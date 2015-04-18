@@ -1,0 +1,4 @@
+scipy
+numpy
+pyopencl
+wheel>=0.23.0

@@ -1,0 +1,334 @@
+#ifndef POWELL_CL
+#define POWELL_CL
+
+/**
+ * Creator = Robbert Harms
+ * Date = 2014-02-05
+ * License = LGPL v3
+ * Maintainer = Robbert Harms
+ * Email = robbert.harms@maastrichtuniversity.nl
+ */
+
+/* Used to set the maximum number of iterations to patience*(number_of_parameters+1). */
+#define PATIENCE %(PATIENCE)r
+#define MAX_IT (PATIENCE * (%(NMR_PARAMS)r+1))
+#define PWLL_FTOL 30*DBL_EPSILON
+#define BRENT_TOL 2*30*DBL_EPSILON
+#define BRACKET_GOLD 1.618034
+#define GLIMIT 100.0
+#define EPSILON 30*DBL_EPSILON
+#define CGOLD 0.3819660 /* golden = (3 - sqrt(5))/2 */
+#define ZEPS 30*DBL_EPSILON
+
+/** helpers to save memory and keep code clean */
+#define A fa
+#define B fb
+#define D fc
+#define FV ulim
+#define FW maxarg
+
+double bracket_and_brent(const double* const pcom, const double* const x_tmp_min,
+                         double* xt, const void* const data, double *xmin);
+
+double powell(double* x, const void* const data){
+    int i, j, i_greatest;
+    int iteration = 0;
+    double fval = evaluate(x, data);
+    double del, fval_tmp1, fval_tmp2;
+
+    double xmin;
+
+    double x_tmp1[%(NMR_PARAMS)r];
+    double x_tmp2[%(NMR_PARAMS)r];
+    double x_tmp_min[%(NMR_PARAMS)r];
+    double starting_vectors[%(NMR_PARAMS)r][%(NMR_PARAMS)r];
+
+    for(i=0; i < %(NMR_PARAMS)r; i++){
+        for(j=0; j < %(NMR_PARAMS)r; j++){
+            starting_vectors[i][j] = (i == j ? 1.0 : 0.0);
+        }
+
+        x_tmp1[i] = x[i];
+    }
+
+    while(iteration++ < MAX_IT){
+        fval_tmp1 = fval;
+        i_greatest = 0;
+        del = 0.0;
+
+        for(i=0; i < %(NMR_PARAMS)r; i++){
+            for(j=0; j < %(NMR_PARAMS)r; j++){
+                x_tmp_min[j] = starting_vectors[j][i];
+            }
+            fval_tmp2 = fval;
+
+            fval = bracket_and_brent(x, x_tmp_min, x_tmp2, data, &xmin);
+            for(j=0; j < %(NMR_PARAMS)r; j++){
+                x_tmp_min[j] *= xmin;
+                x[j] += x_tmp_min[j];
+            }
+
+            if(fval_tmp2 - fval > del){
+                del = fval_tmp2 - fval;
+                i_greatest = i;
+            }
+        }
+
+        if(2.0*(fval_tmp1-fval) <= PWLL_FTOL * (fabs(fval_tmp1) + fabs(fval)) + EPSILON){
+            return fval;
+        }
+
+        for(j=0; j < %(NMR_PARAMS)r; j++){
+            x_tmp2[j] = 2.0 * x[j] - x_tmp1[j];
+            x_tmp_min[j] = x[j] - x_tmp1[j];
+            x_tmp1[j] = x[j];
+        }
+
+        fval_tmp2 = evaluate(x_tmp2, data);
+
+        if(fval_tmp2 < fval_tmp1){
+            if(2.0 * (fval_tmp1 - 2.0 * fval + fval_tmp2) * pown(fval_tmp1 - fval - del, 2)
+                        - del * pown(fval_tmp1 - fval_tmp2, 2) < 0.0){
+
+                fval = bracket_and_brent(x, x_tmp_min, x_tmp2, data, &xmin);
+                for(j=0; j < %(NMR_PARAMS)r; j++){
+                    x_tmp_min[j] *= xmin;
+                    x[j] += x_tmp_min[j];
+                }
+
+                for(j=0; j < %(NMR_PARAMS)r; j++){
+                    starting_vectors[j][i_greatest] = starting_vectors[j][%(NMR_PARAMS)r-1];
+                    starting_vectors[j][%(NMR_PARAMS)r-1] = x_tmp_min[j];
+                }
+            }
+        }
+    }
+    return fval;
+}
+
+double bracket_and_brent(const double* const pcom, const double* const x_tmp_min, double* xt,
+                         const void* const data, double *xmin){
+
+    double ax = 0.0;
+    double bx = 1.0;
+    double cx;
+
+    double ulim, u, r, q, fu, tmp;
+    double maxarg = 0.0;
+    int j;
+    double fa = 0.0;
+    double fb = 0.0;
+    double fc = 0.0;
+
+    int iter;
+    double fx, p, tol1, tol2, v, w, x, xm;
+    double e=0.0;
+
+    for(j=0; j < %(NMR_PARAMS)r; j++){
+        xt[j] = pcom[j] + (ax) * x_tmp_min[j];
+    }
+    fa = evaluate(xt, data);
+
+    for(j=0; j < %(NMR_PARAMS)r; j++){
+        xt[j] = pcom[j] + (bx) * x_tmp_min[j];
+    }
+    fb = evaluate(xt, data);
+
+    if(fb > fa){
+        tmp = ax;
+        ax = bx;
+        bx = tmp;
+
+        tmp = fb;
+        fb = fa;
+        fa = tmp;
+    }
+
+    cx = (bx) + BRACKET_GOLD * (bx - ax);
+    for(j=0; j < %(NMR_PARAMS)r; j++){
+        xt[j] = pcom[j] + (cx) * x_tmp_min[j];
+    }
+    fc = evaluate(xt, data);
+
+    while(fb > fc){
+        r = (bx - ax) * (fb - fc);
+        q = (bx - cx) * (fb - fa);
+
+        maxarg = fmax(fabs(q-r), EPSILON);
+
+        u = (bx) - ((bx - cx) * q - (bx - ax) * r) / (2.0 * copysign(maxarg, q-r));
+        ulim = (bx) + GLIMIT * (cx - bx);
+
+        if((bx - u) * (u - cx) > 0.0){
+            for(j=0; j < %(NMR_PARAMS)r; j++){
+                xt[j] = pcom[j] + u * x_tmp_min[j];
+            }
+            fu = evaluate(xt, data);
+
+            if(fu < fc){
+                ax = bx;
+                bx = u;
+                fa = fb;
+                fb = fu;
+                break;
+            }
+            else if(fu > fb){
+                cx = u;
+                fc = fu;
+                break;
+            }
+            u = (cx) + BRACKET_GOLD * (cx - bx);
+
+            for(j=0; j < %(NMR_PARAMS)r; j++){
+                xt[j] = pcom[j] + u * x_tmp_min[j];
+            }
+            fu = evaluate(xt, data);
+        }
+        else if((cx - u) * (u - ulim) > 0.0){
+            for(j=0; j < %(NMR_PARAMS)r; j++){
+                xt[j] = pcom[j] + u * x_tmp_min[j];
+            }
+            fu = evaluate(xt, data);
+            if(fu < fc){
+                bx = cx;
+                cx = u;
+                u = cx+BRACKET_GOLD*(cx-bx);
+
+                fb = fc;
+                fc = fu;
+                for(j=0; j < %(NMR_PARAMS)r; j++){
+                    xt[j] = pcom[j] + u * x_tmp_min[j];
+                }
+                fu = evaluate(xt, data);
+            }
+        }
+        else if((u - ulim) * (ulim - cx) >= 0.0){
+            u = ulim;
+            for(j=0; j < %(NMR_PARAMS)r; j++){
+                xt[j] = pcom[j] + u * x_tmp_min[j];
+            }
+            fu = evaluate(xt, data);
+        }
+        else{
+            u = (cx) + BRACKET_GOLD * (cx - bx);
+            for(j=0; j < %(NMR_PARAMS)r; j++){
+                xt[j] = pcom[j] + u * x_tmp_min[j];
+            }
+            fu = evaluate(xt, data);
+        }
+        ax = bx;
+        bx = cx;
+        cx = u;
+
+        fa = fb;
+        fb = fc;
+        fc = fu;
+    }
+
+    /** from here starts brent */
+    A=(ax < cx ? ax : cx);
+    B=(ax > cx ? ax : cx);
+
+    x=w=v=bx;
+
+    for(j=0; j < %(NMR_PARAMS)r; j++){
+        xt[j] = pcom[j] + x * x_tmp_min[j];
+    }
+    FW=FV=fx=evaluate(xt, data);
+
+    for(iter=0; iter < MAX_IT; iter++){
+        xm = 0.5 * (A + B);
+        tol1 = BRENT_TOL * fabs(x) + ZEPS;
+        tol2 = 2.0 * tol1;
+
+        if(fabs(x - xm) <= (tol2 - 0.5 * (B - A))){
+            *xmin = x;
+            return fx;
+        }
+
+        if(fabs(e) > tol1){
+            r = (x - w) * (fx - FV);
+            q = (x - v) * (fx - FW);
+            p = (x - v) * q - (x - w) * r;
+            q = 2.0 * (q - r);
+
+            if(q > 0.0){
+                p = -p;
+            }
+
+            q = fabs(q);
+            tmp = e;
+            e = D;
+
+            if(fabs(p) >= fabs(0.5 * q * tmp) || p <= q * (A - x) || p >= q * (B - x)){
+                e = (x >= xm ? A : B) - x;
+                D = CGOLD * e;
+            }
+            else {
+                D = p / q;
+                u = x + D;
+                if(u - A < tol2 || B - u < tol2){
+                    D = copysign(tol1, xm - x);
+                }
+            }
+        }
+        else{
+            e = (x >= xm ? A : B) - x;
+            D = CGOLD * e;
+        }
+
+        u = (fabs(D) >= tol1 ? x + D : x + copysign(tol1, D));
+
+        for(j=0; j < %(NMR_PARAMS)r; j++){
+           xt[j] = pcom[j] + u * x_tmp_min[j];
+        }
+        fu = evaluate(xt, data);
+
+        if(fu <= fx){
+            if(u >= x){
+                A=x;
+            }
+            else{
+                B=x;
+            }
+            v = w;
+            w = x;
+            x = u;
+
+            FV = FW;
+            FW = fx;
+            fx = fu;
+        } else {
+            if(u < x){
+                A=u;
+            }
+            else{
+                B=u;
+            }
+            if (fu <= FW || w == x) {
+                v=w;
+                w=u;
+                FV=FW;
+                FW=fu;
+            }
+            else if(fu <= FV || v == x || v == w){
+                v=u;
+                FV=fu;
+            }
+        }
+    }
+    *xmin=x;
+    return fx;
+}
+
+#undef PATIENCE
+#undef MAX_IT
+#undef PWLL_FTOL
+#undef BRENT_TOL
+#undef BRACKET_GOLD
+#undef GLIMIT
+#undef EPSILON
+#undef CGOLD
+#undef ZEPS
+
+#endif // POWELL_CL
