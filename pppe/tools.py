@@ -28,13 +28,14 @@ def device_supports_double(cl_device):
 
 def results_to_dict(results, param_names):
     """Create a dictionary out of the results, which the optimizer can output to the user
-            Args:
-                - results: a 2d (from optimization) or 3d (from sampling) array that needs to be converted to a
-                        dictionary.
-                - param_names: the names of the parameters, one per column
-            Returns:
-                results = the results packed in a dictionary
-        """
+
+    Args:
+        results: a 2d (from optimization) or 3d (from sampling) array that needs to be converted to a dictionary.
+        param_names (list of str): the names of the parameters, one per column
+
+    Returns:
+        dict: the results packed in a dictionary
+    """
     s = results.shape
     d = {}
     if len(s) == 2:
@@ -205,94 +206,6 @@ def get_bessel_roots(number_of_roots=30):
     return scipy.special.jnp_zeros(1, number_of_roots).astype(np.float64)
 
 
-def create_roi(data, brain_mask):
-    """Create and return the region of interest of the given brain volume and mask
-
-    Args:
-        data: a brain volume with four dimensions (x, y, z, w) where w is the length of the protocol, or a list
-                tuple or dictionary with volumes
-        brain_mask: the mask indicating the region of interest, dimensions: (x, y, z)
-
-    Returns:
-        Signal lists for each of the given volumes. The axis are: (voxels, protocol)
-    """
-    def creator(v):
-        size = v.shape
-        idx = np.transpose(np.nonzero(brain_mask))
-
-        if len(size) < 4:
-            signals = np.zeros((idx.shape[0], 1))
-            for i in range(idx.shape[0]):
-                signals[i, :] = v[idx[i, 0], idx[i, 1], idx[i, 2]]
-        else:
-            signals = np.zeros((idx.shape[0], size[3]))
-            for i in range(idx.shape[0]):
-                signals[i, :] = v[idx[i, 0], idx[i, 1], idx[i, 2], :]
-        return signals
-
-    if isinstance(data, dict):
-        return dict((key, creator(value)) for key, value in data.items())
-    elif isinstance(data, list):
-        return [creator(value) for value in data]
-    elif isinstance(data, tuple):
-        return (creator(value) for value in data)
-    else:
-        return creator(data)
-
-
-def restore_roi(data, brain_mask, with_volume_ind_dim=True):
-    """Restore the given data to a whole brain volume
-
-    The data can be a list, tuple or dictionary or directly a two dimensional list of data points
-
-    Args:
-        data: the data as a x dimensional list of voxels, or, a list, tuple, or dict of those voxel lists
-        brain_mask: the brain_mask which was used to generate the data list
-        with_volume_ind_dim (boolean): If true we return values with 4 dimensions. The extra dimension is for
-            the volume index. If false we return 3 dimensions.
-
-    Returns:
-        Either a single whole volume, a list, tuple or dict of whole volumes, depending on the given input to data.
-        If with_volume_ind_dim is set we return values with 4 dimensions. (x, y, z, 1). If not set we return only
-        three dimensions.
-    """
-    idx = np.transpose(np.nonzero(brain_mask))
-    original_shape = brain_mask.shape[0:3]
-
-    def restorer(l, index, shape3d):
-        s = l.shape
-
-        if with_volume_ind_dim:
-            if len(s) == 1:
-                volume = np.zeros(shape3d + (1, ))
-            else:
-                volume = np.zeros(shape3d + s[1:])
-        else:
-            volume = np.zeros(shape3d)
-
-        for i in range(index.shape[0]):
-            if with_volume_ind_dim:
-                if len(s) == 1:
-                    volume[index[i, 0], index[i, 1], index[i, 2], :] = l[i]
-                else:
-                    volume[index[i, 0], index[i, 1], index[i, 2], :] = l[i, :]
-            else:
-                if len(s) == 1:
-                    volume[index[i, 0], index[i, 1], index[i, 2]] = l[i]
-                else:
-                    volume[index[i, 0], index[i, 1], index[i, 2]] = l[i, :]
-        return volume
-
-    if isinstance(data, dict):
-        return dict((key, restorer(value, idx, original_shape)) for key, value in data.items())
-    elif isinstance(data, list):
-        return [restorer(value, idx, original_shape) for value in data]
-    elif isinstance(data, tuple):
-        return (restorer(value, idx, original_shape) for value in data)
-    else:
-        return restorer(data, idx, original_shape)
-
-
 class TopologicalSort(object):
 
     def __init__(self, data):
@@ -411,28 +324,6 @@ def set_correct_cl_data_type(data):
         else:
             return data.astype(get_correct_cl_data_type_from_data(data))
     return None
-
-
-def calculate_kernel_range_and_offsets(nmr_problems, items_per_kernel):
-    """Calculate a list of ranges and offsets for the given number of problems and the maximum items per kernel.
-
-    Args:
-        nmr_problems (int):
-            The number of problems we have to run on OpenCL.
-        items_per_kernel (int):
-            The maximum number of items we want to run per kernel invocation.
-
-    Returns:
-        A list with tuples with (range, offset) for each invocation.
-    """
-    range_offsets = []
-    remaining = nmr_problems
-    for i in range(int(round(nmr_problems / float(items_per_kernel)))):
-        r = min(items_per_kernel, remaining)
-        o = nmr_problems - remaining
-        remaining -= r
-        range_offsets.append((int(r), int(o)))
-    return range_offsets
 
 
 class ParameterCLCodeGenerator(object):
