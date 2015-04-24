@@ -90,7 +90,7 @@ class CLToPythonCallbacks(object):
         queue = self._get_queue(cl_environment)
 
         def eval_cb(x):
-            cl.enqueue_copy(queue, param_buf, x.astype(np.float64), is_blocking=True)
+            cl.enqueue_copy(queue, param_buf, x.astype(np.float64, order='C'), is_blocking=True)
             kernel.evaluate(queue, (int(self._model.get_nmr_inst_per_problem()), ), None, *data_buffers)
             cl.enqueue_copy(queue, residuals, residuals_buf, is_blocking=True)
             return residuals.copy()
@@ -145,7 +145,7 @@ class CLToPythonCallbacks(object):
         queue = self._get_queue(cl_environment)
 
         def eval_cb(x):
-            cl.enqueue_copy(queue, param_buf, x.astype(np.float64), is_blocking=True)
+            cl.enqueue_copy(queue, param_buf, x.astype(np.float64, order='C'), is_blocking=True)
             kernel.evaluate(queue, (int(self._model.get_nmr_inst_per_problem()), ), None, *data_buffers)
             cl.enqueue_copy(queue, evals, evals_buf, is_blocking=True)
             return evals.copy()
@@ -205,7 +205,7 @@ class CLToPythonCallbacks(object):
         queue = self._get_queue(cl_environment)
 
         def eval_cb(x):
-            cl.enqueue_copy(queue, param_buf, x.astype(np.float64), is_blocking=True)
+            cl.enqueue_copy(queue, param_buf, x.astype(np.float64, order='C'), is_blocking=True)
             kernel.evaluate(queue, (1, ), None, *data_buffers)
             cl.enqueue_copy(queue, errors, errors_buf, is_blocking=True)
             return errors[0]
@@ -336,6 +336,62 @@ class CLToPythonCallbacks(object):
 
         self._cl_environment_items_cache[cl_environment].final_param_transform_cb = final_param_transform_cb
         return final_param_transform_cb
+
+    def get_log_prior_cb(self, cl_environment=None):
+        """Get the callback function for the log prior.
+
+        Args:
+            cl_environment (CLEnvironment): The cl environment to use, if none given we use the
+                cl environment globally defined in the constructor.
+
+        Returns:
+            A python callback function that takes as parameter an numpy array of size (1, n) and that returns as output
+            a single scalar value with the prior value for the given parameters.
+        """
+        if not cl_environment:
+            cl_environment = self._cl_environment
+
+        if cl_environment in self._cl_environment_items_cache:
+            cl_items = self._cl_environment_items_cache[cl_environment]
+            if cl_items.final_param_transform_cb:
+                return cl_items.final_param_transform_cb
+        else:
+            self._cl_environment_items_cache.update({cl_environment: _CLEnvironmentsCachedItems()})
+
+        queue = self._get_queue(cl_environment)
+        read_only_flags = get_read_only_cl_mem_flags(cl_environment)
+        write_only_flags = get_write_only_cl_mem_flags(cl_environment)
+
+        result_buffer = cl.Buffer(cl_environment.context, write_only_flags, hostbuf=np.array((1,), dtype=np.float64))
+
+        kernel = self._get_log_prior_kernel(self._model.get_log_prior_function('getLogPrior'),
+                                            'getLogPrior', self._model.get_nmr_estimable_parameters(), cl_environment)
+
+        def encode_cb(params_model_space):
+            param_buf = cl.Buffer(cl_environment.context, read_only_flags, hostbuf=params_model_space)
+            kernel.calculateLogPrior(queue, (1, ), None, param_buf, result_buffer)
+            prior_result = np.array((1,), dtype=np.float64)
+            cl.enqueue_copy(queue, prior_result, result_buffer, is_blocking=True)
+            return prior_result[0]
+
+        self._cl_environment_items_cache[cl_environment].param_encode_cb = encode_cb
+
+        return encode_cb
+
+    def _get_log_prior_kernel(self, cl_func, cl_func_name, nmr_params, cl_environment):
+        """Get the kernel source code for the encode and decode operations."""
+        kernel_source = get_cl_double_extension_definer(cl_environment.platform)
+        kernel_source += cl_func
+        kernel_source += '''
+            __kernel void calculateLogPrior(constant double* x_global, global double* result){
+                double x[''' + repr(nmr_params) + '''];
+                for(int i = 0; i < ''' + repr(nmr_params) + '''; i++){
+                    x[i] = x_global[i];
+                }
+                result[0] = ''' + cl_func_name + '''(x);
+            }
+        '''
+        return cl.Program(cl_environment.context, kernel_source).build(' '.join(cl_environment.compile_flags))
 
     def _get_space_transformer_kernel(self, cl_func, cl_func_name, nmr_params, environment):
         """Get the kernel source code for the encode and decode operations."""
