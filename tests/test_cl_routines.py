@@ -43,7 +43,7 @@ class TestLSQNonLinExample(unittest.TestCase):
 
     def setUp(self):
         self.model = MatlabLSQNonlinExample()
-        self.optimizers = (LevenbergMarquardt(), SerialLM())
+        self.optimizers = (SerialLM(), LevenbergMarquardt())
         self.residual_calc = ResidualCalculator()
 
     def test_model(self):
