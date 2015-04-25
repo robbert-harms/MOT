@@ -439,6 +439,20 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         return results_dict
 
+    def is_protocol_sufficient(self, protocol):
+        """Check if the given protocol holds enough information for this model to work.
+
+        Args:
+            protocol (Protocol): The protocol object to check for sufficient information.
+
+        Returns:
+            boolean: True if there is enough information in the protocol, false otherwise
+        """
+        for c in self.get_required_protocol_names():
+            if not protocol.has_column(c):
+                return False
+        return True
+
     def _add_fixed_parameter_maps(self, results_dict):
         """In place add complete maps for the fixed parameters."""
         param_lists = self._get_parameter_type_lists()
@@ -776,7 +790,7 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
 
     def __init__(self, model_name, model_tree, evaluation_model, signal_noise_model=None, problem_data=None):
         super(SampleModelBuilder, self).__init__(model_name, model_tree, evaluation_model, signal_noise_model,
-                                                   problem_data)
+                                                 problem_data)
         self._post_sampling_modifiers = []
         self._post_sampling_stats_modifiers = []
 
