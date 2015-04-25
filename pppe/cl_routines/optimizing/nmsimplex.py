@@ -1,4 +1,4 @@
-from ...tools import get_cl_double_extension_definer, ParameterCLCodeGenerator
+from ...utils import get_cl_double_extension_definer, ParameterCLCodeGenerator
 from ...cl_functions import NMSimplexFunc
 from ...cl_routines.optimizing.base import AbstractParallelOptimizer
 

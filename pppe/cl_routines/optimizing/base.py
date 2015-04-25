@@ -4,7 +4,7 @@ import pyopencl as cl
 
 from ...cl_environments import CLEnvironmentFactory
 from pppe.cl_python_callbacks import CLToPythonCallbacks
-from ...tools import get_read_only_cl_mem_flags, get_read_write_cl_mem_flags, \
+from ...utils import get_read_only_cl_mem_flags, get_read_write_cl_mem_flags, \
     set_correct_cl_data_type, results_to_dict, ParameterCLCodeGenerator, get_cl_double_extension_definer
 from ...cl_routines.base import AbstractCLRoutine
 from ...load_balance_strategies import PreferGPU, WorkerConstructor

@@ -1,5 +1,5 @@
 from pppe.cl_functions import LMMin
-from ...tools import get_cl_double_extension_definer, ParameterCLCodeGenerator
+from ...utils import get_cl_double_extension_definer, ParameterCLCodeGenerator
 from .base import AbstractParallelOptimizer
 
 __author__ = 'Robbert Harms'

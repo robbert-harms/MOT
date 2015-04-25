@@ -5,7 +5,7 @@ import pyopencl.array as cl_array
 import numpy as np
 
 from ...cl_functions import RanluxCL
-from ...tools import get_cl_double_extension_definer, results_to_dict, get_read_only_cl_mem_flags, \
+from ...utils import get_cl_double_extension_definer, results_to_dict, get_read_only_cl_mem_flags, \
     get_write_only_cl_mem_flags, get_read_write_cl_mem_flags, set_correct_cl_data_type, ParameterCLCodeGenerator
 from ...load_balance_strategies import WorkerConstructor
 from ...cl_routines.sampling.base import AbstractSampler

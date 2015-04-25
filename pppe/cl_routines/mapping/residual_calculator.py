@@ -1,7 +1,7 @@
 import warnings
 import pyopencl as cl
 import numpy as np
-from ...tools import get_cl_double_extension_definer, \
+from ...utils import get_cl_double_extension_definer, \
     get_read_only_cl_mem_flags, set_correct_cl_data_type, get_write_only_cl_mem_flags, ParameterCLCodeGenerator
 from ...cl_routines.base import AbstractCLRoutine
 from ...load_balance_strategies import WorkerConstructor

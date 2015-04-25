@@ -1,7 +1,7 @@
 import pyopencl as cl
 import numpy as np
 from .cl_environments import CLEnvironmentFactory
-from .tools import get_cl_double_extension_definer, \
+from .utils import get_cl_double_extension_definer, \
     get_read_write_cl_mem_flags, set_correct_cl_data_type, get_read_only_cl_mem_flags, get_write_only_cl_mem_flags, \
     ParameterCLCodeGenerator
 

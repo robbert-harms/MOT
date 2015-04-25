@@ -5,7 +5,7 @@ import pyopencl as cl
 import pyopencl.array as cl_array
 
 from ...pppe.clfunctions import RanluxCL
-from ...tools import get_read_write_cl_mem_flags, get_write_only_cl_mem_flags
+from ...utils import get_read_write_cl_mem_flags, get_write_only_cl_mem_flags
 from ...cl_routines.base import AbstractCLRoutine
 from ...pppe.load_balance_strategies import WorkerConstructor
 

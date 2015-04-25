@@ -1,5 +1,5 @@
 import pyopencl as cl
-from .tools import device_supports_double
+from .utils import device_supports_double
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-11-14"

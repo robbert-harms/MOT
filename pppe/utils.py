@@ -198,14 +198,6 @@ def get_cl_double_extension_definer(platform):
     '''
 
 
-def get_bessel_roots(number_of_roots=30):
-    """These roots are used in some of the compartment models. It are the roots of the equation J'_1(x) = 0.
-
-    That is, where J_1 is the first order Bessel function of the first kind.
-    """
-    return scipy.special.jnp_zeros(1, number_of_roots).astype(np.float64)
-
-
 class TopologicalSort(object):
 
     def __init__(self, data):

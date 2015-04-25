@@ -2,7 +2,7 @@ import math
 import time
 import numpy as np
 import pyopencl as cl
-from .tools import get_read_only_cl_mem_flags
+from .utils import get_read_only_cl_mem_flags
 
 
 __author__ = 'Robbert Harms'

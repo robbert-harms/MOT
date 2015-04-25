@@ -1,7 +1,7 @@
 import numbers
 import numpy as np
 from pppe.base import ProtocolParameter, ModelDataParameter, FreeParameter
-from ..tools import set_cl_compatible_data_type, TopologicalSort, init_dict_tree
+from ..utils import set_cl_compatible_data_type, TopologicalSort, init_dict_tree
 from ..parameter_functions.codecs import CodecBuilder
 from ..parameter_functions.dependencies import SimpleAssignment
 from ..models.interfaces import OptimizeModelInterface, SampleModelInterface

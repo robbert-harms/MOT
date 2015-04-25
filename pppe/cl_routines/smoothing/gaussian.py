@@ -4,7 +4,7 @@ from .base import AbstractSmoother
 import numpy as np
 import pyopencl as cl
 from ...load_balance_strategies import WorkerConstructor
-from ...tools import get_write_only_cl_mem_flags, get_read_only_cl_mem_flags, get_cl_double_extension_definer, \
+from ...utils import get_write_only_cl_mem_flags, get_read_only_cl_mem_flags, get_cl_double_extension_definer, \
     get_read_write_cl_mem_flags
 
 

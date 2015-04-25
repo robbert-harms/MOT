@@ -6,7 +6,7 @@ import pyopencl as cl
 
 from ...cl_routines.base import AbstractCLRoutine
 from ...load_balance_strategies import WorkerConstructor
-from ...tools import set_correct_cl_data_type, \
+from ...utils import set_correct_cl_data_type, \
     get_write_only_cl_mem_flags, get_read_only_cl_mem_flags
 
 

@@ -1,5 +1,5 @@
 from .base import AbstractSmoother
-from ...tools import get_cl_double_extension_definer
+from ...utils import get_cl_double_extension_definer
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-04-26"
