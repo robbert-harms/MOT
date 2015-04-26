@@ -1,13 +1,11 @@
 import time
-
 import numpy as np
 import pyopencl as cl
 import pyopencl.array as cl_array
-
-from ...pppe.clfunctions import RanluxCL
+from ...cl_functions import RanluxCL
 from ...utils import get_read_write_cl_mem_flags, get_write_only_cl_mem_flags
 from ...cl_routines.base import AbstractCLRoutine
-from ...pppe.load_balance_strategies import WorkerConstructor
+from ...load_balance_strategies import WorkerConstructor
 
 
 __author__ = 'Robbert Harms'
