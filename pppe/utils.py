@@ -2,9 +2,7 @@ from collections import defaultdict
 import numbers
 import pyopencl.array as cl_array
 import numpy as np
-import re
 import pyopencl as cl
-import scipy.special
 from functools import reduce
 
 __author__ = 'Robbert Harms'
@@ -51,25 +49,21 @@ def set_cl_compatible_data_type(value, data_type):
     """Set the given value (numpy array) to the given data type, one which is CL compatible.
 
     Args:
-        - value: numpy array
-        - data type: 'float', 'double' or 'double<int>' or 'float<int>'
+        value (ndarray): The value to convert to a CL compatible data type.
+        cl_data_type (CLDataType): A CL data type object.
 
     Returns:
-        The same array, but then with the correct data type. If the data type includes an integer the value is parsed
-        to a CL vector type.
+        ndarray: The same array, but then with the correct data type. If the data type indicates a vector type, a
+            vector type is returned
     """
-    is_vector = bool(re.compile('\d').search(data_type))
-    if is_vector:
-        return array_to_cl_vector(value, data_type)
+    if data_type.is_vector_type:
+        return array_to_cl_vector(value, data_type.data_type)
     else:
-        s = data_type.replace('*', '')
-        s = s.replace(' ', '')
-
-        if s == 'float':
+        if data_type.data_type == 'float':
             if isinstance(value, numbers.Number):
                 return np.float32(value)
             return value.astype(np.float32)
-        elif s == 'int':
+        elif data_type.data_type == 'int':
             if isinstance(value, numbers.Number):
                 return np.int32(value)
             return value.astype(np.int32)
@@ -107,19 +101,20 @@ def get_opencl_vector_data_type(vector_length, data_type):
     return getattr(cl_array.vec, data_type + repr(vector_length))
 
 
-def array_to_cl_vector(array, data_type, vector_length=None):
+def array_to_cl_vector(array, raw_data_type, vector_length=None):
     """Create a CL vector type of the given array.
 
-    Standard is chosen for the minimum vector length that can hold the given array, else, if vector_length is specified
-    the given length is used, but only if vector length is one of (2, 3, 4, 8, 16).
+    If vector_length is specified and one of (2, 3, 4, 8, 16) it is used. Else is chosen for the minimum vector length
+    that can hold the given array.
 
     Args:
-        array: the array of which to translate each row to a vector
-        vector_length: if specified (non-None) the desired vector length. It must be one of (2, 3, 4, 8, 16)
+        array (ndarray): the array of which to translate each row to a vector
+        raw_data_type (str): The raw data type to convert to
+        vector_length (int): if specified (non-None) the desired vector length. It must be one of (2, 3, 4, 8, 16)
 
     Returns:
-        An array of the same length as the given array, but with only one column per row. This column contains the
-        opencl vector.
+        ndarray: An array of the same length as the given array, but with only one column per row.
+            This column contains the opencl vector.
 
     Raises:
         ValueError: if the vector length is not one of (2, 3, 4, 8, 16)
@@ -133,7 +128,7 @@ def array_to_cl_vector(array, data_type, vector_length=None):
     if vector_length is None:
         vector_length = width
 
-    if 'double' in data_type:
+    if 'double' in raw_data_type:
         dtype = get_opencl_vector_data_type(vector_length, 'double')
     else:
         dtype = get_opencl_vector_data_type(vector_length, 'float')
@@ -257,7 +252,7 @@ def get_read_only_cl_mem_flags(cl_environment):
 
 
 def get_read_write_cl_mem_flags(cl_environment):
-    """Get the right write only flags to use in the given environment."""
+    """Get the right read write flags to use in the given environment."""
     if cl_environment.is_gpu:
         return cl.mem_flags.READ_WRITE | cl.mem_flags.COPY_HOST_PTR
     else:
@@ -412,4 +407,11 @@ class ParameterCLCodeGenerator(object):
 
 
 def init_dict_tree():
+    """Create an auto-vivacious dictionary (PHP like dictionary).
+
+    If changing the name of the routine also change the body.
+
+    Returns:
+        A default dict which is auto-vivacious.
+    """
     return defaultdict(init_dict_tree)

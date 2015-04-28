@@ -56,6 +56,7 @@ class ErrorMeasures(AbstractCLRoutine):
 
         write_only_flags = get_write_only_cl_mem_flags(cl_environment)
         read_only_flags = get_read_only_cl_mem_flags(cl_environment)
+
         nmr_problems = end - start
         queue = cl_environment.get_new_queue()
 

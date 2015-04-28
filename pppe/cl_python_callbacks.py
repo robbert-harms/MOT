@@ -147,6 +147,21 @@ class CLToPythonCallbacks(object):
 class _GeneratorState(object):
 
     def __init__(self, model, cl_environment):
+        """The CLToPythonCallbacks uses this class to keep track of the state.
+
+        Since in most cases multiple callbacks are generated we can save the time of setting up the CL parts by
+        keeping track of the state.
+
+        This class uses the _CLEnvironmentsCachedItems to keep track of created CL buffers for protocol and fixed data
+        buffers.
+
+        Attributes:
+            model: The model we are creating callbacks for
+            var_data_dict: The variable data of the model
+            prtcl_data_dict: The protocol data dict of the model
+            fixed_data_dict: The fixed data dict of the model
+            cl_environment_items_cache (_CLEnvironmentsCachedItems): The items cache for the buffers.
+        """
         if cl_environment:
             self.cl_environment = cl_environment
         else:

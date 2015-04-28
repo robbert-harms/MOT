@@ -182,9 +182,9 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         """See super class OptimizeModel for details"""
         var_data_dict = {'observations': self._problem_data.observation_list}
         for m, p in self._get_free_parameters_list():
-            if p.fixed \
-                    and not isinstance(p.value, numbers.Number) \
-                    and not self._parameter_fixed_to_dependency(m, p):
+            inlined_in_cl_code = isinstance(p.value, numbers.Number)
+
+            if p.fixed and not inlined_in_cl_code and not self._parameter_fixed_to_dependency(m, p):
                 var_data_dict.update({m.name + '_' + p.name: set_cl_compatible_data_type(p.value,
                                                                                          p.cl_data_type)})
         return var_data_dict
@@ -511,7 +511,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         const_params_seen = []
         for m, p in param_lists['constant']:
             if (m.name + '_' + p.name) not in exclude_list:
-                data_type = p.cl_data_type
+                data_type = p.cl_data_type.data_type
                 if p.name not in const_params_seen:
                     assignment = 'data->prtcl_data_' + p.name + '[observation_index]'
                     func += "\t"*4 + data_type + ' ' + p.name + ' = ' + assignment + ';' + "\n"
@@ -520,12 +520,12 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         for m, p in param_lists['fixed']:
             name = m.name + '_' + p.name
             if name not in exclude_list:
-                data_type = p.cl_data_type
+                data_type = p.cl_data_type.data_type
                 if isinstance(p.value, numbers.Number):
-                    assignment = '(' + p.cl_data_type + ')' + repr(float(p.value))
+                    assignment = '(' + data_type + ')' + repr(float(p.value))
                 else:
                     if p.value.max() == p.value.min():
-                        assignment = '(' + p.cl_data_type + ')' + repr(float(p.value[0]))
+                        assignment = '(' + data_type + ')' + repr(float(p.value[0]))
                     else:
                         assignment = 'data->var_data_' + m.name + '_' + p.name + '[0]'
                 func += "\t"*4 + data_type + ' ' + name + ' = ' + assignment + ';' + "\n"
@@ -534,7 +534,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         for m, p in param_lists['estimable']:
             name = m.name + '_' + p.name
             if name not in exclude_list:
-                data_type = p.cl_data_type
+                data_type = p.cl_data_type.data_type
                 assignment = 'x[' + repr(estimable_param_counter) + ']'
                 func += "\t"*4 + data_type + ' ' + name + ' = ' + assignment + ';' + "\n"
                 estimable_param_counter += 1
@@ -564,7 +564,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         Please note, that on the moment this function does not support the complete dependency graph for the dependend
         parameters.
         """
-        data_type = p.cl_data_type
+        data_type = p.cl_data_type.data_type
         name = m.name + '_' + p.name
         assignment = ''
 
@@ -573,10 +573,10 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         elif isinstance(p, FreeParameter):
             if p.fixed and not self._parameter_has_dependency(m, p):
                 if isinstance(p.value, numbers.Number):
-                    assignment = '(' + p.cl_data_type + ')' + repr(float(p.value))
+                    assignment = '(' + data_type + ')' + repr(float(p.value))
                 else:
                     if p.value.max() == p.value.min():
-                        assignment = '(' + p.cl_data_type + ')' + repr(float(p.value[0]))
+                        assignment = '(' + data_type + ')' + repr(float(p.value[0]))
                     else:
                         assignment = 'data->var_data_' + m.name + '_' + p.name + '[0]'
             elif not self._parameter_has_dependency(m, p) or (self._parameter_has_dependency(m, p)
@@ -610,7 +610,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
             assignment = self._convert_parameters_dot_to_bar(pd.assignment_code)
             name = m.name + '_' + p.name
-            data_type = p.cl_data_type
+            data_type = p.cl_data_type.data_type
 
             if self._parameter_fixed_to_dependency(m, p):
                 if (m.name + '_' + p.name) not in exclude_list:

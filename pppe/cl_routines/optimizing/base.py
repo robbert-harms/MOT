@@ -251,7 +251,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         return ''
 
     def _run_minimizer(self, parameters, prtcl_data_buffers, var_data_dict, fixed_data_buffers,
-                                start, end, environment, kernel):
+                       start, end, environment, kernel):
         start = int(start)
         end = int(end)
 

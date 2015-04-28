@@ -31,6 +31,19 @@ class CLDataType(object):
         return CLDataType(cl_type_str, bool(re.compile('\d').search(cl_type_str)), '*' in cl_type_str)
 
     @property
+    def data_type(self):
+        """Get the CL raw data type.
+
+        Will return for example 'double' even if the cl_type is *double4.
+
+        Returns:
+            str: The scalar type of this data type.
+        """
+        s = self._cl_type.replace('*', '')
+        s = s.replace(' ', '')
+        return s
+
+    @property
     def cl_type(self):
         """Get the name of this parameter in CL language
 
@@ -419,7 +432,7 @@ class CLFunctionParameter(object):
         Returns:
             str: The CL data type.
         """
-        return self._cl_data_type.cl_type
+        return self._cl_data_type
 
     @property
     def is_cl_vector_type(self):
