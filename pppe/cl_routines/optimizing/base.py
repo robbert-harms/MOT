@@ -119,7 +119,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
 
         optimized = FinalParametersTransformer(cl_environments=cl_environments, load_balancer=self.load_balancer).\
             transform(model, starting_points)
-        results = model.post_optimization(results_to_dict(optimized, model.get_optimized_param_names()))
+        results = model.finalize_optimization_results(results_to_dict(optimized, model.get_optimized_param_names()))
         if full_output:
             return results, {}
         return results
@@ -312,7 +312,7 @@ class AbstractSerialOptimizer(AbstractOptimizer):
         optimized = FinalParametersTransformer(cl_environments=cl_environments, load_balancer=self.load_balancer).\
             transform(model, optimized)
 
-        results = model.post_optimization(results_to_dict(optimized, model.get_optimized_param_names()))
+        results = model.finalize_optimization_results(results_to_dict(optimized, model.get_optimized_param_names()))
         if full_output:
             return results, {}
         return results

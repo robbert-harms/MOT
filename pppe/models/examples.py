@@ -90,7 +90,7 @@ class Rosenbrock(OptimizeModelInterface):
     def get_final_parameter_transformations(self, fname='applyFinalParameterTransformations'):
         return None
 
-    def post_optimization(self, results_dict):
+    def finalize_optimization_results(self, results_dict):
         return results_dict
 
 
@@ -180,5 +180,5 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
     def get_final_parameter_transformations(self, fname='applyFinalParameterTransformations'):
         return None
 
-    def post_optimization(self, results_dict):
+    def finalize_optimization_results(self, results_dict):
         return results_dict

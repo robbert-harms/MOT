@@ -430,9 +430,20 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                                                               obs_fname, param_listing)
         return func
 
-    def post_optimization(self, results_dict):
+    def finalize_optimization_results(self, results_dict):
+        """This adds the final optimization maps to the results dictionary.
+
+        Steps in finalizing the results dict:
+        1) It first adds the maps for the fixed parameters (if return_maps_fixed_parameters is set).
+        2) Second it adds the extra maps defined in the models itself.
+        3) Finally it loops through the post_optimization_modifiers callback functions for the final updates.
+
+        """
         if self.return_maps_fixed_parameters:
             self._add_fixed_parameter_maps(results_dict)
+
+        for model in self._get_model_list():
+            results_dict.update(model.get_extra_results_maps(results_dict))
 
         for name, routine in self._post_optimization_modifiers:
             results_dict[name] = routine(results_dict)
@@ -782,7 +793,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
     def _set_default_post_optimization_modifiers(self):
         """Add default post optimization callbacks. These callbacks are called in the function post_optimization.
 
-            This function is supposed to be used by implementing subclasses.
+        This function is supposed to be used by implementing subclasses.
         """
 
 
@@ -791,63 +802,6 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
     def __init__(self, model_name, model_tree, evaluation_model, signal_noise_model=None, problem_data=None):
         super(SampleModelBuilder, self).__init__(model_name, model_tree, evaluation_model, signal_noise_model,
                                                  problem_data)
-        self._post_sampling_modifiers = []
-        self._post_sampling_stats_modifiers = []
-
-        self._set_default_post_sampling_stats_modifiers()
-
-    def add_post_sampling_modifier(self, model_param_name, mod_routine):
-        """Add a modification function that can update the results of model sampling.
-
-        The mod routine should be a function accepting a dictionary as input and should return a single map of
-        the same dimension as the maps in the dictionary. The idea is that the mod_routine function gets the
-        result dictionary from the sampling routine and calculates a new map.
-
-        This map is returned and the dictionary is updated with the returned map as value and the here given
-        model_param_name as key.
-
-        It is possible to add more than one modifier function. In that case, they are called in the order they
-        were appended to this model.
-        """
-        self._post_sampling_modifiers.append((model_param_name, mod_routine))
-        return self
-
-    def add_post_sampling_modifiers(self, modifiers):
-        """Add a list of modifier functions.
-
-        The same as add_post_sampling_modifier() except that it accepts a list of lists. Every element in the list
-        should be a tuple like (model_param_name, mod_routine)
-
-        Args:
-            modifiers (tuple of tuples): The list of modifiers to add (in order).
-
-        """
-        self._post_sampling_modifiers.extend(modifiers)
-
-    def add_post_sampling_stats_modifier(self, model_param_name, mod_routine):
-        """Add a modification function that can update the results of the statistics of the model sampling.
-
-        The mod routine should be a function accepting a dictionary as input and should return a single map of
-        the same dimension as the maps in the dictionary. The idea is that the mod_routine function gets the
-        result dictionary from the statistics routines of the samples and calculates a new map. This map is returned
-        and the dictionary is updated with the returned map as value and the here given model_param_name as key.
-
-        It is possible to add more than one modifier function. In that case, they are called in the order they
-        were appended to this model.
-        """
-        self._post_sampling_stats_modifiers.append((model_param_name, mod_routine))
-        return self
-
-    def add_post_sampling_stats_modifiers(self, modifiers):
-        """Add a list of modifier functions.
-
-        The same as add_post_sampling_stats_modifier() except that it accepts a list of lists. Every element in the list
-        should be a tuple like (model_param_name, mod_routine)
-
-        Args:
-            modifiers (tuple of tuples): The list of modifiers to add (in order).
-        """
-        self._post_sampling_stats_modifiers.extend(modifiers)
 
     def get_log_prior_function(self, fname='getLogPrior'):
         prior = 'double ' + fname + '(const double* const x){' + "\n"
@@ -903,11 +857,6 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
                                                                    param_listing)
         return func
 
-    def post_sampling(self, results_dict):
-        for name, routine in self._post_sampling_modifiers:
-            results_dict[name] = routine(results_dict)
-        return results_dict
-
     def samples_to_statistics(self, samples_dict):
         results = {}
         for key, value in samples_dict.items():
@@ -915,21 +864,7 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
             stat_mod = param.sampling_statistics
             results[key] = stat_mod.get_mean(value)
             results[key + '.std'] = stat_mod.get_std(value)
-
-        if self.return_maps_fixed_parameters:
-            self._add_fixed_parameter_maps(results)
-
-        for name, routine in self._post_sampling_stats_modifiers:
-            results[name] = routine(results)
-
         return results
-
-    def _set_default_post_sampling_stats_modifiers(self):
-        """Add default post sampling statistics callbacks.
-            These callbacks are called in the function samples_to_statistics after the calculation of the statistics
-
-            This function is supposed to be used by implementing subclasses.
-        """
 
 
 class DependencyStore(object):

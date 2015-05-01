@@ -96,8 +96,8 @@ class MetropolisHastings(AbstractSampler):
 
         if full_output:
             steps = (self.nmr_samples * self.sample_intervals + self.burn_length) * parameters.shape[0]
-            return model.post_sampling(samples_dict), {'ar': acceptance_counter_host / float(steps)}
-        return model.post_sampling(samples_dict)
+            return samples_dict, {'ar': acceptance_counter_host / float(steps)}
+        return samples_dict
 
     def _run_sampler(self, parameters, samples_host, acceptance_counter_host,
                      prtcl_data_buffers, var_data_dict, fixed_data_buffers, start, end, cl_environment, kernel):

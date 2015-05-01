@@ -182,15 +182,20 @@ class OptimizeModelInterface(object):
             Which is called for every voxel and must in place edit the x variable.
         """
 
-    def post_optimization(self, results_dict):
+    def finalize_optimization_results(self, results_dict):
         """After optimization create the final dictionary with the result maps.
+
+        In this location extra maps can be added to the results dictionary.
+
+        Please note that the input dict can be updated in place. The function should also return a dict but that
+        is merely for the purpose of chaining. In short this function behaves as a procedure and as a function.
 
         Args:
             results_dict (dict): A dictionary with as keys the names of the parameters and as values the 1d maps with
                 for each voxel the optimized parameter value. The given dictionary can be altered by this function.
 
         Returns:
-            dict: The same result dictionary but with updated values or some additional maps.
+            dict: The same result dictionary but with updated values or with additional maps.
                 It should at least return the results_dict.
         """
         return results_dict
@@ -256,24 +261,12 @@ class SampleModelInterface(OptimizeModelInterface):
             Which is called by the sampling routine to calculate the posterior probability.
         """
 
-    def post_sampling(self, results_dict):
-        """After sampling create the final dictionary with the result maps.
-
-        Args:
-            results_dict (dict):
-                A dictionary with as keys the names of the parameters and as values a 2d map with
-                for each voxel the list of samples. The given dictionary is altered by this function.
-
-        Returns:
-            The same result dictionary but with updated values or some additional maps.
-        """
-
     def samples_to_statistics(self, samples_dict):
         """Create statistics out of the given set of samples (in a dictionary).
 
         Args:
             samples_dict (dict):
-                Keys being the parameter names, values the roi list in 2d (1d is voxel, 2d is samples).
+                Keys being the parameter names, values the roi list in 2d (1st dim. is voxel, 2nd dim. is samples).
 
         Returns:
             The same dictionary but with statistical maps (mean, avg etc.) for each parameter, instead of the raw

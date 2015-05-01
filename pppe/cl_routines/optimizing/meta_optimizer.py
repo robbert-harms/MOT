@@ -89,7 +89,7 @@ class MetaOptimizer(AbstractOptimizer):
         other_output = {}
         if self.enable_sampling:
             samples, other_output = self.sampler.sample(model, init_params=results, full_output=True)
-            results.update(model.samples_to_statistics(samples))
+            results.update(model.finalize_optimization_results(model.samples_to_statistics(samples)))
 
             nmr_voxels = samples[samples.keys()[0]].shape[0]
             for key, value in other_output.items():

@@ -359,6 +359,31 @@ class ModelFunction(DependentCLFunction):
                 return e
         return None
 
+    def get_extra_results_maps(self, results_dict):
+        """Get extra results maps with extra output from this model function.
+
+        This is used by the function finalize_optimization_results() from the ModelBuilder to add extra maps
+        to the resulting dictionary.
+
+        Suppose a model has a parameter that can be viewed in multiple ways. It would be nice to be able
+        to output maps for that parameter in multiple ways such that the amount of post-processing is as least as
+        possible.
+
+        For example, suppose a model calculates an angle (theta) and a radius (r). Perhaps we would like to return
+        the cartesian coordinate of that point alongside the polar coordinates. This function allows you (indirectly)
+        to add the additional maps.
+
+        Do not modify the dictionary in place.
+
+        Args:
+            results_dict (dict): The result dictionary with all the maps you need and perhaps other maps from other
+                models as well.
+
+        Returns:
+            dict: A new dictionary with the additional maps to add.
+        """
+        return {}
+
 
 class LibraryFunction(DependentCLFunction):
 
