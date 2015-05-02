@@ -377,7 +377,7 @@ class ModelFunction(DependentCLFunction):
 
         Args:
             results_dict (dict): The result dictionary with all the maps you need and perhaps other maps from other
-                models as well.
+                models as well. The maps are 1 dimensional, a long list of values for all the voxels in the ROI.
 
         Returns:
             dict: A new dictionary with the additional maps to add.
