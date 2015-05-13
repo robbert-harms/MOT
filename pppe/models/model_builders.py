@@ -1,6 +1,6 @@
 import numbers
 import numpy as np
-from pppe.base import ProtocolParameter, ModelDataParameter, FreeParameter
+from ..base import ProtocolParameter, ModelDataParameter, FreeParameter
 from ..utils import set_cl_compatible_data_type, TopologicalSort, init_dict_tree
 from ..parameter_functions.codecs import CodecBuilder
 from ..parameter_functions.dependencies import SimpleAssignment
@@ -392,7 +392,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         func += '''
             double ''' + fname + '(const optimize_data* const data, const double* const x, ' \
-                                                 'const int observation_index){' + "\n"
+                                  'const int observation_index){' + "\n"
         func += self._get_parameters_listing(exclude_list=[m.name + '_' + p.name for (m, p) in
                                                            self._get_non_model_tree_param_listing()])
 
@@ -450,20 +450,6 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         return results_dict
 
-    def is_protocol_sufficient(self, protocol):
-        """Check if the given protocol holds enough information for this model to work.
-
-        Args:
-            protocol (Protocol): The protocol object to check for sufficient information.
-
-        Returns:
-            boolean: True if there is enough information in the protocol, false otherwise
-        """
-        for c in self.get_required_protocol_names():
-            if not protocol.has_column(c):
-                return False
-        return True
-
     def _add_fixed_parameter_maps(self, results_dict):
         """In place add complete maps for the fixed parameters."""
         param_lists = self._get_parameter_type_lists()
@@ -494,7 +480,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             return '(' + func + ')'
         return '(' + "\n" + ("\t" * int((depth/2)+5)) + func + "\n" + ("\t" * int((depth/2)+4)) + ')'
 
-    def _model_to_string(self, model, decorated=''):
+    def _model_to_string(self, model):
         """Convert a model to CL string."""
         param_list = []
         for param in model.parameter_list:
