@@ -4,6 +4,7 @@ import pyopencl.array as cl_array
 import numpy as np
 import pyopencl as cl
 from functools import reduce
+from pppe.cl_functions import RanluxCL
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-05-13"
@@ -415,3 +416,32 @@ def init_dict_tree():
         A default dict which is auto-vivacious.
     """
     return defaultdict(init_dict_tree)
+
+
+def initialize_ranlux(cl_environment, queue, nmr_instances, ranlux=RanluxCL(), ranluxcl_lux=4, seed=1):
+    """Create an opencl buffer with the initialized RanluxCLTab.
+
+    Args:
+        cl_environment (CLEnvironment): the environment to use
+        queue: the cl queue to use
+        nmr_instances (int): for how many thread instances we should initialize the ranlux cl tab.
+        ranlux (RanluxCL): the ranlux cl function to use
+        ranluxcl_lux (int): the luxury level of the ranluxcl generator. See the ranluxcl.cl source for details.
+        seed (int): the seed to use, see the ranluxcl.cl source for details.
+
+    Returns:
+        cl buffer: the buffer containing the initialized ranlux cl tab for use in the given environment/queue.
+    """
+    kernel_source = '#define RANLUXCL_LUX ' + repr(ranluxcl_lux) + "\n"
+    kernel_source += ranlux.get_cl_code()
+    kernel_source += '''
+        __kernel void init(global float4 *ranluxcltab){
+            ranluxcl_initialization(''' + repr(seed) + ''', ranluxcltab);
+        }
+    '''
+    read_write_flags = get_read_write_cl_mem_flags(cl_environment)
+    ranluxcltab_buffer = cl.Buffer(cl_environment.context, read_write_flags,
+                                   hostbuf=np.zeros((nmr_instances * 7, 1), dtype=cl_array.vec.float4, order='C'))
+    kernel = cl.Program(cl_environment.context, kernel_source).build(' '.join(cl_environment.compile_flags))
+    kernel.init(queue, (int(nmr_instances), ), None, ranluxcltab_buffer)
+    return ranluxcltab_buffer

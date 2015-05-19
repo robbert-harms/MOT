@@ -1,12 +1,12 @@
 import warnings
 
 import pyopencl as cl
-import pyopencl.array as cl_array
 import numpy as np
 
 from ...cl_functions import RanluxCL
 from ...utils import get_cl_double_extension_definer, results_to_dict, get_read_only_cl_mem_flags, \
-    get_write_only_cl_mem_flags, get_read_write_cl_mem_flags, set_correct_cl_data_type, ParameterCLCodeGenerator
+    get_write_only_cl_mem_flags, set_correct_cl_data_type, ParameterCLCodeGenerator, \
+    initialize_ranlux
 from ...load_balance_strategies import WorkerConstructor
 from ...cl_routines.sampling.base import AbstractSampler
 
@@ -42,9 +42,17 @@ class MetropolisHastings(AbstractSampler):
         """
 
         super(MetropolisHastings, self).__init__(cl_environments=cl_environments, load_balancer=load_balancer)
-        self.nmr_samples = nmr_samples
+        self._nmr_samples = nmr_samples or 1
         self.burn_length = burn_length
         self.sample_intervals = sample_intervals
+
+    @property
+    def nmr_samples(self):
+        return self._nmr_samples
+
+    @nmr_samples.setter
+    def nmr_samples(self, value):
+        self._nmr_samples = value or 1
 
     def sample(self, model, init_params=None, full_output=False):
         parameters = set_correct_cl_data_type(model.get_initial_parameters(init_params))
@@ -96,6 +104,7 @@ class MetropolisHastings(AbstractSampler):
 
         if full_output:
             steps = (self.nmr_samples * self.sample_intervals + self.burn_length) * parameters.shape[0]
+            print((acceptance_counter_host / float(steps))[2000])
             return samples_dict, {'ar': acceptance_counter_host / float(steps)}
         return samples_dict
 
@@ -104,7 +113,7 @@ class MetropolisHastings(AbstractSampler):
 
         queue = cl_environment.get_new_queue()
         nmr_problems = end - start
-        ranluxcltab_buffer = self._initialize_ranlux(cl_environment, queue, nmr_problems)
+        ranluxcltab_buffer = initialize_ranlux(cl_environment, queue, nmr_problems)
 
         read_only_flags = get_read_only_cl_mem_flags(cl_environment)
         write_only_flags = get_write_only_cl_mem_flags(cl_environment)
@@ -207,6 +216,7 @@ class MetropolisHastings(AbstractSampler):
                             for(int i = 0; i < ''' + repr(nmr_params) + '''; i++){
                                 x[i] = x_proposal[i];
                             }
+
                             *current_likelihood = new_likelihood;
                             *current_prior = new_prior;
                             acceptance_counter[get_global_id(0)]++;
@@ -223,6 +233,7 @@ class MetropolisHastings(AbstractSampler):
                     int i, j;
 
                     ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
+
                     ranluxcl_state_t ranluxclstate;
                     ranluxcl_download_seed(&ranluxclstate, ranluxcltab);
 
@@ -263,18 +274,3 @@ class MetropolisHastings(AbstractSampler):
         '''
         kernel_source += rng_code.get_cl_code()
         return kernel_source
-
-    def _initialize_ranlux(self, cl_environment, queue, nmr_problems):
-        kernel_source = '#define RANLUXCL_LUX 4' + "\n"
-        kernel_source += RanluxCL().get_cl_code()
-        kernel_source += '''
-            __kernel void init(global float4 *ranluxcltab){
-                ranluxcl_initialization(1, ranluxcltab);
-            }
-        '''
-        read_write_flags = get_read_write_cl_mem_flags(cl_environment)
-        ranluxcltab_buffer = cl.Buffer(cl_environment.context, read_write_flags,
-                                       hostbuf=np.zeros((nmr_problems * 7, 1), dtype=cl_array.vec.float4, order='C'))
-        kernel = cl.Program(cl_environment.context, kernel_source).build(' '.join(cl_environment.compile_flags))
-        kernel.init(queue, (int(nmr_problems), ), None, ranluxcltab_buffer)
-        return ranluxcltab_buffer

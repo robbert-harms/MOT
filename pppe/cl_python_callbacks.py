@@ -1,9 +1,13 @@
+import random
+import warnings
 import pyopencl as cl
 import numpy as np
+import time
 from .cl_environments import CLEnvironmentFactory
+from pppe.cl_functions import RanluxCL
 from .utils import get_cl_double_extension_definer, \
     get_read_write_cl_mem_flags, set_correct_cl_data_type, get_read_only_cl_mem_flags, get_write_only_cl_mem_flags, \
-    ParameterCLCodeGenerator
+    ParameterCLCodeGenerator, initialize_ranlux
 
 
 __author__ = 'Robbert Harms'
@@ -143,6 +147,21 @@ class CLToPythonCallbacks(object):
         generator = _LogPriorCBGenerator(self._state)
         return generator.get_cb(cl_environment)
 
+    def get_proposal_cb(self, cl_environment=None):
+        """Get the callback function for the proposal function used in sampling.
+
+        Args:
+            cl_environment (CLEnvironment): The cl environment to use, if none given we use the
+                cl environment globally defined in the constructor.
+
+        Returns:
+            A python callback function that takes as parameters:
+                - the parameter index in the list of parameters for the current parameter we want the proposal of
+                - the current value of that parameter.
+        """
+        generator = _ProposalCBGenerator(self._state)
+        return generator.get_cb(cl_environment)
+
 
 class _GeneratorState(object):
 
@@ -192,17 +211,19 @@ class _CLEnvironmentsCachedItems(object):
         these objects.
 
         Attributes:
-            param_encode_cb (python callback): The python callback function for parameter encoding.
-            param_decode_cb (python callback): The python callback function for parameter decoding.
+            param_encode_cb (python function): The python callback function for parameter encoding.
+            param_decode_cb (python function): The python callback function for parameter decoding.
             prtcl_and_fixed_data_buffers (list of pyopencl buffers): The list of prepared buffers for the protocol and
                 fixed data buffers.
-            final_param_transform_cb (python callback): The python callback function for final parameter transformations
+            final_param_transform_cb (python function): The python callback function for final parameter transformations
+            log_prior_cb (python function): for generating the prior
             queue (pyopencl queue): The queue used.
         """
         self.param_encode_cb = None
         self.param_decode_cb = None
         self.prtcl_and_fixed_data_buffers = None
         self.final_param_transform_cb = None
+        self.log_prior_cb = None
         self.queue = None
 
 
@@ -376,6 +397,7 @@ class _ResidualCBGenerator(_BaseCBGenerator):
                     evals[gid] = getObservation(&data, gid) - evaluateModel(&data, x, gid);
                 }
         '''
+        warnings.simplefilter("ignore")
         return cl.Program(environment.context, kernel_source).build(' '.join(environment.compile_flags))
 
 
@@ -462,6 +484,7 @@ class _EvalCBGenerator(_BaseCBGenerator):
                     evals[gid] = evaluateModel(&data, x, gid);
                 }
         '''
+        warnings.simplefilter("ignore")
         return cl.Program(environment.context, kernel_source).build(' '.join(environment.compile_flags))
 
 
@@ -551,6 +574,7 @@ class _ObjectiveCBGenerator(_BaseCBGenerator):
                     fval[0] = calculateObjective(&data, x);
                 }
         '''
+        warnings.simplefilter("ignore")
         return cl.Program(environment.context, kernel_source).build(' '.join(environment.compile_flags))
 
 
@@ -642,6 +666,7 @@ class _CodecCBGenerator(_BaseCBGenerator):
                 }
             }
         '''
+        warnings.simplefilter("ignore")
         return cl.Program(environment.context, kernel_source).build(' '.join(environment.compile_flags))
 
 
@@ -727,6 +752,7 @@ class _FinalTransformationCBGenerator(_BaseCBGenerator):
                     }
                 }
         '''
+        warnings.simplefilter("ignore")
         return cl.Program(environment.context, kernel_source).build(' '.join(environment.compile_flags))
 
 
@@ -748,8 +774,8 @@ class _LogPriorCBGenerator(_BaseCBGenerator):
 
         if cl_environment in self._state.cl_environment_items_cache:
             cl_items = self._state.cl_environment_items_cache[cl_environment]
-            if cl_items.final_param_transform_cb:
-                return cl_items.final_param_transform_cb
+            if cl_items.log_prior_cb:
+                return cl_items.log_prior_cb
         else:
             self._state.cl_environment_items_cache.update({cl_environment: _CLEnvironmentsCachedItems()})
 
@@ -760,16 +786,15 @@ class _LogPriorCBGenerator(_BaseCBGenerator):
         result_buffer = cl.Buffer(cl_environment.context, write_only_flags, hostbuf=np.array((1,), dtype=np.float64))
         kernel = self._get_kernel(cl_environment)
 
-        def encode_cb(params_model_space):
+        def log_prior_cb(params_model_space):
             param_buf = cl.Buffer(cl_environment.context, read_only_flags, hostbuf=params_model_space)
             kernel.calculateLogPrior(queue, (1, ), None, param_buf, result_buffer)
             prior_result = np.array((1,), dtype=np.float64)
             cl.enqueue_copy(queue, prior_result, result_buffer, is_blocking=True)
             return prior_result[0]
 
-        self._state.cl_environment_items_cache[cl_environment].param_encode_cb = encode_cb
-
-        return encode_cb
+        self._state.cl_environment_items_cache[cl_environment].log_prior_cb = log_prior_cb
+        return log_prior_cb
 
     def _get_kernel(self, cl_environment):
         nmr_params = self._state.model.get_nmr_estimable_parameters()
@@ -784,4 +809,69 @@ class _LogPriorCBGenerator(_BaseCBGenerator):
                 result[0] = getLogPrior(x);
             }
         '''
+        warnings.simplefilter("ignore")
+        return cl.Program(cl_environment.context, kernel_source).build(' '.join(cl_environment.compile_flags))
+
+
+class _ProposalCBGenerator(_BaseCBGenerator):
+
+    def get_cb(self, cl_environment):
+        """Get the callback function for the proposal function used in sampling.
+
+        Args:
+            cl_environment (CLEnvironment): The cl environment to use, if none given we use the
+                cl environment globally defined in the constructor.
+
+        Returns:
+            A python callback function that takes as parameters:
+                - the parameter index in the list of parameters for the current parameter we want the proposal of
+                - the current value of that parameter.
+        """
+        if not cl_environment:
+            cl_environment = self._state.cl_environment
+
+        if cl_environment in self._state.cl_environment_items_cache:
+            cl_items = self._state.cl_environment_items_cache[cl_environment]
+            if cl_items.proposal_cb:
+                return cl_items.proposal_cb
+        else:
+            self._state.cl_environment_items_cache.update({cl_environment: _CLEnvironmentsCachedItems()})
+
+        queue = self._get_queue(cl_environment)
+        write_only_flags = get_write_only_cl_mem_flags(cl_environment)
+
+        ranluxcltab_buffer = initialize_ranlux(cl_environment, queue, 1, seed=1)
+        result_buffer = cl.Buffer(cl_environment.context, write_only_flags, hostbuf=np.array((1,), dtype=np.float64))
+        kernel = self._get_kernel(cl_environment)
+
+        def proposal_cb(param_index, current_value):
+            buffers = [np.int32(param_index),
+                       np.float64(current_value),
+                       ranluxcltab_buffer,
+                       result_buffer]
+            kernel.calculateProposal(queue, (1, ), None, *buffers)
+            result_host = np.array((1,), dtype=np.float64)
+            cl.enqueue_copy(queue, result_host, result_buffer, is_blocking=True)
+            return result_host[0]
+
+        self._state.cl_environment_items_cache[cl_environment].proposal_cb = proposal_cb
+        return proposal_cb
+
+    def _get_kernel(self, cl_environment):
+        kernel_source = get_cl_double_extension_definer(cl_environment.platform)
+        kernel_source += RanluxCL().get_cl_code()
+        kernel_source += self._state.model.get_proposal_function('getProposal')
+        kernel_source += '''
+            __kernel void calculateProposal(const int parameter_index, const double current_value,
+                                            global float4* ranluxcltab, global double* result){
+
+                ranluxcl_state_t ranluxclstate;
+                ranluxcl_download_seed(&ranluxclstate, ranluxcltab);
+
+                result[0] = getProposal(parameter_index, current_value, &ranluxclstate);
+
+                ranluxcl_upload_seed(&ranluxclstate, ranluxcltab);
+            }
+        '''
+        warnings.simplefilter("ignore")
         return cl.Program(cl_environment.context, kernel_source).build(' '.join(cl_environment.compile_flags))

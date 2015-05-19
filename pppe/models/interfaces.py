@@ -51,7 +51,7 @@ class OptimizeModelInterface(object):
             int: A single integer specifying the number of problem instances
         """
 
-    def get_model_eval_function(self, fname='evaluateModel'):
+    def get_model_eval_function(self, func_name='evaluateModel'):
         """Get the evaluation function that evaluates the model at the given parameters.
 
         This returned function should not do any error calculations,
@@ -64,33 +64,33 @@ class OptimizeModelInterface(object):
         the answers with the right sign.
 
         Args:
-            fname (string): specifies the name of the function.
+            func_name (string): specifies the name of the function.
 
         Returns:
             str: An CL function with the signature:
-                double <fname>(const optimize_data* const data, const double* const x, const int observation_index);
+                double <func_name>(const optimize_data* const data, const double* const x, const int observation_index);
         """
 
-    def get_observation_return_function(self, fname='getObservation'):
+    def get_observation_return_function(self, func_name='getObservation'):
         """Get the CL function that returns the observation for the given problem.
 
         Args:
-            fname (string): specifies the name of the function.
+            func_name (string): specifies the name of the function.
 
         Returns:
             str: An CL function with the signature:
-                double <fname>(const optimize_data* const data, const int observation_index);
+                double <func_name>(const optimize_data* const data, const int observation_index);
         """
 
-    def get_objective_function(self, fname="calculateObjective"):
+    def get_objective_function(self, func_name="calculateObjective"):
         """Get the objective function that evaluates the entire problem instance under a noise model.
 
         Args:
-            fname (string): specifies the name of the function.
+            func_name (string): specifies the name of the function.
 
         Returns:
             A function of the kind:
-                double <fname>(const optimize_data* const data, double* const x);
+                double <func_name>(const optimize_data* const data, double* const x);
         """
 
     def get_initial_parameters(self, results_dict=None):
@@ -161,7 +161,7 @@ class OptimizeModelInterface(object):
             return None, which indicates that no parameter codec is supposed to be used.
         """
 
-    def get_final_parameter_transformations(self, fname='applyFinalParameterTransformations'):
+    def get_final_parameter_transformations(self, func_name='applyFinalParameterTransformations'):
         """Get the transformations that must be applied at the end of an optimization (or sampling) routine.
 
         These transformations must contain all parameter dependencies, that is, all transformation happening in the
@@ -173,11 +173,11 @@ class OptimizeModelInterface(object):
         the exact same transformations at the end of the optimization routine as happened in the evaluation function.
 
         Args:
-            fname (string): specifies the name of the function.
+            func_name (string): specifies the name of the function.
 
         Returns:
             Return None if this function is not used, else a function of the kind:
-                void <fname>(const optimize_data* data, double* x);
+                void <func_name>(const optimize_data* data, double* x);
 
             Which is called for every voxel and must in place edit the x variable.
         """
@@ -187,8 +187,8 @@ class OptimizeModelInterface(object):
 
         In this location extra maps can be added to the results dictionary.
 
-        Please note that the input dict can be updated in place. The function should also return a dict but that
-        is merely for the purpose of chaining. In short this function behaves as a procedure and as a function.
+        This function behaves as a procedure and as a function. The input dict can be updated in place, but it should
+        also return a dict but that is merely for the purpose of chaining.
 
         Args:
             results_dict (dict): A dictionary with as keys the names of the parameters and as values the 1d maps with
@@ -206,15 +206,15 @@ class SampleModelInterface(OptimizeModelInterface):
     def __init__(self):
         super(SampleModelInterface, self).__init__()
 
-    def get_log_likelihood_function(self, fname="getLogLikelihood"):
+    def get_log_likelihood_function(self, func_name="getLogLikelihood"):
         """Get the Log Likelihood function that evaluates the entire problem instance under a noise model
 
         Args:
-            fname (string): specifies the name of the function.
+            func_name (string): specifies the name of the function.
 
         Returns:
             str: A function of the kind:
-                double <fname>(const optimize_data* const data, double* const x);
+                double <func_name>(const optimize_data* const data, double* const x);
         """
 
     def is_proposal_symmetric(self):
@@ -224,12 +224,12 @@ class SampleModelInterface(OptimizeModelInterface):
             boolean: True if the proposal distribution is symmetric, false otherwise.
         """
 
-    def get_proposal_logpdf(self, fname='getProposalLogPDF'):
+    def get_proposal_logpdf(self, func_name='getProposalLogPDF'):
         """Get the probability density function of the proposal in log space.
 
         Returns:
             A function of the kind:
-                double <fname>(const int i, const double proposal, const double current)
+                double <func_name>(const int i, const double proposal, const double current)
 
             Where i is the index of the parameter we would like to get the proposal from, current is the current
             value of that parameter and proposal the proposal value of the parameter. It should return for the requested
@@ -237,26 +237,26 @@ class SampleModelInterface(OptimizeModelInterface):
             the current value (in log space).
         """
 
-    def get_proposal_function(self, fname='getProposal'):
+    def get_proposal_function(self, func_name='getProposal'):
         """Get a proposal function that returns proposals for a requested parameter.
 
         Returns:
             A function of the kind:
-                double <fname>(const int i, const double current, ranluxcl_state_t* ranluxclstate)
+                double <func_name>(const int i, const double current, ranluxcl_state_t* ranluxclstate)
 
             Where i is the index of the parameter we would like to get the proposal from and current is the current
             value of that parameter. One can obtain random numbers with:
                 float4 randomnr = ranluxcl(ranluxclstate);
         """
 
-    def get_log_prior_function(self, fname='getLogProposal'):
+    def get_log_prior_function(self, func_name='getLogPrior'):
         """Get the prior function that returns a double representing the prior information about the given parameters.
 
         The prior function must be in log space.
 
         Returns:
             A function of the kind:
-                double <fname>(const double* const x);
+                double <func_name>(const double* const x);
 
             Which is called by the sampling routine to calculate the posterior probability.
         """

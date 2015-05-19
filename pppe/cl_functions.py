@@ -275,4 +275,4 @@ class Weight(Scalar):
         super(Weight, self).__init__(name=name, value=value, lower_bound=lower_bound, upper_bound=upper_bound)
         self.parameter_list[0].name = 'w'
         self.parameter_list[0].parameter_transform = CosSqrTransform()
-        self.parameter_list[0].sampling_proposal = GaussianProposal(0.0001)
+        self.parameter_list[0].sampling_proposal = GaussianProposal(0.00001)

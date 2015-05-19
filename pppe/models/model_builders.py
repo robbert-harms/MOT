@@ -332,7 +332,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         return CodecBuilder(list(reversed(enc_func_list)), dec_func_list)
 
-    def get_final_parameter_transformations(self, fname='applyFinalParameterTransformations'):
+    def get_final_parameter_transformations(self, func_name='applyFinalParameterTransformations'):
         """Get the transformations that must be applied at the end of an optimization (or sampling) routine.
 
         These transformations must contain all parameter dependencies, as such that all transformation happening in the
@@ -363,7 +363,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                     param_exclude_list.append(m.name + '_' + p.name)
         param_listing = self._get_parameters_listing(exclude_list=param_exclude_list)
 
-        func = "\n\t\t\t" + 'void ' + fname + '(const optimize_data* const data, double* const x){' + "\n"
+        func = "\n\t\t\t" + 'void ' + func_name + '(const optimize_data* const data, double* const x){' + "\n"
         func += param_listing + "\n"
 
         for i, (m, p) in enumerate(self._get_parameter_type_lists()['estimable']):
@@ -372,26 +372,26 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         func += "\t\t\t" + '}' + "\n"
         return func
 
-    def get_observation_return_function(self, fname='getObservation'):
+    def get_observation_return_function(self, func_name='getObservation'):
         func = '''
-            double ''' + fname + '''(const optimize_data* const data, const int observation_index){
+            double ''' + func_name + '''(const optimize_data* const data, const int observation_index){
                 return data->var_data_observations[observation_index];
             }
         '''
         return func
 
-    def get_model_eval_function(self, fname='evaluateModel'):
+    def get_model_eval_function(self, func_name='evaluateModel'):
         func = ''
         for leave in self._model_tree.leaves:
             func += leave.data.get_cl_header() + "\n"
             func += leave.data.get_cl_code() + "\n"
 
         if self._signal_noise_model:
-            noise_fname = fname + '_signalNoiseModel'
-            func += self._signal_noise_model.get_signal_function(noise_fname)
+            noise_func_name = func_name + '_signalNoiseModel'
+            func += self._signal_noise_model.get_signal_function(noise_func_name)
 
         func += '''
-            double ''' + fname + '(const optimize_data* const data, const double* const x, ' \
+            double ''' + func_name + '(const optimize_data* const data, const double* const x, ' \
                                   'const int observation_index){' + "\n"
         func += self._get_parameters_listing(exclude_list=[m.name + '_' + p.name for (m, p) in
                                                            self._get_non_model_tree_param_listing()])
@@ -406,7 +406,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             func += noise_params_listing
 
             func += '''
-                return ''' + noise_fname + '''((''' + \
+                return ''' + noise_func_name + '''((''' + \
                 self._build_model_from_tree(self._model_tree, 0) + ''')''' + noise_params_func +\
                 ''');'''
         else:
@@ -415,19 +415,19 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         func += "\n\t\t\t}"
         return func
 
-    def get_objective_function(self, fname="calculateObjective"):
+    def get_objective_function(self, func_name="calculateObjective"):
         inst_per_problem = self.get_nmr_inst_per_problem()
-        eval_fname = fname + '_evaluateModel'
-        obs_fname = fname + '_getObservation'
+        eval_func_name = func_name + '_evaluateModel'
+        obs_func_name = func_name + '_getObservation'
 
         param_listing = ''
         for p in self._evaluation_model.get_free_parameters():
             param_listing += self._get_param_listing_for_param(self._evaluation_model, p)
 
-        func = self.get_model_eval_function(eval_fname)
-        func += self.get_observation_return_function(obs_fname)
-        func += self._evaluation_model.get_objective_function(fname, inst_per_problem, eval_fname,
-                                                              obs_fname, param_listing)
+        func = self.get_model_eval_function(eval_func_name)
+        func += self.get_observation_return_function(obs_func_name)
+        func += self._evaluation_model.get_objective_function(func_name, inst_per_problem, eval_func_name,
+                                                              obs_func_name, param_listing)
         return func
 
     def finalize_optimization_results(self, results_dict):
@@ -789,8 +789,8 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         super(SampleModelBuilder, self).__init__(model_name, model_tree, evaluation_model, signal_noise_model,
                                                  problem_data)
 
-    def get_log_prior_function(self, fname='getLogPrior'):
-        prior = 'double ' + fname + '(const double* const x){' + "\n"
+    def get_log_prior_function(self, func_name='getLogPrior'):
+        prior = 'double ' + func_name + '(const double* const x){' + "\n"
         prior += "\t" + 'double prior = 1.0;' + "\n"
         for i, (m, p) in enumerate(self._get_estimable_parameters_list()):
             prior += "\t" + 'prior *= ' + p.sampling_prior.get_log_assignment(p, 'x[' + repr(i) + ']') + "\n"
@@ -800,12 +800,12 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
     def is_proposal_symmetric(self):
         return all(p.sampling_proposal.is_symmetric for m, p in self._get_estimable_parameters_list())
 
-    def get_proposal_logpdf(self, fname='getProposalLogPDF'):
+    def get_proposal_logpdf(self, func_name='getProposalLogPDF'):
         pdf = ''
         for m, p in self._get_estimable_parameters_list():
             pdf += p.sampling_proposal.get_proposal_logpdf_function()
 
-        pdf += "\n" + 'double ' + fname + '(const int i, const double proposal, const double current){' + "\n\t"
+        pdf += "\n" + 'double ' + func_name + '(const int i, const double proposal, const double current){' + "\n\t"
         pdf += 'switch(i){' + "\n\t\t"
         for i, (m, p) in enumerate(self._get_estimable_parameters_list()):
             pdf += 'case ' + repr(i) + ':' + "\n\t\t\t"
@@ -813,14 +813,14 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         pdf += '}' + "\n" + 'return 0;' + "\n" + '}'
         return pdf
 
-    def get_proposal_function(self, fname='getProposal'):
+    def get_proposal_function(self, func_name='getProposal'):
         proposal = ''
         for m, p in self._get_estimable_parameters_list():
             param_prior = p.sampling_proposal
             proposal += param_prior.get_proposal_function()
 
         proposal += "\n"
-        proposal += 'double ' + fname + '(const int i, const double current, ranluxcl_state_t* const ranluxclstate){'
+        proposal += 'double ' + func_name + '(const int i, const double current, ranluxcl_state_t* const ranluxclstate){'
         proposal += "\n\t" + 'switch(i){' + "\n\t\t"
         for i, (m, p) in enumerate(self._get_estimable_parameters_list()):
             proposal += 'case ' + repr(i) + ':' + "\n\t\t\t"
@@ -828,19 +828,19 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         proposal += "\n\t\t" + '}' + "\n" + 'return 0;' + "\n" + '}'
         return proposal
 
-    def get_log_likelihood_function(self, fname="getLogLikelihood"):
+    def get_log_likelihood_function(self, func_name="getLogLikelihood"):
         inst_per_problem = self.get_nmr_inst_per_problem()
-        eval_fname = fname + '_evaluateModel'
-        obs_fname = fname + '_getObservation'
+        eval_func_name = func_name + '_evaluateModel'
+        obs_func_name = func_name + '_getObservation'
 
         param_listing = ''
         for p in self._evaluation_model.get_free_parameters():
             param_listing += self._get_param_listing_for_param(self._evaluation_model, p)
 
-        func = self.get_model_eval_function(eval_fname)
-        func += self.get_observation_return_function(obs_fname)
-        func += self._evaluation_model.get_log_likelihood_function(fname, inst_per_problem, eval_fname, obs_fname,
-                                                                   param_listing)
+        func = self.get_model_eval_function(eval_func_name)
+        func += self.get_observation_return_function(obs_func_name)
+        func += self._evaluation_model.get_log_likelihood_function(func_name, inst_per_problem, eval_func_name,
+                                                                   obs_func_name, param_listing)
         return func
 
     def samples_to_statistics(self, samples_dict):

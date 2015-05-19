@@ -330,7 +330,11 @@ class ModelFunction(DependentCLFunction):
         Returns:
             boolean: True if a parameter of the given name is attached to this function, else otherwise.
         """
-        return self.get_parameter_by_name(param_name) is not None
+        try:
+            self.get_parameter_by_name(param_name)
+            return True
+        except KeyError:
+            return False
 
     def p(self, param_name):
         """Get a parameter by name.
@@ -353,11 +357,14 @@ class ModelFunction(DependentCLFunction):
 
         Returns:
             ClFunctionParameter: the parameter of the given name
+
+        Raises:
+            KeyError: if the parameter could not be found.
         """
         for e in self.parameter_list:
             if e.name == param_name:
                 return e
-        return None
+        raise KeyError('The parameter with the given name could not be found.')
 
     def get_extra_results_maps(self, results_dict):
         """Get extra results maps with extra output from this model function.
