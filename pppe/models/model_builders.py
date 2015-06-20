@@ -18,7 +18,6 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
     def __init__(self, name, model_tree, evaluation_model, signal_noise_model=None, problem_data=None):
         super(OptimizeModelBuilder, self).__init__()
-        self.return_maps_fixed_parameters = True
         self._name = name
         self._model_tree = model_tree
         self._evaluation_model = evaluation_model
@@ -434,16 +433,21 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         """This adds the final optimization maps to the results dictionary.
 
         Steps in finalizing the results dict:
-        1) It first adds the maps for the fixed parameters (if return_maps_fixed_parameters is set).
+        1) It first adds the maps for the fixed parameters
         2) Second it adds the extra maps defined in the models itself.
         3) Finally it loops through the post_optimization_modifiers callback functions for the final updates.
 
         """
-        if self.return_maps_fixed_parameters:
-            self._add_fixed_parameter_maps(results_dict)
+        self._add_fixed_parameter_maps(results_dict)
+
+        #todo add parameters fixed to dependencies
 
         for model in self._get_model_list():
-            results_dict.update(model.get_extra_results_maps(results_dict))
+            try: # todo remove this when the above holds (we must make sure all the parameters of a model
+                # todo are in there. The function get_extra_result_maps requires it
+                results_dict.update(model.get_extra_results_maps(results_dict))
+            except:
+                pass
 
         for name, routine in self._post_optimization_modifiers:
             results_dict[name] = routine(results_dict)
