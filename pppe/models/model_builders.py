@@ -1,6 +1,7 @@
 import numbers
 import numpy as np
 from ..base import ProtocolParameter, ModelDataParameter, FreeParameter
+from pppe.cl_routines.mapping.calc_dependent_params import CalculateDependentParameters
 from ..utils import set_cl_compatible_data_type, TopologicalSort, init_dict_tree
 from ..parameter_functions.codecs import CodecBuilder
 from ..parameter_functions.dependencies import SimpleAssignment
@@ -36,7 +37,6 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         self._check_for_double_model_names()
 
         self._set_default_dependencies()
-        self._set_default_post_optimization_modifiers()
 
     @property
     def name(self):
@@ -350,13 +350,13 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         param_exclude_list = [m.name + '_' + p.name for (m, p) in self._get_non_model_tree_param_listing()]
         param_lists = self._get_parameter_type_lists()
         estimable_names = [m.name + '_' + p.name for m, p in param_lists['estimable']]
-        depend_param_listing = self._get_dependend_parameters_listing(param_lists['dependend'])
+        depend_param_listing = self._get_dependent_parameters_listing(param_lists['dependent'])
 
         for m, p in param_lists['fixed'] + param_lists['constant']:
             if (m.name + '_' + p.name) not in depend_param_listing:
                 param_exclude_list.append(m.name + '_' + p.name)
 
-        for m, p in param_lists['dependend']:
+        for m, p in param_lists['dependent']:
             if self._parameter_fixed_to_dependency(m, p):
                 if (m.name + '_' + p.name) not in estimable_names:
                     param_exclude_list.append(m.name + '_' + p.name)
@@ -385,13 +385,13 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             func += leave.data.get_cl_header() + "\n"
             func += leave.data.get_cl_code() + "\n"
 
+        noise_func_name = func_name + '_signalNoiseModel'
         if self._signal_noise_model:
-            noise_func_name = func_name + '_signalNoiseModel'
             func += self._signal_noise_model.get_signal_function(noise_func_name)
 
         func += '''
-            double ''' + func_name + '(const optimize_data* const data, const double* const x, ' \
-                                  'const int observation_index){' + "\n"
+            double ''' + func_name + \
+                '(const optimize_data* const data, const double* const x, const int observation_index){' + "\n"
         func += self._get_parameters_listing(exclude_list=[m.name + '_' + p.name for (m, p) in
                                                            self._get_non_model_tree_param_listing()])
 
@@ -433,21 +433,16 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         """This adds the final optimization maps to the results dictionary.
 
         Steps in finalizing the results dict:
-        1) It first adds the maps for the fixed parameters
+        1) It first adds the maps for the dependent and fixed parameters
         2) Second it adds the extra maps defined in the models itself.
         3) Finally it loops through the post_optimization_modifiers callback functions for the final updates.
 
         """
+        self._add_dependent_parameter_maps(results_dict)
         self._add_fixed_parameter_maps(results_dict)
 
-        #todo add parameters fixed to dependencies
-
         for model in self._get_model_list():
-            try: # todo remove this when the above holds (we must make sure all the parameters of a model
-                # todo are in there. The function get_extra_result_maps requires it
-                results_dict.update(model.get_extra_results_maps(results_dict))
-            except:
-                pass
+            results_dict.update(model.get_extra_results_maps(results_dict))
 
         for name, routine in self._post_optimization_modifiers:
             results_dict[name] = routine(results_dict)
@@ -465,6 +460,25 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                     results_dict.update({name: np.tile(np.array([p.value]), (self.get_nmr_problems(),))})
                 else:
                     results_dict.update({name: p.value})
+
+    def _add_dependent_parameter_maps(self, results_dict):
+        """In place add complete maps for the dependent parameters."""
+        param_lists = self._get_parameter_type_lists()
+        if len(param_lists['dependent']):
+            func = ''
+            func += self._get_fixed_parameters_listing(param_lists['fixed'])
+            func += self._get_estimable_parameters_listing(param_lists['estimable'])
+            func += self._get_dependent_parameters_listing(param_lists['dependent'])
+
+            estimable_params = [m.name + '.' + p.name for m, p in param_lists['estimable']]
+            estimated_parameters = [results_dict[k] for k in estimable_params]
+
+            dependent_parameter_names = [(m.name + '_' + p.name, m.name + '.' + p.name)
+                                         for m, p in param_lists['dependent']]
+
+            cpd = CalculateDependentParameters()
+            dependent_parameters = cpd.calculate(estimated_parameters, func, dependent_parameter_names)
+            results_dict.update(dependent_parameters)
 
     def _build_model_from_tree(self, node, depth):
         if not node.children:
@@ -508,17 +522,78 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         """
         func = ''
         param_lists = self._get_parameter_type_lists()
+        func += self._get_constant_parameters_listing(param_lists['constant'], exclude_list=exclude_list)
+        func += self._get_fixed_parameters_listing(param_lists['fixed'], exclude_list=exclude_list)
+        func += self._get_estimable_parameters_listing(param_lists['estimable'], exclude_list=exclude_list)
+        func += self._get_dependent_parameters_listing(param_lists['dependent'], exclude_list=exclude_list)
+        return func
+
+    def _get_estimable_parameters_listing(self, param_list=None, exclude_list=()):
+        """Get the parameter listing for the free parameters.
+
+        For performance reasons, the parameter list should already be given.
+            If not given it is calculated using:
+                self._get_parameter_type_lists()['estimable']
+
+        Args:
+            param_list: the list with the estimable parameters
+            exclude_list: a list of parameters to exclude from this listing
+        """
+        if param_list is None:
+            param_list = self._get_parameter_type_lists()['estimable']
+
+        func = ''
+        estimable_param_counter = 0
+        for m, p in param_list:
+            name = m.name + '_' + p.name
+            if name not in exclude_list:
+                data_type = p.cl_data_type.data_type
+                assignment = 'x[' + repr(estimable_param_counter) + ']'
+                func += "\t"*4 + data_type + ' ' + name + ' = ' + assignment + ';' + "\n"
+                estimable_param_counter += 1
+        return func
+
+    def _get_constant_parameters_listing(self, param_list=None, exclude_list=()):
+        """Get the parameter listing for the constant parameters.
+
+        For performance reasons, the parameter list should already be given.
+            If not given it is calculated using:
+                self._get_parameter_type_lists()['constant']
+
+        Args:
+            param_list: the list with the constant parameters
+            exclude_list: a list of parameters to exclude from this listing
+        """
+        if param_list is None:
+            param_list = self._get_parameter_type_lists()['constant']
 
         const_params_seen = []
-        for m, p in param_lists['constant']:
+        func = ''
+        for m, p in param_list:
             if (m.name + '_' + p.name) not in exclude_list:
                 data_type = p.cl_data_type.data_type
                 if p.name not in const_params_seen:
                     assignment = 'data->prtcl_data_' + p.name + '[observation_index]'
                     func += "\t"*4 + data_type + ' ' + p.name + ' = ' + assignment + ';' + "\n"
                     const_params_seen.append(p.name)
+        return func
 
-        for m, p in param_lists['fixed']:
+    def _get_fixed_parameters_listing(self, param_list=None, exclude_list=()):
+        """Get the parameter listing for the fixed parameters.
+
+        For performance reasons, the fixed parameter list should already be given.
+            If not given it is calculated using:
+                self._get_parameter_type_lists()['fixed']
+
+        Args:
+            dependent_param_list: the list list of fixed params
+            exclude_list: a list of parameters to exclude from this listing
+        """
+        if param_list is None:
+            param_list = self._get_parameter_type_lists()['fixed']
+
+        func = ''
+        for m, p in param_list:
             name = m.name + '_' + p.name
             if name not in exclude_list:
                 data_type = p.cl_data_type.data_type
@@ -530,18 +605,37 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                     else:
                         assignment = 'data->var_data_' + m.name + '_' + p.name + '[0]'
                 func += "\t"*4 + data_type + ' ' + name + ' = ' + assignment + ';' + "\n"
+        return func
 
-        estimable_param_counter = 0
-        for m, p in param_lists['estimable']:
+    def _get_dependent_parameters_listing(self, dependent_param_list=None, exclude_list=()):
+        """Get the parameter listing for the dependent parameters.
+
+        For performance reasons, the dependent parameter list should already be given.
+            If not given it is calculated using:
+                self._get_parameter_type_lists()['dependent']
+
+        Args:
+            dependent_param_list: the list list of dependent params
+            exclude_list: a list of parameters to exclude from this listing, note that this will only exclude the
+                definition of the parameter, not the dependency code.
+        """
+        if dependent_param_list is None:
+            dependent_param_list = self._get_parameter_type_lists()['dependent']
+        func = ''
+        for m, p in dependent_param_list:
+            pd = self._dependency_store.get_dependency(m.name + '.' + p.name)
+            if pd.pre_transform_code:
+                func += "\t"*4 + self._convert_parameters_dot_to_bar(pd.pre_transform_code)
+
+            assignment = self._convert_parameters_dot_to_bar(pd.assignment_code)
             name = m.name + '_' + p.name
-            if name not in exclude_list:
-                data_type = p.cl_data_type.data_type
-                assignment = 'x[' + repr(estimable_param_counter) + ']'
-                func += "\t"*4 + data_type + ' ' + name + ' = ' + assignment + ';' + "\n"
-                estimable_param_counter += 1
+            data_type = p.cl_data_type.data_type
 
-        func += self._get_dependend_parameters_listing(param_lists['dependend'], exclude_list=exclude_list)
-
+            if self._parameter_fixed_to_dependency(m, p):
+                if (m.name + '_' + p.name) not in exclude_list:
+                    func += "\t"*4 + data_type + ' ' + name + ' = ' + assignment + ';' + "\n"
+            else:
+                func += "\t"*4 + name + ' = ' + assignment + ';' + "\n"
         return func
 
     def _get_non_model_tree_param_listing(self):
@@ -562,7 +656,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
     def _get_param_listing_for_param(self, m, p):
         """Get the param listing for one specific parameter. This can be used for example for the noise model params.
 
-        Please note, that on the moment this function does not support the complete dependency graph for the dependend
+        Please note, that on the moment this function does not support the complete dependency graph for the dependent
         parameters.
         """
         data_type = p.cl_data_type.data_type
@@ -585,45 +679,14 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 ind = self._get_parameter_estimable_index(m.name + '.' + p.name)
                 assignment += 'x[' + repr(ind) + ']'
             if self._parameter_has_dependency(m, p):
-                return self._get_dependend_parameters_listing(((m, p),))
+                return self._get_dependent_parameters_listing(((m, p),))
 
         return data_type + ' ' + name + ' = ' + assignment + ';' + "\n"
 
-    def _get_dependend_parameters_listing(self, dependend_param_list=None, exclude_list=()):
-        """Get the parameter listing for the dependend parameters.
-
-        For performance reasons, the dependend parameter list should already be given.
-            If not given it is calculated using:
-                self._get_parameter_type_lists()['dependend']
-
-        Args:
-            dependend_param_list: the list list of dependend params
-            exclude_list: a list of parameters to exclude from this listing, note that this will only exclude the
-                definition of the parameter, not the dependency code.
-        """
-        if dependend_param_list is None:
-            dependend_param_list = self._get_parameter_type_lists()['dependend']
-        func = ''
-        for m, p in dependend_param_list:
-            pd = self._dependency_store.get_dependency(m.name + '.' + p.name)
-            if pd.pre_transform_code:
-                func += "\t"*4 + self._convert_parameters_dot_to_bar(pd.pre_transform_code)
-
-            assignment = self._convert_parameters_dot_to_bar(pd.assignment_code)
-            name = m.name + '_' + p.name
-            data_type = p.cl_data_type.data_type
-
-            if self._parameter_fixed_to_dependency(m, p):
-                if (m.name + '_' + p.name) not in exclude_list:
-                    func += "\t"*4 + data_type + ' ' + name + ' = ' + assignment + ';' + "\n"
-            else:
-                func += "\t"*4 + name + ' = ' + assignment + ';' + "\n"
-        return func
-
     def _get_parameter_type_lists(self):
-        """Returns a dictionary with the parameters sorted in the types constant, fixed, estimable and dependend.
+        """Returns a dictionary with the parameters sorted in the types constant, fixed, estimable and dependent.
 
-        Parameters may occur in different lists (estimable and dependend for example).
+        Parameters may occur in different lists (estimable and dependent for example).
         """
         constant_parameters = []
         fixed_parameters = []
@@ -645,7 +708,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                     depended_parameters.insert(ind, (m, p))
 
         return {'constant': constant_parameters, 'fixed': fixed_parameters,
-                'estimable': estimable_parameters, 'dependend': depended_parameters}
+                'estimable': estimable_parameters, 'dependent': depended_parameters}
 
     def _get_parameter_by_name(self, parameter_name):
         """Get the parameter object of the given full parameter name in dot format.
@@ -780,12 +843,6 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         """
         self._init_fixed_duplicates_dependencies()
 
-    def _set_default_post_optimization_modifiers(self):
-        """Add default post optimization callbacks. These callbacks are called in the function post_optimization.
-
-        This function is supposed to be used by implementing subclasses.
-        """
-
 
 class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
 
@@ -824,7 +881,8 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
             proposal += param_prior.get_proposal_function()
 
         proposal += "\n"
-        proposal += 'double ' + func_name + '(const int i, const double current, ranluxcl_state_t* const ranluxclstate){'
+        proposal += 'double ' + func_name + \
+                    '(const int i, const double current, ranluxcl_state_t* const ranluxclstate){'
         proposal += "\n\t" + 'switch(i){' + "\n\t\t"
         for i, (m, p) in enumerate(self._get_estimable_parameters_list()):
             proposal += 'case ' + repr(i) + ':' + "\n\t\t\t"

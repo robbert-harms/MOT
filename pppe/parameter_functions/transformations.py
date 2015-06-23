@@ -147,7 +147,7 @@ class SqrClampTransform(AbstractTransformation):
                ', (double)' + repr(parameter.upper_bound) + ');'
 
 
-class SinSqrClampDependendTransform(AbstractTransformation):
+class SinSqrClampDependentTransform(AbstractTransformation):
     """The clamp transformation limits the parameter between 0 and the given parameter with the sin(sqr()) transform."""
 
     def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):

@@ -181,7 +181,7 @@ class DependentCLFunction(CLFunction):
             return_type (str): Return type of the CL function.
             function_name (string): The name of the CL function
             parameter_list (list of CLFunctionParameter): The list of parameters required for this function
-            dependency_list (list of CLFunction): The list of CLFunctions this function is dependend on
+            dependency_list (list of CLFunction): The list of CLFunctions this function is dependent on
         """
         super(DependentCLFunction, self).__init__(return_type, function_name, parameter_list)
         self._dependency_list = dependency_list
@@ -219,7 +219,7 @@ class ModelFunction(DependentCLFunction):
             return_type (str): Return type of the CL function.
             function_name (string): The name of the CL function
             parameter_list (list of CLFunctionParameter): The list of parameters required for this function
-            dependency_list (list of CLFunction): The list of CLFunctions this function is dependend on
+            dependency_list (list of CLFunction): The list of CLFunctions this function is dependent on
         """
         super(ModelFunction, self).__init__('double', cl_function_name, parameter_list, dependency_list)
         self._name = name
@@ -364,7 +364,7 @@ class ModelFunction(DependentCLFunction):
         for e in self.parameter_list:
             if e.name == param_name:
                 return e
-        raise KeyError('The parameter with the given name could not be found.')
+        raise KeyError('The parameter with the name "{}" could not be found.'.format(param_name))
 
     def get_extra_results_maps(self, results_dict):
         """Get extra results maps with extra output from this model function.
@@ -408,7 +408,7 @@ class LibraryFunction(DependentCLFunction):
             var_replace_dict (dict): In the cl_header and cl_code file these replacements will be made
                 (using the % format function of Python)
             parameter_list (list of CLFunctionParameter): The list of parameters required for this function
-            dependency_list (list of CLFunction): The list of CLFunctions this function is dependend on
+            dependency_list (list of CLFunction): The list of CLFunctions this function is dependent on
         """
         super(LibraryFunction, self).__init__(return_type, function_name, parameter_list, dependency_list)
         self._cl_header_file = cl_header_file
