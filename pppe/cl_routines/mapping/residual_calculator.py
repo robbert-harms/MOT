@@ -36,7 +36,7 @@ class ResidualCalculator(AbstractCLRoutine):
         nmr_inst_per_problem = model.get_nmr_inst_per_problem()
         nmr_problems = model.get_nmr_problems()
 
-        errors = np.asmatrix(np.zeros((nmr_problems, nmr_inst_per_problem)).astype(np.float64))
+        errors = np.asmatrix(np.zeros((nmr_problems, nmr_inst_per_problem)).astype(np.float64, copy=False))
 
         problems_var_data_dict = set_correct_cl_data_type(model.get_problems_var_data())
         problems_prtcl_data_dict = set_correct_cl_data_type(model.get_problems_prtcl_data())

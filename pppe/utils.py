@@ -63,15 +63,15 @@ def set_cl_compatible_data_type(value, data_type):
         if data_type.data_type == 'float':
             if isinstance(value, numbers.Number):
                 return np.float32(value)
-            return value.astype(np.float32)
+            return value.astype(np.float32, copy=False)
         elif data_type.data_type == 'int':
             if isinstance(value, numbers.Number):
                 return np.int32(value)
-            return value.astype(np.int32)
+            return value.astype(np.int32, copy=False)
         else:
             if isinstance(value, numbers.Number):
                 return np.float64(value)
-            return value.astype(np.float64)
+            return value.astype(np.float64, copy=False)
 
 
 def numpy_types_to_cl(data_type):
@@ -308,9 +308,9 @@ def set_correct_cl_data_type(data):
                 items.append(set_correct_cl_data_type(d))
             return items
         elif isinstance(data, (numbers.Number,)):
-            return np.array(data, dtype=np.float64, order='C')
+            return np.array(data, dtype=np.float64, order='C', copy=False)
         else:
-            return data.astype(get_correct_cl_data_type_from_data(data))
+            return data.astype(get_correct_cl_data_type_from_data(data), order='C', copy=False)
     return None
 
 

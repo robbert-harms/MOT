@@ -35,7 +35,7 @@ class ErrorMeasures(AbstractCLRoutine):
         cl_environments = self.load_balancer.get_used_cl_environments(self.cl_environments)
 
         errors = set_correct_cl_data_type(errors)
-        measures = np.asmatrix(np.zeros((errors.shape[0], 3))).astype(np.float64)
+        measures = np.asmatrix(np.zeros((errors.shape[0], 3))).astype(np.float64, copy=False)
 
         def process_cb(cl_environment, start, end, buffered_dicts):
             return self._process(errors, measures, start, end, cl_environment)

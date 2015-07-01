@@ -174,5 +174,5 @@ class GaussianSmoother(AbstractSmoother):
         """
         r = range(-int(kernel_length/2), int(kernel_length/2)+1)
         kernel = np.array([1 / (sigma * np.sqrt(2 * np.pi)) * np.exp(-x**2.0 / (2 * sigma**2)) for x in r])
-        kernel = kernel.astype(dtype=np.float64, order='C')
+        kernel = kernel.astype(dtype=np.float64, order='C', copy=False)
         return kernel / sum(kernel)
