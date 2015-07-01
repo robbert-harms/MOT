@@ -4,7 +4,7 @@ import numpy as np
 from ...utils import get_cl_double_extension_definer, \
     get_read_only_cl_mem_flags, set_correct_cl_data_type, get_write_only_cl_mem_flags, ParameterCLCodeGenerator
 from ...cl_routines.base import AbstractCLRoutine
-from ...load_balance_strategies import WorkerConstructor
+from ...load_balance_strategies import WorkerConstructor, PreferCPU
 
 
 __author__ = 'Robbert Harms'
@@ -18,6 +18,8 @@ class ResidualCalculator(AbstractCLRoutine):
 
     def __init__(self, cl_environments=None, load_balancer=None):
         """Calculate the residuals, that is the errors, per problem instance per data point."""
+        if not load_balancer:
+            load_balancer = PreferCPU()
         super(ResidualCalculator, self).__init__(cl_environments, load_balancer)
 
     def calculate(self, model, parameters):

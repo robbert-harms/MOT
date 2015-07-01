@@ -88,6 +88,7 @@ class GaussianProposal(AbstractParameterProposal):
         '''
 
     def get_proposal_call(self, parameter, param_name, ranlux_name):
+        # The standard deviation is in the proposal call to enable multiple proposal calls with different stds.
         return 'dmriproposal_gaussianProposal(' + param_name + ', ' + ranlux_name + ', ' + \
                repr(self.gaussian_scale) + ')'
 

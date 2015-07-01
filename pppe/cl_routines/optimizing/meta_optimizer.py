@@ -6,7 +6,6 @@ from ...cl_routines.mapping.error_measures import ErrorMeasures
 from ...cl_routines.mapping.residual_calculator import ResidualCalculator
 from ...cl_routines.optimizing.gridsearch import GridSearch
 from ...cl_routines.optimizing.nmsimplex import NMSimplex
-from ...models.interfaces import SmoothableModelInterface
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-06-19"
@@ -42,6 +41,10 @@ class MetaOptimizer(AbstractOptimizer):
             extra_optim_runs_smoothers (list, default None): A list of smoothers with one smoother for every extra
                 optimization run. If the length of this list is smaller than the number of runs, the last smoother is
                 used for all remaining runs.
+            extra_optim_runs_apply_smoothing (boolen): If we want to use smoothing or not. This is mutually exclusive
+                with extra_optim_runs_use_perturbation.
+            extra_optim_runs_use_perturbation (boolean): If we want to use the parameter perturbation by the model
+                or not. This is mutually exclusive with extra_optim_runs_apply_smoothing.
             grid_search (Optimizer, default GridSearch): The grid search optimizer.
             optimizer (Optimizer, default NMSimplex): The default optimization routine
             smoother (Smoother, default MedianSmoother(1)): The default smoothing routine
@@ -52,10 +55,11 @@ class MetaOptimizer(AbstractOptimizer):
         self.enable_sampling = False
         self.enable_error_maps = True
 
-        self.extra_optim_runs = 1
+        self.extra_optim_runs = 0
         self.extra_optim_runs_optimizers = None
         self.extra_optim_runs_smoothers = None
-        self.extra_optim_runs_apply_smoothing = True
+        self.extra_optim_runs_apply_smoothing = False
+        self.extra_optim_runs_use_perturbation = True
 
         self.grid_search = GridSearch(cl_environments=self.cl_environments, load_balancer=self.load_balancer,
                                       use_param_codec=self.use_param_codec)
@@ -72,7 +76,7 @@ class MetaOptimizer(AbstractOptimizer):
 
         results = self.optimizer.minimize(model, init_params=results)
 
-        if self.extra_optim_runs and isinstance(model, SmoothableModelInterface):
+        if self.extra_optim_runs:
             for i in range(self.extra_optim_runs):
                 optimizer = self.optimizer
                 smoother = self.smoother
@@ -85,6 +89,9 @@ class MetaOptimizer(AbstractOptimizer):
                         smoother = self.extra_optim_runs_smoothers[i]
                     smoothed_maps = model.smooth(results, smoother)
                     results = optimizer.minimize(model, init_params=smoothed_maps)
+                elif self.extra_optim_runs_use_perturbation:
+                    perturbated_params = model.perturbate(results)
+                    results = optimizer.minimize(model, init_params=perturbated_params)
                 else:
                     results = optimizer.minimize(model, init_params=results)
 

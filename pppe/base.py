@@ -4,7 +4,7 @@ from pppe.parameter_functions.priors import UniformWithinBoundsPrior
 from pppe.parameter_functions.proposals import GaussianProposal
 from pppe.parameter_functions.sample_statistics import GaussianPSS
 from pppe.parameter_functions.transformations import IdentityTransform
-
+import numpy as np
 
 __author__ = 'Robbert Harms'
 __date__ = "2015-03-21"
@@ -484,7 +484,7 @@ class FreeParameter(CLFunctionParameter):
 
     def __init__(self, cl_data_type, name, fixed, value, lower_bound, upper_bound,
                  parameter_transform=None, sampling_proposal=None,
-                 sampling_prior=None, sampling_statistics=None):
+                 sampling_prior=None, sampling_statistics=None, perturbation_function=None):
         """This are the kind of parameters that are generally meant to be optimized.
 
         These parameters may optionally be fixed to a value or list of values for all voxels.
@@ -502,6 +502,9 @@ class FreeParameter(CLFunctionParameter):
             sampling_prior (AbstractParameterPrior): The prior function for use in model sampling
             sampling_statistics (ParameterSampleStatistics): The statistic functions used to get
                 statistics out of the samples
+            perturbation_function (python cb func): The perturbation function to use for perturbing this parameter
+                in between optimization runs. It should accept a single parameter, an array with values to uniquely
+                perturb.
 
         Attributes:
             value (number or ndarray): The value of this state
@@ -513,6 +516,9 @@ class FreeParameter(CLFunctionParameter):
             sampling_prior (AbstractParameterPrior): The prior function for use in model sampling
             sampling_statistics (ParameterSampleStatistics): The statistic functions used to get
                 statistics out of the samples
+            perturbation_function (python cb func): The perturbation function to use for perturbing this parameter
+                in between optimization runs. It should accept a single parameter, an array with values to uniquely
+                perturb.
         """
         super(FreeParameter, self).__init__(cl_data_type, name)
         self.value = value
@@ -524,6 +530,7 @@ class FreeParameter(CLFunctionParameter):
         self.sampling_proposal = sampling_proposal or GaussianProposal(1.0)
         self.sampling_prior = sampling_prior or UniformWithinBoundsPrior()
         self.sampling_statistics = sampling_statistics or GaussianPSS()
+        self.perturbation_function = perturbation_function or (lambda v: v)
 
     def unfix(self):
         """Set the boolean fixed to false. Then return self.

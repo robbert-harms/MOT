@@ -1,5 +1,4 @@
 from pppe.cl_functions import PowellFunc
-from ...utils import get_cl_double_extension_definer, ParameterCLCodeGenerator
 from .base import AbstractParallelOptimizer
 
 __author__ = 'Robbert Harms'
@@ -11,7 +10,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class Powell(AbstractParallelOptimizer):
 
-    patience = 25
+    patience = 10
 
     def __init__(self, cl_environments=None, load_balancer=None, use_param_codec=True, patience=patience):
         """Use the Powell method to calculate the optimimum.

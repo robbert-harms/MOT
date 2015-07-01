@@ -1,4 +1,5 @@
 import os
+import numpy as np
 from pkg_resources import resource_filename
 from .base import LibraryFunction, LibraryParameter, FreeParameter, CLDataType, ModelFunction
 from pppe.parameter_functions.proposals import GaussianProposal
@@ -275,3 +276,5 @@ class Weight(Scalar):
         self.parameter_list[0].name = 'w'
         self.parameter_list[0].parameter_transform = CosSqrTransform()
         self.parameter_list[0].sampling_proposal = GaussianProposal(0.00001)
+        self.parameter_list[0].perturbation_function = lambda v: np.clip(v + np.random.normal(scale=0.05,
+                                                                                              size=v.shape), 0, 1)
