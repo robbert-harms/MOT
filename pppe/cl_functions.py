@@ -1,7 +1,6 @@
 import os
 from pkg_resources import resource_filename
-from .base import LibraryFunction, LibraryParameter, FreeParameter
-from pppe.base import CLDataType, ModelFunction
+from .base import LibraryFunction, LibraryParameter, FreeParameter, CLDataType, ModelFunction
 from pppe.parameter_functions.proposals import GaussianProposal
 from pppe.parameter_functions.transformations import ClampTransform, CosSqrTransform
 

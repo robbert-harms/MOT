@@ -5,6 +5,7 @@ from pppe.parameter_functions.proposals import GaussianProposal
 from pppe.parameter_functions.sample_statistics import GaussianPSS
 from pppe.parameter_functions.transformations import IdentityTransform
 
+
 __author__ = 'Robbert Harms'
 __date__ = "2015-03-21"
 __license__ = "LGPL v3"

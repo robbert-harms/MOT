@@ -55,6 +55,7 @@ class MetaOptimizer(AbstractOptimizer):
         self.extra_optim_runs = 1
         self.extra_optim_runs_optimizers = None
         self.extra_optim_runs_smoothers = None
+        self.extra_optim_runs_apply_smoothing = True
 
         self.grid_search = GridSearch(cl_environments=self.cl_environments, load_balancer=self.load_balancer,
                                       use_param_codec=self.use_param_codec)
@@ -79,11 +80,13 @@ class MetaOptimizer(AbstractOptimizer):
                 if self.extra_optim_runs_optimizers and i < len(self.extra_optim_runs_optimizers):
                     optimizer = self.extra_optim_runs_optimizers[i]
 
-                if self.extra_optim_runs_smoothers and i < len(self.extra_optim_runs_smoothers):
-                    smoother = self.extra_optim_runs_smoothers[i]
-
-                smoothed_maps = model.smooth(results, smoother)
-                results = optimizer.minimize(model, init_params=smoothed_maps)
+                if self.extra_optim_runs_apply_smoothing:
+                    if self.extra_optim_runs_smoothers and i < len(self.extra_optim_runs_smoothers):
+                        smoother = self.extra_optim_runs_smoothers[i]
+                    smoothed_maps = model.smooth(results, smoother)
+                    results = optimizer.minimize(model, init_params=smoothed_maps)
+                else:
+                    results = optimizer.minimize(model, init_params=results)
 
         samples = ()
         other_output = {}
