@@ -1,5 +1,6 @@
 import math
 import time
+import warnings
 import numpy as np
 import pyopencl as cl
 from .utils import get_read_only_cl_mem_flags
@@ -48,6 +49,86 @@ class Worker(object):
             cb_function (python function handler): The callback function
         """
         return self._cb_function
+
+
+class Worker2(object):
+
+    def __init__(self, cl_environment):
+        """Create a new worker object. This is meant to be subclassed by the user.
+
+        The idea is that the workload strategy can use this object to calculate the data, in a way it seems
+        fit for the strategy. During determining the strategy, all items computed should be stored
+        internally by the worker.
+
+        Args:
+            cl_environment (CLEnvironment): The cl environment, can be used to determine the load
+        """
+        self._cl_environment = cl_environment
+        self._queue = self._cl_environment.get_new_queue()
+        self._constant_buffers = []
+
+    @property
+    def cl_environment(self):
+        """Get the used CL environment.
+
+        Returns:
+            cl_environment (CLEnvironment): The cl environment to use for calculations.
+        """
+        return self._cl_environment
+
+    def calculate(self, range_start, range_end):
+        """Calculate for this problem the given range.
+
+        The results of the computations must be stored internally.
+
+        Args:
+            range_start (int): The start of the range
+            range_end (int): The end of the range
+
+        Returns:
+            cl_event: The last CL event, so the load balancer can wait for completion on it.
+        """
+
+    def _build_kernel(self):
+        """Build the kernel for this worker.
+
+        This assumes that the implementer implements the function _get_kernel_source() to get the source.
+
+        Returns:
+            a compiled kernel
+        """
+        kernel_source = self._get_kernel_source()
+        warnings.simplefilter("ignore")
+        kernel = cl.Program(self._cl_environment.context,
+                            kernel_source).build(' '.join(self._cl_environment.compile_flags))
+        return kernel
+
+    def _get_kernel_source(self):
+        """Calculate the kernel source for this worker.
+
+        Returns:
+            str: the kernel
+        """
+
+    def _generate_constant_buffers(self, *args):
+        """Generate read only buffers for the given data
+
+        Args:
+            args (list of dicts): The list with dictionaries with the values we want to buffer.
+
+        Returns:
+            a list of the same length with read only cl buffers.
+        """
+        buffers = []
+        for data_dict in args:
+            for data in data_dict.values():
+                if isinstance(data, np.ndarray):
+                    buffers.append(cl.Buffer(self._cl_environment.context,
+                                             get_read_only_cl_mem_flags(self._cl_environment),
+                                             hostbuf=data))
+                else:
+                    buffers.append(data)
+        return buffers
 
 
 class WorkerConstructor(object):
@@ -142,9 +223,17 @@ class EvenDistribution(LoadBalanceStrategy):
         current_pos = 0
         for i in range(len(workers)):
             if i == len(workers) - 1:
-                queue, event = workers[i].cb_function(current_pos, nmr_items)
+                if isinstance(workers[i], Worker2):
+                    queue = None
+                    event = workers[i].calculate(current_pos, nmr_items)
+                else:
+                    queue, event = workers[i].cb_function(current_pos, nmr_items)
             else:
-                queue, event = workers[i].cb_function(current_pos, current_pos + items_per_worker)
+                if isinstance(workers[i], Worker2):
+                    queue = None
+                    event = workers[i].calculate(current_pos, current_pos + items_per_worker)
+                else:
+                    queue, event = workers[i].cb_function(current_pos, current_pos + items_per_worker)
                 current_pos += items_per_worker
 
             queues.append(queue)

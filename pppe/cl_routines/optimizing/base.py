@@ -1,13 +1,10 @@
-import warnings
-
 import pyopencl as cl
-
 from ...cl_environments import CLEnvironmentFactory
-from pppe.cl_python_callbacks import CLToPythonCallbacks
+from ...cl_python_callbacks import CLToPythonCallbacks
 from ...utils import get_read_only_cl_mem_flags, get_read_write_cl_mem_flags, \
     set_correct_cl_data_type, results_to_dict, ParameterCLCodeGenerator, get_cl_double_extension_definer
 from ...cl_routines.base import AbstractCLRoutine
-from ...load_balance_strategies import PreferGPU, WorkerConstructor
+from ...load_balance_strategies import PreferGPU, Worker2
 from ...cl_routines.mapping.final_parameters_transformer import FinalParametersTransformer
 from ...cl_routines.mapping.codec_runner import CodecRunner
 
@@ -88,46 +85,96 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         super(AbstractParallelOptimizer, self).__init__(cl_environments, load_balancer, use_param_codec, patience)
         self._automatic_apply_codec = True
 
+    @property
+    def automatic_apply_codec(self):
+        """If the base class takes care of the Codec transformations, or not.
+
+        This can only be set internally, but can be read externally such that the workers can read it.
+
+        Returns:
+            boolean: if the base class takes care of the codec or not
+        """
+        return self._automatic_apply_codec
+
     def minimize(self, model, init_params=None, full_output=False):
         starting_points = model.get_initial_parameters(init_params)
-        data_state = self._get_data_state_object(model, starting_points)
-        cl_environments = self.load_balancer.get_used_cl_environments(self.cl_environments)
-        space_transformer = CodecRunner()
 
-        param_codec = model.get_parameter_codec()
-        if self.use_param_codec and param_codec and self._automatic_apply_codec:
-            starting_points = space_transformer.encode(param_codec, starting_points)
-
-        def minimizer_generator(cl_environment, start, end, buffered_dicts):
-            warnings.simplefilter("ignore")
-
-            prtcl_dbuf = buffered_dicts[0]
-            fixed_dbuf = buffered_dicts[1]
-
-            kernel_source = self._get_kernel_source(data_state, cl_environment)
-            kernel = cl.Program(cl_environment.context, kernel_source).build(' '.join(cl_environment.compile_flags))
-
-            return self._run_minimizer(starting_points, prtcl_dbuf, data_state.var_data_dict, fixed_dbuf,
-                                       start, end, cl_environment, kernel)
-
-        worker_constructor = WorkerConstructor()
-        workers = worker_constructor.generate_workers(cl_environments, minimizer_generator,
-                                                      data_dicts_to_buffer=(data_state.prtcl_data_dict,
-                                                                            data_state.fixed_data_dict))
-
+        workers = self._create_workers(self._get_worker, model, starting_points, full_output)
         self.load_balancer.process(workers, model.get_nmr_problems())
 
-        optimized = FinalParametersTransformer(cl_environments=cl_environments, load_balancer=self.load_balancer).\
-            transform(model, starting_points)
+        optimized = FinalParametersTransformer(cl_environments=self._cl_environments,
+                                               load_balancer=self.load_balancer).transform(model, starting_points)
         results = model.finalize_optimization_results(results_to_dict(optimized, model.get_optimized_param_names()))
         if full_output:
             return results, {}
         return results
 
-    def _get_data_state_object(self, model, init_params):
-        return OptimizeDataStateObject(model, init_params.shape[1])
+    def _get_worker(self, cl_environment, model, starting_points, full_output):
+        """Create the worker that we will use in the computations.
 
-    def _get_kernel_source(self, data_state, cl_environment):
+        This is supposed to be overwritten by the implementing optimizer.
+
+        Returns:
+            the worker object
+        """
+        return AbstractParallelOptimizerWorker(self, cl_environment, model, starting_points, full_output)
+
+
+class AbstractParallelOptimizerWorker(Worker2):
+
+    def __init__(self, parent_optimizer, cl_environment, model, starting_points, full_output):
+        super(AbstractParallelOptimizerWorker, self).__init__(cl_environment)
+
+        self._parent_optimizer = parent_optimizer
+
+        self._model = model
+        self._nmr_params = starting_points.shape[1]
+        self._var_data_dict = set_correct_cl_data_type(model.get_problems_var_data())
+        self._prtcl_data_dict = set_correct_cl_data_type(model.get_problems_prtcl_data())
+        self._fixed_data_dict = set_correct_cl_data_type(model.get_problems_fixed_data())
+
+        self._constant_buffers = self._generate_constant_buffers(self._prtcl_data_dict, self._fixed_data_dict)
+
+        space_transformer = CodecRunner()
+        param_codec = model.get_parameter_codec()
+        self._use_param_codec = self._parent_optimizer.use_param_codec and param_codec \
+                                    and self._parent_optimizer._automatic_apply_codec
+
+        if self._use_param_codec:
+            starting_points = space_transformer.encode(param_codec, starting_points)
+
+        self._starting_points = starting_points
+        self._kernel = self._build_kernel()
+
+    def calculate(self, range_start, range_end):
+        range_start = int(range_start)
+        range_end = int(range_end)
+
+        nmr_problems = range_end - range_start
+
+        read_only_flags = get_read_only_cl_mem_flags(self._cl_environment)
+        read_write_flags = get_read_write_cl_mem_flags(self._cl_environment)
+
+        data_buffers = []
+        parameters_buf = cl.Buffer(self._cl_environment.context, read_write_flags, hostbuf=self._starting_points[range_start:range_end, :])
+        data_buffers.append(parameters_buf)
+
+        for data in self._var_data_dict.values():
+            if len(data.shape) < 2:
+                data_buffers.append(cl.Buffer(self._cl_environment.context, read_only_flags, hostbuf=data[range_start:range_end]))
+            else:
+                data_buffers.append(cl.Buffer(self._cl_environment.context, read_only_flags, hostbuf=data[range_start:range_end, :]))
+
+        data_buffers.extend(self._constant_buffers)
+
+        local_range = None
+        global_range = (nmr_problems, )
+        self._kernel.minimize(self._queue, global_range, local_range, *data_buffers)
+
+        event = cl.enqueue_copy(self._queue, self._starting_points[range_start:range_end, :], parameters_buf, is_blocking=False)
+        return event
+
+    def _get_kernel_source(self):
         """Generate the kernel source for this optimization routine.
 
         By default this returns a full kernel source using information from _get_optimizer_cl_code()
@@ -143,24 +190,21 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         Returns:
             str: The kernel source for this optimization routine.
         """
-        cl_objective_function = data_state.model.get_objective_function('calculateObjective')
-        nmr_params = data_state.nmr_params
-        param_codec = data_state.model.get_parameter_codec()
-        param_code_gen = ParameterCLCodeGenerator(cl_environment.device,
-                                                  data_state.var_data_dict,
-                                                  data_state.prtcl_data_dict,
-                                                  data_state.fixed_data_dict)
+        cl_objective_function = self._model.get_objective_function('calculateObjective')
+        nmr_params = self._nmr_params
+        param_code_gen = ParameterCLCodeGenerator(self._cl_environment.device,
+                                                  self._var_data_dict,
+                                                  self._prtcl_data_dict,
+                                                  self._fixed_data_dict)
 
         kernel_param_names = ['global double* params']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
-        use_param_codec = self.use_param_codec and param_codec and self._automatic_apply_codec
-
         kernel_source = ''
-        kernel_source += get_cl_double_extension_definer(cl_environment.platform)
+        kernel_source += get_cl_double_extension_definer(self._cl_environment.platform)
         kernel_source += param_code_gen.get_data_struct()
         kernel_source += cl_objective_function
-        kernel_source += self._get_optimizer_cl_code(data_state)
+        kernel_source += self._get_optimizer_cl_code()
         kernel_source += '''
             __kernel void minimize(
                 ''' + ",\n".join(kernel_param_names) + '''
@@ -174,7 +218,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
 
                     ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
                     ''' + self._get_optimizer_call_name() + '''(x, (const void*) &data);
-                    ''' + ('decodeParameters(x);' if use_param_codec else '') + '''
+                    ''' + ('decodeParameters(x);' if self._use_param_codec else '') + '''
 
                     for(int i = 0; i < ''' + repr(nmr_params) + '''; i++){
                         params[gid * ''' + repr(nmr_params) + ''' + i] = x[i];
@@ -183,7 +227,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         '''
         return kernel_source
 
-    def _get_optimizer_cl_code(self, data_state):
+    def _get_optimizer_cl_code(self):
         """Get the cl code for the implemented CL optimization routine.
 
         This is used by the default implementation of _get_kernel_source(). This function should return the
@@ -199,20 +243,17 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         Returns:
             str: The kernel source for the optimization routine.
         """
-        param_codec = data_state.model.get_parameter_codec()
-        nmr_params = data_state.nmr_params
-        use_param_codec = self.use_param_codec and param_codec and self._automatic_apply_codec
-
-        optimizer_func = self._get_optimization_function(data_state)
+        param_codec = self._model.get_parameter_codec()
+        optimizer_func = self._get_optimization_function()
 
         kernel_source = ''
-        if use_param_codec:
+        if self._use_param_codec:
             decode_func = param_codec.get_cl_decode_function('decodeParameters')
             kernel_source += decode_func + "\n"
             kernel_source += '''
                 double evaluate(double* x, const void* data){
-                    double x_model[''' + repr(nmr_params) + '''];
-                    for(int i = 0; i < ''' + repr(nmr_params) + '''; i++){
+                    double x_model[''' + repr(self._nmr_params) + '''];
+                    for(int i = 0; i < ''' + repr(self._nmr_params) + '''; i++){
                         x_model[i] = x[i];
                     }
                     decodeParameters(x_model);
@@ -230,7 +271,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         kernel_source += optimizer_func.get_cl_code()
         return kernel_source
 
-    def _get_optimization_function(self, data_state):
+    def _get_optimization_function(self):
         """Return the optimization CLFunction object used by the implementing optimizer.
 
         This is a convenience function to avoid boilerplate in implementing _get_optimizer_cl_code().
@@ -249,38 +290,6 @@ class AbstractParallelOptimizer(AbstractOptimizer):
             str: The function name of the optimization function.
         """
         return ''
-
-    def _run_minimizer(self, parameters, prtcl_data_buffers, var_data_dict, fixed_data_buffers,
-                       start, end, environment, kernel):
-        start = int(start)
-        end = int(end)
-
-        queue = environment.get_new_queue()
-        nmr_problems = end - start
-
-        read_only_flags = get_read_only_cl_mem_flags(environment)
-        read_write_flags = get_read_write_cl_mem_flags(environment)
-
-        data_buffers = []
-        parameters_buf = cl.Buffer(environment.context, read_write_flags, hostbuf=parameters[start:end, :])
-        data_buffers.append(parameters_buf)
-
-        for data in var_data_dict.values():
-            if len(data.shape) < 2:
-                data_buffers.append(cl.Buffer(environment.context, read_only_flags, hostbuf=data[start:end]))
-            else:
-                data_buffers.append(cl.Buffer(environment.context, read_only_flags, hostbuf=data[start:end, :]))
-
-        data_buffers.extend(prtcl_data_buffers)
-        data_buffers.extend(fixed_data_buffers)
-
-        local_range = None
-        global_range = (nmr_problems, )
-        kernel.minimize(queue, global_range, local_range, *data_buffers)
-
-        event = cl.enqueue_copy(queue, parameters[start:end, :], parameters_buf, is_blocking=False)
-
-        return queue, event
 
 
 class AbstractSerialOptimizer(AbstractOptimizer):
@@ -330,13 +339,3 @@ class AbstractSerialOptimizer(AbstractOptimizer):
 
     def _minimize_single_voxel(self, objective_cb, x0):
         """Minimize a single voxel and return the results"""
-
-
-class OptimizeDataStateObject(object):
-
-    def __init__(self, model, nmr_params):
-        self.model = model
-        self.nmr_params = nmr_params
-        self.var_data_dict = set_correct_cl_data_type(model.get_problems_var_data())
-        self.prtcl_data_dict = set_correct_cl_data_type(model.get_problems_prtcl_data())
-        self.fixed_data_dict = set_correct_cl_data_type(model.get_problems_fixed_data())

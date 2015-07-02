@@ -90,8 +90,8 @@ class MetaOptimizer(AbstractOptimizer):
                     smoothed_maps = model.smooth(results, smoother)
                     results = optimizer.minimize(model, init_params=smoothed_maps)
                 elif self.extra_optim_runs_use_perturbation:
-                    perturbated_params = model.perturbate(results)
-                    results = optimizer.minimize(model, init_params=perturbated_params)
+                    perturbed_params = model.perturbate(results)
+                    results = optimizer.minimize(model, init_params=perturbed_params)
                 else:
                     results = optimizer.minimize(model, init_params=results)
 

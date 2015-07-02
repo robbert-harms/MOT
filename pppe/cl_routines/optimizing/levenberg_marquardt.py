@@ -1,6 +1,5 @@
-from pppe.cl_functions import LMMin
-from ...utils import get_cl_double_extension_definer, ParameterCLCodeGenerator
-from .base import AbstractParallelOptimizer
+from ...cl_functions import LMMin
+from .base import AbstractParallelOptimizer, AbstractParallelOptimizerWorker
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-02-05"
@@ -23,17 +22,20 @@ class LevenbergMarquardt(AbstractParallelOptimizer):
         super(LevenbergMarquardt, self).__init__(cl_environments, load_balancer, use_param_codec)
         self.patience = patience
 
-    def _get_optimizer_cl_code(self, data_state):
-        param_codec = data_state.model.get_parameter_codec()
-        use_param_codec = self.use_param_codec and param_codec and self._automatic_apply_codec
+    def _get_worker(self, cl_environment, model, starting_points, full_output):
+        return LevenbergMarquardtWorker(self, cl_environment, model, starting_points, full_output)
 
-        optimizer_func = self._get_optimization_function(data_state)
 
-        cl_eval_func = data_state.model.get_model_eval_function('evaluateModel')
-        cl_observation_func = data_state.model.get_observation_return_function('getObservation')
-        nmr_params = data_state.nmr_params
-        param_codec = data_state.model.get_parameter_codec()
-        nmr_inst_per_problem = data_state.model.get_nmr_inst_per_problem()
+class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
+
+    def _get_optimizer_cl_code(self):
+        optimizer_func = self._get_optimization_function()
+
+        cl_eval_func = self._model.get_model_eval_function('evaluateModel')
+        cl_observation_func = self._model.get_observation_return_function('getObservation')
+        nmr_params = self._nmr_params
+        param_codec = self._model.get_parameter_codec()
+        nmr_inst_per_problem = self._model.get_nmr_inst_per_problem()
 
         if nmr_params <= 0:
             raise ValueError('The number of parameters can not be smaller or equal to 0.')
@@ -46,7 +48,7 @@ class LevenbergMarquardt(AbstractParallelOptimizer):
         '''
         kernel_source += cl_observation_func
         kernel_source += cl_eval_func
-        if use_param_codec:
+        if self._use_param_codec:
             decode_func = param_codec.get_cl_decode_function('decodeParameters')
             kernel_source += decode_func + "\n"
             kernel_source += '''
@@ -77,8 +79,8 @@ class LevenbergMarquardt(AbstractParallelOptimizer):
         kernel_source += optimizer_func.get_cl_code()
         return kernel_source
 
-    def _get_optimization_function(self, data_state):
-        return LMMin(data_state.nmr_params, patience=self.patience)
+    def _get_optimization_function(self):
+        return LMMin(self._nmr_params, patience=self._parent_optimizer.patience)
 
     def _get_optimizer_call_name(self):
         return 'lmmin'

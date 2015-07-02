@@ -1,6 +1,5 @@
-from ...utils import get_cl_double_extension_definer, ParameterCLCodeGenerator
 from ...cl_functions import NMSimplexFunc
-from ...cl_routines.optimizing.base import AbstractParallelOptimizer
+from ...cl_routines.optimizing.base import AbstractParallelOptimizer, AbstractParallelOptimizerWorker
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-02-05"
@@ -22,8 +21,14 @@ class NMSimplex(AbstractParallelOptimizer):
         """
         super(NMSimplex, self).__init__(cl_environments, load_balancer, use_param_codec, patience=patience)
 
-    def _get_optimization_function(self, data_state):
-        return NMSimplexFunc(data_state.nmr_params, patience=self.patience)
+    def _get_worker(self, cl_environment, model, starting_points, full_output):
+        return NMSimplexWorker(self, cl_environment, model, starting_points, full_output)
+
+
+class NMSimplexWorker(AbstractParallelOptimizerWorker):
+
+    def _get_optimization_function(self):
+        return NMSimplexFunc(self._nmr_params, patience=self._parent_optimizer.patience)
 
     def _get_optimizer_call_name(self):
         return 'nmsimplex'

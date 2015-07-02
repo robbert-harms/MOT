@@ -112,9 +112,9 @@ class CosSqrClampTransform(AbstractTransformation):
     """The clamp transformation limits the parameter between its lower and upper bound using a cos(sqr()) transform."""
 
     def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):
-        return 'acos(sqrt((' + parameter_name + ' - (double)' + \
+        return 'acos(sqrt(fabs((' + parameter_name + ' - (double)' + \
                repr(parameter.lower_bound) + ') / (double)' + \
-               repr(parameter.upper_bound-parameter.lower_bound) + '));'
+               repr(parameter.upper_bound-parameter.lower_bound) + ')));'
 
     def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
         return 'fma(pown(cos(' + parameter_name + '), 2), (double)' + \
@@ -126,9 +126,9 @@ class SinSqrClampTransform(AbstractTransformation):
     """The clamp transformation limits the parameter between its lower and upper bound using a sin(sqr()) transform."""
 
     def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):
-        return 'asin(sqrt((' + parameter_name + ' - (double)' + \
+        return 'asin(sqrt(fabs((' + parameter_name + ' - (double)' + \
                repr(parameter.lower_bound) + ') / (double)' + \
-               repr(parameter.upper_bound-parameter.lower_bound) + '));'
+               repr(parameter.upper_bound-parameter.lower_bound) + ')));'
 
     def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
         return 'fma(pown(sin(' + parameter_name + '), 2), (double)' + \
@@ -151,10 +151,10 @@ class SinSqrClampDependentTransform(AbstractTransformation):
     """The clamp transformation limits the parameter between 0 and the given parameter with the sin(sqr()) transform."""
 
     def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):
-        return 'asin(sqrt((' + parameter_name + ' - (double)' + \
+        return 'asin(sqrt(fabs((' + parameter_name + ' - (double)' + \
                repr(parameter.lower_bound) + ') / ((double)' + \
                dependencies_names[0] + ' - ' + \
-               repr(parameter.lower_bound) + ')));'
+               repr(parameter.lower_bound) + '))));'
 
     def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
         return 'fma(pown(sin(' + parameter_name + '), 2), ' + dependencies_names[0] + ', (double)' + \
