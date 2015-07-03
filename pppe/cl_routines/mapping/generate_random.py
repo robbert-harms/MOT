@@ -4,7 +4,7 @@ import pyopencl as cl
 from ...cl_functions import RanluxCL
 from ...utils import get_write_only_cl_mem_flags, initialize_ranlux
 from ...cl_routines.base import AbstractCLRoutine
-from ...load_balance_strategies import WorkerConstructor
+from ...load_balance_strategies import Worker2
 
 
 __author__ = 'Robbert Harms'
@@ -36,10 +36,7 @@ class GenerateRandom(AbstractCLRoutine):
             ndarray: A numpy array with nmr_samples random samples drawn from the uniform distribution.
         """
         seed = seed or nmr_samples / time.time()
-
-        def kernel_source_generator():
-            return self._get_uniform_kernel(minimum, maximum)
-        return self._generate_samples(nmr_samples, kernel_source_generator, seed)
+        return self._generate_samples(nmr_samples, self._get_uniform_kernel(minimum, maximum), seed)
 
     def generate_gaussian(self, nmr_samples, mean, std, seed=None):
         """Draw random samples from the Gaussian distribution.
@@ -54,49 +51,19 @@ class GenerateRandom(AbstractCLRoutine):
             ndarray: A numpy array with nmr_samples random samples drawn from the Gaussian distribution.
         """
         seed = seed or nmr_samples / time.time()
+        return self._generate_samples(nmr_samples, self._get_gaussian_kernel(mean, std), seed)
 
-        def kernel_source_generator():
-            return self._get_gaussian_kernel(mean, std)
-        return self._generate_samples(nmr_samples, kernel_source_generator, seed)
-
-    def _generate_samples(self, nmr_samples, kernel_source_generator, seed):
+    def _generate_samples(self, nmr_samples, kernel_source, seed):
         padding = (4 - (nmr_samples % 4)) % 4
         nmr_samples += padding
         samples = np.zeros((nmr_samples + padding,), dtype=np.float32)
 
-        def run_transformer_cb(cl_environment, start, end, buffered_dicts):
-            kernel_source = kernel_source_generator()
-            kernel = cl.Program(cl_environment.context, kernel_source).build(' '.join(cl_environment.compile_flags))
-            return self._run_sampler(samples, start, end, cl_environment, kernel, seed)
-
-        worker_constructor = WorkerConstructor()
-        workers = worker_constructor.generate_workers(self.load_balancer.get_used_cl_environments(self.cl_environments),
-                                                      run_transformer_cb)
-
+        workers = self._create_workers(_GenerateRandomWorker, samples, nmr_samples, kernel_source, seed)
         self.load_balancer.process(workers, nmr_samples / 4)
 
         if padding:
             return samples[:nmr_samples-padding]
         return samples
-
-    def _run_sampler(self, samples, start, end, cl_environment, kernel, seed):
-        queue = cl_environment.get_new_queue()
-        nmr_problems = end - start
-
-        start *= 4
-        end *= 4
-
-        write_only_flags = get_write_only_cl_mem_flags(cl_environment)
-
-        ranluxcltab_buffer = initialize_ranlux(cl_environment, queue, nmr_problems, seed=seed)
-        samples_buf = cl.Buffer(cl_environment.context, write_only_flags, hostbuf=samples[start:end])
-
-        global_range = (int(nmr_problems), )
-        local_range = None
-
-        kernel.sample(queue, global_range, local_range, ranluxcltab_buffer, samples_buf)
-        event = cl.enqueue_copy(queue, samples[start:end], samples_buf, is_blocking=False)
-        return queue, event
 
     def _get_uniform_kernel(self, min, max):
         kernel_source = '#define RANLUXCL_LUX 4' + "\n"
@@ -137,3 +104,36 @@ class GenerateRandom(AbstractCLRoutine):
             }
         '''
         return kernel_source
+
+
+class _GenerateRandomWorker(Worker2):
+
+    def __init__(self, cl_environment, samples, nmr_samples, kernel_source, seed):
+        super(_GenerateRandomWorker, self).__init__(cl_environment)
+        self._samples = samples
+        self._nmr_samples = nmr_samples
+        self._kernel_source = kernel_source
+        self._seed = seed
+        self._kernel = self._build_kernel()
+
+    def calculate(self, range_start, range_end):
+        nmr_problems = range_end - range_start
+
+        range_start *= 4
+        range_end *= 4
+
+        write_only_flags = get_write_only_cl_mem_flags(self._cl_environment)
+
+        ranluxcltab_buffer = initialize_ranlux(self._cl_environment, self._queue, nmr_problems, seed=self._seed)
+        samples_buf = cl.Buffer(self._cl_environment.context, write_only_flags,
+                                hostbuf=self._samples[range_start:range_end])
+
+        global_range = (int(nmr_problems), )
+        local_range = None
+
+        self._kernel.sample(self._queue, global_range, local_range, ranluxcltab_buffer, samples_buf)
+        event = cl.enqueue_copy(self._queue, self._samples[range_start:range_end], samples_buf, is_blocking=False)
+        return event
+
+    def _get_kernel_source(self):
+        return self._kernel_source

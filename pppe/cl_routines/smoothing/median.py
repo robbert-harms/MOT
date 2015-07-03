@@ -116,7 +116,8 @@ class MedianSmoother(AbstractSmoother):
             s += 'for(dim' + repr(i) + ' = dim' + repr(i) + '_start; dim' + repr(i) + \
                     ' < dim' + repr(i) + '_end; dim' + repr(i) + '++){' + "\n"
 
-        s += "\t" * (6 + len(volume_shape)) + 'if(mask[' + self._get_ks_sub2ind_func_call(len(volume_shape)) + '] > 0){'\
+        s += "\t" * (6 + len(volume_shape)) + \
+             'if(mask[' + self._get_ks_sub2ind_func_call(len(volume_shape)) + '] > 0){'\
              + "\n"
         s += "\t" * (7 + len(volume_shape)) + 'voxels[n] = volume[' + self._get_ks_sub2ind_func_call(len(volume_shape))\
              + '];' + "\n"

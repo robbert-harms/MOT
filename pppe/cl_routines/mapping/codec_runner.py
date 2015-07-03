@@ -1,9 +1,8 @@
-import warnings
 import pyopencl as cl
 from ...utils import get_cl_double_extension_definer, \
     get_read_write_cl_mem_flags, set_correct_cl_data_type
 from ...cl_routines.base import AbstractCLRoutine
-from ...load_balance_strategies import WorkerConstructor
+from ...load_balance_strategies import Worker2
 
 
 __author__ = 'Robbert Harms'
@@ -66,52 +65,51 @@ class CodecRunner(AbstractCLRoutine):
                                           codec.get_nmr_parameters())
 
     def _transform_parameters(self, cl_func, cl_func_name, data, nmr_params):
-        cl_environments = self.load_balancer.get_used_cl_environments(self.cl_environments)
-
         rows = data.shape[0]
         data = set_correct_cl_data_type(data)
-
-        def run_transformer_cb(cl_environment, start, end, buffered_dicts):
-            warnings.simplefilter("ignore")
-            kernel_source = self._get_kernel_source(cl_func, cl_func_name, nmr_params, cl_environment)
-            kernel = cl.Program(cl_environment.context, kernel_source).build(' '.join(cl_environment.compile_flags))
-            return self._run_transformer(data, start, end, cl_environment, kernel)
-
-        worker_constructor = WorkerConstructor()
-        workers = worker_constructor.generate_workers(cl_environments, run_transformer_cb)
-
+        workers = self._create_workers(_CodecWorker, cl_func, cl_func_name, data, nmr_params)
         self.load_balancer.process(workers, rows)
         return data
 
-    def _run_transformer(self, parameters, start, end, cl_environment, kernel):
-        queue = cl_environment.get_new_queue()
-        nmr_problems = end - start
-        read_write_flags = get_read_write_cl_mem_flags(cl_environment)
 
-        param_buf = cl.Buffer(cl_environment.context, read_write_flags, hostbuf=parameters[start:end, :])
+class _CodecWorker(Worker2):
 
-        kernel.transformParameterSpace(queue, (int(nmr_problems), ), None, param_buf)
-        event = cl.enqueue_copy(queue, parameters[start:end, :], param_buf, is_blocking=False)
+    def __init__(self, cl_environment, cl_func, cl_func_name, data, nmr_params):
+        super(_CodecWorker, self).__init__(cl_environment)
+        self._cl_func = cl_func
+        self._cl_func_name = cl_func_name
+        self._data = data
+        self._nmr_params = nmr_params
+        self._kernel = self._build_kernel()
 
-        return queue, event
+    def calculate(self, range_start, range_end):
+        nmr_problems = range_end - range_start
+        read_write_flags = get_read_write_cl_mem_flags(self._cl_environment)
 
-    def _get_kernel_source(self, cl_func, cl_func_name, nmr_params, environment):
-        kernel_source = get_cl_double_extension_definer(environment.platform)
-        kernel_source += cl_func
+        param_buf = cl.Buffer(self._cl_environment.context, read_write_flags,
+                              hostbuf=self._data[range_start:range_end, :])
+
+        self._kernel.transformParameterSpace(self._queue, (int(nmr_problems), ), None, param_buf)
+        event = cl.enqueue_copy(self._queue, self._data[range_start:range_end, :], param_buf, is_blocking=False)
+        return event
+
+    def _get_kernel_source(self):
+        kernel_source = get_cl_double_extension_definer(self._cl_environment.platform)
+        kernel_source += self._cl_func
         kernel_source += '''
             __kernel void transformParameterSpace(global double* x_global){
                 int gid = get_global_id(0);
 
-                double x[''' + repr(nmr_params) + '''];
+                double x[''' + repr(self._nmr_params) + '''];
 
-                for(int i = 0; i < ''' + repr(nmr_params) + '''; i++){
-                    x[i] = x_global[gid * ''' + repr(nmr_params) + ''' + i];
+                for(int i = 0; i < ''' + repr(self._nmr_params) + '''; i++){
+                    x[i] = x_global[gid * ''' + repr(self._nmr_params) + ''' + i];
                 }
 
-                ''' + cl_func_name + '''(x);
+                ''' + self._cl_func_name + '''(x);
 
-                for(int i = 0; i < ''' + repr(nmr_params) + '''; i++){
-                    x_global[gid * ''' + repr(nmr_params) + ''' + i] = x[i];
+                for(int i = 0; i < ''' + repr(self._nmr_params) + '''; i++){
+                    x_global[gid * ''' + repr(self._nmr_params) + ''' + i] = x[i];
                 }
             }
         '''
