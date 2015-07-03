@@ -1,4 +1,4 @@
-from .base import AbstractSmoother
+from .base import AbstractSmoother, AbstractSmootherWorker
 from ...utils import get_cl_double_extension_definer
 
 __author__ = 'Robbert Harms'
@@ -13,25 +13,38 @@ class MeanSmoother(AbstractSmoother):
     def __init__(self, size, cl_environments=None, load_balancer=None):
         super(MeanSmoother, self).__init__(size, cl_environments=cl_environments, load_balancer=load_balancer)
 
-    def _get_kernel_source(self, volume_shape, cl_environment):
-        kernel_source = get_cl_double_extension_definer(cl_environment.platform)
-        kernel_source += self._get_ks_sub2ind_func(volume_shape)
+    def _get_worker(self, cl_environment, results_dict, volumes_list, mask):
+        """Create the worker that we will use in the computations.
+
+        This is supposed to be overwritten by the implementing smoother.
+
+        Returns:
+            the worker object
+        """
+        return _MeanSmootherWorker(cl_environment, self, results_dict, volumes_list, mask)
+
+
+class _MeanSmootherWorker(AbstractSmootherWorker):
+
+    def _get_kernel_source(self):
+        kernel_source = get_cl_double_extension_definer(self._cl_environment.platform)
+        kernel_source += self._get_ks_sub2ind_func(self._volume_shape)
         kernel_source += '''
             __kernel void filter(
                 global double* volume,
                 global char* mask,
                 global double* results
                 ){
-                    ''' + self._get_ks_dimension_inits(len(volume_shape)) + '''
-                    int ind = ''' + self._get_ks_sub2ind_func_call(len(volume_shape)) + ''';
+                    ''' + self._get_ks_dimension_inits(len(self._volume_shape)) + '''
+                    int ind = ''' + self._get_ks_sub2ind_func_call(len(self._volume_shape)) + ''';
 
                     if(mask[ind] > 0){
-                        ''' + self._get_ks_dimension_sizes(volume_shape) + '''
+                        ''' + self._get_ks_dimension_sizes(self._volume_shape) + '''
 
                         double sum = 0.0;
                         int count = 0;
 
-                        ''' + self._get_ks_loop(volume_shape) + '''
+                        ''' + self._get_ks_loop(self._volume_shape) + '''
 
                         results[ind] = sum/count;
                     }

@@ -1,11 +1,9 @@
 import numbers
-import warnings
-
 import numpy as np
 import pyopencl as cl
 
 from ...cl_routines.base import AbstractCLRoutine
-from ...load_balance_strategies import WorkerConstructor
+from ...load_balance_strategies import Worker2
 from ...utils import set_correct_cl_data_type, \
     get_write_only_cl_mem_flags, get_read_only_cl_mem_flags
 
@@ -67,9 +65,6 @@ class AbstractSmoother(AbstractCLRoutine):
             return self._smooth({'value': value}, mask)['value']
 
     def _smooth(self, volumes_dict, mask):
-        cl_environments = self.load_balancer.get_used_cl_environments(self.cl_environments)
-        load_balancer = self.load_balancer
-
         results_dict = {}
         for key, value in volumes_dict.items():
             volumes_dict[key] = np.array(value, dtype=np.float64, order='C')
@@ -77,52 +72,63 @@ class AbstractSmoother(AbstractCLRoutine):
 
         volumes_list = volumes_dict.items()
 
-        def run_transformer_cb(cl_environment, start, end, buffered_dicts):
-            kernel_source = self._get_kernel_source(mask.shape, cl_environment)
-
-            warnings.simplefilter("ignore")
-            kernel = cl.Program(cl_environment.context, kernel_source).build(' '.join(cl_environment.compile_flags))
-            return self._run_filter(results_dict, volumes_list, mask, start, end, cl_environment, kernel)
-
-        worker_constructor = WorkerConstructor()
-        workers = worker_constructor.generate_workers(cl_environments, run_transformer_cb)
-
-        load_balancer.process(workers, len(volumes_list))
+        workers = self._create_workers(self._get_worker, results_dict, volumes_list, mask)
+        self._load_balancer.process(workers, len(volumes_list))
 
         return results_dict
 
-    def _run_filter(self, results_dict, volumes_list, mask, start, end, cl_environment, kernel):
-        volumes_to_run = [volumes_list[i] for i in range(len(volumes_list)) if start <= i < end]
+    def _get_worker(self, cl_environment, results_dict, volumes_list, mask):
+        """Create the worker that we will use in the computations.
 
-        write_only_flags = get_write_only_cl_mem_flags(cl_environment)
-        read_only_flags = get_read_only_cl_mem_flags(cl_environment)
+        This is supposed to be overwritten by the implementing smoother.
 
-        queue = cl_environment.get_new_queue()
+        Returns:
+            the worker object
+        """
+        return AbstractSmootherWorker(cl_environment, self, results_dict, volumes_list, mask)
 
-        mask = mask.astype(np.int8, order='C')
-        mask_buf = cl.Buffer(cl_environment.context, read_only_flags, hostbuf=mask)
+
+class AbstractSmootherWorker(Worker2):
+
+    def __init__(self, cl_environment, parent_smoother, results_dict, volumes_list, mask):
+        super(AbstractSmootherWorker, self).__init__(cl_environment)
+        self._parent_smoother = parent_smoother
+        self._size = self._parent_smoother.size
+        self._results_dict = results_dict
+        self._volumes_list = volumes_list
+        self._volume_shape = mask.shape
+        self._mask = mask.astype(np.int8, order='C')
+        self._kernel = self._build_kernel()
+
+    def calculate(self, range_start, range_end):
+        volumes_to_run = [self._volumes_list[i] for i in range(len(self._volumes_list)) if range_start <= i < range_end]
+
+        write_only_flags = get_write_only_cl_mem_flags(self._cl_environment)
+        read_only_flags = get_read_only_cl_mem_flags(self._cl_environment)
+
+        mask_buf = cl.Buffer(self._cl_environment.context, read_only_flags, hostbuf=self._mask)
 
         event = None
         for key, value in volumes_to_run:
-            volume_buf = cl.Buffer(cl_environment.context, read_only_flags, hostbuf=value)
-            results_buf = cl.Buffer(cl_environment.context, write_only_flags, hostbuf=results_dict[key])
+            volume_buf = cl.Buffer(self._cl_environment.context, read_only_flags, hostbuf=value)
+            results_buf = cl.Buffer(self._cl_environment.context, write_only_flags, hostbuf=self._results_dict[key])
 
-            kernel.filter(queue, mask.shape, None, volume_buf, mask_buf, results_buf)
-            event = cl.enqueue_copy(queue, results_dict[key], results_buf, is_blocking=False)
+            self._kernel.filter(self._queue, self._mask.shape, None, volume_buf, mask_buf, results_buf)
+            event = cl.enqueue_copy(self._queue, self._results_dict[key], results_buf, is_blocking=False)
 
-        return queue, event
+        return event
 
-    def _get_kernel_source(self, volume_shape, cl_environment):
+    def _get_kernel_source(self):
         """Get the kernel source for this smoothing kernel.
 
            This should be implemented by the subclass.
         """
 
     def _get_size_in_dimension(self, dimension):
-        if isinstance(self.size, numbers.Number):
-            return self.size
+        if isinstance(self._size, numbers.Number):
+            return self._size
         else:
-            return self.size[dimension]
+            return self._size[dimension]
 
     def _calculate_kernel_size_in_dimension(self, dimension):
         return self._get_size_in_dimension(dimension) * 2 + 1
