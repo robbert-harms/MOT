@@ -180,12 +180,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
     def get_problems_var_data(self):
         """See super class OptimizeModel for details"""
         var_data_dict = {'observations': self._problem_data.observation_list}
-        for m, p in self._get_free_parameters_list():
-            inlined_in_cl_code = isinstance(p.value, numbers.Number)
-
-            if p.fixed and not inlined_in_cl_code and not self._parameter_fixed_to_dependency(m, p):
-                var_data_dict.update({m.name + '_' + p.name: set_cl_compatible_data_type(p.value,
-                                                                                         p.cl_data_type)})
+        var_data_dict.update(self._get_fixed_parameters_as_var_data())
         return var_data_dict
 
     def get_optimization_output_param_names(self):
@@ -477,7 +472,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                                          for m, p in param_lists['dependent']]
 
             cpd = CalculateDependentParameters()
-            dependent_parameters = cpd.calculate(estimated_parameters, func, dependent_parameter_names)
+            dependent_parameters = cpd.calculate(self._get_fixed_parameters_as_var_data(),
+                                                 estimated_parameters, func, dependent_parameter_names)
             results_dict.update(dependent_parameters)
 
     def _build_model_from_tree(self, node, depth):
@@ -637,6 +633,16 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             else:
                 func += "\t"*4 + name + ' = ' + assignment + ';' + "\n"
         return func
+
+    def _get_fixed_parameters_as_var_data(self):
+        var_data_dict = {}
+        for m, p in self._get_free_parameters_list():
+            inlined_in_cl_code = isinstance(p.value, numbers.Number)
+
+            if p.fixed and not inlined_in_cl_code and not self._parameter_fixed_to_dependency(m, p):
+                var_data_dict.update({m.name + '_' + p.name: set_cl_compatible_data_type(p.value,
+                                                                                         p.cl_data_type)})
+        return var_data_dict
 
     def _get_non_model_tree_param_listing(self):
         listing = []

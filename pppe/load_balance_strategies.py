@@ -1,9 +1,10 @@
+import logging
 import math
 import time
 import warnings
 import numpy as np
 import pyopencl as cl
-from .utils import get_read_only_cl_mem_flags
+from .utils import get_read_only_cl_mem_flags, device_type_from_string
 
 
 __author__ = 'Robbert Harms'
@@ -95,6 +96,9 @@ class Worker(object):
 
 class LoadBalanceStrategy(object):
 
+    def __init__(self):
+        self._logger = logging.getLogger(__name__)
+
     def process(self, workers, nmr_items):
         """Process all of the items using the callback function in the work packages.
 
@@ -125,10 +129,36 @@ class LoadBalanceStrategy(object):
         """
         pass
 
-    def _try_processing(self, worker, range_start, range_end, wait_for_cl_event=None):
+    def _run_batches(self, workers, batches):
+        """Run a list of batches on each of the workers.
+
+        This will enqueue on all the workers the batches in sequence and waits for completion of each batch before
+        enqueueing the next one.
+
+        Args:
+            workers (list of Worker): the workers to use in the processing
+            batches (list of lists): for each worker a list with the batches in format (start, end)
+        """
+        self._logger.debug('Preparing to run {0} batch(es) on {1} device(s)'.format(len(batches[0]), len(workers)))
+
+        for batch_nmr in range(len(batches[0])):
+            self._logger.debug('Going to run batch {0} with range {1}'.format(batch_nmr, batches[0][batch_nmr]))
+
+            events = []
+            for worker_ind, worker in enumerate(workers):
+                events.append(worker.calculate(*batches[worker_ind][batch_nmr]))
+            for event in events:
+                event.wait()
+
+            self._logger.info('Processing at {}%.'.format(100 * (float(batch_nmr+1) / len(batches[0]))))
+
+        self._logger.debug('Ran all batches')
+
+    def _try_processing(self, worker, range_start, range_end):
         """Try to process the given worker on the given range.
 
         If processing fails due to memory problems we try to run the worker again with a smaller range.
+        This is currently a blocking call if we run into a memory exception.
 
         Args:
             worker (Worker): The worker to use for the work
@@ -143,7 +173,7 @@ class LoadBalanceStrategy(object):
         """
         try:
             return worker.calculate(range_start, range_end)
-        except cl.MemoryError as e:
+        except cl.MemoryError:
             half_range_length = int(math.ceil((range_end - range_start) / 2.0))
             event = self._try_processing(worker, range_start, range_start + half_range_length)
             event.wait()
@@ -151,27 +181,64 @@ class LoadBalanceStrategy(object):
 
 
 class EvenDistribution(LoadBalanceStrategy):
-    """Give each worker exactly 1/nth of the work. This does not do any feedback load balancing."""
+
+    def __init__(self, run_in_batches=True, single_batch_length=1e4):
+        """Give each worker exactly 1/nth of the work. This does not do any feedback load balancing.
+
+        Args:
+            run_in_batches (boolean): If we want to run the load per worker in batches or in one large run.
+                The advantage of batches is that it is interruptable and it may prevent memory errors since we run
+                with smaller buffers. The disadvantage is that it may be slower due to constant waiting to load the
+                new kernel.
+            single_batch_length (int): The length of a single batch, only used if run_in_batches is set to True.
+                This will create batches this size and run each of them one after the other.
+        """
+        super(EvenDistribution, self).__init__()
+        self.run_in_batches = run_in_batches
+        self.single_batch_length = single_batch_length
 
     def process(self, workers, nmr_items):
-        finish_events = []
         items_per_worker = round(nmr_items / float(len(workers)))
+        batches = []
         current_pos = 0
-        for i in range(len(workers)):
-            if i == len(workers) - 1:
-                new_event = self._try_processing(workers[i], current_pos, nmr_items)
+
+        for worker_ind in range(len(workers)):
+            if worker_ind == len(workers) - 1:
+                batches.append(self._create_batches(current_pos, nmr_items))
             else:
-                new_event = self._try_processing(workers[i], current_pos, current_pos + items_per_worker)
+                batches.append(self._create_batches(current_pos, current_pos + items_per_worker))
                 current_pos += items_per_worker
 
-            finish_events.append(new_event)
-
-        for finish_event in finish_events:
-            if finish_event:
-                finish_event.wait()
+        self._run_batches(workers, batches)
 
     def get_used_cl_environments(self, cl_environments):
         return cl_environments
+
+    def _create_batches(self, range_start, range_end):
+        """Created batches in the given range.
+
+        If self.run_in_batches is False we will only return one batch covering the entire range. If self.run_in_batches
+        is True we will create batches the size of self.single_batch_length.
+
+        Args:
+            range_start (int): the start of the range to create batches for
+            range_end (int): the end of the range to create batches for
+
+        Returns:
+            list of batches which are (start, end) pairs
+        """
+
+        if self.run_in_batches:
+            batches = []
+            batch_pos = range_start
+
+            while batch_pos < range_end:
+                new_batch = (batch_pos, min(range_end, batch_pos + self.single_batch_length))
+                batches.append(new_batch)
+                batch_pos = new_batch[1]
+
+            return batches
+        return [(range_start, range_end)]
 
 
 class RuntimeLoadBalancing(LoadBalanceStrategy):
@@ -183,6 +250,7 @@ class RuntimeLoadBalancing(LoadBalanceStrategy):
             test_percentage (float): The percentage of items to use for the run time duration test
                 (divided by number of devices)
         """
+        super(RuntimeLoadBalancing, self).__init__()
         self.test_percentage = test_percentage
 
     def process(self, workers, nmr_items):
@@ -190,7 +258,7 @@ class RuntimeLoadBalancing(LoadBalanceStrategy):
         start = 0
         for worker in workers:
             end = start + int(math.floor(nmr_items * (self.test_percentage/len(workers)) / 100))
-            durations.append(self.test_duration(worker, start, end))
+            durations.append(self._test_duration(worker, start, end))
             start = end
 
         total_d = sum(durations)
@@ -211,7 +279,7 @@ class RuntimeLoadBalancing(LoadBalanceStrategy):
             if finish_event:
                 finish_event.wait()
 
-    def test_duration(self, worker, start, end):
+    def _test_duration(self, worker, start, end):
         s = time.time()
         event = worker.calculate(start, end)
         if event:
@@ -222,55 +290,57 @@ class RuntimeLoadBalancing(LoadBalanceStrategy):
         return cl_environments
 
 
-class PreferGPU(LoadBalanceStrategy):
+class PreferSingleDeviceType(LoadBalanceStrategy):
 
-    def __init__(self, lb_strategy=EvenDistribution()):
+    def __init__(self, device_type=None, lb_strategy=None):
+        """This is a meta load balance strategy, it uses the given strategy and prefers the use of the indicated device.
+
+        Args:
+            device_type (str or cl.device_type): either a cl device type or a string like ('gpu', 'cpu' or 'apu').
+                This variable indicates the type of device we want to use.
+            lb_strategy (LoadBalanceStrategy): The strategy this class uses in the background.
+        """
+        super(PreferSingleDeviceType, self).__init__()
+        self._lb_strategy = lb_strategy or EvenDistribution()
+        self._device_type = device_type or cl.device_type.CPU
+
+        if isinstance(device_type, basestring):
+            self._device_type = device_type_from_string(device_type)
+
+    def process(self, workers, nmr_items):
+        specific_workers = [worker for worker in workers if worker.cl_environment.device_type == self._device_type]
+
+        if specific_workers:
+            self._lb_strategy.process(specific_workers, nmr_items)
+        else:
+            self._lb_strategy.process(workers, nmr_items)
+
+    def get_used_cl_environments(self, cl_environments):
+        specific_envs = [cl_env for cl_env in cl_environments if cl_env.device_type == self._device_type]
+
+        if specific_envs:
+            return specific_envs
+        else:
+            return cl_environments
+
+
+class PreferGPU(PreferSingleDeviceType):
+
+    def __init__(self, lb_strategy=None):
         """This is a meta load balance strategy, it uses the given strategy and prefers the use of GPU's.
 
         Args:
             lb_strategy (LoadBalanceStrategy): The strategy this class uses in the background.
         """
-        self._lb_strategy = lb_strategy
-
-    def process(self, workers, nmr_items):
-        gpu_list = [wp for wp in workers if wp.cl_environment.is_gpu]
-
-        if gpu_list:
-            self._lb_strategy.process(gpu_list, nmr_items)
-        else:
-            self._lb_strategy.process(workers, nmr_items)
-
-    def get_used_cl_environments(self, cl_environments):
-        gpu_list = [cl_environment for cl_environment in cl_environments if cl_environment.is_gpu]
-
-        if gpu_list:
-            return gpu_list
-        else:
-            return cl_environments
+        super(PreferGPU, self).__init__(device_type='GPU', lb_strategy=lb_strategy)
 
 
-class PreferCPU(LoadBalanceStrategy):
+class PreferCPU(PreferSingleDeviceType):
 
-    def __init__(self, lb_strategy=EvenDistribution()):
+    def __init__(self, lb_strategy=None):
         """This is a meta load balance strategy, it uses the given strategy and prefers the use of CPU's.
 
         Args:
             lb_strategy (LoadBalanceStrategy): The strategy this class uses in the background.
         """
-        self._lb_strategy = lb_strategy
-
-    def process(self, workers, nmr_items):
-        cpu_list = [wp for wp in workers if wp.cl_environment.is_cpu]
-
-        if cpu_list:
-            self._lb_strategy.process(cpu_list, nmr_items)
-        else:
-            self._lb_strategy.process(workers, nmr_items)
-
-    def get_used_cl_environments(self, cl_environments):
-        cpu_list = [cl_environment for cl_environment in cl_environments if cl_environment.is_cpu]
-
-        if cpu_list:
-            return cpu_list
-        else:
-            return cl_environments
+        super(PreferCPU, self).__init__(device_type='CPU', lb_strategy=lb_strategy)

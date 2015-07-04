@@ -1,5 +1,5 @@
 import pyopencl as cl
-from .utils import device_supports_double
+from .utils import device_supports_double, device_type_from_string
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-11-14"
@@ -92,6 +92,15 @@ class CLEnvironment(object):
         """
         return self._device.get_info(cl.device_info.TYPE) == cl.device_type.CPU
 
+    @property
+    def device_type(self):
+        """Get the device type of the device in this environment.
+
+        Returns:
+            the device type of this device.
+        """
+        return self._device.get_info(cl.device_info.TYPE)
+
     def __repr__(self):
         s = "Platform: " + self._platform.name + "\n"
         s += "Vendor: " + self._platform.vendor + "\n"
@@ -131,10 +140,7 @@ class CLEnvironmentFactory(object):
         Returns:
             list of CLEnvironment: List with one element, the CL runtime environment requested.
         """
-        if cl_device_type == 'GPU':
-            cl_device_type = cl.device_type.GPU
-        elif cl_device_type == 'CPU':
-            cl_device_type = cl.device_type.CPU
+        cl_device_type = device_type_from_string(cl_device_type)
 
         if platform is None:
             platform = cl.get_platforms()[0]
@@ -174,11 +180,8 @@ class CLEnvironmentFactory(object):
             list of CLEnvironment: List with one element, the CL runtime environment requested.
         """
         if cl_device_type is not None:
-            if cl_device_type.upper() == 'GPU':
-                cl_device_type = cl.device_type.GPU
-            elif cl_device_type.upper() == 'CPU':
-                cl_device_type = cl.device_type.CPU
-            elif cl_device_type.upper() == 'ALL':
+            cl_device_type = device_type_from_string(cl_device_type)
+            if cl_device_type.upper() == 'ALL':
                 cl_device_type = None
 
         runtime_list = []
