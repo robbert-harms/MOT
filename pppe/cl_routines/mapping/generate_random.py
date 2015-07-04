@@ -4,7 +4,7 @@ import pyopencl as cl
 from ...cl_functions import RanluxCL
 from ...utils import get_write_only_cl_mem_flags, initialize_ranlux
 from ...cl_routines.base import AbstractCLRoutine
-from ...load_balance_strategies import Worker2
+from ...load_balance_strategies import Worker
 
 
 __author__ = 'Robbert Harms'
@@ -106,7 +106,7 @@ class GenerateRandom(AbstractCLRoutine):
         return kernel_source
 
 
-class _GenerateRandomWorker(Worker2):
+class _GenerateRandomWorker(Worker):
 
     def __init__(self, cl_environment, samples, nmr_samples, kernel_source, seed):
         super(_GenerateRandomWorker, self).__init__(cl_environment)

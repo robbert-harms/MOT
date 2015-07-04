@@ -4,7 +4,7 @@ from ...cl_functions import RanluxCL
 from ...utils import get_cl_double_extension_definer, results_to_dict, get_read_only_cl_mem_flags, \
     get_write_only_cl_mem_flags, set_correct_cl_data_type, ParameterCLCodeGenerator, \
     initialize_ranlux
-from ...load_balance_strategies import Worker2
+from ...load_balance_strategies import Worker
 from ...cl_routines.sampling.base import AbstractSampler
 
 
@@ -75,7 +75,7 @@ class MetropolisHastings(AbstractSampler):
         return samples_dict
 
 
-class _MHWorker(Worker2):
+class _MHWorker(Worker):
 
     def __init__(self, cl_environment, model, parameters, samples, acceptance_counter,
                  var_data_dict, prtcl_data_dict, fixed_data_dict, nmr_samples, burn_length, sample_intervals):

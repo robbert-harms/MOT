@@ -2,7 +2,7 @@ import pyopencl as cl
 from ...utils import get_cl_double_extension_definer, \
     get_read_write_cl_mem_flags, get_read_only_cl_mem_flags, set_correct_cl_data_type, ParameterCLCodeGenerator
 from ...cl_routines.base import AbstractCLRoutine
-from ...load_balance_strategies import Worker2
+from ...load_balance_strategies import Worker
 
 
 __author__ = 'Robbert Harms'
@@ -39,13 +39,14 @@ class FinalParametersTransformer(AbstractCLRoutine):
         fixed_data_dict = set_correct_cl_data_type(model.get_problems_fixed_data())
 
         if model.get_final_parameter_transformations():
-            workers = self._create_workers(_FPTWorker, parameters, var_data_dict, prtcl_data_dict, fixed_data_dict)
+            workers = self._create_workers(_FPTWorker, model, parameters, var_data_dict,
+                                           prtcl_data_dict, fixed_data_dict)
             self.load_balancer.process(workers, model.get_nmr_problems())
 
         return parameters
 
 
-class _FPTWorker(Worker2):
+class _FPTWorker(Worker):
 
     def __init__(self, cl_environment, model, parameters, var_data_dict, prtcl_data_dict, fixed_data_dict):
         super(_FPTWorker, self).__init__(cl_environment)

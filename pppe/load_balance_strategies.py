@@ -15,44 +15,6 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class Worker(object):
 
-    def __init__(self, cl_environment, cb_function):
-        """A work package consists of an CL environment and a callback function.
-
-        The callback function is a (pre-initialized) function that accepts a start and end point of data to process. The
-        full signature of this (python) function is as follows:
-            queue, event = cb_function(start, end)
-
-        The idea is that the workload strategy can execute this function in a way it seems fit for the strategy. During
-        determining the strategy, all items computed should be stored internally by the callback function.
-
-        Args:
-            cl_environment (CLEnvironment): The cl environment to use for calculations.
-            cb_function (python function handler): The callback function with the signature cb_function(start, end)
-        """
-        self._cl_environment = cl_environment
-        self._cb_function = cb_function
-
-    @property
-    def cl_environment(self):
-        """Get the used CL environment.
-
-        Returns:
-            cl_environment (CLEnvironment): The cl environment to use for calculations.
-        """
-        return self._cl_environment
-
-    @property
-    def cb_function(self):
-        """The callback function used by this worker.
-
-        Returns:
-            cb_function (python function handler): The callback function
-        """
-        return self._cb_function
-
-
-class Worker2(object):
-
     def __init__(self, cl_environment):
         """Create a new worker object. This is meant to be subclassed by the user.
 
@@ -131,55 +93,6 @@ class Worker2(object):
         return buffers
 
 
-class WorkerConstructor(object):
-
-    def generate_workers(self, cl_environments, callback_generator, data_dicts_to_buffer=None):
-        """Generate workers using the given information.
-
-        Args:
-            cl_environments (list): A list with the CL environments for which to create the work packages
-
-            wp_compute_callback (python function): The function that generate the compute callback function
-                that is used in the work package.
-                Signature:
-                    def wp_minimizer_generator(cl_environment, prtcl_data_buffers, fixed_data_buffers, start, end):
-                        return python_cb function
-
-            prtcl_data_dict (dict): The dictionary with constant data, can be empty
-            fixed_data_dict (dict): The dictionary with the fixd data, can be empty
-
-        Returns:
-            The workers (instances of LoadBalanceStrategy.Worker) that the load balancer
-            may use to calculate the objectives.
-        """
-        workers = []
-        for cl_environment in cl_environments:
-            buffered = []
-            if data_dicts_to_buffer:
-                for e in data_dicts_to_buffer:
-                    buffered.append(self._generate_buffers(cl_environment, e))
-
-            def cb_function_gen(cl_environment=cl_environment, buffered=buffered):
-                def compute_cb(start, end):
-                    return callback_generator(cl_environment, start, end, buffered)
-                return compute_cb
-
-            workers.append(Worker(cl_environment, cb_function_gen()))
-
-        return workers
-
-    def _generate_buffers(self, cl_environment, data_dict):
-        result = []
-        if data_dict:
-            for data in data_dict.values():
-                if isinstance(data, np.ndarray):
-                    result.append(cl.Buffer(cl_environment.context, get_read_only_cl_mem_flags(cl_environment),
-                                            hostbuf=data))
-                else:
-                    result.append(data)
-        return result
-
-
 class LoadBalanceStrategy(object):
 
     def process(self, workers, nmr_items):
@@ -212,32 +125,46 @@ class LoadBalanceStrategy(object):
         """
         pass
 
+    def _try_processing(self, worker, range_start, range_end, wait_for_cl_event=None):
+        """Try to process the given worker on the given range.
+
+        If processing fails due to memory problems we try to run the worker again with a smaller range.
+
+        Args:
+            worker (Worker): The worker to use for the work
+            range_start (int): the start of the range to process
+            range_end (int): the end of the range to process
+            wait_for_cl_event (CL Event): the CL event we must add to the kernel call. This is needed to support
+                running multiple events nicely after each other with very large buffers.
+
+        Returns:
+            a cl event for the last event to happen. Unfortunately this is at the moment a blocking call if the
+            worker throws a memory error. In the future this should be changed to something more appropriate.
+        """
+        try:
+            return worker.calculate(range_start, range_end)
+        except cl.MemoryError as e:
+            half_range_length = int(math.ceil((range_end - range_start) / 2.0))
+            event = self._try_processing(worker, range_start, range_start + half_range_length)
+            event.wait()
+            return self._try_processing(worker, range_start + half_range_length, range_end)
+
 
 class EvenDistribution(LoadBalanceStrategy):
-    """Distribute the work evenly over all the available work packages."""
+    """Give each worker exactly 1/nth of the work. This does not do any feedback load balancing."""
 
     def process(self, workers, nmr_items):
-        queues = []
         finish_events = []
         items_per_worker = round(nmr_items / float(len(workers)))
         current_pos = 0
         for i in range(len(workers)):
             if i == len(workers) - 1:
-                if isinstance(workers[i], Worker2):
-                    queue = None
-                    event = workers[i].calculate(current_pos, nmr_items)
-                else:
-                    queue, event = workers[i].cb_function(current_pos, nmr_items)
+                new_event = self._try_processing(workers[i], current_pos, nmr_items)
             else:
-                if isinstance(workers[i], Worker2):
-                    queue = None
-                    event = workers[i].calculate(current_pos, current_pos + items_per_worker)
-                else:
-                    queue, event = workers[i].cb_function(current_pos, current_pos + items_per_worker)
+                new_event = self._try_processing(workers[i], current_pos, current_pos + items_per_worker)
                 current_pos += items_per_worker
 
-            queues.append(queue)
-            finish_events.append(event)
+            finish_events.append(new_event)
 
         for finish_event in finish_events:
             if finish_event:
@@ -269,18 +196,16 @@ class RuntimeLoadBalancing(LoadBalanceStrategy):
         total_d = sum(durations)
         nmr_items_left = nmr_items - start
 
-        queues = []
         finish_events = []
         for i in range(len(workers)):
             if i == len(workers) - 1:
-                queue, event = workers[i].cb_function(start, nmr_items)
+                new_event = self._try_processing(workers[i], start, nmr_items)
             else:
                 items = int(math.floor(nmr_items_left * (1 - (durations[i] / total_d))))
-                queue, event = workers[i].cb_function(start, start + items)
+                new_event = self._try_processing(workers[i], start, start + items)
                 start += items
 
-            queues.append(queue)
-            finish_events.append(event)
+            finish_events.append(new_event)
 
         for finish_event in finish_events:
             if finish_event:
@@ -288,7 +213,7 @@ class RuntimeLoadBalancing(LoadBalanceStrategy):
 
     def test_duration(self, worker, start, end):
         s = time.time()
-        queue, event = worker.cb_function(start, end)
+        event = worker.calculate(start, end)
         if event:
             event.wait()
         return time.time() - s

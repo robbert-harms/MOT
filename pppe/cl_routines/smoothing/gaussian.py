@@ -1,11 +1,9 @@
 import numbers
 import warnings
-from .base import AbstractSmoother
+from .base import AbstractSmoother, AbstractSmootherWorker
 import numpy as np
 import pyopencl as cl
-from ...load_balance_strategies import WorkerConstructor
-from ...utils import get_write_only_cl_mem_flags, get_read_only_cl_mem_flags, get_cl_double_extension_definer, \
-    get_read_write_cl_mem_flags
+from ...utils import get_read_only_cl_mem_flags, get_cl_double_extension_definer, get_read_write_cl_mem_flags
 
 
 __author__ = 'Robbert Harms'
@@ -43,79 +41,72 @@ class GaussianSmoother(AbstractSmoother):
         super(GaussianSmoother, self).__init__(size, cl_environments=cl_environments, load_balancer=load_balancer)
         self.sigma = sigma
 
-    def _smooth(self, volumes_dict, mask):
-        cl_environments = self.load_balancer.get_used_cl_environments(self.cl_environments)
-        load_balancer = self.load_balancer
+    def _get_worker(self, cl_environment, results_dict, volumes_list, mask):
+        """Create the worker that we will use in the computations.
 
-        results_dict = {}
-        for key, value in volumes_dict.items():
-            volumes_dict[key] = np.array(value, dtype=np.float64, order='C')
-            results_dict[key] = np.zeros_like(volumes_dict[key], dtype=np.float64, order='C')
+        This is supposed to be overwritten by the implementing smoother.
 
-        volumes_list = volumes_dict.items()
+        Returns:
+            the worker object
+        """
+        return _GaussianSmootherWorker(cl_environment, self, results_dict, volumes_list, mask)
 
-        def run_transformer_cb(cl_environment, start, end, buffered_dicts):
-            return self._run_all_filter_steps(results_dict, volumes_list, mask, start, end, cl_environment)
 
-        worker_constructor = WorkerConstructor()
-        workers = worker_constructor.generate_workers(cl_environments, run_transformer_cb)
+class _GaussianSmootherWorker(AbstractSmootherWorker):
 
-        load_balancer.process(workers, len(volumes_list))
+    def calculate(self, range_start, range_end):
+        volumes_to_run = [self._volumes_list[i] for i in range(len(self._volumes_list)) if range_start <= i < range_end]
 
-        return results_dict
-
-    def _run_all_filter_steps(self, results_dict, volumes_list, mask, start, end, cl_environment):
-        volumes_to_run = [volumes_list[i] for i in range(len(volumes_list)) if start <= i < end]
-
-        read_write_flags = get_read_write_cl_mem_flags(cl_environment)
-        read_only_flags = get_read_only_cl_mem_flags(cl_environment)
-
-        queue = cl_environment.get_new_queue()
-
-        mask = mask.astype(np.int8, order='C')
-        mask_buf = cl.Buffer(cl_environment.context, read_only_flags, hostbuf=mask)
+        read_write_flags = get_read_write_cl_mem_flags(self._cl_environment)
+        read_only_flags = get_read_only_cl_mem_flags(self._cl_environment)
 
         return_event = None
         for volume_name, volume in volumes_to_run:
-            volume_buf = cl.Buffer(cl_environment.context, read_write_flags, hostbuf=volume)
-            results_buf = cl.Buffer(cl_environment.context, read_write_flags, hostbuf=results_dict[volume_name])
+            volume_buf = cl.Buffer(self._cl_environment.context, read_write_flags, hostbuf=volume)
+            results_buf = cl.Buffer(self._cl_environment.context, read_write_flags,
+                                    hostbuf=self._results_dict[volume_name])
 
-            if volume.shape != mask.shape:
+            if volume.shape != self._mask.shape:
                 raise ValueError('The shape of the mask and the volumes should match exactly.')
 
-            for dimension in range(len(mask.shape)):
+            for dimension in range(len(self._mask.shape)):
                 kernel_length = self._calculate_kernel_size_in_dimension(dimension)
                 kernel_sigma = self._get_sigma_in_dimension(dimension)
 
                 smooth_kernel = self._get_1d_gaussian_kernel(kernel_length, kernel_sigma)
-                smooth_kernel_buf = cl.Buffer(cl_environment.context, read_only_flags, hostbuf=smooth_kernel)
+                smooth_kernel_buf = cl.Buffer(self._cl_environment.context, read_only_flags, hostbuf=smooth_kernel)
 
-                kernel_source = self._get_gaussian_kernel_source(mask.shape, cl_environment, dimension)
+                kernel_source = self._get_gaussian_kernel_source(dimension)
 
                 warnings.simplefilter("ignore")
-                kernel = cl.Program(cl_environment.context, kernel_source).build(' '.join(cl_environment.compile_flags))
+                kernel = cl.Program(self._cl_environment.context,
+                                    kernel_source).build(' '.join(self._cl_environment.compile_flags))
 
                 if dimension % 2 == 0:
-                    buffers_list = [volume_buf, mask_buf, smooth_kernel_buf, results_buf]
+                    buffers_list = [volume_buf, self._mask_buf, smooth_kernel_buf, results_buf]
                     results_buf_ptr = results_buf
                 else:
-                    buffers_list = [results_buf, mask_buf, smooth_kernel_buf, volume_buf]
+                    buffers_list = [results_buf, self._mask_buf, smooth_kernel_buf, volume_buf]
                     results_buf_ptr = volume_buf
 
-                kernel.filter(queue, mask.shape, None, *buffers_list)
+                kernel.filter(self._queue, self._mask.shape, None, *buffers_list)
 
-                if dimension == len(mask.shape) - 1:
-                    return_event = cl.enqueue_copy(queue, results_dict[volume_name], results_buf_ptr, is_blocking=False)
+                if dimension == len(self._mask.shape) - 1:
+                    return_event = cl.enqueue_copy(self._queue, self._results_dict[volume_name],
+                                                   results_buf_ptr, is_blocking=False)
 
-        return queue, return_event
+        return return_event
 
-    def _get_gaussian_kernel_source(self, volume_shape, cl_environment, dimension):
+    def _build_kernel(self):
+        pass
+
+    def _get_gaussian_kernel_source(self, dimension):
         left_right = self._get_size_in_dimension(dimension)
 
         working_dim = 'dim' + repr(dimension)
 
-        kernel_source = get_cl_double_extension_definer(cl_environment.platform)
-        kernel_source += self._get_ks_sub2ind_func(volume_shape)
+        kernel_source = get_cl_double_extension_definer(self._cl_environment.platform)
+        kernel_source += self._get_ks_sub2ind_func(self._volume_shape)
         kernel_source += '''
             __kernel void filter(
                 global double* volume,
@@ -124,8 +115,8 @@ class GaussianSmoother(AbstractSmoother):
                 global double* results
                 ){
 
-                ''' + self._get_ks_dimension_inits(len(volume_shape)) + '''
-                const int ind = ''' + self._get_ks_sub2ind_func_call(len(volume_shape)) + ''';
+                ''' + self._get_ks_dimension_inits(len(self._volume_shape)) + '''
+                const int ind = ''' + self._get_ks_sub2ind_func_call(len(self._volume_shape)) + ''';
 
                 if(mask[ind] > 0){
                     int filter_index = 0;
@@ -136,10 +127,10 @@ class GaussianSmoother(AbstractSmoother):
                     int tmp_ind = 0;
 
                     for(''' + working_dim + ''' = start; ''' + working_dim + ''' <= end; ''' + working_dim + '''++){
-                        tmp_ind = ''' + self._get_ks_sub2ind_func_call(len(volume_shape)) + ''';
+                        tmp_ind = ''' + self._get_ks_sub2ind_func_call(len(self._volume_shape)) + ''';
 
                         if(''' + working_dim + ''' >= 0 && ''' + working_dim + ''' < ''' + \
-                            repr(volume_shape[dimension]) + '''){
+                            repr(self._volume_shape[dimension]) + '''){
                             if(mask[tmp_ind] > 0){
                                 filtered_value += filter[filter_index] * volume[tmp_ind];
                             }
@@ -154,12 +145,12 @@ class GaussianSmoother(AbstractSmoother):
         return kernel_source
 
     def _get_sigma_in_dimension(self, dimension):
-        if self.sigma is None:
+        if self._parent_smoother.sigma is None:
             return self._get_size_in_dimension(dimension) / 3.0
-        elif isinstance(self.sigma, numbers.Number):
-            return self.sigma
+        elif isinstance(self._parent_smoother.sigma, numbers.Number):
+            return self._parent_smoother.sigma
         else:
-            return self.sigma[dimension]
+            return self._parent_smoother.sigma[dimension]
 
     def _get_1d_gaussian_kernel(self, kernel_length, sigma):
         """Generate a new gaussian kernel of length kernel_length and with the given sigma in one dimension.

@@ -3,7 +3,7 @@ import numpy as np
 from ...utils import get_cl_double_extension_definer, \
     get_read_only_cl_mem_flags, set_correct_cl_data_type, get_write_only_cl_mem_flags, ParameterCLCodeGenerator
 from ...cl_routines.base import AbstractCLRoutine
-from ...load_balance_strategies import Worker2
+from ...load_balance_strategies import Worker
 
 
 __author__ = 'Robbert Harms'
@@ -39,7 +39,7 @@ class ResidualCalculator(AbstractCLRoutine):
         return residuals
 
 
-class _ResidualCalculatorWorker(Worker2):
+class _ResidualCalculatorWorker(Worker):
 
     def __init__(self, cl_environment, model, parameters, residuals):
         super(_ResidualCalculatorWorker, self).__init__(cl_environment)

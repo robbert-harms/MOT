@@ -2,7 +2,7 @@ import pyopencl as cl
 from ...utils import get_cl_double_extension_definer, \
     get_read_write_cl_mem_flags, set_correct_cl_data_type
 from ...cl_routines.base import AbstractCLRoutine
-from ...load_balance_strategies import Worker2
+from ...load_balance_strategies import Worker
 
 
 __author__ = 'Robbert Harms'
@@ -72,7 +72,7 @@ class CodecRunner(AbstractCLRoutine):
         return data
 
 
-class _CodecWorker(Worker2):
+class _CodecWorker(Worker):
 
     def __init__(self, cl_environment, cl_func, cl_func_name, data, nmr_params):
         super(_CodecWorker, self).__init__(cl_environment)

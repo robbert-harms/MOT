@@ -3,7 +3,7 @@ import numpy as np
 import pyopencl as cl
 
 from ...cl_routines.base import AbstractCLRoutine
-from ...load_balance_strategies import Worker2
+from ...load_balance_strategies import Worker
 from ...utils import set_correct_cl_data_type, \
     get_write_only_cl_mem_flags, get_read_only_cl_mem_flags
 
@@ -88,7 +88,7 @@ class AbstractSmoother(AbstractCLRoutine):
         return AbstractSmootherWorker(cl_environment, self, results_dict, volumes_list, mask)
 
 
-class AbstractSmootherWorker(Worker2):
+class AbstractSmootherWorker(Worker):
 
     def __init__(self, cl_environment, parent_smoother, results_dict, volumes_list, mask):
         super(AbstractSmootherWorker, self).__init__(cl_environment)
@@ -98,6 +98,8 @@ class AbstractSmootherWorker(Worker2):
         self._volumes_list = volumes_list
         self._volume_shape = mask.shape
         self._mask = mask.astype(np.int8, order='C')
+        self._mask_buf = cl.Buffer(self._cl_environment.context, get_read_only_cl_mem_flags(self._cl_environment),
+                                   hostbuf=self._mask)
         self._kernel = self._build_kernel()
 
     def calculate(self, range_start, range_end):
@@ -106,14 +108,12 @@ class AbstractSmootherWorker(Worker2):
         write_only_flags = get_write_only_cl_mem_flags(self._cl_environment)
         read_only_flags = get_read_only_cl_mem_flags(self._cl_environment)
 
-        mask_buf = cl.Buffer(self._cl_environment.context, read_only_flags, hostbuf=self._mask)
-
         event = None
         for key, value in volumes_to_run:
             volume_buf = cl.Buffer(self._cl_environment.context, read_only_flags, hostbuf=value)
             results_buf = cl.Buffer(self._cl_environment.context, write_only_flags, hostbuf=self._results_dict[key])
 
-            self._kernel.filter(self._queue, self._mask.shape, None, volume_buf, mask_buf, results_buf)
+            self._kernel.filter(self._queue, self._mask.shape, None, volume_buf, self._mask_buf, results_buf)
             event = cl.enqueue_copy(self._queue, self._results_dict[key], results_buf, is_blocking=False)
 
         return event

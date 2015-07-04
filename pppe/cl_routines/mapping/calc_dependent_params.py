@@ -3,7 +3,7 @@ from ...utils import get_cl_double_extension_definer, \
     get_read_only_cl_mem_flags, set_correct_cl_data_type, \
     get_write_only_cl_mem_flags, results_to_dict
 from ...cl_routines.base import AbstractCLRoutine
-from ...load_balance_strategies import PreferCPU, Worker2
+from ...load_balance_strategies import PreferCPU, Worker
 import numpy as np
 
 
@@ -54,7 +54,7 @@ class CalculateDependentParameters(AbstractCLRoutine):
         return results_to_dict(results_list, [n[1] for n in dependent_parameter_names])
 
 
-class _CDPWorker(Worker2):
+class _CDPWorker(Worker):
 
     def __init__(self, cl_environment, estimated_parameters_list, parameters_listing,
                  dependent_parameter_names, results_list):

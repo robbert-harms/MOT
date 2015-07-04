@@ -4,7 +4,7 @@ from ...cl_python_callbacks import CLToPythonCallbacks
 from ...utils import get_read_only_cl_mem_flags, get_read_write_cl_mem_flags, \
     set_correct_cl_data_type, results_to_dict, ParameterCLCodeGenerator, get_cl_double_extension_definer
 from ...cl_routines.base import AbstractCLRoutine
-from ...load_balance_strategies import PreferGPU, Worker2
+from ...load_balance_strategies import PreferGPU, Worker
 from ...cl_routines.mapping.final_parameters_transformer import FinalParametersTransformer
 from ...cl_routines.mapping.codec_runner import CodecRunner
 
@@ -120,7 +120,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         return AbstractParallelOptimizerWorker(self, cl_environment, model, starting_points, full_output)
 
 
-class AbstractParallelOptimizerWorker(Worker2):
+class AbstractParallelOptimizerWorker(Worker):
 
     def __init__(self, parent_optimizer, cl_environment, model, starting_points, full_output):
         super(AbstractParallelOptimizerWorker, self).__init__(cl_environment)
