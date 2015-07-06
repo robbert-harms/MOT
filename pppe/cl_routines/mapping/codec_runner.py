@@ -1,3 +1,4 @@
+import logging
 import pyopencl as cl
 from ...utils import get_cl_double_extension_definer, \
     get_read_write_cl_mem_flags, set_correct_cl_data_type
@@ -17,6 +18,7 @@ class CodecRunner(AbstractCLRoutine):
     def __init__(self, cl_environments=None, load_balancer=None):
         """This class can run the codecs used to transform the parameters to and from optimization space."""
         super(CodecRunner, self).__init__(cl_environments, load_balancer)
+        self._logger = logging.getLogger(__name__)
 
     def decode(self, codec, data):
         """Decode the parameters.

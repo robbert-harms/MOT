@@ -1,3 +1,4 @@
+import logging
 import pyopencl as cl
 from ...cl_environments import CLEnvironmentFactory
 from ...cl_python_callbacks import CLToPythonCallbacks
@@ -84,6 +85,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
     def __init__(self, cl_environments=None, load_balancer=None, use_param_codec=True, patience=1):
         super(AbstractParallelOptimizer, self).__init__(cl_environments, load_balancer, use_param_codec, patience)
         self._automatic_apply_codec = True
+        self._logger = logging.getLogger(__name__)
 
     @property
     def automatic_apply_codec(self):
@@ -97,51 +99,72 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         return self._automatic_apply_codec
 
     def minimize(self, model, init_params=None, full_output=False):
+        self._logger.info('Starting optimization preliminaries')
         starting_points = model.get_initial_parameters(init_params)
 
-        workers = self._create_workers(self._get_worker, model, starting_points, full_output)
+        var_data_dict = set_correct_cl_data_type(model.get_problems_var_data())
+        prtcl_data_dict = set_correct_cl_data_type(model.get_problems_prtcl_data())
+        fixed_data_dict = set_correct_cl_data_type(model.get_problems_fixed_data())
+        nmr_params = starting_points.shape[1]
+
+        space_transformer = CodecRunner()
+        param_codec = model.get_parameter_codec()
+        if self.use_param_codec and param_codec and self._automatic_apply_codec:
+            starting_points = space_transformer.encode(param_codec, starting_points)
+
+        self._logger.info('Finished optimization preliminaries')
+        self._logger.info('Starting optimization')
+
+        workers = self._create_workers(self._get_worker_class(), self, model, starting_points, full_output,
+                                       var_data_dict, prtcl_data_dict, fixed_data_dict, nmr_params)
         self.load_balancer.process(workers, model.get_nmr_problems())
+
+        self._logger.info('Finished optimization')
+        self._logger.info('Starting post-optimization transformations')
 
         optimized = FinalParametersTransformer(cl_environments=self._cl_environments,
                                                load_balancer=self.load_balancer).transform(model, starting_points)
         results = model.finalize_optimization_results(results_to_dict(optimized, model.get_optimized_param_names()))
+
+        self._logger.info('Finished post-optimization transformations')
+
         if full_output:
             return results, {}
         return results
 
-    def _get_worker(self, cl_environment, model, starting_points, full_output):
-        """Create the worker that we will use in the computations.
+    def _get_worker_class(self):
+        """Get the worker class we will use for the calculations.
 
-        This is supposed to be overwritten by the implementing optimizer.
+        This should return a class or a callback function capable of generating an object. It should accept
+        the parameters (cl_environment, self, model, starting_points, full_output) where self refers to the
+        the parent optimization class (the class that constructs the worker.
+
+        This function is supposed to be implemented by the implementing optimizer.
 
         Returns:
-            the worker object
+            the worker class
         """
-        return AbstractParallelOptimizerWorker(self, cl_environment, model, starting_points, full_output)
 
 
 class AbstractParallelOptimizerWorker(Worker):
 
-    def __init__(self, parent_optimizer, cl_environment, model, starting_points, full_output):
+    def __init__(self, cl_environment, parent_optimizer, model, starting_points, full_output,
+                 var_data_dict, prtcl_data_dict, fixed_data_dict, nmr_params):
         super(AbstractParallelOptimizerWorker, self).__init__(cl_environment)
 
         self._parent_optimizer = parent_optimizer
 
         self._model = model
-        self._nmr_params = starting_points.shape[1]
-        self._var_data_dict = set_correct_cl_data_type(model.get_problems_var_data())
-        self._prtcl_data_dict = set_correct_cl_data_type(model.get_problems_prtcl_data())
-        self._fixed_data_dict = set_correct_cl_data_type(model.get_problems_fixed_data())
+        self._nmr_params = nmr_params
+        self._var_data_dict = var_data_dict
+        self._prtcl_data_dict = prtcl_data_dict
+        self._fixed_data_dict = fixed_data_dict
 
         self._constant_buffers = self._generate_constant_buffers(self._prtcl_data_dict, self._fixed_data_dict)
 
-        space_transformer = CodecRunner()
         param_codec = model.get_parameter_codec()
         self._use_param_codec = self._parent_optimizer.use_param_codec and param_codec \
                                     and self._parent_optimizer._automatic_apply_codec
-
-        if self._use_param_codec:
-            starting_points = space_transformer.encode(param_codec, starting_points)
 
         self._starting_points = starting_points
         self._kernel = self._build_kernel()

@@ -3,7 +3,7 @@ from ...utils import get_cl_double_extension_definer, \
     get_read_only_cl_mem_flags, set_correct_cl_data_type, \
     get_write_only_cl_mem_flags, results_to_dict, ParameterCLCodeGenerator
 from ...cl_routines.base import AbstractCLRoutine
-from ...load_balance_strategies import PreferCPU, Worker
+from ...load_balance_strategies import Worker
 import numpy as np
 
 
@@ -23,8 +23,6 @@ class CalculateDependentParameters(AbstractCLRoutine):
         as well as all the other maps. Since the dependencies are specified in CL, we have to recourse to CL to
         calculate these maps.
         """
-        if not load_balancer:
-            load_balancer = PreferCPU()
         super(CalculateDependentParameters, self).__init__(cl_environments, load_balancer)
 
     def calculate(self, fixed_param_values, estimated_parameters_list, parameters_listing, dependent_parameter_names):
@@ -51,10 +49,11 @@ class CalculateDependentParameters(AbstractCLRoutine):
             (estimated_parameters_list[0].shape[0], len(dependent_parameter_names)),
             dtype=np.float64, order='C')
 
-        estimated_parameters = set_correct_cl_data_type(np.dstack(estimated_parameters_list).ravel().reshape((-1, 1)))
+        estimated_parameters = set_correct_cl_data_type(np.dstack(estimated_parameters_list).flatten())
 
-        workers = self._create_workers(_CDPWorker, fixed_param_values, estimated_parameters_list, estimated_parameters,
-                                       parameters_listing, dependent_parameter_names, results_list)
+        workers = self._create_workers(_CDPWorker, fixed_param_values, len(estimated_parameters_list),
+                                       estimated_parameters, parameters_listing,
+                                       dependent_parameter_names, results_list)
         self.load_balancer.process(workers, estimated_parameters_list[0].shape[0])
 
         return results_to_dict(results_list, [n[1] for n in dependent_parameter_names])
@@ -62,12 +61,12 @@ class CalculateDependentParameters(AbstractCLRoutine):
 
 class _CDPWorker(Worker):
 
-    def __init__(self, cl_environment, fixed_param_values, estimated_parameters_list, estimated_parameters,
+    def __init__(self, cl_environment, fixed_param_values, nmr_estimated_params, estimated_parameters,
                  parameters_listing, dependent_parameter_names, results_list):
         super(_CDPWorker, self).__init__(cl_environment)
 
         self._fixed_param_values = fixed_param_values
-        self._estimated_parameters_list = estimated_parameters_list
+        self._nmr_estimated_params = nmr_estimated_params
         self._parameters_listing = parameters_listing
         self._dependent_parameter_names = dependent_parameter_names
         self._results_list = results_list
@@ -79,18 +78,24 @@ class _CDPWorker(Worker):
     def calculate(self, range_start, range_end):
         write_only_flags = get_write_only_cl_mem_flags(self._cl_environment)
         read_only_flags = get_read_only_cl_mem_flags(self._cl_environment)
-        nmr_problems = range_end - range_start
+        nmr_problems = int(range_end - range_start)
 
-        estimated_parameters_buf = cl.Buffer(self._cl_environment.context, read_only_flags,
-                                             hostbuf=self._estimated_parameters[range_start:range_end, :])
+        ep_start = range_start * self._nmr_estimated_params
+        ep_end = range_end * self._nmr_estimated_params
+
+        estimated_parameters_buf = cl.Buffer(
+            self._cl_environment.context, read_only_flags,
+            hostbuf=self._estimated_parameters[ep_start:ep_end])
+
         results_buf = cl.Buffer(self._cl_environment.context, write_only_flags,
                                 hostbuf=self._results_list[range_start:range_end, :])
 
         data_buffers = [estimated_parameters_buf, results_buf]
         data_buffers.extend(self._constant_buffers)
 
-        self._kernel.transform(self._queue, (int(nmr_problems), ), None, *data_buffers)
-        event = cl.enqueue_copy(self._queue, self._results_list[range_start:range_end, :], results_buf, is_blocking=False)
+        self._kernel.transform(self._queue, (nmr_problems, ), None, *data_buffers)
+        event = cl.enqueue_copy(self._queue, self._results_list[range_start:range_end, :], results_buf,
+                                is_blocking=False)
         return event
 
     def _get_kernel_source(self):
@@ -116,10 +121,10 @@ class _CDPWorker(Worker):
                     ''' + param_code_gen.get_data_struct_init_assignment('data_var') + '''
                     optimize_data* data = &data_var;
 
-                    double x[''' + repr(len(self._estimated_parameters_list)) + '''];
+                    double x[''' + repr(self._nmr_estimated_params) + '''];
                     int i = 0;
-                    for(i = 0; i < ''' + repr(len(self._estimated_parameters_list)) + '''; i++){
-                        x[i] = params[gid * ''' + repr(len(self._estimated_parameters_list)) + ''' + i];
+                    for(i = 0; i < ''' + repr(self._nmr_estimated_params) + '''; i++){
+                        x[i] = params[gid * ''' + repr(self._nmr_estimated_params) + ''' + i];
                     }
                     ''' + self._parameters_listing + '''
                     ''' + parameter_write_out + '''

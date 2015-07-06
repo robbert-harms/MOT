@@ -10,7 +10,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class Powell(AbstractParallelOptimizer):
 
-    patience = 10
+    patience = 5
 
     def __init__(self, cl_environments=None, load_balancer=None, use_param_codec=True, patience=patience):
         """Use the Powell method to calculate the optimum.
@@ -21,8 +21,8 @@ class Powell(AbstractParallelOptimizer):
         """
         super(Powell, self).__init__(cl_environments, load_balancer, use_param_codec, patience=patience)
 
-    def _get_worker(self, cl_environment, model, starting_points, full_output):
-        return PowellWorker(self, cl_environment, model, starting_points, full_output)
+    def _get_worker_class(self):
+        return PowellWorker
 
 
 class PowellWorker(AbstractParallelOptimizerWorker):

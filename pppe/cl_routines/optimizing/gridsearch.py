@@ -15,8 +15,8 @@ class GridSearch(AbstractParallelOptimizer):
         super(GridSearch, self).__init__(cl_environments, load_balancer, use_param_codec, patience=patience)
         self._automatic_apply_codec = False
 
-    def _get_worker(self, cl_environment, model, starting_points, full_output):
-        return GridSearchWorker(self, cl_environment, model, starting_points, full_output)
+    def _get_worker_class(self):
+        return GridSearchWorker
 
 
 class GridSearchWorker(AbstractParallelOptimizerWorker):

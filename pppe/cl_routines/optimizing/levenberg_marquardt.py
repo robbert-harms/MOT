@@ -22,8 +22,8 @@ class LevenbergMarquardt(AbstractParallelOptimizer):
         super(LevenbergMarquardt, self).__init__(cl_environments, load_balancer, use_param_codec)
         self.patience = patience
 
-    def _get_worker(self, cl_environment, model, starting_points, full_output):
-        return LevenbergMarquardtWorker(self, cl_environment, model, starting_points, full_output)
+    def _get_worker_class(self):
+        return LevenbergMarquardtWorker
 
 
 class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):

@@ -1,6 +1,7 @@
 import logging
 import math
 import time
+import timeit
 import warnings
 import numpy as np
 import pyopencl as cl
@@ -141,6 +142,7 @@ class LoadBalanceStrategy(object):
         """
         self._logger.debug('Preparing to run {0} batch(es) on {1} device(s)'.format(len(batches[0]), len(workers)))
 
+        start_time = timeit.default_timer()
         for batch_nmr in range(len(batches[0])):
             self._logger.debug('Going to run batch {0} with range {1}'.format(batch_nmr, batches[0][batch_nmr]))
 
@@ -150,9 +152,13 @@ class LoadBalanceStrategy(object):
             for event in events:
                 event.wait()
 
-            self._logger.info('Processing at {}%.'.format(100 * (float(batch_nmr+1) / len(batches[0]))))
+            run_time = timeit.default_timer() - start_time
+            current_percentage = float(batch_nmr+1) / len(batches[0])
+            remaining_time = (run_time / current_percentage) - run_time
+            self._logger.info('Processing is at {0:.2%}, time left: {1}.'.format(
+                current_percentage, time.strftime('%H:%M:%S', time.gmtime(remaining_time))))
 
-        self._logger.debug('Ran all batches')
+        self._logger.debug('Ran all batches.')
 
     def _try_processing(self, worker, range_start, range_end):
         """Try to process the given worker on the given range.
@@ -182,7 +188,7 @@ class LoadBalanceStrategy(object):
 
 class EvenDistribution(LoadBalanceStrategy):
 
-    def __init__(self, run_in_batches=True, single_batch_length=1e4):
+    def __init__(self, run_in_batches=True, single_batch_length=1e5):
         """Give each worker exactly 1/nth of the work. This does not do any feedback load balancing.
 
         Args:
