@@ -97,8 +97,41 @@ class Worker(object):
 
 class LoadBalanceStrategy(object):
 
-    def __init__(self):
+    def __init__(self, run_in_batches=True, single_batch_length=1e5):
+        """ The base load balancer.
+
+        Every load balancer has the option to run the calculations in batches. The advantage of batches is that it is
+        interruptable and it may prevent memory errors since we run with smaller buffers. The disadvantage is that it
+        may be slower due to constant waiting to load the new kernel and due to GPU thread starvation.
+
+        Args:
+            run_in_batches (boolean): If we want to run the load per worker in batches or in one large run.
+            single_batch_length (int): The length of a single batch, only used if run_in_batches is set to True.
+                This will create batches this size and run each of them one after the other.
+
+        Attributes:
+            run_in_batches (boolean); See above.
+            single_batch_length (boolean); See above.
+        """
         self._logger = logging.getLogger(__name__)
+        self._run_in_batches = run_in_batches
+        self._single_batch_length = single_batch_length
+
+    @property
+    def run_in_batches(self):
+        return self._run_in_batches
+
+    @run_in_batches.setter
+    def run_in_batches(self, value):
+        self._run_in_batches = value
+
+    @property
+    def single_batch_length(self):
+        return self._single_batch_length
+
+    @single_batch_length.setter
+    def single_batch_length(self, value):
+        self._single_batch_length = value
 
     def process(self, workers, nmr_items):
         """Process all of the items using the callback function in the work packages.
@@ -130,6 +163,32 @@ class LoadBalanceStrategy(object):
         """
         pass
 
+    def _create_batches(self, range_start, range_end):
+        """Created batches in the given range.
+
+        If self.run_in_batches is False we will only return one batch covering the entire range. If self.run_in_batches
+        is True we will create batches the size of self.single_batch_length.
+
+        Args:
+            range_start (int): the start of the range to create batches for
+            range_end (int): the end of the range to create batches for
+
+        Returns:
+            list of list: list of batches which are (start, end) pairs
+        """
+
+        if self.run_in_batches:
+            batches = []
+            batch_pos = range_start
+
+            while batch_pos < range_end:
+                new_batch = (batch_pos, min(range_end, batch_pos + self.single_batch_length))
+                batches.append(new_batch)
+                batch_pos = new_batch[1]
+
+            return batches
+        return [(range_start, range_end)]
+
     def _run_batches(self, workers, batches):
         """Run a list of batches on each of the workers.
 
@@ -148,7 +207,8 @@ class LoadBalanceStrategy(object):
 
             events = []
             for worker_ind, worker in enumerate(workers):
-                events.append(worker.calculate(*batches[worker_ind][batch_nmr]))
+                if batch_nmr < len(batches[worker_ind]):
+                    events.append(worker.calculate(*batches[worker_ind][batch_nmr]))
             for event in events:
                 event.wait()
 
@@ -187,21 +247,7 @@ class LoadBalanceStrategy(object):
 
 
 class EvenDistribution(LoadBalanceStrategy):
-
-    def __init__(self, run_in_batches=True, single_batch_length=1e5):
-        """Give each worker exactly 1/nth of the work. This does not do any feedback load balancing.
-
-        Args:
-            run_in_batches (boolean): If we want to run the load per worker in batches or in one large run.
-                The advantage of batches is that it is interruptable and it may prevent memory errors since we run
-                with smaller buffers. The disadvantage is that it may be slower due to constant waiting to load the
-                new kernel.
-            single_batch_length (int): The length of a single batch, only used if run_in_batches is set to True.
-                This will create batches this size and run each of them one after the other.
-        """
-        super(EvenDistribution, self).__init__()
-        self.run_in_batches = run_in_batches
-        self.single_batch_length = single_batch_length
+    """Give each worker exactly 1/nth of the work. This does not do any feedback load balancing."""
 
     def process(self, workers, nmr_items):
         items_per_worker = round(nmr_items / float(len(workers)))
@@ -220,43 +266,18 @@ class EvenDistribution(LoadBalanceStrategy):
     def get_used_cl_environments(self, cl_environments):
         return cl_environments
 
-    def _create_batches(self, range_start, range_end):
-        """Created batches in the given range.
-
-        If self.run_in_batches is False we will only return one batch covering the entire range. If self.run_in_batches
-        is True we will create batches the size of self.single_batch_length.
-
-        Args:
-            range_start (int): the start of the range to create batches for
-            range_end (int): the end of the range to create batches for
-
-        Returns:
-            list of batches which are (start, end) pairs
-        """
-
-        if self.run_in_batches:
-            batches = []
-            batch_pos = range_start
-
-            while batch_pos < range_end:
-                new_batch = (batch_pos, min(range_end, batch_pos + self.single_batch_length))
-                batches.append(new_batch)
-                batch_pos = new_batch[1]
-
-            return batches
-        return [(range_start, range_end)]
-
 
 class RuntimeLoadBalancing(LoadBalanceStrategy):
 
-    def __init__(self, test_percentage=10):
+    def __init__(self, test_percentage=10, run_in_batches=True, single_batch_length=1e5):
         """Distribute the work by trying to minimize the time taken.
 
         Args:
             test_percentage (float): The percentage of items to use for the run time duration test
                 (divided by number of devices)
         """
-        super(RuntimeLoadBalancing, self).__init__()
+        super(RuntimeLoadBalancing, self).__init__(run_in_batches=run_in_batches,
+                                                   single_batch_length=single_batch_length)
         self.test_percentage = test_percentage
 
     def process(self, workers, nmr_items):
@@ -270,46 +291,70 @@ class RuntimeLoadBalancing(LoadBalanceStrategy):
         total_d = sum(durations)
         nmr_items_left = nmr_items - start
 
-        finish_events = []
+        batches = []
         for i in range(len(workers)):
             if i == len(workers) - 1:
-                new_event = self._try_processing(workers[i], start, nmr_items)
+                batches.append(self._create_batches(start, nmr_items))
             else:
                 items = int(math.floor(nmr_items_left * (1 - (durations[i] / total_d))))
-                new_event = self._try_processing(workers[i], start, start + items)
+                batches.append(self._create_batches(start, start + items))
                 start += items
 
-            finish_events.append(new_event)
-
-        for finish_event in finish_events:
-            if finish_event:
-                finish_event.wait()
+        self._run_batches(workers, batches)
 
     def _test_duration(self, worker, start, end):
-        s = time.time()
-        event = worker.calculate(start, end)
-        if event:
-            event.wait()
-        return time.time() - s
+        s = timeit.default_timer()
+        self._run_batches([worker], [self._create_batches(start, end)])
+        return timeit.default_timer() - s
 
     def get_used_cl_environments(self, cl_environments):
         return cl_environments
 
 
-class PreferSingleDeviceType(LoadBalanceStrategy):
+class MetaLoadBalanceStrategy(LoadBalanceStrategy):
 
-    def __init__(self, device_type=None, lb_strategy=None):
+    def __init__(self, lb_strategy):
+        """ Create a load balance strategy that uses another strategy to do the actual computations.
+
+        Args:
+            lb_strategy (LoadBalanceStrategy): The load balance strategy this class uses.
+        """
+        super(MetaLoadBalanceStrategy, self).__init__()
+        self._lb_strategy = lb_strategy or EvenDistribution()
+
+    @property
+    def run_in_batches(self):
+        """ Returns the value for the load balance strategy this class uses. """
+        return self._lb_strategy.run_in_batches
+
+    @run_in_batches.setter
+    def run_in_batches(self, value):
+        """ Sets the value for the load balance strategy this class uses. """
+        self._lb_strategy.run_in_batches = value
+
+    @property
+    def single_batch_length(self):
+        """ Returns the value for the load balance strategy this class uses. """
+        return self._lb_strategy.single_batch_length
+
+    @single_batch_length.setter
+    def single_batch_length(self, value):
+        """ Sets the value for the load balance strategy this class uses. """
+        self._lb_strategy.single_batch_length = value
+
+
+class PreferSingleDeviceType(MetaLoadBalanceStrategy):
+
+    def __init__(self, lb_strategy=None, device_type=None):
         """This is a meta load balance strategy, it uses the given strategy and prefers the use of the indicated device.
 
         Args:
+            lb_strategy (LoadBalanceStrategy): The strategy this class uses in the background.
             device_type (str or cl.device_type): either a cl device type or a string like ('gpu', 'cpu' or 'apu').
                 This variable indicates the type of device we want to use.
-            lb_strategy (LoadBalanceStrategy): The strategy this class uses in the background.
         """
-        super(PreferSingleDeviceType, self).__init__()
-        self._lb_strategy = lb_strategy or EvenDistribution()
+        super(PreferSingleDeviceType, self).__init__(lb_strategy)
         self._device_type = device_type or cl.device_type.CPU
-
         if isinstance(device_type, basestring):
             self._device_type = device_type_from_string(device_type)
 
@@ -350,3 +395,25 @@ class PreferCPU(PreferSingleDeviceType):
             lb_strategy (LoadBalanceStrategy): The strategy this class uses in the background.
         """
         super(PreferCPU, self).__init__(device_type='CPU', lb_strategy=lb_strategy)
+
+
+class PreferSpecificEnvironment(MetaLoadBalanceStrategy):
+
+    def __init__(self, lb_strategy=None, environment_nmr=0):
+        """This is a meta load balance strategy, it prefers the use of a specific CL environment.
+
+        Use this only when you are sure how the list of CL devices will look like. For example in use with parallel
+        optimization of multiple subjects with each on a specific device.
+
+        Args:
+            lb_strategy (LoadBalanceStrategy): The strategy this class uses in the background.
+            environment_nmr (int): the specific environment to use in the list of CL environments
+        """
+        super(PreferSpecificEnvironment, self).__init__(lb_strategy)
+        self._environment_nmr = environment_nmr
+
+    def process(self, workers, nmr_items):
+        self._lb_strategy.process(workers, nmr_items)
+
+    def get_used_cl_environments(self, cl_environments):
+        return [cl_environments[self._environment_nmr]]

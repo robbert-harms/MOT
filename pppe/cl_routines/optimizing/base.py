@@ -30,10 +30,10 @@ class AbstractOptimizer(AbstractCLRoutine):
             load_balancer (LoadBalancer): the load balance strategy to use
             use_param_codec (boolean): if this minimization should use the parameter codecs (param transformations)
             patience (int): The patience is used in the calculation of how many iterations to iterate the optimizer.
-                The exact semantical value of this parameter may change per optimizer.
+                The exact usage of this value of this parameter may change per optimizer.
         """
         self._use_param_codec = use_param_codec
-        self.patience = patience
+        self.patience = patience or 1
 
         if not load_balancer:
             load_balancer = PreferGPU()
@@ -41,9 +41,6 @@ class AbstractOptimizer(AbstractCLRoutine):
         if not cl_environments:
             cl_environments = CLEnvironmentFactory.all_devices(compile_flags=('-cl-strict-aliasing',
                                                                               '-cl-no-signed-zeros'))
-
-        if not patience:
-            self.patience = 1
 
         super(AbstractOptimizer, self).__init__(cl_environments, load_balancer)
 

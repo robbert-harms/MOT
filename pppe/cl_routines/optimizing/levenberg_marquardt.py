@@ -10,17 +10,17 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class LevenbergMarquardt(AbstractParallelOptimizer):
 
-    patience = 250
+    default_patience = 250
 
-    def __init__(self, cl_environments=None, load_balancer=None, use_param_codec=True, patience=patience):
+    def __init__(self, cl_environments=None, load_balancer=None, use_param_codec=True, patience=None):
         """Use the Levenberg-Marquardt method to calculate the optimimum.
 
         Args:
             patience (int):
                 Used to set the maximum number of iterations to patience*(number_of_parameters+1)
         """
-        super(LevenbergMarquardt, self).__init__(cl_environments, load_balancer, use_param_codec)
-        self.patience = patience
+        patience = patience or self.default_patience
+        super(LevenbergMarquardt, self).__init__(cl_environments, load_balancer, use_param_codec, patience=patience)
 
     def _get_worker_class(self):
         return LevenbergMarquardtWorker

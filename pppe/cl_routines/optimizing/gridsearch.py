@@ -9,9 +9,10 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class GridSearch(AbstractParallelOptimizer):
 
-    patience = 250
+    default_patience = 250
 
-    def __init__(self, cl_environments=None, load_balancer=None, use_param_codec=True, patience=patience):
+    def __init__(self, cl_environments=None, load_balancer=None, use_param_codec=True, patience=None):
+        patience = patience or self.default_patience
         super(GridSearch, self).__init__(cl_environments, load_balancer, use_param_codec, patience=patience)
         self._automatic_apply_codec = False
 

@@ -19,8 +19,9 @@ class MetaOptimizer(AbstractOptimizer):
     def __init__(self, cl_environments=None, load_balancer=None, use_param_codec=True, patience=None):
         """This meta optimization routine uses optimizers, and samplers to provide a meta optimization.
 
-        In general one can enable a grid search beforehand, optimization, sampling and optionally calculating extra
-        error maps.
+        In general one can enable a grid search beforehand, optimization and sampling.
+
+        It will also calculating the error maps for the final fitted model parameters.
 
         Args:
             cl_environments (list of CLEnvironment): a list with the cl environments to use
@@ -32,7 +33,6 @@ class MetaOptimizer(AbstractOptimizer):
         Attributes:
             enable_grid_search (boolean, default False); If we want to enable a grid search before optimization
             enable_sampling (boolean, default False): If we want to enable sampling
-            enable_error_maps (boolean, default True): If we want to calculate various error maps at the end
             extra_optim_runs (boolean, default 1): The amount of extra optimization runs with a smoothing step
                 in between.
             extra_optim_runs_optimizers (list, default None): A list of optimizers with one optimizer for every extra
@@ -53,7 +53,6 @@ class MetaOptimizer(AbstractOptimizer):
         super(MetaOptimizer, self).__init__(cl_environments, load_balancer, use_param_codec)
         self.enable_grid_search = False
         self.enable_sampling = False
-        self.enable_error_maps = True
 
         self.extra_optim_runs = 0
         self.extra_optim_runs_optimizers = None
@@ -88,8 +87,8 @@ class MetaOptimizer(AbstractOptimizer):
                     if self.extra_optim_runs_smoothers and i < len(self.extra_optim_runs_smoothers):
                         smoother = self.extra_optim_runs_smoothers[i]
                     smoothed_maps = model.smooth(results, smoother)
-                    # results = optimizer.minimize(model, init_params=smoothed_maps)
-                    results = smoothed_maps
+                    results = optimizer.minimize(model, init_params=smoothed_maps)
+
                 elif self.extra_optim_runs_use_perturbation:
                     perturbed_params = model.perturbate(results)
                     results = optimizer.minimize(model, init_params=perturbed_params)
@@ -107,10 +106,9 @@ class MetaOptimizer(AbstractOptimizer):
                 if value.shape[0] == nmr_voxels:
                     results.update({'sampling.' + key: value})
 
-        if self.enable_error_maps:
-            errors = ResidualCalculator().calculate(model, results)
-            error_measures = ErrorMeasures().calculate(errors)
-            results.update(error_measures)
+        errors = ResidualCalculator().calculate(model, results)
+        error_measures = ErrorMeasures().calculate(errors)
+        results.update(error_measures)
 
         if full_output:
             d = {}
