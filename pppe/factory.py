@@ -7,6 +7,8 @@ from pppe.cl_routines.optimizing.nmsimplex import NMSimplex
 from pppe.cl_routines.optimizing.powell import Powell
 from pppe.cl_routines.optimizing.serial_optimizers import SerialBasinHopping, SerialBFGS, SerialLM, SerialNMSimplex, \
     SerialPowell
+from pppe.load_balance_strategies import EvenDistribution, RuntimeLoadBalancing, PreferGPU, PreferCPU, \
+    PreferSpecificEnvironment
 
 __author__ = 'Robbert Harms'
 __date__ = "2015-07-06"
@@ -15,44 +17,73 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
 def get_optimizer_by_name(name):
-    """ Get the class of the optimizer by the given name.
+    """ Get the class by the given name.
 
     This does not instantiate the class, only returns a reference to it.
 
     Args:
         name: the name of the optimizer we want to return
+
+    Returns:
+        class: the class of the optimizer requested
     """
     if name == 'GridSearch':
         return GridSearch
-    elif name == 'Powell':
+    if name == 'Powell':
         return Powell
-    elif name == 'NMSimplex':
+    if name == 'NMSimplex':
         return NMSimplex
-    elif name == 'MetaOptimizer':
+    if name == 'MetaOptimizer':
         return MetaOptimizer
-    elif name == 'SerialBasinHopping':
+    if name == 'SerialBasinHopping':
         return SerialBasinHopping
-    elif name == 'SerialBFGS':
+    if name == 'SerialBFGS':
         return SerialBFGS
-    elif name == 'SerialLM':
+    if name == 'SerialLM':
         return SerialLM
-    elif name == 'SerialNMSimplex':
+    if name == 'SerialNMSimplex':
         return SerialNMSimplex
-    elif name == 'SerialPowell':
+    if name == 'SerialPowell':
         return SerialPowell
 
 
 def get_smoother_by_name(name):
-    """ Get the class of the optimizer by the given name.
+    """ Get the class by the given name.
 
     This does not instantiate the class, only returns a reference to it.
 
     Args:
-        name: the name of the optimizer we want to return
+        name: the name of the smoothing routine we want to return
+
+    Returns:
+        class: the class of the smoothing routine requested
     """
     if name == 'Gaussian':
         return GaussianSmoother
-    elif name == 'Mean':
+    if name == 'Mean':
         return MeanSmoother
-    elif name == 'Median':
+    if name == 'Median':
         return MedianSmoother
+
+
+def get_load_balance_strategy_by_name(name):
+    """ Get the class by the given name.
+
+    This does not instantiate the class, only returns a reference to it.
+
+    Args:
+        name: the name of the load balance strategy we want to return
+
+    Returns:
+        class: the class of the load balance strategy requested
+    """
+    if name == 'EvenDistribution':
+        return EvenDistribution
+    if name == 'RuntimeLoadBalancing':
+        return RuntimeLoadBalancing
+    if name == 'PreferGPU':
+        return PreferGPU
+    if name == 'PreferCPU':
+        return PreferCPU
+    if name == 'PreferSpecificEnvironment':
+        return PreferSpecificEnvironment

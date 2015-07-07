@@ -41,7 +41,8 @@ class FinalParametersTransformer(AbstractCLRoutine):
         if model.get_final_parameter_transformations():
             workers = self._create_workers(_FPTWorker, model, parameters, var_data_dict,
                                            prtcl_data_dict, fixed_data_dict)
-            self.load_balancer.process(workers, model.get_nmr_problems())
+            self.load_balancer.process(workers, model.get_nmr_problems(),
+                                       run_in_batches=True, single_batch_length=1e3)
 
         return parameters
 

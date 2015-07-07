@@ -132,6 +132,14 @@ class MetaOptimizer(AbstractOptimizer):
         self.smoother.cl_environments = cl_environments
         self.sampler.cl_environments = cl_environments
 
+        if self.extra_optim_runs_optimizers:
+            for optim in self.extra_optim_runs_optimizers:
+                optim.cl_environments = cl_environments
+
+        if self.extra_optim_runs_smoothers:
+            for smoother in self.extra_optim_runs_smoothers:
+                smoother.cl_environments = cl_environments
+
         self._cl_environments = cl_environments
 
     @property
@@ -145,5 +153,13 @@ class MetaOptimizer(AbstractOptimizer):
         self.grid_search.load_balancer = load_balancer
         self.smoother.load_balancer = load_balancer
         self.sampler.load_balancer = load_balancer
+
+        if self.extra_optim_runs_optimizers:
+            for optim in self.extra_optim_runs_optimizers:
+                optim.load_balancer = load_balancer
+
+        if self.extra_optim_runs_smoothers:
+            for smoother in self.extra_optim_runs_smoothers:
+                smoother.load_balancer = load_balancer
 
         self._load_balancer = load_balancer

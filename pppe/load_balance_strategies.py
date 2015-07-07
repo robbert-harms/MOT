@@ -131,9 +131,9 @@ class LoadBalanceStrategy(object):
 
     @single_batch_length.setter
     def single_batch_length(self, value):
-        self._single_batch_length = value
+        self._single_batch_length = int(value)
 
-    def process(self, workers, nmr_items):
+    def process(self, workers, nmr_items, run_in_batches=None, single_batch_length=None):
         """Process all of the items using the callback function in the work packages.
 
         The idea is that a strategy can be chosen on the fly by for example testing the execution time of the callback
@@ -143,6 +143,10 @@ class LoadBalanceStrategy(object):
         Args:
             workers (Worker): a list of workers
             nmr_items (int): an integer specifying the total number of items to be processed
+            run_with_batches (boolean): a implementing class may overwrite run_in_batches with this parameter. If None
+                the value is not used.
+            single_batch_length (int): a implementing class may overwrite single_batch_length with this parameter.
+                If None the value is not used.
         """
         pass
 
@@ -163,7 +167,7 @@ class LoadBalanceStrategy(object):
         """
         pass
 
-    def _create_batches(self, range_start, range_end):
+    def _create_batches(self, range_start, range_end, run_in_batches=None, single_batch_length=None):
         """Created batches in the given range.
 
         If self.run_in_batches is False we will only return one batch covering the entire range. If self.run_in_batches
@@ -172,17 +176,24 @@ class LoadBalanceStrategy(object):
         Args:
             range_start (int): the start of the range to create batches for
             range_end (int): the end of the range to create batches for
+            run_with_batches (boolean): if other than None, use this as run_with_batches
+            single_batch_length (int): if other than None, use this as single_batch_length
 
         Returns:
             list of list: list of batches which are (start, end) pairs
         """
+        if run_in_batches is None:
+            run_in_batches = self.run_in_batches
 
-        if self.run_in_batches:
+        if single_batch_length is None:
+            single_batch_length = self.single_batch_length
+
+        if run_in_batches:
             batches = []
             batch_pos = range_start
 
             while batch_pos < range_end:
-                new_batch = (batch_pos, min(range_end, batch_pos + self.single_batch_length))
+                new_batch = (batch_pos, min(range_end, batch_pos + single_batch_length))
                 batches.append(new_batch)
                 batch_pos = new_batch[1]
 
@@ -208,7 +219,7 @@ class LoadBalanceStrategy(object):
             events = []
             for worker_ind, worker in enumerate(workers):
                 if batch_nmr < len(batches[worker_ind]):
-                    events.append(worker.calculate(*batches[worker_ind][batch_nmr]))
+                    events.append(self._try_processing(worker, *batches[worker_ind][batch_nmr]))
             for event in events:
                 event.wait()
 
@@ -246,71 +257,6 @@ class LoadBalanceStrategy(object):
             return self._try_processing(worker, range_start + half_range_length, range_end)
 
 
-class EvenDistribution(LoadBalanceStrategy):
-    """Give each worker exactly 1/nth of the work. This does not do any feedback load balancing."""
-
-    def process(self, workers, nmr_items):
-        items_per_worker = round(nmr_items / float(len(workers)))
-        batches = []
-        current_pos = 0
-
-        for worker_ind in range(len(workers)):
-            if worker_ind == len(workers) - 1:
-                batches.append(self._create_batches(current_pos, nmr_items))
-            else:
-                batches.append(self._create_batches(current_pos, current_pos + items_per_worker))
-                current_pos += items_per_worker
-
-        self._run_batches(workers, batches)
-
-    def get_used_cl_environments(self, cl_environments):
-        return cl_environments
-
-
-class RuntimeLoadBalancing(LoadBalanceStrategy):
-
-    def __init__(self, test_percentage=10, run_in_batches=True, single_batch_length=1e5):
-        """Distribute the work by trying to minimize the time taken.
-
-        Args:
-            test_percentage (float): The percentage of items to use for the run time duration test
-                (divided by number of devices)
-        """
-        super(RuntimeLoadBalancing, self).__init__(run_in_batches=run_in_batches,
-                                                   single_batch_length=single_batch_length)
-        self.test_percentage = test_percentage
-
-    def process(self, workers, nmr_items):
-        durations = []
-        start = 0
-        for worker in workers:
-            end = start + int(math.floor(nmr_items * (self.test_percentage/len(workers)) / 100))
-            durations.append(self._test_duration(worker, start, end))
-            start = end
-
-        total_d = sum(durations)
-        nmr_items_left = nmr_items - start
-
-        batches = []
-        for i in range(len(workers)):
-            if i == len(workers) - 1:
-                batches.append(self._create_batches(start, nmr_items))
-            else:
-                items = int(math.floor(nmr_items_left * (1 - (durations[i] / total_d))))
-                batches.append(self._create_batches(start, start + items))
-                start += items
-
-        self._run_batches(workers, batches)
-
-    def _test_duration(self, worker, start, end):
-        s = timeit.default_timer()
-        self._run_batches([worker], [self._create_batches(start, end)])
-        return timeit.default_timer() - s
-
-    def get_used_cl_environments(self, cl_environments):
-        return cl_environments
-
-
 class MetaLoadBalanceStrategy(LoadBalanceStrategy):
 
     def __init__(self, lb_strategy):
@@ -343,6 +289,79 @@ class MetaLoadBalanceStrategy(LoadBalanceStrategy):
         self._lb_strategy.single_batch_length = value
 
 
+class EvenDistribution(LoadBalanceStrategy):
+    """Give each worker exactly 1/nth of the work. This does not do any feedback load balancing."""
+
+    def process(self, workers, nmr_items, run_in_batches=None, single_batch_length=None):
+        items_per_worker = round(nmr_items / float(len(workers)))
+        batches = []
+        current_pos = 0
+
+        for worker_ind in range(len(workers)):
+            if worker_ind == len(workers) - 1:
+                batches.append(self._create_batches(current_pos, nmr_items,
+                                                    run_in_batches=run_in_batches,
+                                                    single_batch_length=single_batch_length))
+            else:
+                batches.append(self._create_batches(current_pos, current_pos + items_per_worker,
+                                                    run_in_batches=run_in_batches,
+                                                    single_batch_length=single_batch_length))
+                current_pos += items_per_worker
+
+        self._run_batches(workers, batches)
+
+    def get_used_cl_environments(self, cl_environments):
+        return cl_environments
+
+
+class RuntimeLoadBalancing(LoadBalanceStrategy):
+
+    def __init__(self, test_percentage=10, run_in_batches=True, single_batch_length=1e5):
+        """Distribute the work by trying to minimize the time taken.
+
+        Args:
+            test_percentage (float): The percentage of items to use for the run time duration test
+                (divided by number of devices)
+        """
+        super(RuntimeLoadBalancing, self).__init__(run_in_batches=run_in_batches,
+                                                   single_batch_length=single_batch_length)
+        self.test_percentage = test_percentage
+
+    def process(self, workers, nmr_items, run_in_batches=None, single_batch_length=None):
+        durations = []
+        start = 0
+        for worker in workers:
+            end = start + int(math.floor(nmr_items * (self.test_percentage/len(workers)) / 100))
+            durations.append(self._test_duration(worker, start, end))
+            start = end
+
+        total_d = sum(durations)
+        nmr_items_left = nmr_items - start
+
+        batches = []
+        for i in range(len(workers)):
+            if i == len(workers) - 1:
+                batches.append(self._create_batches(start, nmr_items,
+                                                    run_in_batches=run_in_batches,
+                                                    single_batch_length=single_batch_length))
+            else:
+                items = int(math.floor(nmr_items_left * (1 - (durations[i] / total_d))))
+                batches.append(self._create_batches(start, start + items,
+                                                    run_in_batches=run_in_batches,
+                                                    single_batch_length=single_batch_length))
+                start += items
+
+        self._run_batches(workers, batches)
+
+    def _test_duration(self, worker, start, end):
+        s = timeit.default_timer()
+        self._run_batches([worker], [self._create_batches(start, end)])
+        return timeit.default_timer() - s
+
+    def get_used_cl_environments(self, cl_environments):
+        return cl_environments
+
+
 class PreferSingleDeviceType(MetaLoadBalanceStrategy):
 
     def __init__(self, lb_strategy=None, device_type=None):
@@ -358,13 +377,15 @@ class PreferSingleDeviceType(MetaLoadBalanceStrategy):
         if isinstance(device_type, basestring):
             self._device_type = device_type_from_string(device_type)
 
-    def process(self, workers, nmr_items):
+    def process(self, workers, nmr_items, run_in_batches=None, single_batch_length=None):
         specific_workers = [worker for worker in workers if worker.cl_environment.device_type == self._device_type]
 
         if specific_workers:
-            self._lb_strategy.process(specific_workers, nmr_items)
+            self._lb_strategy.process(specific_workers, nmr_items, run_in_batches=run_in_batches,
+                                      single_batch_length=single_batch_length)
         else:
-            self._lb_strategy.process(workers, nmr_items)
+            self._lb_strategy.process(workers, nmr_items, run_in_batches=run_in_batches,
+                                      single_batch_length=single_batch_length)
 
     def get_used_cl_environments(self, cl_environments):
         specific_envs = [cl_env for cl_env in cl_environments if cl_env.device_type == self._device_type]
@@ -410,10 +431,11 @@ class PreferSpecificEnvironment(MetaLoadBalanceStrategy):
             environment_nmr (int): the specific environment to use in the list of CL environments
         """
         super(PreferSpecificEnvironment, self).__init__(lb_strategy)
-        self._environment_nmr = environment_nmr
+        self.environment_nmr = environment_nmr
 
-    def process(self, workers, nmr_items):
-        self._lb_strategy.process(workers, nmr_items)
+    def process(self, workers, nmr_items, run_in_batches=None, single_batch_length=None):
+        self._lb_strategy.process(workers, nmr_items, run_in_batches=run_in_batches,
+                                  single_batch_length=single_batch_length)
 
     def get_used_cl_environments(self, cl_environments):
-        return [cl_environments[self._environment_nmr]]
+        return [cl_environments[self.environment_nmr]]
