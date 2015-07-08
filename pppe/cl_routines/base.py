@@ -56,3 +56,13 @@ class AbstractCLRoutine(object):
             workers.append(worker_class(cl_environment, *args, **kwargs))
         return workers
 
+    @classmethod
+    def get_pretty_name(cls):
+        """The pretty name of this routine.
+
+        This is used to create an object of the implementing class using a factory, and is used in the logging.
+
+        Returns:
+            str: the pretty name of this routine.
+        """
+        return cls.__name__

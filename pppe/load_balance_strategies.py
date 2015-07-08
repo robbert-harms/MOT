@@ -256,6 +256,16 @@ class LoadBalanceStrategy(object):
             event.wait()
             return self._try_processing(worker, range_start + half_range_length, range_end)
 
+    @classmethod
+    def get_pretty_name(cls):
+        """The pretty name of this routine.
+
+        This is used to create an object of the implementing class using a factory, and is used in the logging.
+
+        Returns:
+            str: the pretty name of this routine.
+        """
+        return cls.__name__
 
 class MetaLoadBalanceStrategy(LoadBalanceStrategy):
 

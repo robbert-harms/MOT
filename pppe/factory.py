@@ -27,24 +27,9 @@ def get_optimizer_by_name(name):
     Returns:
         class: the class of the optimizer requested
     """
-    if name == 'GridSearch':
-        return GridSearch
-    if name == 'Powell':
-        return Powell
-    if name == 'NMSimplex':
-        return NMSimplex
-    if name == 'MetaOptimizer':
-        return MetaOptimizer
-    if name == 'SerialBasinHopping':
-        return SerialBasinHopping
-    if name == 'SerialBFGS':
-        return SerialBFGS
-    if name == 'SerialLM':
-        return SerialLM
-    if name == 'SerialNMSimplex':
-        return SerialNMSimplex
-    if name == 'SerialPowell':
-        return SerialPowell
+    optimizers = [GridSearch, Powell, NMSimplex, MetaOptimizer, SerialBasinHopping,
+                  SerialBFGS, SerialLM, SerialNMSimplex, SerialPowell]
+    return _get_item(name, optimizers, 'optimizers')
 
 
 def get_smoother_by_name(name):
@@ -58,12 +43,8 @@ def get_smoother_by_name(name):
     Returns:
         class: the class of the smoothing routine requested
     """
-    if name == 'Gaussian':
-        return GaussianSmoother
-    if name == 'Mean':
-        return MeanSmoother
-    if name == 'Median':
-        return MedianSmoother
+    smoothers = [GaussianSmoother, MeanSmoother, MedianSmoother]
+    return _get_item(name, smoothers, 'smoothers')
 
 
 def get_load_balance_strategy_by_name(name):
@@ -77,13 +58,12 @@ def get_load_balance_strategy_by_name(name):
     Returns:
         class: the class of the load balance strategy requested
     """
-    if name == 'EvenDistribution':
-        return EvenDistribution
-    if name == 'RuntimeLoadBalancing':
-        return RuntimeLoadBalancing
-    if name == 'PreferGPU':
-        return PreferGPU
-    if name == 'PreferCPU':
-        return PreferCPU
-    if name == 'PreferSpecificEnvironment':
-        return PreferSpecificEnvironment
+    lb = [EvenDistribution, RuntimeLoadBalancing, PreferGPU, PreferCPU, PreferSpecificEnvironment]
+    return _get_item(name, lb, 'load balancers')
+
+
+def _get_item(name, item_list, factory_type):
+    for item in item_list:
+        if item.get_pretty_name() == name:
+            return item
+    raise ValueError('The item with the name {0} could not be found in the {1} factory.'.format(name, factory_type))

@@ -110,7 +110,8 @@ class AbstractParallelOptimizer(AbstractOptimizer):
             starting_points = space_transformer.encode(param_codec, starting_points)
 
         self._logger.info('Finished optimization preliminaries')
-        self._logger.info('Starting optimization')
+        self._logger.info('Starting optimization with method {0} and patience {1}.'.format(self.get_pretty_name(),
+                                                                                           self.patience))
 
         workers = self._create_workers(self._get_worker_class(), self, model, starting_points, full_output,
                                        var_data_dict, prtcl_data_dict, fixed_data_dict, nmr_params)
@@ -176,14 +177,17 @@ class AbstractParallelOptimizerWorker(Worker):
         read_write_flags = get_read_write_cl_mem_flags(self._cl_environment)
 
         data_buffers = []
-        parameters_buf = cl.Buffer(self._cl_environment.context, read_write_flags, hostbuf=self._starting_points[range_start:range_end, :])
+        parameters_buf = cl.Buffer(self._cl_environment.context, read_write_flags,
+                                   hostbuf=self._starting_points[range_start:range_end, :])
         data_buffers.append(parameters_buf)
 
         for data in self._var_data_dict.values():
             if len(data.shape) < 2:
-                data_buffers.append(cl.Buffer(self._cl_environment.context, read_only_flags, hostbuf=data[range_start:range_end]))
+                data_buffers.append(cl.Buffer(self._cl_environment.context, read_only_flags,
+                                              hostbuf=data[range_start:range_end]))
             else:
-                data_buffers.append(cl.Buffer(self._cl_environment.context, read_only_flags, hostbuf=data[range_start:range_end, :]))
+                data_buffers.append(cl.Buffer(self._cl_environment.context, read_only_flags,
+                                              hostbuf=data[range_start:range_end, :]))
 
         data_buffers.extend(self._constant_buffers)
 
@@ -191,7 +195,8 @@ class AbstractParallelOptimizerWorker(Worker):
         global_range = (nmr_problems, )
         self._kernel.minimize(self._queue, global_range, local_range, *data_buffers)
 
-        event = cl.enqueue_copy(self._queue, self._starting_points[range_start:range_end, :], parameters_buf, is_blocking=False)
+        event = cl.enqueue_copy(self._queue, self._starting_points[range_start:range_end, :], parameters_buf,
+                                is_blocking=False)
         return event
 
     def _get_kernel_source(self):
