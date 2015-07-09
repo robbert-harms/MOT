@@ -1,6 +1,6 @@
 import numbers
 import numpy as np
-from ..base import ProtocolParameter, ModelDataParameter, FreeParameter
+from ..base import ProtocolParameter, ModelDataParameter, FreeParameter, CLDataType
 from pppe.cl_routines.mapping.calc_dependent_params import CalculateDependentParameters
 from ..utils import set_cl_compatible_data_type, TopologicalSort, init_dict_tree
 from ..parameter_functions.codecs import CodecBuilder
@@ -243,9 +243,10 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         for m, p in self._get_model_parameter_list():
             if isinstance(p, ProtocolParameter):
                 if p.name in self._problem_data.prtcl_data_dict:
-                    const_d = {p.name: set_cl_compatible_data_type(self._problem_data.prtcl_data_dict[p.name],
-                                                                   p.cl_data_type)}
-                    prtcl_data_dict.update(const_d)
+                    if not self._all_elements_equal(self._problem_data.prtcl_data_dict[p.name]):
+                        const_d = {p.name: set_cl_compatible_data_type(self._problem_data.prtcl_data_dict[p.name],
+                                                                       p.cl_data_type)}
+                        prtcl_data_dict.update(const_d)
                 else:
                     exception = 'Constant parameter "{}" could not be resolved'.format(m.name + '.' + p.name)
                     raise ParameterResolutionException(exception)
@@ -569,7 +570,17 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             if (m.name + '_' + p.name) not in exclude_list:
                 data_type = p.cl_data_type.data_type
                 if p.name not in const_params_seen:
-                    assignment = 'data->prtcl_data_' + p.name + '[observation_index]'
+                    if self._all_elements_equal(self._problem_data.prtcl_data_dict[p.name]):
+                        if CLDataType.from_string(data_type).is_vector_type:
+                            vector_length = CLDataType.from_string(data_type).vector_length
+                            values = [repr(val) for val in self._problem_data.prtcl_data_dict[p.name][0]]
+                            if len(values) < vector_length:
+                                values.append(repr(0))
+                            assignment = '(' + data_type + ')(' + ', '.join(values) + ')'
+                        else:
+                            assignment = repr(float(self._problem_data.prtcl_data_dict[p.name][0]))
+                    else:
+                        assignment = 'data->prtcl_data_' + p.name + '[observation_index]'
                     func += "\t"*4 + data_type + ' ' + p.name + ' = ' + assignment + ';' + "\n"
                     const_params_seen.append(p.name)
         return func
@@ -849,6 +860,16 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         """
         self._init_fixed_duplicates_dependencies()
 
+    def _all_elements_equal(self, col):
+        """Checks if all elements of a given numpy column are equal to each other.
+
+        Args:
+            col (array): a numpy array
+
+        Returns:
+            bool: true if all elements are equal to each other, false otherwise
+        """
+        return (col == col[0]).all()
 
 class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
 

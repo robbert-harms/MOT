@@ -71,6 +71,12 @@ class CLDataType(object):
         """
         return self._is_pointer_type
 
+    @property
+    def vector_length(self):
+        if self.is_vector_type:
+            return re.search('(\d)+', self._cl_type).group(1)
+        return 0
+
 
 class ProblemData(object):
 
