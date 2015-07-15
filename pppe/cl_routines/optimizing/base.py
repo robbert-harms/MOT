@@ -110,7 +110,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
             starting_points = space_transformer.encode(param_codec, starting_points)
 
         self._logger.info('Finished optimization preliminaries')
-        self._logger.info('Starting optimization with method {0} and patience {1}.'.format(self.get_pretty_name(),
+        self._logger.info('Starting optimization with method {0} and patience {1}'.format(self.get_pretty_name(),
                                                                                            self.patience))
 
         workers = self._create_workers(self._get_worker_class(), self, model, starting_points, full_output,

@@ -100,6 +100,7 @@ def numpy_types_to_cl(data_type):
     """Get the CL type name of the given numpy type. Call this function with argument data.dtype.type."""
     names = {np.float32: 'float',
              np.float64: 'double',
+             np.int16: 'short',
              np.int32: 'int',
              np.int64: 'long',
              np.uint32: 'uint',

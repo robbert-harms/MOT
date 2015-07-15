@@ -212,22 +212,33 @@ class LoadBalanceStrategy(object):
         """
         self._logger.debug('Preparing to run {0} batch(es) on {1} device(s)'.format(len(batches[0]), len(workers)))
 
+        total_nmr_problems = 0
+        for workers_batches in batches:
+            for batch in workers_batches:
+                total_nmr_problems += batch[1] - batch[0]
+        problems_seen = 0
+
         start_time = timeit.default_timer()
         for batch_nmr in range(len(batches[0])):
-            self._logger.debug('Going to run batch {0} with range {1}'.format(batch_nmr, batches[0][batch_nmr]))
+            self._logger.debug('Going to run batch {0} '
+                               'with start {1}, and end {2}'.format(batch_nmr, *batches[0][batch_nmr]))
 
             events = []
             for worker_ind, worker in enumerate(workers):
                 if batch_nmr < len(batches[worker_ind]):
                     events.append(self._try_processing(worker, *batches[worker_ind][batch_nmr]))
+                    problems_seen += batches[worker_ind][batch_nmr][1] - batches[worker_ind][batch_nmr][0]
             for event in events:
                 event.wait()
 
             run_time = timeit.default_timer() - start_time
-            current_percentage = float(batch_nmr+1) / len(batches[0])
+            current_percentage = problems_seen / float(total_nmr_problems)
             remaining_time = (run_time / current_percentage) - run_time
-            self._logger.info('Processing is at {0:.2%}, time left: {1}.'.format(
-                current_percentage, time.strftime('%H:%M:%S', time.gmtime(remaining_time))))
+
+            self._logger.info('Processing is at {0:.2%}, time spent: {1}, time left: {2} (h:m:s).'.format(
+                current_percentage,
+                time.strftime('%H:%M:%S', time.gmtime(run_time)),
+                time.strftime('%H:%M:%S', time.gmtime(remaining_time))))
 
         self._logger.debug('Ran all batches.')
 

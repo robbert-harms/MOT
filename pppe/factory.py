@@ -1,3 +1,4 @@
+from pppe.cl_routines.optimizing.levenberg_marquardt import LevenbergMarquardt
 from pppe.cl_routines.smoothing.gaussian import GaussianSmoother
 from pppe.cl_routines.smoothing.mean import MeanSmoother
 from pppe.cl_routines.smoothing.median import MedianSmoother
@@ -27,7 +28,7 @@ def get_optimizer_by_name(name):
     Returns:
         class: the class of the optimizer requested
     """
-    optimizers = [GridSearch, Powell, NMSimplex, MetaOptimizer, SerialBasinHopping,
+    optimizers = [LevenbergMarquardt, GridSearch, Powell, NMSimplex, MetaOptimizer, SerialBasinHopping,
                   SerialBFGS, SerialLM, SerialNMSimplex, SerialPowell]
     return _get_item(name, optimizers, 'optimizers')
 

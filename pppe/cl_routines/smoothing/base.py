@@ -172,6 +172,8 @@ class AbstractSmootherWorker(Worker):
         values we look to the right and to the left to calculate the new value. This means that the total kernel size
         of all dimensions together is the multiplication of 2 * n + 1 for each dimension: left + right + current.
 
+        Args:
+            nmr_dimensions (int): the number of dimensions
         """
         n = 1
         for dimension in range(nmr_dimensions):
