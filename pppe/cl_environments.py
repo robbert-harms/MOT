@@ -1,4 +1,5 @@
 import pyopencl as cl
+from six import string_types
 from .utils import device_supports_double, device_type_from_string
 
 __author__ = 'Robbert Harms'
@@ -132,7 +133,7 @@ class CLEnvironmentFactory(object):
 
         Args:
             cl_device_type (cl.device_type.* or string): The type of the device we want,
-                can be a opencl device type or a string matching 'GPU' or 'CPU'.
+                can be a opencl device type or a string matching 'GPU', 'CPU' or 'ALL'.
             platform (opencl platform): The opencl platform to select the devices from
             compile_flags (list of str): A tuple with compile flags to use for this device / context.
             fallback_to_any_device_type (boolean): If True, try to fallback to any possible device in the system.
@@ -140,7 +141,8 @@ class CLEnvironmentFactory(object):
         Returns:
             list of CLEnvironment: List with one element, the CL runtime environment requested.
         """
-        cl_device_type = device_type_from_string(cl_device_type)
+        if isinstance(cl_device_type, string_types):
+            cl_device_type = device_type_from_string(cl_device_type)
 
         if platform is None:
             platform = cl.get_platforms()[0]
@@ -179,10 +181,8 @@ class CLEnvironmentFactory(object):
         Returns:
             list of CLEnvironment: List with one element, the CL runtime environment requested.
         """
-        if cl_device_type is not None:
+        if isinstance(cl_device_type, string_types):
             cl_device_type = device_type_from_string(cl_device_type)
-            if cl_device_type.upper() == 'ALL':
-                cl_device_type = None
 
         runtime_list = []
 

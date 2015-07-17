@@ -16,7 +16,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 def device_type_from_string(cl_device_type_str):
     """Converts values like 'gpu' to a pyopencl device type string.
 
-    Supported values are: 'accelerator', 'cpu', 'custom', 'gpu'.
+    Supported values are: 'accelerator', 'cpu', 'custom', 'gpu'. If 'ALL' is given, None is returned.
 
     Args:
         cl_device_type_str (str): The string we want to convert to a device type.
@@ -33,6 +33,7 @@ def device_type_from_string(cl_device_type_str):
         return cl.device_type.ACCELERATOR
     if cl_device_type_str == 'CUSTOM':
         return cl.device_type.CUSTOM
+    return None
 
 
 def device_supports_double(cl_device):
