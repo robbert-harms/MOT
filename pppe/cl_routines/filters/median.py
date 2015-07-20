@@ -1,4 +1,4 @@
-from .base import AbstractSmoother, AbstractSmootherWorker
+from .base import AbstractFilter, AbstractFilterWorker
 from ...utils import get_cl_double_extension_definer
 
 __author__ = 'Robbert Harms'
@@ -8,12 +8,12 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class MedianSmoother(AbstractSmoother):
+class MedianFilter(AbstractFilter):
 
     def __init__(self, size, cl_environments=None, load_balancer=None):
-        super(MedianSmoother, self).__init__(size, cl_environments=cl_environments, load_balancer=load_balancer)
+        super(MedianFilter, self).__init__(size, cl_environments=cl_environments, load_balancer=load_balancer)
 
-    def _get_worker(self, cl_environment, results_dict, volumes_list, mask):
+    def _get_worker(self, *args):
         """Create the worker that we will use in the computations.
 
         This is supposed to be overwritten by the implementing smoother.
@@ -21,10 +21,10 @@ class MedianSmoother(AbstractSmoother):
         Returns:
             the worker object
         """
-        return _MedianSmootherWorker(cl_environment, self, results_dict, volumes_list, mask)
+        return _MedianFilterWorker(self, *args)
 
 
-class _MedianSmootherWorker(AbstractSmootherWorker):
+class _MedianFilterWorker(AbstractFilterWorker):
 
     def _get_kernel_source(self):
         kernel_source = get_cl_double_extension_definer(self._cl_environment.platform)
@@ -32,14 +32,15 @@ class _MedianSmootherWorker(AbstractSmootherWorker):
         kernel_source += '''
             __kernel void filter(
                 global double* volume,
-                global char* mask,
+                ''' + ('global char* mask,' if self._use_mask else '') + '''
                 global double* results
                 ){
 
                     ''' + self._get_ks_dimension_inits(len(self._volume_shape)) + '''
                     int ind = ''' + self._get_ks_sub2ind_func_call(len(self._volume_shape)) + ''';
 
-                    if(mask[ind] > 0){
+
+                    ''' + ('if(mask[ind] > 0){' if self._use_mask else 'if(true){') + '''
                         double voxels[''' + repr(self._calculate_length(len(self._volume_shape))) + '''];
                         int n = 0;
 
@@ -124,18 +125,18 @@ class _MedianSmootherWorker(AbstractSmootherWorker):
     def _get_ks_init_loop(self, volume_shape):
         s = ''
         for i in range(len(volume_shape)):
-            if i > 0:
-                s += "\t" * (5 + len(volume_shape))
             s += 'for(dim' + repr(i) + ' = dim' + repr(i) + '_start; dim' + repr(i) + \
                     ' < dim' + repr(i) + '_end; dim' + repr(i) + '++){' + "\n"
 
-        s += "\t" * (6 + len(volume_shape)) + \
-             'if(mask[' + self._get_ks_sub2ind_func_call(len(volume_shape)) + '] > 0){'\
-             + "\n"
-        s += "\t" * (7 + len(volume_shape)) + 'voxels[n] = volume[' + self._get_ks_sub2ind_func_call(len(volume_shape))\
-             + '];' + "\n"
-        s += "\t" * (7 + len(volume_shape)) + 'n++;' + "\n"
-        s += "\t" * (6 + len(volume_shape)) + '}' + "\n"
+        if self._use_mask:
+            s += 'if(mask[' + self._get_ks_sub2ind_func_call(len(volume_shape)) + '] > 0){' + "\n"
+
+        s += 'voxels[n] = volume[' + self._get_ks_sub2ind_func_call(len(volume_shape)) + '];' + "\n"
+        s += 'n++;' + "\n"
+
+        if self._use_mask:
+            s += '}' + "\n"
+
         for i in range(len(volume_shape)):
-            s += "\t" * (5 + len(volume_shape)) + '}' + "\n"
+            s += '}' + "\n"
         return s

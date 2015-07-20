@@ -1,11 +1,10 @@
+import logging
 import numbers
 import numpy as np
 import pyopencl as cl
-
 from ...cl_routines.base import AbstractCLRoutine
 from ...load_balance_strategies import Worker
-from ...utils import set_correct_cl_data_type, \
-    get_write_only_cl_mem_flags, get_read_only_cl_mem_flags
+from ...utils import get_write_only_cl_mem_flags, get_read_only_cl_mem_flags
 
 
 __author__ = 'Robbert Harms'
@@ -15,16 +14,16 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class AbstractSmoother(AbstractCLRoutine):
+class AbstractFilter(AbstractCLRoutine):
 
     def __init__(self, size, cl_environments=None, load_balancer=None):
-        """Initialize an abstract smoother routine.
+        """Initialize an abstract filter routine.
 
         This is meant to be called by the constructor of an implementing class.
 
          Args:
             size (int or tuple): Either a single dimension size for all dimensions or one value
-                for each dimension of the input data to the smooth function. Maximum number of dimensions is 3.
+                for each dimension of the input data to the filter function. Maximum number of dimensions is 3.
                 Either way this value is the distance to the left and to the right of each value.
                 That means that the total kernel size is the product of 1 + 2*s for each size s of each dimension.
             cl_environments: The cl environments
@@ -32,40 +31,39 @@ class AbstractSmoother(AbstractCLRoutine):
 
         Attributes:
             size (int or tuple): (x, y, z, ...). Either a single dimension size for all dimensions or one value
-                for each dimension of the input data to the smooth function.
+                for each dimension of the input data to the filter function.
                 Either way this value is the distance to the left and to the right of each value.
                 That means that the total kernel size is the product of 1 + 2*s for each size s of each dimension.
         """
-        super(AbstractSmoother, self).__init__(cl_environments, load_balancer)
+        super(AbstractFilter, self).__init__(cl_environments, load_balancer)
         self.size = size
+        self._logger = logging.getLogger(__name__)
 
-    def smooth(self, value, mask=None):
-        """Smooth the givens volumes in the given dictionary.
+    def filter(self, value, mask=None):
+        """Filter the given volumes in the given dictionary.
 
-        If a dict is given as a value the smoothing is applied to every value in the dictionary. This can be spreaded
-        over the different devices. If a single nd array is given the smoothing is performed only on one device.
+        If a dict is given as a value the filtering is applied to every value in the dictionary. This can be spread
+        over the different devices. If a single ndarray is given the filtering is performed only on one device.
 
         Args:
-            value (dict or array like): an single array to smooth (dimensions must match the size specified in
+            value (dict or array like): an single array to filter (dimensions must match the size specified in
                 the constructor). Can also be a dictionary with a list of ndarrays.
             mask (array like): A single array of the same dimension as the input value. This can be used to
-                mask values from being used by the smoothing routines. They are not used for smoothing other values
-                and are not smoothed themselves.
+                mask values from being used by the filtering routines. They are not used for filtering other values
+                and are not filtered themselves.
 
         Returns:
-            The same type as the input. A new set of volumes with the same keys, or a single array. All smoothed.
+            The same type as the input. A new set of volumes with the same keys, or a single array. All filtered.
         """
+        self._logger.info('Applying filtering with filter {0}'.format(self.get_pretty_name()))
         if isinstance(value, dict):
-            if mask is None:
-                mask = np.ones_like(value[value.keys()[0]], dtype=np.float64, order='C')
-            return self._smooth(value, mask)
+            return self._filter(value, mask)
         else:
-            if mask is None:
-                mask = np.ones_like(value, dtype=np.float64, order='C')
-            return self._smooth({'value': value}, mask)['value']
+            return self._filter({'value': value}, mask)['value']
 
-    def _smooth(self, volumes_dict, mask):
+    def _filter(self, volumes_dict, mask):
         results_dict = {}
+
         for key, value in volumes_dict.items():
             volumes_dict[key] = np.array(value, dtype=np.float64, order='C')
             results_dict[key] = np.zeros_like(volumes_dict[key], dtype=np.float64, order='C')
@@ -77,29 +75,35 @@ class AbstractSmoother(AbstractCLRoutine):
 
         return results_dict
 
-    def _get_worker(self, cl_environment, results_dict, volumes_list, mask):
+    def _get_worker(self, *args):
         """Create the worker that we will use in the computations.
 
-        This is supposed to be overwritten by the implementing smoother.
+        This is supposed to be overwritten by the implementing filterer.
 
         Returns:
             the worker object
         """
-        return AbstractSmootherWorker(cl_environment, self, results_dict, volumes_list, mask)
+        return AbstractFilterWorker(self, *args)
 
 
-class AbstractSmootherWorker(Worker):
+class AbstractFilterWorker(Worker):
 
-    def __init__(self, cl_environment, parent_smoother, results_dict, volumes_list, mask):
-        super(AbstractSmootherWorker, self).__init__(cl_environment)
-        self._parent_smoother = parent_smoother
-        self._size = self._parent_smoother.size
+    def __init__(self, parent_filter, cl_environment, results_dict, volumes_list, mask):
+        super(AbstractFilterWorker, self).__init__(cl_environment)
+        self._parent_filter = parent_filter
+        self._size = self._parent_filter.size
         self._results_dict = results_dict
         self._volumes_list = volumes_list
-        self._volume_shape = mask.shape
-        self._mask = mask.astype(np.int8, order='C')
-        self._mask_buf = cl.Buffer(self._cl_environment.context, get_read_only_cl_mem_flags(self._cl_environment),
-                                   hostbuf=self._mask)
+        self._volume_shape = volumes_list[0][1].shape
+
+        if mask is None:
+            self._use_mask = False
+        else:
+            self._use_mask = True
+            self._mask = mask.astype(np.int8, order='C')
+            self._mask_buf = cl.Buffer(self._cl_environment.context, get_read_only_cl_mem_flags(self._cl_environment),
+                                       hostbuf=self._mask)
+
         self._kernel = self._build_kernel()
 
     def calculate(self, range_start, range_end):
@@ -113,13 +117,18 @@ class AbstractSmootherWorker(Worker):
             volume_buf = cl.Buffer(self._cl_environment.context, read_only_flags, hostbuf=value)
             results_buf = cl.Buffer(self._cl_environment.context, write_only_flags, hostbuf=self._results_dict[key])
 
-            self._kernel.filter(self._queue, self._mask.shape, None, volume_buf, self._mask_buf, results_buf)
+            buffers = [volume_buf]
+            if self._use_mask:
+                buffers.append(self._mask_buf)
+            buffers.append(results_buf)
+
+            self._kernel.filter(self._queue, self._volume_shape, None, *buffers)
             event = cl.enqueue_copy(self._queue, self._results_dict[key], results_buf, is_blocking=False)
 
         return event
 
     def _get_kernel_source(self):
-        """Get the kernel source for this smoothing kernel.
+        """Get the kernel source for this filtering kernel.
 
            This should be implemented by the subclass.
         """
@@ -137,8 +146,6 @@ class AbstractSmootherWorker(Worker):
         """Get the kernel source part for the dimension initializations"""
         s = ''
         for i in range(nmr_dimensions):
-            if i > 0:
-                s += "\t" * 5
             s += 'int dim' + repr(i) + ' = get_global_id(' + repr(i) + ');' + "\n"
         return s
 
@@ -148,14 +155,14 @@ class AbstractSmootherWorker(Worker):
         for i in range(len(volume_shape)):
             s += 'const int dim' + repr(i) + ', '
         s = s[0:-2] + '){' + "\n"
-        s += "\t" * 2 + 'return '
+        s += 'return '
         for i, d in enumerate(volume_shape):
             stride = ''
             for ds in volume_shape[(i + 1):]:
                 stride += ' * ' + repr(ds)
             s += 'dim' + repr(i) + stride + ' + '
         s = s[0:-3] + ';' + "\n"
-        s += "\t" * 1 + '}' + "\n"
+        s += '}' + "\n"
         return s
 
     def _get_ks_sub2ind_func_call(self, nmr_dimensions):
@@ -185,11 +192,8 @@ class AbstractSmootherWorker(Worker):
         """Get the kernel source for the start and end of each of the dimensions"""
         s = ''
         for i, d in enumerate(volume_shape):
-            if i > 0:
-                s += "\t" * 6
             s += 'int dim' + repr(i) + '_start = max(0, dim' + repr(i) + ' - ' + repr(self._get_size_in_dimension(i)) \
                  + ');' + "\n"
-            s += "\t" * 6
             s += 'int dim' + repr(i) + '_end = min(' + repr(d) + ', dim' + repr(i) + ' + ' + \
                  repr(self._get_size_in_dimension(i)) + ' + 1);' + "\n"
         return s

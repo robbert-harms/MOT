@@ -1,6 +1,6 @@
 from ...cl_environments import CLEnvironment
 from ...cl_routines.sampling.metropolis_hastings import MetropolisHastings
-from ...cl_routines.smoothing.median import MedianSmoother
+from ...cl_routines.filters.median import MedianFilter
 from ...cl_routines.optimizing.base import AbstractOptimizer
 from ...cl_routines.mapping.error_measures import ErrorMeasures
 from ...cl_routines.mapping.residual_calculator import ResidualCalculator
@@ -47,7 +47,7 @@ class MetaOptimizer(AbstractOptimizer):
                 or not. This is mutually exclusive with extra_optim_runs_apply_smoothing.
             grid_search (Optimizer, default GridSearch): The grid search optimizer.
             optimizer (Optimizer, default NMSimplex): The default optimization routine
-            smoother (Smoother, default MedianSmoother(1)): The default smoothing routine
+            smoother (Smoother, default MedianFilter(1)): The default smoothing routine
             sampler (Sampler, default MetropolisHastings): The default sampling routine.
         """
         super(MetaOptimizer, self).__init__(cl_environments, load_balancer, use_param_codec)
@@ -64,7 +64,7 @@ class MetaOptimizer(AbstractOptimizer):
                                       use_param_codec=self.use_param_codec)
         self.optimizer = NMSimplex(cl_environments=self.cl_environments, load_balancer=self.load_balancer,
                                    use_param_codec=self.use_param_codec)
-        self.smoother = MedianSmoother((1, 1, 1))
+        self.smoother = MedianFilter((1, 1, 1))
         self.sampler = MetropolisHastings()
 
     def minimize(self, model, init_params=None, full_output=False):

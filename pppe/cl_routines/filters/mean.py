@@ -1,4 +1,4 @@
-from .base import AbstractSmoother, AbstractSmootherWorker
+from .base import AbstractFilter, AbstractFilterWorker
 from ...utils import get_cl_double_extension_definer
 
 __author__ = 'Robbert Harms'
@@ -8,12 +8,12 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class MeanSmoother(AbstractSmoother):
+class MeanFilter(AbstractFilter):
 
     def __init__(self, size, cl_environments=None, load_balancer=None):
-        super(MeanSmoother, self).__init__(size, cl_environments=cl_environments, load_balancer=load_balancer)
+        super(MeanFilter, self).__init__(size, cl_environments=cl_environments, load_balancer=load_balancer)
 
-    def _get_worker(self, cl_environment, results_dict, volumes_list, mask):
+    def _get_worker(self, *args):
         """Create the worker that we will use in the computations.
 
         This is supposed to be overwritten by the implementing smoother.
@@ -21,10 +21,10 @@ class MeanSmoother(AbstractSmoother):
         Returns:
             the worker object
         """
-        return _MeanSmootherWorker(cl_environment, self, results_dict, volumes_list, mask)
+        return _MeanFilterWorker(self, *args)
 
 
-class _MeanSmootherWorker(AbstractSmootherWorker):
+class _MeanFilterWorker(AbstractFilterWorker):
 
     def _get_kernel_source(self):
         kernel_source = get_cl_double_extension_definer(self._cl_environment.platform)
@@ -32,13 +32,13 @@ class _MeanSmootherWorker(AbstractSmootherWorker):
         kernel_source += '''
             __kernel void filter(
                 global double* volume,
-                global char* mask,
+                ''' + ('global char* mask,' if self._use_mask else '') + '''
                 global double* results
                 ){
                     ''' + self._get_ks_dimension_inits(len(self._volume_shape)) + '''
                     int ind = ''' + self._get_ks_sub2ind_func_call(len(self._volume_shape)) + ''';
 
-                    if(mask[ind] > 0){
+                    ''' + ('if(mask[ind] > 0){' if self._use_mask else 'if(true){') + '''
                         ''' + self._get_ks_dimension_sizes(self._volume_shape) + '''
 
                         double sum = 0.0;
@@ -55,17 +55,18 @@ class _MeanSmootherWorker(AbstractSmootherWorker):
     def _get_ks_loop(self, volume_shape):
         s = ''
         for i in range(len(volume_shape)):
-            if i > 0:
-                s += "\t" * (5 + len(volume_shape))
             s += 'for(dim' + repr(i) + ' = dim' + repr(i) + '_start; dim' + repr(i) + \
                  ' < dim' + repr(i) + '_end; dim' + repr(i) + '++){' + "\n"
 
-        s += "\t" * (6 + len(volume_shape)) + 'if(mask[' + self._get_ks_sub2ind_func_call(len(volume_shape)) + '] > 0){'\
-             + "\n"
-        s += "\t" * (7 + len(volume_shape)) + 'sum += volume[' + self._get_ks_sub2ind_func_call(len(volume_shape)) + '];'\
-             + "\n"
-        s += "\t" * (7 + len(volume_shape)) + 'count++;' + "\n"
-        s += "\t" * (6 + len(volume_shape)) + '}' + "\n"
+        if self._use_mask:
+            s += 'if(mask[' + self._get_ks_sub2ind_func_call(len(volume_shape)) + '] > 0){' + "\n"
+
+        s += 'sum += volume[' + self._get_ks_sub2ind_func_call(len(volume_shape)) + '];' + "\n"
+        s += 'count++;' + "\n"
+
+        if self._use_mask:
+            s += '}' + "\n"
+
         for i in range(len(volume_shape)):
-            s += "\t" * (5 + len(volume_shape)) + '}' + "\n"
+            s += '}' + "\n"
         return s

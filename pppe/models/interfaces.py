@@ -276,12 +276,12 @@ class SampleModelInterface(OptimizeModelInterface):
 
 class SmoothableModelInterface(OptimizeModelInterface):
 
-    def smooth(self, results, smoother):
+    def smooth(self, results, filter_routine):
         """Smooth the given results according to the rules in this model and the given smoother.
 
         Args:
             results (dict): Parameters and 1d maps with the voxel maps.
-            smoother (AbstractSmoother): A smoothing routine object.
+            filter_routine (AbstractFilter): A smoothing routine object.
 
         Returns:
             results (dict): A dictionary with the same keys as the given results,

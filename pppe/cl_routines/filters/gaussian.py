@@ -1,6 +1,6 @@
 import numbers
 import warnings
-from .base import AbstractSmoother, AbstractSmootherWorker
+from .base import AbstractFilter, AbstractFilterWorker
 import numpy as np
 import pyopencl as cl
 from ...utils import get_read_only_cl_mem_flags, get_cl_double_extension_definer, get_read_write_cl_mem_flags
@@ -13,14 +13,14 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class GaussianSmoother(AbstractSmoother):
+class GaussianFilter(AbstractFilter):
 
     def __init__(self, size, cl_environments=None, load_balancer=None, sigma=None):
         """Create a new smoother for gaussian smoothing.
 
         Args:
             size (int or tuple): (x, y, z, ...). Either a single dimension size for all dimensions or one value
-                for each dimension of the input data to the smooth function.
+                for each dimension of the input data to the filter function.
                 Either way this value is the distance to the left and to the right of each value.
                 That means that the total kernel size is the product of 1 + 2*s for each size s of each dimension.
             cl_environments: The cl environments
@@ -31,17 +31,17 @@ class GaussianSmoother(AbstractSmoother):
 
         Attributes:
             size (int or tuple): (x, y, z, ...). Either a single dimension size for all dimensions or one value
-                for each dimension of the input data to the smooth function.
+                for each dimension of the input data to the filter function.
                 Either way this value is the distance to the left and to the right of each value.
                 That means that the total kernel size is the product of 1 + 2*s for each size s of each dimension.
             sigma (double or list of double): Either a single double or a list of doubles, one for each size.
                 This parameter defines the sigma of the Gaussian distribution used for creating the Gaussian smoothing
                 kernel.
         """
-        super(GaussianSmoother, self).__init__(size, cl_environments=cl_environments, load_balancer=load_balancer)
+        super(GaussianFilter, self).__init__(size, cl_environments=cl_environments, load_balancer=load_balancer)
         self.sigma = sigma
 
-    def _get_worker(self, cl_environment, results_dict, volumes_list, mask):
+    def _get_worker(self, *args):
         """Create the worker that we will use in the computations.
 
         This is supposed to be overwritten by the implementing smoother.
@@ -49,10 +49,10 @@ class GaussianSmoother(AbstractSmoother):
         Returns:
             the worker object
         """
-        return _GaussianSmootherWorker(cl_environment, self, results_dict, volumes_list, mask)
+        return _GaussianFilterWorker(self, *args)
 
 
-class _GaussianSmootherWorker(AbstractSmootherWorker):
+class _GaussianFilterWorker(AbstractFilterWorker):
 
     def calculate(self, range_start, range_end):
         volumes_to_run = [self._volumes_list[i] for i in range(len(self._volumes_list)) if range_start <= i < range_end]
@@ -66,10 +66,7 @@ class _GaussianSmootherWorker(AbstractSmootherWorker):
             results_buf = cl.Buffer(self._cl_environment.context, read_write_flags,
                                     hostbuf=self._results_dict[volume_name])
 
-            if volume.shape != self._mask.shape:
-                raise ValueError('The shape of the mask and the volumes should match exactly.')
-
-            for dimension in range(len(self._mask.shape)):
+            for dimension in range(len(self._volume_shape)):
                 kernel_length = self._calculate_kernel_size_in_dimension(dimension)
                 kernel_sigma = self._get_sigma_in_dimension(dimension)
 
@@ -83,15 +80,21 @@ class _GaussianSmootherWorker(AbstractSmootherWorker):
                                     kernel_source).build(' '.join(self._cl_environment.compile_flags))
 
                 if dimension % 2 == 0:
-                    buffers_list = [volume_buf, self._mask_buf, smooth_kernel_buf, results_buf]
+                    buffers_list = [volume_buf]
+                    if self._use_mask:
+                        buffers_list.append(self._mask_buf)
+                    buffers_list.extend([smooth_kernel_buf, results_buf])
                     results_buf_ptr = results_buf
                 else:
-                    buffers_list = [results_buf, self._mask_buf, smooth_kernel_buf, volume_buf]
+                    buffers_list = [results_buf]
+                    if self._use_mask:
+                        buffers_list.append(self._mask_buf)
+                    buffers_list.extend([smooth_kernel_buf, volume_buf])
                     results_buf_ptr = volume_buf
 
-                kernel.filter(self._queue, self._mask.shape, None, *buffers_list)
+                kernel.filter(self._queue, self._volume_shape, None, *buffers_list)
 
-                if dimension == len(self._mask.shape) - 1:
+                if dimension == len(self._volume_shape) - 1:
                     return_event = cl.enqueue_copy(self._queue, self._results_dict[volume_name],
                                                    results_buf_ptr, is_blocking=False)
 
@@ -110,7 +113,7 @@ class _GaussianSmootherWorker(AbstractSmootherWorker):
         kernel_source += '''
             __kernel void filter(
                 global double* volume,
-                global char* mask,
+                ''' + ('global char* mask,' if self._use_mask else '') + '''
                 global double* filter,
                 global double* results
                 ){
@@ -118,7 +121,7 @@ class _GaussianSmootherWorker(AbstractSmootherWorker):
                 ''' + self._get_ks_dimension_inits(len(self._volume_shape)) + '''
                 const int ind = ''' + self._get_ks_sub2ind_func_call(len(self._volume_shape)) + ''';
 
-                if(mask[ind] > 0){
+                ''' + ('if(mask[ind] > 0){' if self._use_mask else 'if(true){') + '''
                     int filter_index = 0;
                     double filtered_value = 0;
 
@@ -131,7 +134,7 @@ class _GaussianSmootherWorker(AbstractSmootherWorker):
 
                         if(''' + working_dim + ''' >= 0 && ''' + working_dim + ''' < ''' + \
                             repr(self._volume_shape[dimension]) + '''){
-                            if(mask[tmp_ind] > 0){
+                            ''' + ('if(mask[tmp_ind] > 0){' if self._use_mask else 'if(true){') + '''
                                 filtered_value += filter[filter_index] * volume[tmp_ind];
                             }
                         }
@@ -145,12 +148,12 @@ class _GaussianSmootherWorker(AbstractSmootherWorker):
         return kernel_source
 
     def _get_sigma_in_dimension(self, dimension):
-        if self._parent_smoother.sigma is None:
+        if self._parent_filter.sigma is None:
             return self._get_size_in_dimension(dimension) / 3.0
-        elif isinstance(self._parent_smoother.sigma, numbers.Number):
-            return self._parent_smoother.sigma
+        elif isinstance(self._parent_filter.sigma, numbers.Number):
+            return self._parent_filter.sigma
         else:
-            return self._parent_smoother.sigma[dimension]
+            return self._parent_filter.sigma[dimension]
 
     def _get_1d_gaussian_kernel(self, kernel_length, sigma):
         """Generate a new gaussian kernel of length kernel_length and with the given sigma in one dimension.

@@ -1,7 +1,7 @@
 from pppe.cl_routines.optimizing.levenberg_marquardt import LevenbergMarquardt
-from pppe.cl_routines.smoothing.gaussian import GaussianSmoother
-from pppe.cl_routines.smoothing.mean import MeanSmoother
-from pppe.cl_routines.smoothing.median import MedianSmoother
+from pppe.cl_routines.filters.gaussian import GaussianFilter
+from pppe.cl_routines.filters.mean import MeanFilter
+from pppe.cl_routines.filters.median import MedianFilter
 from pppe.cl_routines.optimizing.gridsearch import GridSearch
 from pppe.cl_routines.optimizing.meta_optimizer import MetaOptimizer
 from pppe.cl_routines.optimizing.nmsimplex import NMSimplex
@@ -44,7 +44,7 @@ def get_smoother_by_name(name):
     Returns:
         class: the class of the smoothing routine requested
     """
-    smoothers = [GaussianSmoother, MeanSmoother, MedianSmoother]
+    smoothers = [GaussianFilter, MeanFilter, MedianFilter]
     return _get_item(name, smoothers, 'smoothers')
 
 
