@@ -32,7 +32,8 @@ class AbstractCLRoutine(object):
 
     @cl_environments.setter
     def cl_environments(self, cl_environments):
-        self._cl_environments = cl_environments
+        if cl_environments is not None:
+            self._cl_environments = cl_environments
 
     @property
     def load_balancer(self):

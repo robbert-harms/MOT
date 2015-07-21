@@ -33,19 +33,19 @@ def get_optimizer_by_name(name):
     return _get_item(name, optimizers, 'optimizers')
 
 
-def get_smoother_by_name(name):
+def get_filter_by_name(name):
     """ Get the class by the given name.
 
     This does not instantiate the class, only returns a reference to it.
 
     Args:
-        name: the name of the smoothing routine we want to return
+        name: the name of the filter routine we want to return
 
     Returns:
-        class: the class of the smoothing routine requested
+        class: the class of the filter routine requested
     """
-    smoothers = [GaussianFilter, MeanFilter, MedianFilter]
-    return _get_item(name, smoothers, 'smoothers')
+    filters = [GaussianFilter, MeanFilter, MedianFilter]
+    return _get_item(name, filters, 'smoothers')
 
 
 def get_load_balance_strategy_by_name(name):

@@ -16,7 +16,7 @@ class MeanFilter(AbstractFilter):
     def _get_worker(self, *args):
         """Create the worker that we will use in the computations.
 
-        This is supposed to be overwritten by the implementing smoother.
+        This is supposed to be overwritten by the implementing filterer.
 
         Returns:
             the worker object

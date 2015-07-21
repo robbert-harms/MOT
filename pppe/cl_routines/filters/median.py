@@ -16,7 +16,7 @@ class MedianFilter(AbstractFilter):
     def _get_worker(self, *args):
         """Create the worker that we will use in the computations.
 
-        This is supposed to be overwritten by the implementing smoother.
+        This is supposed to be overwritten by the implementing filterer.
 
         Returns:
             the worker object
@@ -37,106 +37,104 @@ class _MedianFilterWorker(AbstractFilterWorker):
                 ){
 
                     ''' + self._get_ks_dimension_inits(len(self._volume_shape)) + '''
-                    int ind = ''' + self._get_ks_sub2ind_func_call(len(self._volume_shape)) + ''';
-
+                    const int ind = ''' + self._get_ks_sub2ind_func_call(len(self._volume_shape)) + ''';
 
                     ''' + ('if(mask[ind] > 0){' if self._use_mask else 'if(true){') + '''
-                        double voxels[''' + repr(self._calculate_length(len(self._volume_shape))) + '''];
-                        int n = 0;
 
                         ''' + self._get_ks_dimension_sizes(self._volume_shape) + '''
-                        ''' + self._get_ks_init_loop(self._volume_shape) + '''
 
-                        if(n > 0){
-                            int i;
+                        double guess;
+                        double maxltguess;
+                        double mingtguess;
+                        double less;
+                        double greater;
+                        double equal;
+                        double minv = volume[ind];
+                        double maxv = volume[ind];
+                        int number_of_items = 0;
 
-                            double guess;
-                            double maxltguess;
-                            double mingtguess;
-                            double less;
-                            double greater;
-                            double equal;
-                            double minv = voxels[0];
-                            double maxv = voxels[0];
+                        double tmp_val = 0.0;
 
-                            for(i = 1; i < n; i++){
-                                if(voxels[i] < minv){
-                                    minv = voxels[i];
-                                }
-                                if(voxels[i] > maxv){
-                                    maxv = voxels[i];
-                                }
+                        ''' + self._loop_encapsulate('''
+                            tmp_val = volume[''' +
+                                    self._get_ks_sub2ind_func_call(len(self._volume_shape)) + '''];
+
+                            if(tmp_val < minv){
+                                minv = tmp_val;
+                            }
+                            if(tmp_val > maxv){
+                                maxv = tmp_val;
                             }
 
-                            while(1){
-                                guess = (minv+maxv)/2.0;
-                                less = 0;
-                                greater = 0;
-                                equal = 0;
-                                maxltguess = minv;
-                                mingtguess = maxv;
+                            number_of_items++;
+                        ''') + '''
 
-                                for(i=0; i<n; i++){
-                                    if(voxels[i] < guess){
-                                        less++;
-                                        if(voxels[i] > maxltguess){
-                                            maxltguess = voxels[i];
-                                        }
-                                    }
-                                    else if (voxels[i] > guess) {
-                                        greater++;
-                                        if(voxels[i] < mingtguess){
-                                            mingtguess = voxels[i];
-                                        }
-                                    }
-                                    else{
-                                        equal++;
+                        while(1){
+                            guess = (minv+maxv)/2.0;
+                            less = 0;
+                            greater = 0;
+                            equal = 0;
+                            maxltguess = minv;
+                            mingtguess = maxv;
+
+                            ''' + self._loop_encapsulate('''
+                                tmp_val = volume[''' +
+                                    self._get_ks_sub2ind_func_call(len(self._volume_shape)) + '''];
+                                if(tmp_val < guess){
+                                    less++;
+                                    if(tmp_val > maxltguess){
+                                        maxltguess = tmp_val;
                                     }
                                 }
-                                if(less <= (n+1)/2 && greater <= (n+1)/2){
-                                    break;
-                                }
-                                else if(less > greater){
-                                    maxv = maxltguess;
+                                else if (tmp_val > guess) {
+                                    greater++;
+                                    if(tmp_val < mingtguess){
+                                        mingtguess = tmp_val;
+                                    }
                                 }
                                 else{
-                                    minv = mingtguess;
+                                    equal++;
                                 }
+                            ''') + '''
+                            if(less <= (number_of_items + 1)/2 && greater <= (number_of_items + 1)/2){
+                                break;
                             }
-
-                            if(less >= (n+1)/2){
-                                guess = maxltguess;
+                            else if(less > greater){
+                                maxv = maxltguess;
                             }
-                            else if(less + equal >= (n+1)/2){}
                             else{
-                                guess = mingtguess;
+                                minv = mingtguess;
                             }
+                        }
 
-                            results[ind] = guess;
+                        if(less >= (number_of_items + 1)/2){
+                            guess = maxltguess;
                         }
+                        else if(less + equal >= (number_of_items + 1)/2){}
                         else{
-                            results[ind] = 0;
+                            guess = mingtguess;
                         }
+
+                        results[ind] = guess;
                     }
             }
         '''
         return kernel_source
 
-    def _get_ks_init_loop(self, volume_shape):
+    def _loop_encapsulate(self, body):
         s = ''
-        for i in range(len(volume_shape)):
+        for i in range(len(self._volume_shape)):
             s += 'for(dim' + repr(i) + ' = dim' + repr(i) + '_start; dim' + repr(i) + \
                     ' < dim' + repr(i) + '_end; dim' + repr(i) + '++){' + "\n"
 
         if self._use_mask:
-            s += 'if(mask[' + self._get_ks_sub2ind_func_call(len(volume_shape)) + '] > 0){' + "\n"
+            s += 'if(mask[' + self._get_ks_sub2ind_func_call(len(self._volume_shape)) + '] > 0){' + "\n"
 
-        s += 'voxels[n] = volume[' + self._get_ks_sub2ind_func_call(len(volume_shape)) + '];' + "\n"
-        s += 'n++;' + "\n"
+        s += body
 
         if self._use_mask:
             s += '}' + "\n"
 
-        for i in range(len(volume_shape)):
+        for i in range(len(self._volume_shape)):
             s += '}' + "\n"
         return s

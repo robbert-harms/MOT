@@ -56,7 +56,7 @@ class TestLSQNonLinExample(unittest.TestCase):
             self.assertAlmostEqual(s, 124.3622, places=4)
 
 
-class TestSmoothing(unittest.TestCase):
+class TestFilters(unittest.TestCase):
 
     def setUp(self):
         self.d1 = np.array([1, 2, 4, 2, 1], dtype=np.float64)

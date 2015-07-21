@@ -16,7 +16,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 class GaussianFilter(AbstractFilter):
 
     def __init__(self, size, cl_environments=None, load_balancer=None, sigma=None):
-        """Create a new smoother for gaussian smoothing.
+        """Create a new filterer for gaussian filtering.
 
         Args:
             size (int or tuple): (x, y, z, ...). Either a single dimension size for all dimensions or one value
@@ -26,7 +26,7 @@ class GaussianFilter(AbstractFilter):
             cl_environments: The cl environments
             load_balancer: The load balancer to use
             sigma (double or list of double): Either a single double or a list of doubles, one for each size.
-                This parameter defines the sigma of the Gaussian distribution used for creating the Gaussian smoothing
+                This parameter defines the sigma of the Gaussian distribution used for creating the Gaussian filtering
                 kernel. If None, the sigma is calculated using size / 3.0.
 
         Attributes:
@@ -35,7 +35,7 @@ class GaussianFilter(AbstractFilter):
                 Either way this value is the distance to the left and to the right of each value.
                 That means that the total kernel size is the product of 1 + 2*s for each size s of each dimension.
             sigma (double or list of double): Either a single double or a list of doubles, one for each size.
-                This parameter defines the sigma of the Gaussian distribution used for creating the Gaussian smoothing
+                This parameter defines the sigma of the Gaussian distribution used for creating the Gaussian filtering
                 kernel.
         """
         super(GaussianFilter, self).__init__(size, cl_environments=cl_environments, load_balancer=load_balancer)
@@ -44,7 +44,7 @@ class GaussianFilter(AbstractFilter):
     def _get_worker(self, *args):
         """Create the worker that we will use in the computations.
 
-        This is supposed to be overwritten by the implementing smoother.
+        This is supposed to be overwritten by the implementing filterer.
 
         Returns:
             the worker object
@@ -70,8 +70,8 @@ class _GaussianFilterWorker(AbstractFilterWorker):
                 kernel_length = self._calculate_kernel_size_in_dimension(dimension)
                 kernel_sigma = self._get_sigma_in_dimension(dimension)
 
-                smooth_kernel = self._get_1d_gaussian_kernel(kernel_length, kernel_sigma)
-                smooth_kernel_buf = cl.Buffer(self._cl_environment.context, read_only_flags, hostbuf=smooth_kernel)
+                filter_kernel = self._get_1d_gaussian_kernel(kernel_length, kernel_sigma)
+                filter_kernel_buf = cl.Buffer(self._cl_environment.context, read_only_flags, hostbuf=filter_kernel)
 
                 kernel_source = self._get_gaussian_kernel_source(dimension)
 
@@ -83,13 +83,13 @@ class _GaussianFilterWorker(AbstractFilterWorker):
                     buffers_list = [volume_buf]
                     if self._use_mask:
                         buffers_list.append(self._mask_buf)
-                    buffers_list.extend([smooth_kernel_buf, results_buf])
+                    buffers_list.extend([filter_kernel_buf, results_buf])
                     results_buf_ptr = results_buf
                 else:
                     buffers_list = [results_buf]
                     if self._use_mask:
                         buffers_list.append(self._mask_buf)
-                    buffers_list.extend([smooth_kernel_buf, volume_buf])
+                    buffers_list.extend([filter_kernel_buf, volume_buf])
                     results_buf_ptr = volume_buf
 
                 kernel.filter(self._queue, self._volume_shape, None, *buffers_list)
@@ -163,7 +163,7 @@ class _GaussianFilterWorker(AbstractFilterWorker):
             sigma (double): The sigma used in constructing the kernel.
 
         Returns:
-            A list of the indicated length filled with a Gaussian smoothing kernel.
+            A list of the indicated length filled with a Gaussian filtering kernel.
             The kernel is normalized to sum to 1.
         """
         r = range(-int(kernel_length/2), int(kernel_length/2)+1)
