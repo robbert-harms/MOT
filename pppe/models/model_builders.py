@@ -1,6 +1,7 @@
 import numbers
 import numpy as np
 from ..base import ProtocolParameter, ModelDataParameter, FreeParameter, CLDataType
+from pppe import runtime_configuration
 from pppe.cl_routines.mapping.calc_dependent_params import CalculateDependentParameters
 from ..utils import set_cl_compatible_data_type, TopologicalSort, init_dict_tree
 from ..parameter_functions.codecs import CodecBuilder
@@ -483,7 +484,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             dependent_parameter_names = [(m.name + '_' + p.name, m.name + '.' + p.name)
                                          for m, p in param_lists['dependent']]
 
-            cpd = CalculateDependentParameters()
+            cpd = CalculateDependentParameters(runtime_configuration.runtime_config['cl_environments'],
+                                               runtime_configuration.runtime_config['load_balancer'])
             dependent_parameters = cpd.calculate(self._get_fixed_parameters_as_var_data(),
                                                  estimated_parameters, func, dependent_parameter_names)
             results_dict.update(dependent_parameters)

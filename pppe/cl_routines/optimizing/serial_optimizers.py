@@ -11,7 +11,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class SerialBasinHopping(AbstractSerialOptimizer):
 
-    def __init__(self, cl_environments=None, load_balancer=None, use_param_codec=True, patience=None,
+    def __init__(self, cl_environments, load_balancer, use_param_codec=True, patience=None,
                  basinhopping_args=None):
         """Uses basinhopping from scipy.optimize"""
         super(SerialBasinHopping, self).__init__(cl_environments, load_balancer, use_param_codec)
@@ -23,7 +23,7 @@ class SerialBasinHopping(AbstractSerialOptimizer):
 
 class SerialBFGS(AbstractSerialOptimizer):
 
-    def __init__(self, cl_environments=None, load_balancer=None, use_param_codec=True, patience=None):
+    def __init__(self, cl_environments, load_balancer, use_param_codec=True, patience=None):
         """Uses fmin_bfgs from scipy.optimize"""
         super(SerialBFGS, self).__init__(cl_environments, load_balancer, use_param_codec)
 
@@ -33,7 +33,7 @@ class SerialBFGS(AbstractSerialOptimizer):
 
 class SerialLM(AbstractSerialOptimizer):
 
-    def __init__(self, cl_environments=None, load_balancer=None, use_param_codec=True, patience=None):
+    def __init__(self, cl_environments, load_balancer, use_param_codec=True, patience=None):
         """Uses leastsq from scipy.optimize"""
         super(SerialLM, self).__init__(cl_environments, load_balancer, use_param_codec)
 
@@ -51,7 +51,7 @@ class SerialLM(AbstractSerialOptimizer):
 
 class SerialNMSimplex(AbstractSerialOptimizer):
 
-    def __init__(self, cl_environments=None, load_balancer=None, use_param_codec=True, patience=None):
+    def __init__(self, cl_environments, load_balancer, use_param_codec=True, patience=None):
         """Uses minimize from scipy.optimize"""
         super(SerialNMSimplex, self).__init__(cl_environments, load_balancer, use_param_codec)
 
@@ -61,7 +61,7 @@ class SerialNMSimplex(AbstractSerialOptimizer):
 
 class SerialPowell(AbstractSerialOptimizer):
 
-    def __init__(self, cl_environments=None, load_balancer=None, use_param_codec=True, patience=None):
+    def __init__(self, cl_environments, load_balancer, use_param_codec=True, patience=None):
         """Uses fmin_powell from scipy.optimize"""
         super(SerialPowell, self).__init__(cl_environments, load_balancer, use_param_codec)
 

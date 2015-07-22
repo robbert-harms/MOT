@@ -1,6 +1,4 @@
-from ..cl_environments import CLEnvironmentFactory
-import configuration
-from ..load_balance_strategies import PreferGPU
+from pppe import runtime_configuration
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-04-26"
@@ -11,19 +9,13 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class AbstractCLRoutine(object):
 
-    def __init__(self, cl_environments=None, load_balancer=None):
+    def __init__(self, cl_environments, load_balancer):
         """This class serves as an abstract basis for all CL routine classes.
 
         Args:
             cl_environments (list of CLEnvironment): The list of CL environments using by this routine.
             load_balancer (LoadBalancingStrategy): The load balancing strategy to be used by this routine.
         """
-        if not load_balancer:
-            load_balancer = configuration.default_load_balancer
-
-        if not cl_environments:
-            cl_environments = configuration.default_cl_environments
-
         self._cl_environments = cl_environments
         self._load_balancer = load_balancer
 

@@ -1,11 +1,10 @@
 import logging
 import pyopencl as cl
-from ...cl_environments import CLEnvironmentFactory
 from ...cl_python_callbacks import CLToPythonCallbacks
 from ...utils import get_read_only_cl_mem_flags, get_read_write_cl_mem_flags, \
     set_correct_cl_data_type, results_to_dict, ParameterCLCodeGenerator, get_cl_double_extension_definer
 from ...cl_routines.base import AbstractCLRoutine
-from ...load_balance_strategies import PreferGPU, Worker
+from ...load_balance_strategies import Worker
 from ...cl_routines.mapping.final_parameters_transformer import FinalParametersTransformer
 from ...cl_routines.mapping.codec_runner import CodecRunner
 
@@ -19,7 +18,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class AbstractOptimizer(AbstractCLRoutine):
 
-    def __init__(self, cl_environments=None, load_balancer=None, use_param_codec=True, patience=1):
+    def __init__(self, cl_environments, load_balancer, use_param_codec=True, patience=1):
         """Create a new optimizer that will minimize the given model with the given codec using the given environments.
 
         If the codec is None it is not used, if the environment is None, a suitable default environment should be
@@ -72,7 +71,7 @@ class AbstractOptimizer(AbstractCLRoutine):
 
 class AbstractParallelOptimizer(AbstractOptimizer):
 
-    def __init__(self, cl_environments=None, load_balancer=None, use_param_codec=True, patience=1):
+    def __init__(self, cl_environments, load_balancer, use_param_codec=True, patience=1):
         super(AbstractParallelOptimizer, self).__init__(cl_environments, load_balancer, use_param_codec, patience)
         self._automatic_apply_codec = True
         self._logger = logging.getLogger(__name__)
@@ -97,7 +96,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         fixed_data_dict = set_correct_cl_data_type(model.get_problems_fixed_data())
         nmr_params = starting_points.shape[1]
 
-        space_transformer = CodecRunner(cl_environments=self.cl_environments, load_balancer=self.load_balancer)
+        space_transformer = CodecRunner(self.cl_environments, self.load_balancer)
         param_codec = model.get_parameter_codec()
         if self.use_param_codec and param_codec and self._automatic_apply_codec:
             starting_points = space_transformer.encode(param_codec, starting_points)
@@ -312,7 +311,7 @@ class AbstractParallelOptimizerWorker(Worker):
 
 class AbstractSerialOptimizer(AbstractOptimizer):
 
-    def __init__(self, cl_environments=None, load_balancer=None, use_param_codec=True, patience=None):
+    def __init__(self, cl_environments, load_balancer, use_param_codec=True, patience=None):
         """The base class for serial optimization.
 
         Serial optimization is the process in which each voxel is optimized one at a time, regularly by a python
@@ -323,7 +322,7 @@ class AbstractSerialOptimizer(AbstractOptimizer):
                                                       use_param_codec=use_param_codec)
 
     def minimize(self, model, init_params=None, full_output=False):
-        space_transformer = CodecRunner(cl_environments=self._cl_environments, load_balancer=self._load_balancer)
+        space_transformer = CodecRunner(self._cl_environments, self._load_balancer)
         cl_environments = self.load_balancer.get_used_cl_environments(self.cl_environments)
         starting_points = model.get_initial_parameters(init_params)
 

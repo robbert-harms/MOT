@@ -10,9 +10,6 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class MedianFilter(AbstractFilter):
 
-    def __init__(self, size, cl_environments=None, load_balancer=None):
-        super(MedianFilter, self).__init__(size, cl_environments=cl_environments, load_balancer=load_balancer)
-
     def _get_worker(self, *args):
         """Create the worker that we will use in the computations.
 

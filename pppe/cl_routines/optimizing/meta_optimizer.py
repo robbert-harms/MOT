@@ -7,6 +7,7 @@ from ...cl_routines.mapping.error_measures import ErrorMeasures
 from ...cl_routines.mapping.residual_calculator import ResidualCalculator
 from ...cl_routines.optimizing.gridsearch import GridSearch
 from ...cl_routines.optimizing.nmsimplex import NMSimplex
+from pppe import runtime_configuration
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-06-19"
@@ -17,7 +18,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class MetaOptimizer(AbstractOptimizer):
 
-    def __init__(self, cl_environments=None, load_balancer=None, use_param_codec=True, patience=None):
+    def __init__(self, cl_environments, load_balancer, use_param_codec=True, patience=None):
         """This meta optimization routine uses optimizers, and samplers to provide a meta optimization.
 
         In general one can enable a grid search beforehand, optimization and sampling.
@@ -61,12 +62,12 @@ class MetaOptimizer(AbstractOptimizer):
         self.extra_optim_runs_apply_smoothing = False
         self.extra_optim_runs_use_perturbation = True
 
-        self.grid_search = GridSearch(cl_environments=self.cl_environments, load_balancer=self.load_balancer,
-                                      use_param_codec=self.use_param_codec)
-        self.optimizer = NMSimplex(cl_environments=self.cl_environments, load_balancer=self.load_balancer,
-                                   use_param_codec=self.use_param_codec)
-        self.smoother = MedianFilter((1, 1, 1))
-        self.sampler = MetropolisHastings()
+        self.grid_search = GridSearch(self.cl_environments, self.load_balancer, use_param_codec=self.use_param_codec)
+        self.optimizer = NMSimplex(self.cl_environments, self.load_balancer, use_param_codec=self.use_param_codec)
+        self.smoother = MedianFilter((1, 1, 1), self.cl_environments, self.load_balancer)
+        self.sampler = MetropolisHastings(
+            runtime_configuration.runtime_config['cl_environments'],
+            runtime_configuration.runtime_config['load_balancer'])
 
         self._propagate_property('cl_environments', cl_environments)
         self._propagate_property('load_balancer', load_balancer)

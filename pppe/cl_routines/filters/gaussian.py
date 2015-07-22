@@ -15,7 +15,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class GaussianFilter(AbstractFilter):
 
-    def __init__(self, size, cl_environments=None, load_balancer=None, sigma=None):
+    def __init__(self, size, cl_environments, load_balancer, sigma=None):
         """Create a new filterer for gaussian filtering.
 
         Args:

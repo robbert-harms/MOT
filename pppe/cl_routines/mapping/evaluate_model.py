@@ -16,7 +16,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class EvaluateModel(AbstractCLRoutine):
 
-    def __init__(self, cl_environments=None, load_balancer=None):
+    def __init__(self, cl_environments, load_balancer):
         """Evaluate the model at each problem instance for each data point."""
         super(EvaluateModel, self).__init__(cl_environments, load_balancer)
 

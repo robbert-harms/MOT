@@ -16,7 +16,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class AbstractFilter(AbstractCLRoutine):
 
-    def __init__(self, size, cl_environments=None, load_balancer=None):
+    def __init__(self, size, cl_environments, load_balancer):
         """Initialize an abstract filter routine.
 
         This is meant to be called by the constructor of an implementing class.

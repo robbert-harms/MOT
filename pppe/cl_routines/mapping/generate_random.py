@@ -16,7 +16,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class GenerateRandom(AbstractCLRoutine):
 
-    def __init__(self, cl_environments=None, load_balancer=None):
+    def __init__(self, cl_environments, load_balancer):
         """This class is there to generate random numbers using OpenCL.
 
         It's main purpose is to verify the correct working of the ranlux random number generator.

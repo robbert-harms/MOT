@@ -21,8 +21,7 @@ Note that this variable should only be used as a last resort. It is for example 
 CL routines 'AbstractCLRoutine', for the moment there is no environment or load balancer passed as a function parameter.
 
 """
-default_cl_environments = CLEnvironmentFactory.all_devices(
-    compile_flags=('-cl-strict-aliasing', '-cl-no-signed-zeros'))
-
-default_load_balancer = PreferCPU()
-
+runtime_config = {
+    'cl_environments': CLEnvironmentFactory.all_devices(compile_flags=('-cl-strict-aliasing', '-cl-no-signed-zeros')),
+    'load_balancer': PreferGPU()
+}

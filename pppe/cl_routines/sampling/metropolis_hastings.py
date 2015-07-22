@@ -17,8 +17,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class MetropolisHastings(AbstractSampler):
 
-    def __init__(self, cl_environments=None, load_balancer=None,
-                 nmr_samples=500, burn_length=500, sample_intervals=10):
+    def __init__(self, cl_environments, load_balancer, nmr_samples=500, burn_length=500, sample_intervals=10):
         """An CL implementation of Metropolis Hastings.
 
         Args:

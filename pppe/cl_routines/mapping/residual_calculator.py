@@ -15,7 +15,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class ResidualCalculator(AbstractCLRoutine):
 
-    def __init__(self, cl_environments=None, load_balancer=None):
+    def __init__(self, cl_environments, load_balancer):
         """Calculate the residuals, that is the errors, per problem instance per data point."""
         super(ResidualCalculator, self).__init__(cl_environments, load_balancer)
 
