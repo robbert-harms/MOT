@@ -35,13 +35,6 @@ class AbstractOptimizer(AbstractCLRoutine):
         self._use_param_codec = use_param_codec
         self.patience = patience or 1
 
-        if not load_balancer:
-            load_balancer = PreferGPU()
-
-        if not cl_environments:
-            cl_environments = CLEnvironmentFactory.all_devices(compile_flags=('-cl-strict-aliasing',
-                                                                              '-cl-no-signed-zeros'))
-
         super(AbstractOptimizer, self).__init__(cl_environments, load_balancer)
 
     @property
@@ -104,7 +97,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         fixed_data_dict = set_correct_cl_data_type(model.get_problems_fixed_data())
         nmr_params = starting_points.shape[1]
 
-        space_transformer = CodecRunner()
+        space_transformer = CodecRunner(cl_environments=self.cl_environments, load_balancer=self.load_balancer)
         param_codec = model.get_parameter_codec()
         if self.use_param_codec and param_codec and self._automatic_apply_codec:
             starting_points = space_transformer.encode(param_codec, starting_points)
@@ -330,7 +323,7 @@ class AbstractSerialOptimizer(AbstractOptimizer):
                                                       use_param_codec=use_param_codec)
 
     def minimize(self, model, init_params=None, full_output=False):
-        space_transformer = CodecRunner()
+        space_transformer = CodecRunner(cl_environments=self._cl_environments, load_balancer=self._load_balancer)
         cl_environments = self.load_balancer.get_used_cl_environments(self.cl_environments)
         starting_points = model.get_initial_parameters(init_params)
 
@@ -343,8 +336,8 @@ class AbstractSerialOptimizer(AbstractOptimizer):
         if self.use_param_codec and param_codec:
             optimized = space_transformer.decode(param_codec, optimized)
 
-        optimized = FinalParametersTransformer(cl_environments=cl_environments, load_balancer=self.load_balancer).\
-            transform(model, optimized)
+        optimized = FinalParametersTransformer(cl_environments=cl_environments,
+                                               load_balancer=self.load_balancer).transform(model, optimized)
 
         results = model.finalize_optimization_results(results_to_dict(optimized, model.get_optimized_param_names()))
         if full_output:

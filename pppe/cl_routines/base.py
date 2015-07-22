@@ -1,4 +1,5 @@
 from ..cl_environments import CLEnvironmentFactory
+import configuration
 from ..load_balance_strategies import PreferGPU
 
 __author__ = 'Robbert Harms'
@@ -18,10 +19,10 @@ class AbstractCLRoutine(object):
             load_balancer (LoadBalancingStrategy): The load balancing strategy to be used by this routine.
         """
         if not load_balancer:
-            load_balancer = PreferGPU()
+            load_balancer = configuration.default_load_balancer
 
         if not cl_environments:
-            cl_environments = CLEnvironmentFactory.all_devices()
+            cl_environments = configuration.default_cl_environments
 
         self._cl_environments = cl_environments
         self._load_balancer = load_balancer

@@ -210,7 +210,7 @@ class LoadBalanceStrategy(object):
             workers (list of Worker): the workers to use in the processing
             batches (list of lists): for each worker a list with the batches in format (start, end)
         """
-        self._logger.debug('Preparing to run {0} batch(es) on {1} device(s)'.format(len(batches[0]), len(workers)))
+        self._logger.debug('Preparing to run on {0} device(s)'.format(len(workers)))
 
         total_nmr_problems = 0
         for workers_batches in batches:
@@ -220,12 +220,12 @@ class LoadBalanceStrategy(object):
 
         start_time = timeit.default_timer()
         for batch_nmr in range(len(batches[0])):
-            self._logger.debug('Going to run batch {0} '
-                               'with start {1}, and end {2}'.format(batch_nmr, *batches[0][batch_nmr]))
-
             events = []
             for worker_ind, worker in enumerate(workers):
                 if batch_nmr < len(batches[worker_ind]):
+                    self._logger.debug('Going to run batch {0} on device {1} with range ({2}, {3})'.format(
+                        batch_nmr, worker_ind, *batches[worker_ind][batch_nmr]))
+
                     events.append(self._try_processing(worker, *batches[worker_ind][batch_nmr]))
                     problems_seen += batches[worker_ind][batch_nmr][1] - batches[worker_ind][batch_nmr][0]
             for event in events:

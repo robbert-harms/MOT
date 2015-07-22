@@ -279,6 +279,12 @@ class SmoothableModelInterface(OptimizeModelInterface):
     def smooth(self, results, filter_routine):
         """Smooth the given results according to the rules in this model and the given smoother.
 
+        This is meant for spatial smoothing across the problems.
+
+        There is a reason we have this kind of interface, instead of a function 'get_smoothable_mapnames' and then
+        do the smoothing in the calling class. That is because the optimization classes work with a list of problems
+        and do not know the spatial locations of each problem in the original dataset.
+
         Args:
             results (dict): Parameters and 1d maps with the voxel maps.
             filter_routine (AbstractFilter): A smoothing routine object.

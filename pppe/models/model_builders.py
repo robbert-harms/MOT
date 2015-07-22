@@ -18,6 +18,15 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 class OptimizeModelBuilder(OptimizeModelInterface):
 
     def __init__(self, name, model_tree, evaluation_model, signal_noise_model=None, problem_data=None):
+        """Create a new model builder that can construct an optimization model using parts.
+
+        Args:
+            name (str): the name of the model
+            model_tree (CompartmentModelTree): the model tree object
+            evaluation_model (EvaluationModel): the evaluation model to use for the resulting complete model
+            signal_noise_model (SignalNoiseModel): the optional signal noise model to use to noise the model prediction
+            problem_data (ProblemData): the problem data object
+        """
         super(OptimizeModelBuilder, self).__init__()
         self._name = name
         self._model_tree = model_tree
@@ -429,9 +438,11 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         """This adds the final optimization maps to the results dictionary.
 
         Steps in finalizing the results dict:
-        1) It first adds the maps for the dependent and fixed parameters
-        2) Second it adds the extra maps defined in the models itself.
-        3) Finally it loops through the post_optimization_modifiers callback functions for the final updates.
+            1) It first adds the maps for the dependent and fixed parameters
+            2) Second it adds the extra maps defined in the models itself.
+            3) Finally it loops through the post_optimization_modifiers callback functions for the final updates.
+
+        For more documentation see the base method.
 
         """
         self._add_dependent_parameter_maps(results_dict)

@@ -1,3 +1,4 @@
+import logging
 from ...cl_environments import CLEnvironment
 from ...cl_routines.sampling.metropolis_hastings import MetropolisHastings
 from ...cl_routines.filters.median import MedianFilter
@@ -67,10 +68,16 @@ class MetaOptimizer(AbstractOptimizer):
         self.smoother = MedianFilter((1, 1, 1))
         self.sampler = MetropolisHastings()
 
+        self._propagate_property('cl_environments', cl_environments)
+        self._propagate_property('load_balancer', load_balancer)
+
+        self._logger = logging.getLogger(__name__)
+
     def minimize(self, model, init_params=None, full_output=False):
         results = init_params
 
         if self.enable_grid_search:
+            self._logger.info('Doing an initial grid search')
             results = self.grid_search.minimize(model, init_params=results)
 
         results = self.optimizer.minimize(model, init_params=results)
@@ -106,8 +113,10 @@ class MetaOptimizer(AbstractOptimizer):
                 if value.shape[0] == nmr_voxels:
                     results.update({'sampling.' + key: value})
 
-        errors = ResidualCalculator().calculate(model, results)
-        error_measures = ErrorMeasures().calculate(errors)
+        errors = ResidualCalculator(cl_environments=self.cl_environments,
+                                    load_balancer=self.load_balancer).calculate(model, results)
+        error_measures = ErrorMeasures(cl_environments=self.cl_environments,
+                                       load_balancer=self.load_balancer).calculate(errors)
         results.update(error_measures)
 
         if full_output:
@@ -122,44 +131,30 @@ class MetaOptimizer(AbstractOptimizer):
     def cl_environments(self):
         return self._cl_environments
 
-    @cl_environments.setter
-    def cl_environments(self, cl_environments):
-        if isinstance(cl_environments, CLEnvironment):
-            cl_environments = [cl_environments]
-
-        self.optimizer.cl_environments = cl_environments
-        self.grid_search.cl_environments = cl_environments
-        self.smoother.cl_environments = cl_environments
-        self.sampler.cl_environments = cl_environments
-
-        if self.extra_optim_runs_optimizers:
-            for optim in self.extra_optim_runs_optimizers:
-                optim.cl_environments = cl_environments
-
-        if self.extra_optim_runs_smoothers:
-            for smoother in self.extra_optim_runs_smoothers:
-                smoother.cl_environments = cl_environments
-
-        self._cl_environments = cl_environments
-
     @property
     def load_balancer(self):
         return self._load_balancer
 
+    @cl_environments.setter
+    def cl_environments(self, cl_environments):
+        self._propagate_property('cl_environments', cl_environments)
+        self._cl_environments = cl_environments
+
     @load_balancer.setter
     def load_balancer(self, load_balancer):
+        self._propagate_property('load_balancer', load_balancer)
+        self._load_balancer = load_balancer
 
-        self.optimizer.load_balancer = load_balancer
-        self.grid_search.load_balancer = load_balancer
-        self.smoother.load_balancer = load_balancer
-        self.sampler.load_balancer = load_balancer
+    def _propagate_property(self, name, value):
+        self.optimizer.__setattr__(name, value)
+        self.grid_search.__setattr__(name, value)
+        self.smoother.__setattr__(name, value)
+        self.sampler.__setattr__(name, value)
 
         if self.extra_optim_runs_optimizers:
             for optim in self.extra_optim_runs_optimizers:
-                optim.load_balancer = load_balancer
+                optim.__setattr__(name, value)
 
         if self.extra_optim_runs_smoothers:
             for smoother in self.extra_optim_runs_smoothers:
-                smoother.load_balancer = load_balancer
-
-        self._load_balancer = load_balancer
+                smoother.__setattr__(name, value)
