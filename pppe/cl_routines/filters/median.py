@@ -81,19 +81,19 @@ class _MedianFilterWorker(AbstractFilterWorker):
                                 tmp_val = volume[''' +
                                     self._get_ks_sub2ind_func_call(len(self._volume_shape)) + '''];
                                 if(tmp_val < guess){
-                                    less++;
+                                    less += 1;
                                     if(tmp_val > maxltguess){
                                         maxltguess = tmp_val;
                                     }
                                 }
                                 else if (tmp_val > guess) {
-                                    greater++;
+                                    greater += 1;
                                     if(tmp_val < mingtguess){
                                         mingtguess = tmp_val;
                                     }
                                 }
                                 else{
-                                    equal++;
+                                    equal += 1;
                                 }
                             ''') + '''
                             if(less <= (number_of_items + 1)/2 && greater <= (number_of_items + 1)/2){
