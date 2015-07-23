@@ -78,12 +78,35 @@ class CLDataType(object):
         return 0
 
 
-class ProblemData(object):
+class AbstractProblemData(object):
+    """A simple data container for the data for optimization/sampling models."""
+
+    @property
+    def prtcl_data_dict(self):
+        """Return the protocol data stored in this problem data container.
+
+        The protocol data contains information about the experimental setup. In MRI this is the scanner protocol.
+
+        Returns:
+            dict: The protocol data dict.
+        """
+        return {}
+
+    @property
+    def observations(self):
+        """Return the observations stored in this problem data container.
+
+        Returns:
+            ndarray: The list of observed instances per problem. Should be a matrix with as columns the observations
+                and as rows the problems.
+        """
+        return np.array([])
+
+
+class SimpleProblemData(AbstractProblemData):
 
     def __init__(self, prtcl_data_dict, observations_list):
         """A simple data container for the data for optimization/sampling models.
-
-        It is possible to extend this problem data with other data using the kwargs argument.
 
         Args:
             prtcl_data_dict (dict): The protocol data dictionary
@@ -94,20 +117,10 @@ class ProblemData(object):
 
     @property
     def prtcl_data_dict(self):
-        """Return the constant data stored in this problem data container.
-
-        Returns:
-            dict: The protocol data dict.
-        """
         return self._prtcl_data_dict
 
     @property
-    def observation_list(self):
-        """Return the constant data stored in this problem data container.
-
-        Returns:
-            ndarray: The list of observations
-        """
+    def observations(self):
         return self._observation_list
 
 

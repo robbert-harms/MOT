@@ -50,7 +50,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
     @property
     def name(self):
-        """See super class OptimizeModel for details"""
+        """See super class OptimizeModelInterface for details"""
         return self._name
 
     def fix(self, model_param_name, value):
@@ -188,21 +188,13 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                          isinstance(p, ProtocolParameter)]))
 
     def get_problems_var_data(self):
-        """See super class OptimizeModel for details"""
-        var_data_dict = {'observations': self._problem_data.observation_list}
+        """See super class OptimizeModelInterface for details"""
+        var_data_dict = {'observations': self._problem_data.observations}
         var_data_dict.update(self._get_fixed_parameters_as_var_data())
         return var_data_dict
 
     def get_optimization_output_param_names(self):
-        """Get a list with the names of the parameters, this is the list of keys to the titles and results.
-
-        See get_optimized_param_names() for getting the names of the parameters that are actually being optimized.
-
-        This should be a complete overview of all the maps returned from optimizing this model.
-
-        Returns:
-            list of str: a list with the parameter names
-        """
+        """See super class OptimizeModelInterface for details"""
         l = []
         for m, params in self.get_optimization_output_param_listing():
             for p in params:
@@ -240,10 +232,10 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         return [m.name + '.' + p.name for m, p in self._get_estimable_parameters_list()]
 
     def get_nmr_problems(self):
-        return self._problem_data.observation_list.shape[0]
+        return self._problem_data.observations.shape[0]
 
     def get_nmr_inst_per_problem(self):
-        return self._problem_data.observation_list.shape[1]
+        return self._problem_data.observations.shape[1]
 
     def get_nmr_estimable_parameters(self):
         return len(self.get_optimized_param_names())

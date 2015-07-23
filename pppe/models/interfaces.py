@@ -135,6 +135,17 @@ class OptimizeModelInterface(object):
             A list with the parameter names (in dot format) of all the estimated (free) parameters.
         """
 
+    def get_optimization_output_param_names(self):
+        """Get a list with the names of the parameters, this is the list of keys to the titles and results.
+
+        See get_optimized_param_names() for getting the names of the parameters that are actually being optimized.
+
+        This should be a complete overview of all the maps returned from optimizing this model.
+
+        Returns:
+            list of str: a list with the parameter names
+        """
+
     def get_nmr_inst_per_problem(self):
         """Get the number of instances/data points per problem. In DMRI this is the length of the protocol.
 
