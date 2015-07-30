@@ -17,7 +17,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class MetropolisHastings(AbstractSampler):
 
-    def __init__(self, cl_environments, load_balancer, nmr_samples=500, burn_length=500, sample_intervals=10):
+    def __init__(self, cl_environments, load_balancer, nmr_samples=100, burn_length=0, sample_intervals=1):
         """An CL implementation of Metropolis Hastings.
 
         Args:
@@ -58,7 +58,8 @@ class MetropolisHastings(AbstractSampler):
 
         samples = np.zeros((model.get_nmr_problems(), parameters.shape[1] * self.nmr_samples),
                            dtype=np.float64, order='C')
-        acceptance_counter = np.zeros((model.get_nmr_problems(),), dtype=np.int32, order='C')
+        acceptance_counter = np.zeros((model.get_nmr_problems(), parameters.shape[1]),
+                                      dtype=np.uint32, order='C')
 
         workers = self._create_workers(_MHWorker, model, parameters, samples, acceptance_counter,
                                        var_data_dict, prtcl_data_dict, fixed_data_dict,
@@ -70,7 +71,13 @@ class MetropolisHastings(AbstractSampler):
 
         if full_output:
             steps = (self.nmr_samples * self.sample_intervals + self.burn_length) * parameters.shape[0]
-            return samples_dict, {'ar': acceptance_counter / float(steps)}
+
+            acceptance_counter = acceptance_counter.astype(np.float32) / float(steps)
+
+            extra_output = {name + '.acceptance_rate': acceptance_counter[:, ind] for ind, name
+                            in enumerate(model.get_optimized_param_names())}
+
+            return samples_dict, extra_output
         return samples_dict
 
 
@@ -111,13 +118,13 @@ class _MHWorker(Worker):
         data_buffers.append(samples_buf)
 
         ac_buf = cl.Buffer(self._cl_environment.context, write_only_flags,
-                           hostbuf=self._acceptance_counter[range_start:range_end])
+                           hostbuf=self._acceptance_counter[range_start:range_end, :])
         data_buffers.append(ac_buf)
 
         data_buffers.append(ranluxcltab_buffer)
-        data_buffers.append(np.int32(self._nmr_samples))
-        data_buffers.append(np.int32(self._burn_length))
-        data_buffers.append(np.int32(self._sample_intervals))
+        data_buffers.append(np.uint32(self._nmr_samples))
+        data_buffers.append(np.uint32(self._burn_length))
+        data_buffers.append(np.uint32(self._sample_intervals))
 
         for data in self._var_data_dict.values():
             if len(data.shape) < 2:
@@ -133,7 +140,7 @@ class _MHWorker(Worker):
         local_range = None
 
         event = self._kernel.sample(self._queue, global_range, local_range, *data_buffers)
-        event = cl.enqueue_copy(self._queue, self._acceptance_counter[range_start:range_end],
+        event = cl.enqueue_copy(self._queue, self._acceptance_counter[range_start:range_end, :],
                                 ac_buf, wait_for=(event,), is_blocking=False)
         event = cl.enqueue_copy(self._queue, self._samples[range_start:range_end, :],
                                 samples_buf, wait_for=(event,), is_blocking=False)
@@ -147,11 +154,11 @@ class _MHWorker(Worker):
 
         kernel_param_names = ['global double* params',
                               'global double* samples',
-                              'global int* acceptance_counter',
+                              'global unsigned int* acceptance_counter',
                               'global float4* ranluxcltab',
-                              'int nmr_samples',
-                              'int burn_length',
-                              'int sample_intervals']
+                              'unsigned int nmr_samples',
+                              'unsigned int burn_length',
+                              'unsigned int sample_intervals']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
         rng_code = RanluxCL()
@@ -214,7 +221,7 @@ class _MHWorker(Worker):
 
                             *current_likelihood = new_likelihood;
                             *current_prior = new_prior;
-                            acceptance_counter[get_global_id(0)]++;
+                            acceptance_counter[k + ''' + repr(self._nmr_params) + ''' * get_global_id(0)]++;
                         }
                     }
                 }
@@ -225,7 +232,7 @@ class _MHWorker(Worker):
                 ''' + ",\n".join(kernel_param_names) + '''
                 ){
                     int gid = get_global_id(0);
-                    int i, j;
+                    unsigned int i, j;
 
                     ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
 

@@ -11,7 +11,7 @@ class AbstractParameterPrior(object):
     They indicate the a priori information one has about a parameter.
     """
 
-    def get_log_assignment(self, parameter, parameter_name):
+    def get_cl_assignment(self, parameter, parameter_name):
         """Get the assignment code.
 
         In CL assignments look like: a = b;
@@ -25,21 +25,24 @@ class AbstractParameterPrior(object):
 
 class UniformPrior(AbstractParameterPrior):
     """The uniform prior is always 1."""
-
-    def get_log_assignment(self, parameter, parameter_name):
+    def get_cl_assignment(self, parameter, parameter_name):
         return '1;'
 
 
 class UniformWithinBoundsPrior(AbstractParameterPrior):
     """This prior is 1 within the upper and lower bound of the parameter, 0 outside."""
-
-    def get_log_assignment(self, parameter, parameter_name):
+    def get_cl_assignment(self, parameter, parameter_name):
         return '((' + parameter_name + ' < ' + repr(float(parameter.lower_bound)) + \
                ' || ' + parameter_name + ' > ' + repr(float(parameter.upper_bound)) + ') ? 0.0 : 1.0);'
 
 
 class AbsSinPrior(AbstractParameterPrior):
     """The fabs(sin(x)) prior."""
-
-    def get_log_assignment(self, parameter, parameter_name):
+    def get_cl_assignment(self, parameter, parameter_name):
         return 'fabs(sin(' + parameter_name + '));'
+
+
+class AbsSinHalfPrior(AbstractParameterPrior):
+    """The fabs(sin(x)/2.0) prior. Taken from FSL"""
+    def get_cl_assignment(self, parameter, parameter_name):
+        return 'fabs(sin(' + parameter_name + ')/2.0);'

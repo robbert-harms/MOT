@@ -65,7 +65,7 @@ class AbstractOptimizer(AbstractCLRoutine):
 
         Returns:
             Either only the results per problem, or a list: (results, {}) where the dictionary contains all
-            other parameters (named) that can be returned.
+            other parameters (named) that can be returned. Depends on full_output argument.
         """
 
 

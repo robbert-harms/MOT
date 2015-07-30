@@ -1,4 +1,5 @@
 from six import string_types
+from .base import ModelFunction
 
 __author__ = 'Robbert Harms'
 __date__ = "2015-03-26"
@@ -113,3 +114,12 @@ class CompartmentModelTree(Tree):
         else:
             self.data = listing
             self.tag = listing.name
+
+    def __str__(self, level=0):
+        if isinstance(self.data, string_types):
+            operator = ' ' + self.data + ' '
+            return '(' + "\n" + "\t" * (level + 1) + \
+                   operator.join([child.__str__(level + 1) for child in self.children]) + \
+                   "\n" + "\t" * level + ')'
+        else:
+            return self.data.name + '(' + ', '.join([p.name for p in self.data.parameter_list]) + ')'

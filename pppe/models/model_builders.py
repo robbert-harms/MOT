@@ -886,7 +886,7 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         prior = 'double ' + func_name + '(const double* const x){' + "\n"
         prior += "\t" + 'double prior = 1.0;' + "\n"
         for i, (m, p) in enumerate(self._get_estimable_parameters_list()):
-            prior += "\t" + 'prior *= ' + p.sampling_prior.get_log_assignment(p, 'x[' + repr(i) + ']') + "\n"
+            prior += "\t" + 'prior *= ' + p.sampling_prior.get_cl_assignment(p, 'x[' + repr(i) + ']') + "\n"
         prior += "\n" + "\t" + 'return log(prior);' + "\n" + '}'
         return prior
 
