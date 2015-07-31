@@ -77,7 +77,8 @@ class MetropolisHastings(AbstractSampler):
         samples_dict = results_to_dict(samples, model.get_optimized_param_names())
 
         if full_output:
-            acceptance_counter = acceptance_counter.astype(np.float32) / float(self.nmr_samples * self.sample_intervals)
+            acceptance_counter = acceptance_counter.astype(np.float32) / float(
+                self.burn_length + self.nmr_samples * self.sample_intervals)
 
             volume_maps = {}
             for ind, name in enumerate(model.get_optimized_param_names()):
@@ -304,10 +305,6 @@ class _MHWorker(Worker):
                             }
                             proposal_update_count = 0;
                         }
-                    }
-
-                    for(int k = 0; k < ''' + repr(self._nmr_params) + '''; k++){
-                        acceptance_counter[k + ''' + repr(self._nmr_params) + ''' * get_global_id(0)] = 0;
                     }
 
                     proposal_update_count = 0;
