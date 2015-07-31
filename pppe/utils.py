@@ -332,7 +332,7 @@ def set_correct_cl_data_type(data):
                 items.append(set_correct_cl_data_type(d))
             return items
         elif isinstance(data, (numbers.Number,)):
-            return np.array(data, dtype=np.float64, order='C', copy=False)
+            return np.array([data])
         else:
             return data.astype(get_correct_cl_data_type_from_data(data), order='C', copy=False)
     return None

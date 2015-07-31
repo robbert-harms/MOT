@@ -17,7 +17,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class MetropolisHastings(AbstractSampler):
 
-    def __init__(self, cl_environments, load_balancer, nmr_samples=100, burn_length=0, sample_intervals=1):
+    def __init__(self, cl_environments, load_balancer, nmr_samples=2, burn_length=0, sample_intervals=0):
         """An CL implementation of Metropolis Hastings.
 
         Args:
@@ -51,7 +51,7 @@ class MetropolisHastings(AbstractSampler):
         self._nmr_samples = value or 1
 
     def sample(self, model, init_params=None, full_output=False):
-        parameters = set_correct_cl_data_type(model.get_initial_parameters(init_params))
+        parameters = model.get_initial_parameters(init_params).astype(np.float64, order='C')
         var_data_dict = set_correct_cl_data_type(model.get_problems_var_data())
         prtcl_data_dict = set_correct_cl_data_type(model.get_problems_prtcl_data())
         fixed_data_dict = set_correct_cl_data_type(model.get_problems_fixed_data())
@@ -71,13 +71,15 @@ class MetropolisHastings(AbstractSampler):
 
         if full_output:
             steps = (self.nmr_samples * self.sample_intervals + self.burn_length) * parameters.shape[0]
-
             acceptance_counter = acceptance_counter.astype(np.float32) / float(steps)
 
-            extra_output = {name + '.acceptance_rate': acceptance_counter[:, ind] for ind, name
-                            in enumerate(model.get_optimized_param_names())}
+            volume_maps = {}
+            for ind, name in enumerate(model.get_optimized_param_names()):
+                volume_maps.update({name + '.ar': acceptance_counter[:, ind]})
 
-            return samples_dict, extra_output
+            volume_maps.update(model.finalize_optimization_results(model.samples_to_statistics(samples_dict)))
+
+            return samples_dict, {'volume_maps': volume_maps}
         return samples_dict
 
 

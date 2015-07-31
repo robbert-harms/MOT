@@ -1,13 +1,10 @@
 import logging
-from ...cl_environments import CLEnvironment
-from ...cl_routines.sampling.metropolis_hastings import MetropolisHastings
 from ...cl_routines.filters.median import MedianFilter
 from ...cl_routines.optimizing.base import AbstractOptimizer
 from ...cl_routines.mapping.error_measures import ErrorMeasures
 from ...cl_routines.mapping.residual_calculator import ResidualCalculator
 from ...cl_routines.optimizing.gridsearch import GridSearch
 from ...cl_routines.optimizing.nmsimplex import NMSimplex
-from pppe import runtime_configuration
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-06-19"
@@ -19,9 +16,9 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 class MetaOptimizer(AbstractOptimizer):
 
     def __init__(self, cl_environments, load_balancer, use_param_codec=True, patience=None):
-        """This meta optimization routine uses optimizers, and samplers to provide a meta optimization.
+        """This meta optimization routine uses optimizers and smoothing routines to provide a meta optimization.
 
-        In general one can enable a grid search beforehand, optimization and sampling.
+        In general one can enable a grid search beforehand, multiple optimizers, parameter smoothing and perturbation.
 
         It will also calculating the error maps for the final fitted model parameters.
 
@@ -34,7 +31,6 @@ class MetaOptimizer(AbstractOptimizer):
 
         Attributes:
             enable_grid_search (boolean, default False); If we want to enable a grid search before optimization
-            enable_sampling (boolean, default False): If we want to enable sampling
             extra_optim_runs (boolean, default 1): The amount of extra optimization runs with a smoothing step
                 in between.
             extra_optim_runs_optimizers (list, default None): A list of optimizers with one optimizer for every extra
@@ -50,7 +46,6 @@ class MetaOptimizer(AbstractOptimizer):
             grid_search (Optimizer, default GridSearch): The grid search optimizer.
             optimizer (Optimizer, default NMSimplex): The default optimization routine
             smoother (Smoother, default MedianFilter(1)): The default smoothing routine
-            sampler (Sampler, default MetropolisHastings): The default sampling routine.
         """
         super(MetaOptimizer, self).__init__(cl_environments, load_balancer, use_param_codec)
         self.enable_grid_search = False
@@ -63,11 +58,9 @@ class MetaOptimizer(AbstractOptimizer):
         self.extra_optim_runs_use_perturbation = True
 
         self.grid_search = GridSearch(self.cl_environments, self.load_balancer, use_param_codec=self.use_param_codec)
-        self.optimizer = NMSimplex(self.cl_environments, self.load_balancer, use_param_codec=self.use_param_codec)
+        self.optimizer = NMSimplex(self.cl_environments, self.load_balancer, use_param_codec=self.use_param_codec,
+                                   patience=patience)
         self.smoother = MedianFilter((1, 1, 1), self.cl_environments, self.load_balancer)
-        self.sampler = MetropolisHastings(
-            runtime_configuration.runtime_config['cl_environments'],
-            runtime_configuration.runtime_config['load_balancer'])
 
         self._propagate_property('cl_environments', cl_environments)
         self._propagate_property('load_balancer', load_balancer)
@@ -78,7 +71,7 @@ class MetaOptimizer(AbstractOptimizer):
         results = init_params
 
         if self.enable_grid_search:
-            self._logger.info('Doing an initial grid search')
+            self._logger.info('Performing an initial grid search')
             results = self.grid_search.minimize(model, init_params=results)
 
         results = self.optimizer.minimize(model, init_params=results)
@@ -103,17 +96,6 @@ class MetaOptimizer(AbstractOptimizer):
                 else:
                     results = optimizer.minimize(model, init_params=results)
 
-        samples = ()
-        other_output = {}
-        if self.enable_sampling:
-            samples, other_output = self.sampler.sample(model, init_params=results, full_output=True)
-            results.update(model.finalize_optimization_results(model.samples_to_statistics(samples)))
-
-            nmr_voxels = samples[samples.keys()[0]].shape[0]
-            for key, value in other_output.items():
-                if value.shape[0] == nmr_voxels:
-                    results.update({'sampling.' + key: value})
-
         errors = ResidualCalculator(cl_environments=self.cl_environments,
                                     load_balancer=self.load_balancer).calculate(model, results)
         error_measures = ErrorMeasures(cl_environments=self.cl_environments,
@@ -121,11 +103,7 @@ class MetaOptimizer(AbstractOptimizer):
         results.update(error_measures)
 
         if full_output:
-            d = {}
-            if self.enable_sampling:
-                d.update({'samples': samples})
-                d.update(other_output)
-            return results, d
+            return results, {}
         return results
 
     @property
@@ -150,7 +128,6 @@ class MetaOptimizer(AbstractOptimizer):
         self.optimizer.__setattr__(name, value)
         self.grid_search.__setattr__(name, value)
         self.smoother.__setattr__(name, value)
-        self.sampler.__setattr__(name, value)
 
         if self.extra_optim_runs_optimizers:
             for optim in self.extra_optim_runs_optimizers:
