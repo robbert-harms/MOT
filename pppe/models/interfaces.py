@@ -217,6 +217,13 @@ class SampleModelInterface(OptimizeModelInterface):
     def __init__(self):
         super(SampleModelInterface, self).__init__()
 
+    def get_proposal_parameter_values(self):
+        """Get a list of parameter value for the adaptable proposal parameters.
+
+        Returns:
+            list: list of double values with the proposal parameter values that are adaptable.
+        """
+
     def get_log_likelihood_function(self, func_name="getLogLikelihood"):
         """Get the Log Likelihood function that evaluates the entire problem instance under a noise model
 
@@ -240,12 +247,13 @@ class SampleModelInterface(OptimizeModelInterface):
 
         Returns:
             A function of the kind:
-                double <func_name>(const int i, const double proposal, const double current)
+                double <func_name>(const int i, const double proposal, const double current, double* const parameters)
 
             Where i is the index of the parameter we would like to get the proposal from, current is the current
             value of that parameter and proposal the proposal value of the parameter. It should return for the requested
             parameter a value q(proposal | current). That is, the probability density function of the proposal given
             the current value (in log space).
+            Parameters is the list of adaptable parameters.
         """
 
     def get_proposal_function(self, func_name='getProposal'):
@@ -253,11 +261,13 @@ class SampleModelInterface(OptimizeModelInterface):
 
         Returns:
             A function of the kind:
-                double <func_name>(const int i, const double current, ranluxcl_state_t* ranluxclstate)
+                double <func_name>(const int i, const double current, ranluxcl_state_t* ranluxclstate,
+                                   double* const parameters)
 
             Where i is the index of the parameter we would like to get the proposal from and current is the current
             value of that parameter. One can obtain random numbers with:
                 float4 randomnr = ranluxcl(ranluxclstate);
+            Parameters is the list of adaptable parameters.
         """
 
     def get_log_prior_function(self, func_name='getLogPrior'):

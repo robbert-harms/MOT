@@ -876,6 +876,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         """
         return (col == col[0]).all()
 
+
 class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
 
     def __init__(self, model_name, model_tree, evaluation_model, signal_noise_model=None, problem_data=None):
@@ -890,37 +891,78 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         prior += "\n" + "\t" + 'return log(prior);' + "\n" + '}'
         return prior
 
+    def get_proposal_parameter_values(self):
+        return_list = []
+        for m, p in self._get_estimable_parameters_list():
+            for param in p.sampling_proposal.get_parameters():
+                if param.adaptable:
+                    return_list.append(param.default_value)
+        return return_list
+
     def is_proposal_symmetric(self):
         return all(p.sampling_proposal.is_symmetric for m, p in self._get_estimable_parameters_list())
 
     def get_proposal_logpdf(self, func_name='getProposalLogPDF'):
-        pdf = ''
-        for m, p in self._get_estimable_parameters_list():
-            pdf += p.sampling_proposal.get_proposal_logpdf_function()
+        return_str = ''
+        for _, p in self._get_estimable_parameters_list():
+            return_str += p.sampling_proposal.get_proposal_logpdf_function()
 
-        pdf += "\n" + 'double ' + func_name + '(const int i, const double proposal, const double current){' + "\n\t"
-        pdf += 'switch(i){' + "\n\t\t"
+        return_str += "\n" + 'double ' + func_name + \
+            '(const int i, const double proposal, const double current, double* const parameters){' + "\n\t"
+
+        return_str += "\n\t" + 'switch(i){' + "\n\t\t"
+
+        adaptable_parameter_count = 0
         for i, (m, p) in enumerate(self._get_estimable_parameters_list()):
-            pdf += 'case ' + repr(i) + ':' + "\n\t\t\t"
-            pdf += 'return ' + p.sampling_proposal.get_proposal_logpdf_call('proposal', 'current') + ';' + "\n\t\t"
-        pdf += '}' + "\n" + 'return 0;' + "\n" + '}'
-        return pdf
+            return_str += 'case ' + repr(i) + ':' + "\n\t\t\t"
+
+            param_proposal = p.sampling_proposal
+            logpdf_call = 'return ' + param_proposal.get_proposal_logpdf_function_name() + '(proposal, current'
+
+            for param in param_proposal.get_parameters():
+                if param.adaptable:
+                    logpdf_call += ', parameters[' + str(adaptable_parameter_count) + ']'
+                    adaptable_parameter_count += 1
+                else:
+                    logpdf_call += ', ' + str(param.default_value)
+
+            logpdf_call += ');'
+            return_str += logpdf_call + "\n"
+
+        return_str += "\n\t\t" + '}' + "\n" + 'return 0;' + "\n"
+        return_str += '}'
+        return return_str
 
     def get_proposal_function(self, func_name='getProposal'):
-        proposal = ''
-        for m, p in self._get_estimable_parameters_list():
-            param_prior = p.sampling_proposal
-            proposal += param_prior.get_proposal_function()
+        return_str = ''
+        for _, p in self._get_estimable_parameters_list():
+            return_str += p.sampling_proposal.get_proposal_function()
 
-        proposal += "\n"
-        proposal += 'double ' + func_name + \
-                    '(const int i, const double current, ranluxcl_state_t* const ranluxclstate){'
-        proposal += "\n\t" + 'switch(i){' + "\n\t\t"
+        return_str += "\n" + 'double ' + func_name + \
+            '(const int i, const double current, ranluxcl_state_t* const ranluxclstate, double* const parameters){'
+
+        return_str += "\n\t" + 'switch(i){' + "\n\t\t"
+
+        adaptable_parameter_count = 0
         for i, (m, p) in enumerate(self._get_estimable_parameters_list()):
-            proposal += 'case ' + repr(i) + ':' + "\n\t\t\t"
-            proposal += 'return ' + p.sampling_proposal.get_proposal_call(p, 'current', 'ranluxclstate') + ";" + "\n"
-        proposal += "\n\t\t" + '}' + "\n" + 'return 0;' + "\n" + '}'
-        return proposal
+            return_str += 'case ' + repr(i) + ':' + "\n\t\t\t"
+
+            param_proposal = p.sampling_proposal
+            proposal_call = 'return ' + param_proposal.get_proposal_function_name() + '(current, ranluxclstate'
+
+            for param in param_proposal.get_parameters():
+                if param.adaptable:
+                    proposal_call += ', parameters[' + str(adaptable_parameter_count) + ']'
+                    adaptable_parameter_count += 1
+                else:
+                    proposal_call += ', ' + str(param.default_value)
+
+            proposal_call += ');'
+            return_str += proposal_call + "\n"
+
+        return_str += "\n\t\t" + '}' + "\n" + 'return 0;' + "\n"
+        return_str += '}'
+        return return_str
 
     def get_log_likelihood_function(self, func_name="getLogLikelihood"):
         inst_per_problem = self.get_nmr_inst_per_problem()

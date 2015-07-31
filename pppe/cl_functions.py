@@ -275,6 +275,6 @@ class Weight(Scalar):
         super(Weight, self).__init__(name=name, value=value, lower_bound=lower_bound, upper_bound=upper_bound)
         self.parameter_list[0].name = 'w'
         self.parameter_list[0].parameter_transform = CosSqrTransform()
-        self.parameter_list[0].sampling_proposal = GaussianProposal(0.00001)
-        self.parameter_list[0].perturbation_function = lambda v: np.clip(v + np.random.normal(scale=0.05,
-                                                                                              size=v.shape), 0, 1)
+        self.parameter_list[0].sampling_proposal = GaussianProposal(0.01)
+        self.parameter_list[0].perturbation_function = lambda v: np.clip(
+            v + np.random.normal(scale=0.05, size=v.shape), 0, 1)

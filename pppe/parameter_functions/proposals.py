@@ -9,6 +9,8 @@ class AbstractParameterProposal(object):
     """The parameter proposals are meant for use during sampling.
 
     They indicate how a proposal should be generated for the given parameter.
+
+    The proposals can allow for dynamic updates to better adapt to the landscape during sampling.
     """
 
     @property
@@ -16,63 +18,88 @@ class AbstractParameterProposal(object):
         """Check if this proposal is symmetric. That is, if q(x|y) == q(y|x)."""
         return True
 
+    def get_parameters(self):
+        """The proposal parameters.
+
+        Returns:
+            list of ProposalParameter: the proposal parameter objects used by this proposal
+        """
+
     def get_proposal_function(self):
-        """Get the proposal function as a CL string. This should include include guards (ifdef's).
+        """Get the proposal function as a CL string. This should include include guards (#ifdef's).
+
+        This should follow the signature:
+        double <proposal_fname>(double current, ranluxcl_state_t* ranlux, <additional_parameters>)
+
+        That is, it can have more than two parameter, but the first two are obligatory. The additional parameters
+        are defined by the get_parameters function of this python class.
 
         Returns:
             str: The cl function
         """
 
-    def get_proposal_call(self, parameter, param_name, ranlux_name):
-        """Get the function call.
+    def get_proposal_function_name(self):
+        """Get the name of the proposal function call.
 
-        This should follow the signature:
-        double <proposal_fname>(double <param_name>, ranluxcl_state_t* <ranlux_name>, ...)
-        That is, it can have more than two parameter, but the first two should be replaceable by the composite model.
+         This is used by the model builder to construct the call to the proposal function.
 
-        Args:
-            parameter (CLFunctionParameter): The context parameter
-            param_name (str): The parameter name for in CL
-            ranlux_name (str): The ranlux name for in CL
-
-        Returns:
-            str: The proposal calling function.
+         Returns:
+            str: name of the function
         """
 
     def get_proposal_logpdf_function(self):
         """Get the proposal pdf function as a CL string. This should include include guards.
 
+        This should follow the signature:
+            double <proposal_pdf_fname>(double proposal, double current, <additional_parameters>)
+
         Returns:
             str: The proposal log pdf function as a CL string
         """
 
-    def get_proposal_logpdf_call(self, proposal_name, current_name):
-        """Get the function call to the proposal log pdf function.
+    def get_proposal_logpdf_function_name(self):
+        """Get the name of the proposal logpdf function call.
 
-        This should follow the signature:
-            double <proposal_pdf_fname>(<proposal_name>, <current_name>, ...)
+         This is used by the model builder to construct the call to the proposal logpdf function.
+
+         Returns:
+            str: name of the function
+        """
+
+
+class ProposalParameter(object):
+
+    def __init__(self, default_value, adaptable):
+        """Container class for parameters of a proposal function.
 
         Args:
-            proposal_name (str): The proposal name for in CL
-            current_name (str): The current variable name for in CL
+            default_value (double): the parameter value
+            adaptable (boolean): if this parameter is adaptable during sampling
 
-        Returns:
-            str: The proposal log pdf calling function.
+        Attributes:
+            default_value (double): the parameter value
+            adaptable (boolean): if this parameter is adaptable
         """
+        self.default_value = default_value
+        self.adaptable = adaptable
 
 
 class GaussianProposal(AbstractParameterProposal):
 
-    def __init__(self, gaussian_scale=1.0):
+    def __init__(self, std=1.0, adaptable=True):
         """Create a new proposal function using a Gaussian distribution with the given scale.
 
         Args:
             gaussian_scale (float): The scale of the Gaussian distribution.
+            adaptable (boolean): If this proposal is adaptable during sampling
 
         Attributes:
             gaussian_scale (float): The scale of the Gaussian distribution.
         """
-        self.gaussian_scale = float(gaussian_scale)
+        self._parameters = [ProposalParameter(std, adaptable)]
+
+    def get_parameters(self):
+        return self._parameters
 
     def get_proposal_function(self):
         return '''
@@ -87,23 +114,21 @@ class GaussianProposal(AbstractParameterProposal):
             #endif //DMRIPROP_GAUSSIANPROPOSAL_CL
         '''
 
-    def get_proposal_call(self, parameter, param_name, ranlux_name):
-        # The standard deviation is in the proposal call to enable multiple proposal calls with different stds.
-        return 'dmriproposal_gaussianProposal(' + param_name + ', ' + ranlux_name + ', ' + \
-               repr(self.gaussian_scale) + ')'
+    def get_proposal_function_name(self):
+        return 'dmriproposal_gaussianProposal'
 
     def get_proposal_logpdf_function(self):
         return '''
             #ifndef DMRIPROP_GAUSSIANPROPOSALLOGPDF_CL
             #define DMRIPROP_GAUSSIANPROPOSALLOGPDF_CL
 
-            double dmriproposal_gaussianProposalLogPDF(const double x, const double mu, const double sigma){
-                return log(M_2_SQRTPI / sigma) + (-0.5 * pown((x - mu) / sigma, 2));
+            double dmriproposal_gaussianProposalLogPDF(const double x, const double mu, const double std){
+                return log(M_2_SQRTPI / std) + (-0.5 * pown((x - mu) / std, 2));
             }
 
             #endif //DMRIPROP_GAUSSIANPROPOSALLOGPDF_CL
         '''
 
-    def get_proposal_logpdf_call(self, proposal_name, current_name):
-        return 'dmriproposal_gaussianProposalLogPDF(' + proposal_name + ', ' + current_name + ', ' + \
-               repr(self.gaussian_scale) + ')'
+    def get_proposal_logpdf_function_name(self):
+        return 'dmriproposal_gaussianProposalLogPDF'
+

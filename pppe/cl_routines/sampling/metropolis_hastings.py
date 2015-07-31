@@ -17,7 +17,8 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class MetropolisHastings(AbstractSampler):
 
-    def __init__(self, cl_environments, load_balancer, nmr_samples=2, burn_length=0, sample_intervals=0):
+    def __init__(self, cl_environments, load_balancer, nmr_samples=500, burn_length=1500,
+                 sample_intervals=5, proposal_update_intervals=25):
         """An CL implementation of Metropolis Hastings.
 
         Args:
@@ -28,6 +29,8 @@ class MetropolisHastings(AbstractSampler):
                 jump is set to 1 (no thinning)
             sample_intervales (int): how many samples we wait before we take,
                 this requires extra samples (chain_length * sample_intervals)
+            proposal_update_intervals (int): after how many samples we would like to update the proposals
+                This is during burning and sampling. A value of 1 means update after every jump.
 
         Attributes:
             nmr_samples (int): The length of the (returned) chain per voxel
@@ -35,12 +38,15 @@ class MetropolisHastings(AbstractSampler):
                 jump is set to 1 (no thinning)
             sample_intervales (int): how many samples we wait before we take,
                 this requires extra samples (chain_length * sample_intervals)
+            proposal_update_intervals (int): after how many samples we would like to update the proposals
+                This is during burning and sampling. A value of 1 means update after every jump.
         """
 
         super(MetropolisHastings, self).__init__(cl_environments=cl_environments, load_balancer=load_balancer)
         self._nmr_samples = nmr_samples or 1
         self.burn_length = burn_length
         self.sample_intervals = sample_intervals
+        self.proposal_update_intervals = proposal_update_intervals
 
     @property
     def nmr_samples(self):
@@ -63,15 +69,15 @@ class MetropolisHastings(AbstractSampler):
 
         workers = self._create_workers(_MHWorker, model, parameters, samples, acceptance_counter,
                                        var_data_dict, prtcl_data_dict, fixed_data_dict,
-                                       self.nmr_samples, self.burn_length, self.sample_intervals)
+                                       self.nmr_samples, self.burn_length, self.sample_intervals,
+                                       self.proposal_update_intervals)
         self.load_balancer.process(workers, model.get_nmr_problems())
 
         samples = np.reshape(samples, (model.get_nmr_problems(), parameters.shape[1], self.nmr_samples))
         samples_dict = results_to_dict(samples, model.get_optimized_param_names())
 
         if full_output:
-            steps = (self.nmr_samples * self.sample_intervals + self.burn_length) * parameters.shape[0]
-            acceptance_counter = acceptance_counter.astype(np.float32) / float(steps)
+            acceptance_counter = acceptance_counter.astype(np.float32) / float(self.nmr_samples * self.sample_intervals)
 
             volume_maps = {}
             for ind, name in enumerate(model.get_optimized_param_names()):
@@ -86,7 +92,8 @@ class MetropolisHastings(AbstractSampler):
 class _MHWorker(Worker):
 
     def __init__(self, cl_environment, model, parameters, samples, acceptance_counter,
-                 var_data_dict, prtcl_data_dict, fixed_data_dict, nmr_samples, burn_length, sample_intervals):
+                 var_data_dict, prtcl_data_dict, fixed_data_dict, nmr_samples, burn_length, sample_intervals,
+                 proposal_update_intervals):
         super(_MHWorker, self).__init__(cl_environment)
 
         self._model = model
@@ -102,6 +109,7 @@ class _MHWorker(Worker):
         self._nmr_samples = nmr_samples
         self._burn_length = burn_length
         self._sample_intervals = sample_intervals
+        self.proposal_update_intervals = proposal_update_intervals
 
         self._constant_buffers = self._generate_constant_buffers(self._prtcl_data_dict, self._fixed_data_dict)
         self._kernel = self._build_kernel()
@@ -165,6 +173,14 @@ class _MHWorker(Worker):
 
         rng_code = RanluxCL()
 
+        nrm_adaptable_proposal_parameters = len(self._model.get_proposal_parameter_values())
+        adaptable_proposal_parameters_str = 'double proposal_parameters[] = {' + \
+            ', '.join(map(str, self._model.get_proposal_parameter_values())) + \
+            '};'
+
+        acceptance_counters_between_proposal_updates = 'uint ac_between_proposal_updates[] = {' +\
+            ', '.join('0' * self._nmr_params) + '};'
+
         kernel_source = '''
             #define NMR_INST_PER_PROBLEM ''' + repr(self._model.get_nmr_inst_per_problem()) + '''
         '''
@@ -185,11 +201,13 @@ class _MHWorker(Worker):
         kernel_source += '''
             void update_state(double* const x,
                               double* const x_proposal,
-                              global int* const acceptance_counter,
+                              global uint* const acceptance_counter,
                               ranluxcl_state_t* ranluxclstate,
                               double* const current_likelihood,
                               double* const current_prior,
-                              const optimize_data* const data){
+                              const optimize_data* const data,
+                              double * const proposal_parameters,
+                              uint * const ac_between_proposal_updates){
 
                 for(int k = 0; k < ''' + repr(self._nmr_params) + '''; k++){
                     float4 randomnmr = ranluxcl(ranluxclstate);
@@ -197,7 +215,7 @@ class _MHWorker(Worker):
                     for(int i = 0; i < ''' + repr(self._nmr_params) + '''; i++){
                         x_proposal[i] = x[i];
                     }
-                    x_proposal[k] = getProposal(k, x[k], ranluxclstate);
+                    x_proposal[k] = getProposal(k, x[k], ranluxclstate, proposal_parameters);
 
                     double new_prior = getLogPrior(x_proposal);
 
@@ -209,9 +227,11 @@ class _MHWorker(Worker):
             kernel_source += "\t" * 4
             kernel_source += 'double f = exp((new_likelihood + new_prior) - (*current_likelihood + *current_prior));'
         else:
-            kernel_source += "\t" * 4 + 'double x_to_prop = getProposalLogPDF(k, x[k], x_proposal[k]);' + "\n"
-            kernel_source += "\t" * 4 + 'double prop_to_x = getProposalLogPDF(k, x_proposal[k], x[k]);' + "\n"
-            kernel_source += "\t" * 4 + \
+            kernel_source += "\t" * 4 + 'double x_to_prop = getProposalLogPDF(k, x[k], x_proposal[k], ' \
+                                        'proposal_parameters);' + "\n"
+            kernel_source += "\t" * 6 + 'double prop_to_x = getProposalLogPDF(k, x_proposal[k], x[k], ' \
+                                        'proposal_parameters);' + "\n"
+            kernel_source += "\t" * 6 + \
                 'double f = exp((new_likelihood + new_prior + x_to_prop) - ' \
                 '(*current_likelihood + *current_prior + prop_to_x));'
 
@@ -224,9 +244,18 @@ class _MHWorker(Worker):
                             *current_likelihood = new_likelihood;
                             *current_prior = new_prior;
                             acceptance_counter[k + ''' + repr(self._nmr_params) + ''' * get_global_id(0)]++;
+                            ac_between_proposal_updates[k]++;
                         }
                     }
                 }
+            }
+        '''
+        kernel_source += '''
+            double update_parameter_proposal(const double current_value, const uint acceptance_counter,
+                const uint jump_counter){
+
+                return min(current_value * sqrt( (double)(acceptance_counter+1) /
+                    ((jump_counter - acceptance_counter) + 1) ), 1e10);
             }
         '''
         kernel_source += '''
@@ -234,7 +263,10 @@ class _MHWorker(Worker):
                 ''' + ",\n".join(kernel_param_names) + '''
                 ){
                     int gid = get_global_id(0);
-                    unsigned int i, j;
+                    unsigned int i, j, proposal_update_count;
+
+                    ''' + adaptable_proposal_parameters_str + '''
+                    ''' + acceptance_counters_between_proposal_updates + '''
 
                     ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
 
@@ -251,15 +283,55 @@ class _MHWorker(Worker):
                     double current_likelihood = getLogLikelihood(&data, x);
                     double current_prior = getLogPrior(x);
 
+                    proposal_update_count = 0;
                     for(i = 0; i < burn_length; i++){
                         update_state(x, x_proposal, acceptance_counter, &ranluxclstate, &current_likelihood,
-                                     &current_prior, &data);
+                                     &current_prior, &data, proposal_parameters, ac_between_proposal_updates);
+
+                        proposal_update_count += 1;
+
+                        if(proposal_update_count == ''' + repr(self.proposal_update_intervals) + '''){
+                            for(proposal_update_count = 0;
+                                proposal_update_count < ''' + repr(nrm_adaptable_proposal_parameters) + ''';
+                                proposal_update_count++){
+
+                                proposal_parameters[proposal_update_count] = update_parameter_proposal(
+                                    proposal_parameters[proposal_update_count],
+                                    ac_between_proposal_updates[proposal_update_count],
+                                    ''' + repr(self.proposal_update_intervals) + ''');
+
+                                ac_between_proposal_updates[proposal_update_count] = 0;
+                            }
+                            proposal_update_count = 0;
+                        }
                     }
 
+                    for(int k = 0; k < ''' + repr(self._nmr_params) + '''; k++){
+                        acceptance_counter[k + ''' + repr(self._nmr_params) + ''' * get_global_id(0)] = 0;
+                    }
+
+                    proposal_update_count = 0;
                     for(i = 0; i < nmr_samples; i++){
                         for(j = 0; j < sample_intervals; j++){
                             update_state(x, x_proposal, acceptance_counter, &ranluxclstate, &current_likelihood,
-                                         &current_prior, &data);
+                                         &current_prior, &data, proposal_parameters, ac_between_proposal_updates);
+
+                            proposal_update_count += 1;
+
+                            if(proposal_update_count == ''' + repr(self.proposal_update_intervals) + '''){
+                                for(proposal_update_count = 0;
+                                    proposal_update_count < ''' + repr(nrm_adaptable_proposal_parameters) + ''';
+                                    proposal_update_count++){
+
+                                    proposal_parameters[proposal_update_count] = update_parameter_proposal(
+                                        proposal_parameters[proposal_update_count],
+                                        ac_between_proposal_updates[proposal_update_count],
+                                        ''' + repr(self.proposal_update_intervals) + ''');
+
+                                    ac_between_proposal_updates[proposal_update_count] = 0;
+                                }
+                                proposal_update_count = 0;
+                            }
                         }
 
                         for(j = 0; j < ''' + repr(self._nmr_params) + '''; j++){
@@ -276,5 +348,11 @@ class _MHWorker(Worker):
                     ranluxcl_upload_seed(&ranluxclstate, ranluxcltab);
             }
         '''
+
+        #todo move the proposal update to model builder.
+        # also, there is a mismatch now between proposal parameters and model parameters.
+        # we currently assume they are the same, but that is not necessarily the case. FIX THIS.
+
+
         kernel_source += rng_code.get_cl_code()
         return kernel_source
