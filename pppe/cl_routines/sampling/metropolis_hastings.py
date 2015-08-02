@@ -136,6 +136,10 @@ class _MHWorker(Worker):
         data_buffers.append(np.uint32(self._nmr_samples))
         data_buffers.append(np.uint32(self._burn_length))
         data_buffers.append(np.uint32(self._sample_intervals))
+        data_buffers.append(np.uint32(self._nmr_params))
+        # We add these parameters to the kernel call instead of inlining them.
+        # This if for a good reason. At the time of writing, the CL kernel compiler crashes if these are inlined
+        # My guess is that the compiler tries to optimize the loops, fails and then crashes.
 
         for data in self._var_data_dict.values():
             if len(data.shape) < 2:
@@ -169,18 +173,15 @@ class _MHWorker(Worker):
                               'global float4* ranluxcltab',
                               'unsigned int nmr_samples',
                               'unsigned int burn_length',
-                              'unsigned int sample_intervals']
+                              'unsigned int sample_intervals',
+                              'unsigned int nmr_params']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
         rng_code = RanluxCL()
 
         nrm_adaptable_proposal_parameters = len(self._model.get_proposal_parameter_values())
-        adaptable_proposal_parameters_str = 'double proposal_parameters[] = {' + \
-            ', '.join(map(str, self._model.get_proposal_parameter_values())) + \
-            '};'
-
-        acceptance_counters_between_proposal_updates = 'uint ac_between_proposal_updates[] = {' +\
-            ', '.join('0' * self._nmr_params) + '};'
+        adaptable_proposal_parameters_str = '{' + ', '.join(map(str, self._model.get_proposal_parameter_values())) + '}'
+        acceptance_counters_between_proposal_updates = '{' + ', '.join('0' * self._nmr_params) + '}'
 
         kernel_source = '''
             #define NMR_INST_PER_PROBLEM ''' + repr(self._model.get_nmr_inst_per_problem()) + '''
@@ -190,6 +191,7 @@ class _MHWorker(Worker):
         kernel_source += rng_code.get_cl_header()
         kernel_source += self._model.get_log_prior_function('getLogPrior')
         kernel_source += self._model.get_proposal_function('getProposal')
+        kernel_source += self._model.get_proposal_parameters_update_function('updateProposalParameters')
 
         if cl_final_param_transform:
             kernel_source += cl_final_param_transform
@@ -208,36 +210,47 @@ class _MHWorker(Worker):
                               double* const current_prior,
                               const optimize_data* const data,
                               double * const proposal_parameters,
-                              uint * const ac_between_proposal_updates){
+                              uint * const ac_between_proposal_updates,
+                              const uint nmr_params){
 
-                for(int k = 0; k < ''' + repr(self._nmr_params) + '''; k++){
-                    float4 randomnmr = ranluxcl(ranluxclstate);
+                float4 randomnmr;
+                double new_prior;
+                double new_likelihood;
+                double bayesian_f;
+        '''
+        if not self._model.is_proposal_symmetric():
+            kernel_source += '''
+                double x_to_prop, prop_to_x;
+        '''
+        kernel_source += '''
+                for(int k = 0; k < nmr_params; k++){
+                    randomnmr = ranluxcl(ranluxclstate);
 
                     for(int i = 0; i < ''' + repr(self._nmr_params) + '''; i++){
                         x_proposal[i] = x[i];
                     }
                     x_proposal[k] = getProposal(k, x[k], ranluxclstate, proposal_parameters);
 
-                    double new_prior = getLogPrior(x_proposal);
+                    new_prior = getLogPrior(x_proposal);
 
                     if(exp(new_prior) > 0){
-                        double new_likelihood = getLogLikelihood(data, x_proposal);
+                        new_likelihood = getLogLikelihood(data, x_proposal);
 
         '''
         if self._model.is_proposal_symmetric():
-            kernel_source += "\t" * 4
-            kernel_source += 'double f = exp((new_likelihood + new_prior) - (*current_likelihood + *current_prior));'
+            kernel_source += '''
+                        bayesian_f = exp((new_likelihood + new_prior) - (*current_likelihood + *current_prior));
+                '''
         else:
-            kernel_source += "\t" * 4 + 'double x_to_prop = getProposalLogPDF(k, x[k], x_proposal[k], ' \
-                                        'proposal_parameters);' + "\n"
-            kernel_source += "\t" * 6 + 'double prop_to_x = getProposalLogPDF(k, x_proposal[k], x[k], ' \
-                                        'proposal_parameters);' + "\n"
-            kernel_source += "\t" * 6 + \
-                'double f = exp((new_likelihood + new_prior + x_to_prop) - ' \
-                '(*current_likelihood + *current_prior + prop_to_x));'
+            kernel_source += '''
+                        x_to_prop = getProposalLogPDF(k, x[k], x_proposal[k], proposal_parameters);
+                        prop_to_x = getProposalLogPDF(k, x_proposal[k], x[k], proposal_parameters);
 
+                        bayesian_f = exp((new_likelihood + new_prior + x_to_prop) -
+                            (*current_likelihood + *current_prior + prop_to_x));
+                '''
         kernel_source += '''
-                        if(randomnmr.x < f){
+                        if(randomnmr.x < bayesian_f){
                             for(int i = 0; i < ''' + repr(self._nmr_params) + '''; i++){
                                 x[i] = x_proposal[i];
                             }
@@ -252,11 +265,13 @@ class _MHWorker(Worker):
             }
         '''
         kernel_source += '''
-            double update_parameter_proposal(const double current_value, const uint acceptance_counter,
-                const uint jump_counter){
+            void _update_proposals(double* const proposal_parameters, uint* const ac_between_proposal_updates){
+                updateProposalParameters(ac_between_proposal_updates, ''' + repr(self.proposal_update_intervals) + ''',
+                                         proposal_parameters);
 
-                return min(current_value * sqrt( (double)(acceptance_counter+1) /
-                    ((jump_counter - acceptance_counter) + 1) ), 1e10);
+                for(int i = 0; i < ''' + repr(nrm_adaptable_proposal_parameters) + '''; i++){
+                    ac_between_proposal_updates[i] = 0;
+                }
             }
         '''
         kernel_source += '''
@@ -266,8 +281,8 @@ class _MHWorker(Worker):
                     int gid = get_global_id(0);
                     unsigned int i, j, proposal_update_count;
 
-                    ''' + adaptable_proposal_parameters_str + '''
-                    ''' + acceptance_counters_between_proposal_updates + '''
+                    double proposal_parameters[] = ''' + adaptable_proposal_parameters_str + ''';
+                    uint ac_between_proposal_updates[] = ''' + acceptance_counters_between_proposal_updates + ''';
 
                     ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
 
@@ -287,22 +302,12 @@ class _MHWorker(Worker):
                     proposal_update_count = 0;
                     for(i = 0; i < burn_length; i++){
                         update_state(x, x_proposal, acceptance_counter, &ranluxclstate, &current_likelihood,
-                                     &current_prior, &data, proposal_parameters, ac_between_proposal_updates);
+                                     &current_prior, &data, proposal_parameters, ac_between_proposal_updates,
+                                     nmr_params);
 
                         proposal_update_count += 1;
-
                         if(proposal_update_count == ''' + repr(self.proposal_update_intervals) + '''){
-                            for(proposal_update_count = 0;
-                                proposal_update_count < ''' + repr(nrm_adaptable_proposal_parameters) + ''';
-                                proposal_update_count++){
-
-                                proposal_parameters[proposal_update_count] = update_parameter_proposal(
-                                    proposal_parameters[proposal_update_count],
-                                    ac_between_proposal_updates[proposal_update_count],
-                                    ''' + repr(self.proposal_update_intervals) + ''');
-
-                                ac_between_proposal_updates[proposal_update_count] = 0;
-                            }
+                            _update_proposals(proposal_parameters, ac_between_proposal_updates);
                             proposal_update_count = 0;
                         }
                     }
@@ -311,22 +316,12 @@ class _MHWorker(Worker):
                     for(i = 0; i < nmr_samples; i++){
                         for(j = 0; j < sample_intervals; j++){
                             update_state(x, x_proposal, acceptance_counter, &ranluxclstate, &current_likelihood,
-                                         &current_prior, &data, proposal_parameters, ac_between_proposal_updates);
+                                         &current_prior, &data, proposal_parameters, ac_between_proposal_updates,
+                                         nmr_params);
 
                             proposal_update_count += 1;
-
                             if(proposal_update_count == ''' + repr(self.proposal_update_intervals) + '''){
-                                for(proposal_update_count = 0;
-                                    proposal_update_count < ''' + repr(nrm_adaptable_proposal_parameters) + ''';
-                                    proposal_update_count++){
-
-                                    proposal_parameters[proposal_update_count] = update_parameter_proposal(
-                                        proposal_parameters[proposal_update_count],
-                                        ac_between_proposal_updates[proposal_update_count],
-                                        ''' + repr(self.proposal_update_intervals) + ''');
-
-                                    ac_between_proposal_updates[proposal_update_count] = 0;
-                                }
+                                _update_proposals(proposal_parameters, ac_between_proposal_updates);
                                 proposal_update_count = 0;
                             }
                         }
@@ -334,22 +329,18 @@ class _MHWorker(Worker):
                         for(j = 0; j < ''' + repr(self._nmr_params) + '''; j++){
                             x_proposal[j] = x[j];
                         }
+
                         ''' + ('applyFinalParamTransforms(&data, x_proposal);'
                                if cl_final_param_transform else '') + '''
+
                         for(j = 0; j < ''' + repr(self._nmr_params) + '''; j++){
-                            samples[i + j * nmr_samples + gid * ''' + repr(self._nmr_params) +\
-                                    ''' * nmr_samples] = x_proposal[j];
+                            samples[i + j * nmr_samples + gid *
+                                    ''' + repr(self._nmr_params) + ''' * nmr_samples] = x_proposal[j];
                         }
                     }
 
                     ranluxcl_upload_seed(&ranluxclstate, ranluxcltab);
             }
         '''
-
-        #todo move the proposal update to model builder.
-        # also, there is a mismatch now between proposal parameters and model parameters.
-        # we currently assume they are the same, but that is not necessarily the case. FIX THIS.
-
-
         kernel_source += rng_code.get_cl_code()
         return kernel_source

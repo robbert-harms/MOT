@@ -83,6 +83,35 @@ class ProposalParameter(object):
         self.default_value = default_value
         self.adaptable = adaptable
 
+    def get_parameter_update_function(self):
+        """Get the parameter update function used to update this proposal parameter.
+
+        Returns:
+            A function with the signature:
+                double <func_name>(const double current_value, const uint acceptance_counter, const uint jump_counter)
+
+            Where current value is the current value for this proposal parameter, acceptance counter is the
+            number of accepted steps and jump counter the number of jumps.
+        """
+        return '''
+            #ifndef DMRIPROPOSAL_DEFAULT_PARAMETER_UPDATE
+            #define DMRIPROPOSAL_DEFAULT_PARAMETER_UPDATE
+
+            double dmriproposal_default_parameter_update(const double current_value, const uint acceptance_counter,
+                                                         const uint jump_counter){
+                return min(current_value *
+                                sqrt( (double)(acceptance_counter+1) /
+                                      ((jump_counter - acceptance_counter) + 1)
+                                ),
+                           1e10);
+            }
+
+            #endif //DMRIPROPOSAL_DEFAULT_PARAMETER_UPDATE
+        '''
+
+    def get_parameter_update_function_name(self):
+        return 'dmriproposal_default_parameter_update'
+
 
 class GaussianProposal(AbstractParameterProposal):
 

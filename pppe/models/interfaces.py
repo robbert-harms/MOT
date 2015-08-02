@@ -246,7 +246,7 @@ class SampleModelInterface(OptimizeModelInterface):
         """Get the probability density function of the proposal in log space.
 
         Returns:
-            A function of the kind:
+            A function with the signature:
                 double <func_name>(const int i, const double proposal, const double current, double* const parameters)
 
             Where i is the index of the parameter we would like to get the proposal from, current is the current
@@ -260,7 +260,7 @@ class SampleModelInterface(OptimizeModelInterface):
         """Get a proposal function that returns proposals for a requested parameter.
 
         Returns:
-            A function of the kind:
+            A function with the signature:
                 double <func_name>(const int i, const double current, ranluxcl_state_t* ranluxclstate,
                                    double* const parameters)
 
@@ -268,6 +268,23 @@ class SampleModelInterface(OptimizeModelInterface):
             value of that parameter. One can obtain random numbers with:
                 float4 randomnr = ranluxcl(ranluxclstate);
             Parameters is the list of adaptable parameters.
+        """
+
+    def get_proposal_parameters_update_function(self, func_name='updateProposalParameters'):
+        """Get a function that can update the parameters of the proposals
+
+        Returns:
+            A function with the signature:
+                void <func_name>(uint* const ac_between_proposal_updates, const uint proposal_update_intervals,
+                                 double* const proposal_parameters);
+
+            Where ac_between_proposal_updates is the acceptance count in between proposal updates,
+            proposal_update_intervals is the interval at which we update the proposals and proposal_parameters
+            is the current list of proposal parameters (to be updated in place),
+
+            Please note that the ac_between_proposal_updates is per sampled parameter while the proposal_parameters is
+            per proposal parameter. If the number of parameters of a proposal function is not equal to one then those
+            two arrays do not share the same index.
         """
 
     def get_log_prior_function(self, func_name='getLogPrior'):

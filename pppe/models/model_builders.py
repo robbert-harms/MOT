@@ -964,6 +964,32 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         return_str += '}'
         return return_str
 
+    def get_proposal_parameters_update_function(self, func_name='updateProposalParameters'):
+        return_str = ''
+        for _, p in self._get_estimable_parameters_list():
+            for param in p.sampling_proposal.get_parameters():
+                if param.adaptable:
+                    return_str += param.get_parameter_update_function()
+
+        return_str += 'void ' + func_name + '(uint* const ac_between_proposal_updates, ' + \
+            'const uint proposal_update_intervals, double* const proposal_parameters){' + "\n"
+
+        adaptable_parameter_count = 0
+        for i, (m, p) in enumerate(self._get_estimable_parameters_list()):
+            param_proposal = p.sampling_proposal
+
+            for param in param_proposal.get_parameters():
+                if param.adaptable:
+                    return_str += "\t" * 3
+                    return_str += 'proposal_parameters[' + repr(adaptable_parameter_count) + '] = '
+                    return_str += param.get_parameter_update_function_name() + '(' +\
+                        'proposal_parameters[' + repr(adaptable_parameter_count) + '], ' + \
+                        'ac_between_proposal_updates[' + repr(i) + '], proposal_update_intervals);' + "\n"
+                    adaptable_parameter_count += 1
+
+        return_str += '}'
+        return return_str
+
     def get_log_likelihood_function(self, func_name="getLogLikelihood"):
         inst_per_problem = self.get_nmr_inst_per_problem()
         eval_func_name = func_name + '_evaluateModel'
