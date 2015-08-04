@@ -3,7 +3,7 @@ import warnings
 from .base import AbstractFilter, AbstractFilterWorker
 import numpy as np
 import pyopencl as cl
-from ...utils import get_read_only_cl_mem_flags, get_cl_double_extension_definer, get_read_write_cl_mem_flags
+from ...utils import get_cl_double_extension_definer
 
 
 __author__ = 'Robbert Harms'
@@ -57,8 +57,8 @@ class _GaussianFilterWorker(AbstractFilterWorker):
     def calculate(self, range_start, range_end):
         volumes_to_run = [self._volumes_list[i] for i in range(len(self._volumes_list)) if range_start <= i < range_end]
 
-        read_write_flags = get_read_write_cl_mem_flags(self._cl_environment)
-        read_only_flags = get_read_only_cl_mem_flags(self._cl_environment)
+        read_write_flags = self._cl_environment.get_read_write_cl_mem_flags()
+        read_only_flags = self._cl_environment.get_read_only_cl_mem_flags()
 
         return_event = None
         for volume_name, volume in volumes_to_run:

@@ -1,13 +1,10 @@
-import random
 import warnings
 import pyopencl as cl
 import numpy as np
-import time
 from .cl_environments import CLEnvironmentFactory
 from pppe.cl_functions import RanluxCL
-from .utils import get_cl_double_extension_definer, \
-    get_read_write_cl_mem_flags, set_correct_cl_data_type, get_read_only_cl_mem_flags, get_write_only_cl_mem_flags, \
-    ParameterCLCodeGenerator, initialize_ranlux
+from .utils import get_cl_double_extension_definer, set_correct_cl_data_type, ParameterCLCodeGenerator, \
+    initialize_ranlux
 
 
 __author__ = 'Robbert Harms'
@@ -269,7 +266,7 @@ class _BaseCBGenerator(object):
         return queue
 
     def _get_protocol_and_fixed_data_buffers(self, cl_environment):
-        read_only_flags = get_read_only_cl_mem_flags(cl_environment)
+        read_only_flags = cl_environment.get_read_only_cl_mem_flags()
 
         if cl_environment in self._state.cl_environment_items_cache:
             cl_items = self._state.cl_environment_items_cache[cl_environment]
@@ -310,7 +307,7 @@ class _BaseCBGenerator(object):
         for data in data_dict.values():
             data = np.ascontiguousarray(data)
             data_buffers.append(cl.Buffer(cl_environment.context,
-                                              get_read_only_cl_mem_flags(cl_environment), hostbuf=data))
+                                          cl_environment.get_read_only_cl_mem_flags(), hostbuf=data))
         return data_buffers
 
 
@@ -341,7 +338,7 @@ class _ResidualCBGenerator(_BaseCBGenerator):
         data_buffers.append(param_buf)
 
         residuals = np.zeros((self._state.model.get_nmr_inst_per_problem(), ), dtype=np.float64, order='C')
-        residuals_buf = cl.Buffer(cl_environment.context, get_write_only_cl_mem_flags(cl_environment),
+        residuals_buf = cl.Buffer(cl_environment.context, cl_environment.get_write_only_cl_mem_flags(),
                                   hostbuf=residuals)
         data_buffers.append(residuals_buf)
 
@@ -430,7 +427,7 @@ class _EvalCBGenerator(_BaseCBGenerator):
         data_buffers.append(param_buf)
 
         evals = np.zeros((self._state.model.get_nmr_inst_per_problem(), ), dtype=np.float64, order='C')
-        evals_buf = cl.Buffer(cl_environment.context, get_write_only_cl_mem_flags(cl_environment), hostbuf=evals)
+        evals_buf = cl.Buffer(cl_environment.context, cl_environment.get_write_only_cl_mem_flags(), hostbuf=evals)
         data_buffers.append(evals_buf)
 
         data_buffers.extend(self._create_buffer(var_data_dict, cl_environment))
@@ -522,7 +519,7 @@ class _ObjectiveCBGenerator(_BaseCBGenerator):
         data_buffers.append(param_buf)
 
         errors = np.zeros((1, ), dtype=np.float64, order='C')
-        errors_buf = cl.Buffer(cl_environment.context, get_write_only_cl_mem_flags(cl_environment), hostbuf=errors)
+        errors_buf = cl.Buffer(cl_environment.context, cl_environment.get_write_only_cl_mem_flags(), hostbuf=errors)
         data_buffers.append(errors_buf)
 
         data_buffers.extend(self._create_buffer(var_data_dict, cl_environment))
@@ -632,7 +629,7 @@ class _CodecCBGenerator(_BaseCBGenerator):
                                       'decodeParameters', codec.get_nmr_parameters(), cl_environment)
 
         queue = self._get_queue(cl_environment)
-        read_write_flags = get_read_write_cl_mem_flags(cl_environment)
+        read_write_flags = cl_environment.get_read_write_cl_mem_flags()
 
         def cb(params_model_space):
             params = params_model_space.copy()
@@ -700,7 +697,7 @@ class _FinalTransformationCBGenerator(_BaseCBGenerator):
         if cl_transform_func:
             kernel = self._get_kernel(cl_transform_func, cl_environment)
             queue = self._get_queue(cl_environment)
-            read_write_flags = get_read_write_cl_mem_flags(cl_environment)
+            read_write_flags = cl_environment.get_read_write_cl_mem_flags()
 
             def final_param_transform_cb(params):
                 data_buffers = []
@@ -780,8 +777,8 @@ class _LogPriorCBGenerator(_BaseCBGenerator):
             self._state.cl_environment_items_cache.update({cl_environment: _CLEnvironmentsCachedItems()})
 
         queue = self._get_queue(cl_environment)
-        read_only_flags = get_read_only_cl_mem_flags(cl_environment)
-        write_only_flags = get_write_only_cl_mem_flags(cl_environment)
+        read_only_flags = cl_environment.get_read_only_cl_mem_flags()
+        write_only_flags = cl_environment.get_write_only_cl_mem_flags()
 
         result_buffer = cl.Buffer(cl_environment.context, write_only_flags, hostbuf=np.array((1,), dtype=np.float64))
         kernel = self._get_kernel(cl_environment)
@@ -838,7 +835,7 @@ class _ProposalCBGenerator(_BaseCBGenerator):
             self._state.cl_environment_items_cache.update({cl_environment: _CLEnvironmentsCachedItems()})
 
         queue = self._get_queue(cl_environment)
-        write_only_flags = get_write_only_cl_mem_flags(cl_environment)
+        write_only_flags = cl_environment.get_write_only_cl_mem_flags()
 
         ranluxcltab_buffer = initialize_ranlux(cl_environment, queue, 1, seed=1)
         result_buffer = cl.Buffer(cl_environment.context, write_only_flags, hostbuf=np.array((1,), dtype=np.float64))

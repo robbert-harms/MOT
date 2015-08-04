@@ -1,9 +1,8 @@
 import pyopencl as cl
 import numpy as np
 from ...cl_functions import RanluxCL
-from ...utils import get_cl_double_extension_definer, results_to_dict, get_read_only_cl_mem_flags, \
-    get_write_only_cl_mem_flags, set_correct_cl_data_type, ParameterCLCodeGenerator, \
-    initialize_ranlux
+from ...utils import get_cl_double_extension_definer, results_to_dict, set_correct_cl_data_type, \
+    ParameterCLCodeGenerator, initialize_ranlux
 from ...load_balance_strategies import Worker
 from ...cl_routines.sampling.base import AbstractSampler
 
@@ -108,8 +107,8 @@ class _MHWorker(Worker):
         nmr_problems = range_end - range_start
         ranluxcltab_buffer = initialize_ranlux(self._cl_environment, self._queue, nmr_problems)
 
-        read_only_flags = get_read_only_cl_mem_flags(self._cl_environment)
-        write_only_flags = get_write_only_cl_mem_flags(self._cl_environment)
+        read_only_flags = self._cl_environment.get_read_only_cl_mem_flags()
+        write_only_flags = self._cl_environment.get_write_only_cl_mem_flags()
 
         data_buffers = [cl.Buffer(self._cl_environment.context, read_only_flags,
                                   hostbuf=self._parameters[range_start:range_end, :])]

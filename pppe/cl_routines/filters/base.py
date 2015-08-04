@@ -4,7 +4,6 @@ import numpy as np
 import pyopencl as cl
 from ...cl_routines.base import AbstractCLRoutine
 from ...load_balance_strategies import Worker
-from ...utils import get_write_only_cl_mem_flags, get_read_only_cl_mem_flags
 
 
 __author__ = 'Robbert Harms'
@@ -101,7 +100,7 @@ class AbstractFilterWorker(Worker):
         else:
             self._use_mask = True
             self._mask = mask.astype(np.int8, order='C')
-            self._mask_buf = cl.Buffer(self._cl_environment.context, get_read_only_cl_mem_flags(self._cl_environment),
+            self._mask_buf = cl.Buffer(self._cl_environment.context, self._cl_environment.get_read_only_cl_mem_flags(),
                                        hostbuf=self._mask)
 
         self._kernel = self._build_kernel()
@@ -109,8 +108,8 @@ class AbstractFilterWorker(Worker):
     def calculate(self, range_start, range_end):
         volumes_to_run = [self._volumes_list[i] for i in range(len(self._volumes_list)) if range_start <= i < range_end]
 
-        write_only_flags = get_write_only_cl_mem_flags(self._cl_environment)
-        read_only_flags = get_read_only_cl_mem_flags(self._cl_environment)
+        write_only_flags = self._cl_environment.get_write_only_cl_mem_flags()
+        read_only_flags = self._cl_environment.get_read_only_cl_mem_flags()
 
         event = None
         for key, value in volumes_to_run:

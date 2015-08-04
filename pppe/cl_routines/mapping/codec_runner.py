@@ -1,7 +1,6 @@
 import logging
 import pyopencl as cl
-from ...utils import get_cl_double_extension_definer, \
-    get_read_write_cl_mem_flags, set_correct_cl_data_type
+from ...utils import get_cl_double_extension_definer, set_correct_cl_data_type
 from ...cl_routines.base import AbstractCLRoutine
 from ...load_balance_strategies import Worker
 
@@ -86,7 +85,7 @@ class _CodecWorker(Worker):
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
-        read_write_flags = get_read_write_cl_mem_flags(self._cl_environment)
+        read_write_flags = self._cl_environment.get_read_write_cl_mem_flags()
 
         param_buf = cl.Buffer(self._cl_environment.context, read_write_flags,
                               hostbuf=self._data[range_start:range_end, :])

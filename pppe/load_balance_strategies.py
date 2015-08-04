@@ -5,7 +5,7 @@ import timeit
 import warnings
 import numpy as np
 import pyopencl as cl
-from .utils import get_read_only_cl_mem_flags, device_type_from_string
+from .utils import device_type_from_string
 
 
 __author__ = 'Robbert Harms'
@@ -88,7 +88,7 @@ class Worker(object):
             for data in data_dict.values():
                 if isinstance(data, np.ndarray):
                     buffers.append(cl.Buffer(self._cl_environment.context,
-                                             get_read_only_cl_mem_flags(self._cl_environment),
+                                             self._cl_environment.get_read_only_cl_mem_flags(),
                                              hostbuf=data))
                 else:
                     buffers.append(data)

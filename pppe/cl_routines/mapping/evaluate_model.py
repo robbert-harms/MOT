@@ -1,8 +1,6 @@
-import warnings
 import pyopencl as cl
 import numpy as np
-from ...utils import get_cl_double_extension_definer, \
-    get_read_only_cl_mem_flags, set_correct_cl_data_type, get_write_only_cl_mem_flags, ParameterCLCodeGenerator
+from ...utils import get_cl_double_extension_definer, set_correct_cl_data_type, ParameterCLCodeGenerator
 from ...cl_routines.base import AbstractCLRoutine
 from ...load_balance_strategies import Worker
 
@@ -66,8 +64,8 @@ class _EvaluateModelWorker(Worker):
         self._kernel = self._build_kernel()
 
     def calculate(self, range_start, range_end):
-        write_only_flags = get_write_only_cl_mem_flags(self._cl_environment)
-        read_only_flags = get_read_only_cl_mem_flags(self._cl_environment)
+        write_only_flags = self._cl_environment.get_write_only_cl_mem_flags()
+        read_only_flags = self._cl_environment.get_read_only_cl_mem_flags()
         nmr_problems = range_end - range_start
 
         evals_buf = cl.Buffer(self._cl_environment.context, write_only_flags,

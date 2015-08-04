@@ -2,7 +2,7 @@ import time
 import numpy as np
 import pyopencl as cl
 from ...cl_functions import RanluxCL
-from ...utils import get_write_only_cl_mem_flags, initialize_ranlux
+from ...utils import initialize_ranlux
 from ...cl_routines.base import AbstractCLRoutine
 from ...load_balance_strategies import Worker
 
@@ -122,7 +122,7 @@ class _GenerateRandomWorker(Worker):
         range_start *= 4
         range_end *= 4
 
-        write_only_flags = get_write_only_cl_mem_flags(self._cl_environment)
+        write_only_flags = self._cl_environment.get_write_only_cl_mem_flags()
 
         ranluxcltab_buffer = initialize_ranlux(self._cl_environment, self._queue, nmr_problems, seed=self._seed)
         samples_buf = cl.Buffer(self._cl_environment.context, write_only_flags,

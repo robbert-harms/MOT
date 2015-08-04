@@ -1,8 +1,8 @@
 import logging
 import pyopencl as cl
 from ...cl_python_callbacks import CLToPythonCallbacks
-from ...utils import get_read_only_cl_mem_flags, get_read_write_cl_mem_flags, \
-    set_correct_cl_data_type, results_to_dict, ParameterCLCodeGenerator, get_cl_double_extension_definer
+from ...utils import set_correct_cl_data_type, results_to_dict, ParameterCLCodeGenerator, \
+    get_cl_double_extension_definer
 from ...cl_routines.base import AbstractCLRoutine
 from ...load_balance_strategies import Worker
 from ...cl_routines.mapping.final_parameters_transformer import FinalParametersTransformer
@@ -165,8 +165,8 @@ class AbstractParallelOptimizerWorker(Worker):
 
         nmr_problems = range_end - range_start
 
-        read_only_flags = get_read_only_cl_mem_flags(self._cl_environment)
-        read_write_flags = get_read_write_cl_mem_flags(self._cl_environment)
+        read_only_flags = self._cl_environment.get_read_only_cl_mem_flags()
+        read_write_flags = self._cl_environment.get_read_write_cl_mem_flags()
 
         data_buffers = []
         parameters_buf = cl.Buffer(self._cl_environment.context, read_write_flags,

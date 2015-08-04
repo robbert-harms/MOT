@@ -39,6 +39,39 @@ class CLEnvironment(object):
         """
         return cl.CommandQueue(self._context, device=self._device)
 
+    def get_read_only_cl_mem_flags(self):
+        """Get the read only memory flags for this environment.
+
+        Returns:
+            int: CL integer representing the memory flags to use.
+        """
+        if self.is_gpu:
+            return cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR
+        else:
+            return cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR
+
+    def get_read_write_cl_mem_flags(self):
+        """Get the read write memory flags for this environment.
+
+        Returns:
+            int: CL integer representing the memory flags to use.
+        """
+        if self.is_gpu:
+            return cl.mem_flags.READ_WRITE | cl.mem_flags.COPY_HOST_PTR
+        else:
+            return cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR
+
+    def get_write_only_cl_mem_flags(self):
+        """Get the write only memory flags for this environment.
+
+        Returns:
+            int: CL integer representing the memory flags to use.
+        """
+        if self.is_gpu:
+            return cl.mem_flags.WRITE_ONLY | cl.mem_flags.COPY_HOST_PTR
+        else:
+            return cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR
+
     @property
     def supports_double(self):
         """Check if the device listed by this environment supports double

@@ -58,14 +58,11 @@ def results_to_dict(results, param_names):
     Returns:
         dict: the results packed in a dictionary
     """
-    s = results.shape
+    results_slice = [slice(None)] * len(results.shape)
     d = {}
-    if len(s) == 2:
-        for i in range(len(param_names)):
-            d[param_names[i]] = results[:, i]
-    else:
-        for i in range(len(param_names)):
-            d[param_names[i]] = results[:, i, :]
+    for i in range(len(param_names)):
+        results_slice[1] = i
+        d[param_names[i]] = results[results_slice]
     return d
 
 
@@ -268,30 +265,6 @@ class TopologicalSort(object):
         return result
 
 
-def get_read_only_cl_mem_flags(cl_environment):
-    """Get the right read only flags to use in the given environment."""
-    if cl_environment.is_gpu:
-        return cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR
-    else:
-        return cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR
-
-
-def get_read_write_cl_mem_flags(cl_environment):
-    """Get the right read write flags to use in the given environment."""
-    if cl_environment.is_gpu:
-        return cl.mem_flags.READ_WRITE | cl.mem_flags.COPY_HOST_PTR
-    else:
-        return cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR
-
-
-def get_write_only_cl_mem_flags(cl_environment):
-    """Get the right write only flags to use in the given environment."""
-    if cl_environment.is_gpu:
-        return cl.mem_flags.WRITE_ONLY | cl.mem_flags.COPY_HOST_PTR
-    else:
-        return cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR
-
-
 def check_array_fits_cl_memory(array, dtype, max_size):
     """Check if the given array when casted to the given type can be fit into the given max_size"""
     return np.product(array.shape) * np.dtype(dtype).itemsize < max_size
@@ -463,7 +436,7 @@ def initialize_ranlux(cl_environment, queue, nmr_instances, ranlux=RanluxCL(), r
             ranluxcl_initialization(''' + repr(seed) + ''', ranluxcltab);
         }
     '''
-    read_write_flags = get_read_write_cl_mem_flags(cl_environment)
+    read_write_flags = cl_environment.get_read_write_cl_mem_flags()
     ranluxcltab_buffer = cl.Buffer(cl_environment.context, read_write_flags,
                                    hostbuf=np.zeros((nmr_instances * 7, 1), dtype=cl_array.vec.float4, order='C'))
     kernel = cl.Program(cl_environment.context, kernel_source).build(' '.join(cl_environment.compile_flags))

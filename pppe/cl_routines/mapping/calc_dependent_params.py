@@ -1,7 +1,6 @@
 import pyopencl as cl
-from ...utils import get_cl_double_extension_definer, \
-    get_read_only_cl_mem_flags, set_correct_cl_data_type, \
-    get_write_only_cl_mem_flags, results_to_dict, ParameterCLCodeGenerator
+from ...utils import get_cl_double_extension_definer, set_correct_cl_data_type, \
+    results_to_dict, ParameterCLCodeGenerator
 from ...cl_routines.base import AbstractCLRoutine
 from ...load_balance_strategies import Worker
 import numpy as np
@@ -76,8 +75,8 @@ class _CDPWorker(Worker):
         self._kernel = self._build_kernel()
 
     def calculate(self, range_start, range_end):
-        write_only_flags = get_write_only_cl_mem_flags(self._cl_environment)
-        read_only_flags = get_read_only_cl_mem_flags(self._cl_environment)
+        write_only_flags = self._cl_environment.get_write_only_cl_mem_flags()
+        read_only_flags = self._cl_environment.get_read_only_cl_mem_flags()
         nmr_problems = int(range_end - range_start)
 
         ep_start = range_start * self._nmr_estimated_params
