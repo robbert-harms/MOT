@@ -64,10 +64,8 @@ class MetropolisHastings(AbstractSampler):
 
         samples = np.zeros((model.get_nmr_problems(), parameters.shape[1] * self.nmr_samples),
                            dtype=np.float64, order='C')
-        acceptance_counter = np.zeros((model.get_nmr_problems(), parameters.shape[1]),
-                                      dtype=np.uint32, order='C')
 
-        workers = self._create_workers(_MHWorker, model, parameters, samples, acceptance_counter,
+        workers = self._create_workers(_MHWorker, model, parameters, samples,
                                        var_data_dict, prtcl_data_dict, fixed_data_dict,
                                        self.nmr_samples, self.burn_length, self.sample_intervals,
                                        self.proposal_update_intervals)
@@ -77,22 +75,14 @@ class MetropolisHastings(AbstractSampler):
         samples_dict = results_to_dict(samples, model.get_optimized_param_names())
 
         if full_output:
-            acceptance_counter = acceptance_counter.astype(np.float32) / float(
-                self.burn_length + self.nmr_samples * self.sample_intervals)
-
-            volume_maps = {}
-            for ind, name in enumerate(model.get_optimized_param_names()):
-                volume_maps.update({name + '.ar': acceptance_counter[:, ind]})
-
-            volume_maps.update(model.finalize_optimization_results(model.samples_to_statistics(samples_dict)))
-
+            volume_maps = model.finalize_optimization_results(model.samples_to_statistics(samples_dict))
             return samples_dict, {'volume_maps': volume_maps}
         return samples_dict
 
 
 class _MHWorker(Worker):
 
-    def __init__(self, cl_environment, model, parameters, samples, acceptance_counter,
+    def __init__(self, cl_environment, model, parameters, samples,
                  var_data_dict, prtcl_data_dict, fixed_data_dict, nmr_samples, burn_length, sample_intervals,
                  proposal_update_intervals):
         super(_MHWorker, self).__init__(cl_environment)
@@ -101,7 +91,6 @@ class _MHWorker(Worker):
         self._parameters = parameters
         self._nmr_params = parameters.shape[1]
         self._samples = samples
-        self._acceptance_counter = acceptance_counter
 
         self._var_data_dict = var_data_dict
         self._prtcl_data_dict = prtcl_data_dict
@@ -128,10 +117,6 @@ class _MHWorker(Worker):
                                 hostbuf=self._samples[range_start:range_end, :])
         data_buffers.append(samples_buf)
 
-        ac_buf = cl.Buffer(self._cl_environment.context, write_only_flags,
-                           hostbuf=self._acceptance_counter[range_start:range_end, :])
-        data_buffers.append(ac_buf)
-
         data_buffers.append(ranluxcltab_buffer)
         data_buffers.append(np.uint32(self._nmr_samples))
         data_buffers.append(np.uint32(self._burn_length))
@@ -155,8 +140,6 @@ class _MHWorker(Worker):
         local_range = None
 
         event = self._kernel.sample(self._queue, global_range, local_range, *data_buffers)
-        event = cl.enqueue_copy(self._queue, self._acceptance_counter[range_start:range_end, :],
-                                ac_buf, wait_for=(event,), is_blocking=False)
         event = cl.enqueue_copy(self._queue, self._samples[range_start:range_end, :],
                                 samples_buf, wait_for=(event,), is_blocking=False)
         return event
@@ -169,7 +152,6 @@ class _MHWorker(Worker):
 
         kernel_param_names = ['global double* params',
                               'global double* samples',
-                              'global unsigned int* acceptance_counter',
                               'global float4* ranluxcltab',
                               'unsigned int nmr_samples',
                               'unsigned int burn_length',
@@ -204,7 +186,6 @@ class _MHWorker(Worker):
         kernel_source += '''
             void update_state(double* const x,
                               double* const x_proposal,
-                              global uint* const acceptance_counter,
                               ranluxcl_state_t* ranluxclstate,
                               double* const current_likelihood,
                               double* const current_prior,
@@ -257,7 +238,6 @@ class _MHWorker(Worker):
 
                             *current_likelihood = new_likelihood;
                             *current_prior = new_prior;
-                            acceptance_counter[k + ''' + repr(self._nmr_params) + ''' * get_global_id(0)]++;
                             ac_between_proposal_updates[k]++;
                         }
                     }
@@ -301,7 +281,7 @@ class _MHWorker(Worker):
 
                     proposal_update_count = 0;
                     for(i = 0; i < burn_length; i++){
-                        update_state(x, x_proposal, acceptance_counter, &ranluxclstate, &current_likelihood,
+                        update_state(x, x_proposal, &ranluxclstate, &current_likelihood,
                                      &current_prior, &data, proposal_parameters, ac_between_proposal_updates,
                                      nmr_params);
 
@@ -315,7 +295,7 @@ class _MHWorker(Worker):
                     proposal_update_count = 0;
                     for(i = 0; i < nmr_samples; i++){
                         for(j = 0; j < sample_intervals; j++){
-                            update_state(x, x_proposal, acceptance_counter, &ranluxclstate, &current_likelihood,
+                            update_state(x, x_proposal, &ranluxclstate, &current_likelihood,
                                          &current_prior, &data, proposal_parameters, ac_between_proposal_updates,
                                          nmr_params);
 
