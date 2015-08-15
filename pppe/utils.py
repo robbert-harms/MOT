@@ -120,7 +120,7 @@ def get_opencl_vector_data_type(vector_length, data_type):
     if data_type not in ('char', 'uchar', 'short', 'ushort', 'int', 'uint', 'long', 'ulong', 'float', 'double', 'half'):
         raise ValueError('The given data type ({}) is not supported.'.format(data_type))
 
-    return getattr(cl_array.vec, data_type + repr(vector_length))
+    return getattr(cl_array.vec, data_type + str(vector_length))
 
 
 def array_to_cl_vector(array, raw_data_type, vector_length=None):

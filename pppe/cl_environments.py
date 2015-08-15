@@ -157,7 +157,7 @@ class CLEnvironment(object):
 class CLEnvironmentFactory(object):
 
     @staticmethod
-    def single_device(cl_device_type=cl.device_type.GPU, platform=None, compile_flags=('-cl-strict-aliasing',),
+    def single_device(cl_device_type=cl.device_type.GPU, platform=None, compile_flags=(),
                       fallback_to_any_device_type=False):
         """Get a list containing a single device environment, for a device of the given type on the given platform.
 
@@ -199,7 +199,7 @@ class CLEnvironmentFactory(object):
         raise ValueError('No suitable OpenCL device found.')
 
     @staticmethod
-    def all_devices(cl_device_type=None, platform=None, compile_flags=('-cl-strict-aliasing',)):
+    def all_devices(cl_device_type=None, platform=None, compile_flags=()):
         """Get multiple device environments, optionally only of the indicated type.
 
         This will only fetch devices that support double (possibly only devices

@@ -63,6 +63,11 @@ class Worker(object):
         """
         kernel_source = self._get_kernel_source()
         warnings.simplefilter("ignore")
+
+        # the following is a hack to be able to build kernels using a nvidia 1.1
+        # opencl implementation with an 1.2 build PyOpenCL with the Intel Opencl 1.2 drivers.
+        cl._DEFAULT_INCLUDE_OPTIONS = []
+
         kernel = cl.Program(self._cl_environment.context,
                             kernel_source).build(' '.join(self._cl_environment.compile_flags))
         return kernel

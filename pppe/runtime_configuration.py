@@ -22,6 +22,6 @@ known from the context defaults can be obtained from this module.
 
 """
 runtime_config = {
-    'cl_environments': CLEnvironmentFactory.all_devices(compile_flags=('-cl-strict-aliasing', '-cl-no-signed-zeros')),
+    'cl_environments': CLEnvironmentFactory.all_devices(compile_flags=()),
     'load_balancer': PreferGPU()
 }
