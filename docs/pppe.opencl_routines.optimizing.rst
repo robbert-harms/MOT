@@ -1,101 +1,101 @@
-pppe.opencl_routines.optimizing package
+mot.opencl_routines.optimizing package
 =======================================
 
 Submodules
 ----------
 
-pppe.opencl_routines.optimizing.AbstractOptimizer module
+mot.opencl_routines.optimizing.AbstractOptimizer module
 --------------------------------------------------------
 
-.. automodule:: pppe.opencl_routines.optimizing.AbstractOptimizer
+.. automodule:: mot.opencl_routines.optimizing.AbstractOptimizer
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.opencl_routines.optimizing.GridSearch module
+mot.opencl_routines.optimizing.GridSearch module
 -------------------------------------------------
 
-.. automodule:: pppe.opencl_routines.optimizing.GridSearch
+.. automodule:: mot.opencl_routines.optimizing.GridSearch
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.opencl_routines.optimizing.LevenbergMarquardt module
+mot.opencl_routines.optimizing.LevenbergMarquardt module
 ---------------------------------------------------------
 
-.. automodule:: pppe.opencl_routines.optimizing.LevenbergMarquardt
+.. automodule:: mot.opencl_routines.optimizing.LevenbergMarquardt
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.opencl_routines.optimizing.MetaOptimizer module
+mot.opencl_routines.optimizing.MetaOptimizer module
 ----------------------------------------------------
 
-.. automodule:: pppe.opencl_routines.optimizing.MetaOptimizer
+.. automodule:: mot.opencl_routines.optimizing.MetaOptimizer
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.opencl_routines.optimizing.NMSimplex module
+mot.opencl_routines.optimizing.NMSimplex module
 ------------------------------------------------
 
-.. automodule:: pppe.opencl_routines.optimizing.NMSimplex
+.. automodule:: mot.opencl_routines.optimizing.NMSimplex
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.opencl_routines.optimizing.Powell module
+mot.opencl_routines.optimizing.Powell module
 ---------------------------------------------
 
-.. automodule:: pppe.opencl_routines.optimizing.Powell
+.. automodule:: mot.opencl_routines.optimizing.Powell
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.opencl_routines.optimizing.SerialBFGS module
+mot.opencl_routines.optimizing.SerialBFGS module
 -------------------------------------------------
 
-.. automodule:: pppe.opencl_routines.optimizing.SerialBFGS
+.. automodule:: mot.opencl_routines.optimizing.SerialBFGS
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.opencl_routines.optimizing.SerialBasinHopping module
+mot.opencl_routines.optimizing.SerialBasinHopping module
 ---------------------------------------------------------
 
-.. automodule:: pppe.opencl_routines.optimizing.SerialBasinHopping
+.. automodule:: mot.opencl_routines.optimizing.SerialBasinHopping
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.opencl_routines.optimizing.SerialLM module
+mot.opencl_routines.optimizing.SerialLM module
 -----------------------------------------------
 
-.. automodule:: pppe.opencl_routines.optimizing.SerialLM
+.. automodule:: mot.opencl_routines.optimizing.SerialLM
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.opencl_routines.optimizing.SerialNMSimplex module
+mot.opencl_routines.optimizing.SerialNMSimplex module
 ------------------------------------------------------
 
-.. automodule:: pppe.opencl_routines.optimizing.SerialNMSimplex
+.. automodule:: mot.opencl_routines.optimizing.SerialNMSimplex
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.opencl_routines.optimizing.SerialOptimizer module
+mot.opencl_routines.optimizing.SerialOptimizer module
 ------------------------------------------------------
 
-.. automodule:: pppe.opencl_routines.optimizing.SerialOptimizer
+.. automodule:: mot.opencl_routines.optimizing.SerialOptimizer
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.opencl_routines.optimizing.SerialPowell module
+mot.opencl_routines.optimizing.SerialPowell module
 ---------------------------------------------------
 
-.. automodule:: pppe.opencl_routines.optimizing.SerialPowell
+.. automodule:: mot.opencl_routines.optimizing.SerialPowell
     :members:
     :undoc-members:
     :show-inheritance:
@@ -104,7 +104,7 @@ pppe.opencl_routines.optimizing.SerialPowell module
 Module contents
 ---------------
 
-.. automodule:: pppe.opencl_routines.optimizing
+.. automodule:: mot.opencl_routines.optimizing
     :members:
     :undoc-members:
     :show-inheritance:

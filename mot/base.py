@@ -1,9 +1,9 @@
 import os
 import re
-from pppe.parameter_functions.priors import UniformWithinBoundsPrior
-from pppe.parameter_functions.proposals import GaussianProposal
-from pppe.parameter_functions.sample_statistics import GaussianPSS
-from pppe.parameter_functions.transformations import IdentityTransform
+from .parameter_functions.priors import UniformWithinBoundsPrior
+from .parameter_functions.proposals import GaussianProposal
+from .parameter_functions.sample_statistics import GaussianPSS
+from .parameter_functions.transformations import IdentityTransform
 import numpy as np
 
 __author__ = 'Robbert Harms'

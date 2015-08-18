@@ -1,4 +1,4 @@
-pppe.cl_routines package
+mot.cl_routines package
 ========================
 
 Subpackages
@@ -6,18 +6,18 @@ Subpackages
 
 .. toctree::
 
-    pppe.cl_routines.mapping
-    pppe.cl_routines.optimizing
-    pppe.cl_routines.sampling
-    pppe.cl_routines.smoothing
+    mot.cl_routines.mapping
+    mot.cl_routines.optimizing
+    mot.cl_routines.sampling
+    mot.cl_routines.smoothing
 
 Submodules
 ----------
 
-pppe.cl_routines.base module
+mot.cl_routines.base module
 ----------------------------
 
-.. automodule:: pppe.cl_routines.base
+.. automodule:: mot.cl_routines.base
     :members:
     :undoc-members:
     :show-inheritance:
@@ -26,7 +26,7 @@ pppe.cl_routines.base module
 Module contents
 ---------------
 
-.. automodule:: pppe.cl_routines
+.. automodule:: mot.cl_routines
     :members:
     :undoc-members:
     :show-inheritance:

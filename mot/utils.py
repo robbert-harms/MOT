@@ -4,7 +4,7 @@ import pyopencl.array as cl_array
 import numpy as np
 import pyopencl as cl
 from functools import reduce
-from pppe.cl_functions import RanluxCL
+from .cl_functions import RanluxCL
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-05-13"

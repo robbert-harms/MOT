@@ -1,4 +1,4 @@
-pppe package
+mot package
 ============
 
 Subpackages
@@ -6,81 +6,81 @@ Subpackages
 
 .. toctree::
 
-    pppe.cl_routines
-    pppe.models
-    pppe.parameter_functions
+    mot.cl_routines
+    mot.models
+    mot.parameter_functions
 
 Submodules
 ----------
 
-pppe.base module
+mot.base module
 ----------------
 
-.. automodule:: pppe.base
+.. automodule:: mot.base
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.cl_environments module
+mot.cl_environments module
 ---------------------------
 
-.. automodule:: pppe.cl_environments
+.. automodule:: mot.cl_environments
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.cl_functions module
+mot.cl_functions module
 ------------------------
 
-.. automodule:: pppe.cl_functions
+.. automodule:: mot.cl_functions
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.cl_python_callbacks module
+mot.cl_python_callbacks module
 -------------------------------
 
-.. automodule:: pppe.cl_python_callbacks
+.. automodule:: mot.cl_python_callbacks
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.evaluation_models module
+mot.evaluation_models module
 -----------------------------
 
-.. automodule:: pppe.evaluation_models
+.. automodule:: mot.evaluation_models
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.load_balance_strategies module
+mot.load_balance_strategies module
 -----------------------------------
 
-.. automodule:: pppe.load_balance_strategies
+.. automodule:: mot.load_balance_strategies
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.signal_noise_models module
+mot.signal_noise_models module
 -------------------------------
 
-.. automodule:: pppe.signal_noise_models
+.. automodule:: mot.signal_noise_models
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.tools module
+mot.tools module
 -----------------
 
-.. automodule:: pppe.tools
+.. automodule:: mot.tools
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.trees module
+mot.trees module
 -----------------
 
-.. automodule:: pppe.trees
+.. automodule:: mot.trees
     :members:
     :undoc-members:
     :show-inheritance:
@@ -89,7 +89,7 @@ pppe.trees module
 Module contents
 ---------------
 
-.. automodule:: pppe
+.. automodule:: mot
     :members:
     :undoc-members:
     :show-inheritance:

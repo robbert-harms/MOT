@@ -1,5 +1,3 @@
-from pppe import runtime_configuration
-
 __author__ = 'Robbert Harms'
 __date__ = "2014-04-26"
 __license__ = "LGPL v3"

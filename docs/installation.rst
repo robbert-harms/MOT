@@ -4,10 +4,10 @@ Installation
 
 At the command line::
 
-    $ easy_install pppe
+    $ easy_install mot
 
 Or, if you have virtualenvwrapper installed::
 
-    $ mkvirtualenv pppe
-    $ pip install pppe
+    $ mkvirtualenv mot
+    $ pip install mot
 

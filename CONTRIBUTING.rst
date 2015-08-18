@@ -13,7 +13,7 @@ Types of Contributions
 Report Bugs
 ~~~~~~~~~~~
 
-Report bugs at https://github.com/robbert-harms/pppe/issues.
+Report bugs at https://github.com/robbert-harms/mot/issues.
 
 If you are reporting a bug, please include:
 
@@ -43,7 +43,7 @@ articles, and such.
 Submit Feedback
 ~~~~~~~~~~~~~~~
 
-The best way to send feedback is to file an issue at https://github.com/robbert-harms/pppe/issues.
+The best way to send feedback is to file an issue at https://github.com/robbert-harms/mot/issues.
 
 If you are proposing a feature:
 
@@ -55,17 +55,17 @@ If you are proposing a feature:
 Get Started!
 ------------
 
-Ready to contribute? Here's how to set up `pppe` for local development.
+Ready to contribute? Here's how to set up `mot` for local development.
 
-1. Fork the `pppe` repo on GitHub.
+1. Fork the `mot` repo on GitHub.
 2. Clone your fork locally::
 
-    $ git clone git@github.com:your_name_here/pppe.git
+    $ git clone git@github.com:your_name_here/mot.git
 
 3. Install your local copy into a virtualenv. Assuming you have virtualenvwrapper installed, this is how you set up your fork for local development::
 
-    $ mkvirtualenv pppe
-    $ cd pppe/
+    $ mkvirtualenv mot
+    $ cd mot/
     $ python setup.py develop
 
 4. Create a branch for local development::
@@ -76,7 +76,7 @@ Ready to contribute? Here's how to set up `pppe` for local development.
 
 5. When you're done making changes, check that your changes pass flake8 and the tests, including testing other Python versions with tox::
 
-    $ flake8 pppe tests
+    $ flake8 mot tests
     $ python setup.py test
     $ tox
 
@@ -100,7 +100,7 @@ Before you submit a pull request, check that it meets these guidelines:
    your new functionality into a function with a docstring, and add the
    feature to the list in README.rst.
 3. The pull request should work for Python 2.7, and 3.4. Check
-   https://travis-ci.org/robbert-harms/pppe/pull_requests
+   https://travis-ci.org/robbert-harms/mot/pull_requests
    and make sure that the tests pass for all supported Python versions.
 
 Tips
@@ -108,4 +108,4 @@ Tips
 
 To run a subset of tests::
 
-    $ python -m unittest tests.test_pppe
+    $ python -m unittest tests.test_mot

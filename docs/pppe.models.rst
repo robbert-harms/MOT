@@ -1,29 +1,29 @@
-pppe.models package
+mot.models package
 ===================
 
 Submodules
 ----------
 
-pppe.models.examples module
+mot.models.examples module
 ---------------------------
 
-.. automodule:: pppe.models.examples
+.. automodule:: mot.models.examples
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.models.interfaces module
+mot.models.interfaces module
 -----------------------------
 
-.. automodule:: pppe.models.interfaces
+.. automodule:: mot.models.interfaces
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.models.model_builders module
+mot.models.model_builders module
 ---------------------------------
 
-.. automodule:: pppe.models.model_builders
+.. automodule:: mot.models.model_builders
     :members:
     :undoc-members:
     :show-inheritance:
@@ -32,7 +32,7 @@ pppe.models.model_builders module
 Module contents
 ---------------
 
-.. automodule:: pppe.models
+.. automodule:: mot.models
     :members:
     :undoc-members:
     :show-inheritance:

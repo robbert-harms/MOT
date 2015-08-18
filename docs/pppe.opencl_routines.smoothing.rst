@@ -1,37 +1,37 @@
-pppe.opencl_routines.smoothing package
+mot.opencl_routines.smoothing package
 ======================================
 
 Submodules
 ----------
 
-pppe.opencl_routines.smoothing.AbstractSmoother module
+mot.opencl_routines.smoothing.AbstractSmoother module
 ------------------------------------------------------
 
-.. automodule:: pppe.opencl_routines.smoothing.AbstractSmoother
+.. automodule:: mot.opencl_routines.smoothing.AbstractSmoother
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.opencl_routines.smoothing.GaussianSmoother module
+mot.opencl_routines.smoothing.GaussianSmoother module
 ------------------------------------------------------
 
-.. automodule:: pppe.opencl_routines.smoothing.GaussianSmoother
+.. automodule:: mot.opencl_routines.smoothing.GaussianSmoother
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.opencl_routines.smoothing.MeanSmoother module
+mot.opencl_routines.smoothing.MeanSmoother module
 --------------------------------------------------
 
-.. automodule:: pppe.opencl_routines.smoothing.MeanSmoother
+.. automodule:: mot.opencl_routines.smoothing.MeanSmoother
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.opencl_routines.smoothing.MedianSmoother module
+mot.opencl_routines.smoothing.MedianSmoother module
 ----------------------------------------------------
 
-.. automodule:: pppe.opencl_routines.smoothing.MedianSmoother
+.. automodule:: mot.opencl_routines.smoothing.MedianSmoother
     :members:
     :undoc-members:
     :show-inheritance:
@@ -40,7 +40,7 @@ pppe.opencl_routines.smoothing.MedianSmoother module
 Module contents
 ---------------
 
-.. automodule:: pppe.opencl_routines.smoothing
+.. automodule:: mot.opencl_routines.smoothing
     :members:
     :undoc-members:
     :show-inheritance:

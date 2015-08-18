@@ -11,28 +11,28 @@ def load_requirements(fname):
 
 with open('README.rst', 'rt') as f: readme = f.read()
 with open('HISTORY.rst', 'rt') as f: history = f.read().replace('.. :changelog:', '')
-with open('pppe/__init__.py') as f: version_file_contents = f.read()
+with open('mot/__init__.py') as f: version_file_contents = f.read()
 
 requirements = load_requirements('requirements.txt')
 requirements_tests = load_requirements('requirements_tests.txt')
 
 ver_dic = {}
-exec(compile(version_file_contents, "pppe/__init__.py", 'exec'), ver_dic)
+exec(compile(version_file_contents, "mot/__init__.py", 'exec'), ver_dic)
 
 setup(
-    name='pppe',
+    name='mot',
     version=ver_dic["VERSION"],
     description='A library for parallel parameter estimation in python and opencl.',
     long_description=readme + '\n\n' + history,
     author='Robbert Harms',
     author_email='robbert.harms@maastrichtuniversity.nl',
-    url='https://github.com/robbert-harms/pppe',
+    url='https://github.com/robbert-harms/mot',
     packages=find_packages(),
     include_package_data=True,
     install_requires=requirements,
     license="LGPL v3",
     zip_safe=False,
-    keywords='pppe',
+    keywords='mot',
     classifiers=[
         'Environment :: Console',
         'Intended Audience :: Developers',

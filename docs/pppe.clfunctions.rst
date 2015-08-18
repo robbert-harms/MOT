@@ -1,29 +1,29 @@
-pppe.clfunctions package
+mot.clfunctions package
 ========================
 
 Submodules
 ----------
 
-pppe.clfunctions.AbstractCLFunctions module
+mot.clfunctions.AbstractCLFunctions module
 -------------------------------------------
 
-.. automodule:: pppe.clfunctions.AbstractCLFunctions
+.. automodule:: mot.clfunctions.AbstractCLFunctions
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.clfunctions.LibraryFunctions module
+mot.clfunctions.LibraryFunctions module
 ----------------------------------------
 
-.. automodule:: pppe.clfunctions.LibraryFunctions
+.. automodule:: mot.clfunctions.LibraryFunctions
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.clfunctions.ModelFunctions module
+mot.clfunctions.ModelFunctions module
 --------------------------------------
 
-.. automodule:: pppe.clfunctions.ModelFunctions
+.. automodule:: mot.clfunctions.ModelFunctions
     :members:
     :undoc-members:
     :show-inheritance:
@@ -32,7 +32,7 @@ pppe.clfunctions.ModelFunctions module
 Module contents
 ---------------
 
-.. automodule:: pppe.clfunctions
+.. automodule:: mot.clfunctions
     :members:
     :undoc-members:
     :show-inheritance:

@@ -1,37 +1,37 @@
-pppe.cl_routines.smoothing package
+mot.cl_routines.smoothing package
 ==================================
 
 Submodules
 ----------
 
-pppe.cl_routines.smoothing.base module
+mot.cl_routines.smoothing.base module
 --------------------------------------
 
-.. automodule:: pppe.cl_routines.smoothing.base
+.. automodule:: mot.cl_routines.smoothing.base
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.cl_routines.smoothing.gaussian module
+mot.cl_routines.smoothing.gaussian module
 ------------------------------------------
 
-.. automodule:: pppe.cl_routines.smoothing.gaussian
+.. automodule:: mot.cl_routines.smoothing.gaussian
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.cl_routines.smoothing.mean module
+mot.cl_routines.smoothing.mean module
 --------------------------------------
 
-.. automodule:: pppe.cl_routines.smoothing.mean
+.. automodule:: mot.cl_routines.smoothing.mean
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.cl_routines.smoothing.median module
+mot.cl_routines.smoothing.median module
 ----------------------------------------
 
-.. automodule:: pppe.cl_routines.smoothing.median
+.. automodule:: mot.cl_routines.smoothing.median
     :members:
     :undoc-members:
     :show-inheritance:
@@ -40,7 +40,7 @@ pppe.cl_routines.smoothing.median module
 Module contents
 ---------------
 
-.. automodule:: pppe.cl_routines.smoothing
+.. automodule:: mot.cl_routines.smoothing
     :members:
     :undoc-members:
     :show-inheritance:

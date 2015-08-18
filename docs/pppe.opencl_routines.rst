@@ -1,4 +1,4 @@
-pppe.opencl_routines package
+mot.opencl_routines package
 ============================
 
 Subpackages
@@ -6,26 +6,26 @@ Subpackages
 
 .. toctree::
 
-    pppe.opencl_routines.mapping
-    pppe.opencl_routines.optimizing
-    pppe.opencl_routines.sampling
-    pppe.opencl_routines.smoothing
+    mot.opencl_routines.mapping
+    mot.opencl_routines.optimizing
+    mot.opencl_routines.sampling
+    mot.opencl_routines.smoothing
 
 Submodules
 ----------
 
-pppe.opencl_routines.AbstractCLRoutine module
+mot.opencl_routines.AbstractCLRoutine module
 ---------------------------------------------
 
-.. automodule:: pppe.opencl_routines.AbstractCLRoutine
+.. automodule:: mot.opencl_routines.AbstractCLRoutine
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.opencl_routines.LoadBalanceStrategy module
+mot.opencl_routines.LoadBalanceStrategy module
 -----------------------------------------------
 
-.. automodule:: pppe.opencl_routines.LoadBalanceStrategy
+.. automodule:: mot.opencl_routines.LoadBalanceStrategy
     :members:
     :undoc-members:
     :show-inheritance:
@@ -34,7 +34,7 @@ pppe.opencl_routines.LoadBalanceStrategy module
 Module contents
 ---------------
 
-.. automodule:: pppe.opencl_routines
+.. automodule:: mot.opencl_routines
     :members:
     :undoc-members:
     :show-inheritance:

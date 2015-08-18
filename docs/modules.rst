@@ -1,7 +1,7 @@
-pppe
+mot
 ====
 
 .. toctree::
    :maxdepth: 4
 
-   pppe
+   mot

@@ -2,28 +2,28 @@
 # -*- coding: utf-8 -*-
 
 """
-test_pppe
+test_mot
 ----------------------------------
 
-Tests for `pppe` module.
+Tests for `mot` module.
 """
 
 import unittest
 
 import numpy as np
 
-from pppe.cl_routines.mapping.residual_calculator import ResidualCalculator
-from pppe.cl_routines.optimizing.nmsimplex import NMSimplex
-from pppe.cl_routines.optimizing.levenberg_marquardt import LevenbergMarquardt
-from pppe.cl_routines.optimizing.powell import Powell
-from pppe.cl_routines.optimizing.serial_optimizers import SerialBasinHopping
-from pppe.cl_routines.optimizing.serial_optimizers import SerialLM
-from pppe.cl_routines.optimizing.serial_optimizers import SerialNMSimplex
-from pppe.cl_routines.optimizing.serial_optimizers import SerialPowell
-from pppe.cl_routines.filters.gaussian import GaussianFilter
-from pppe.cl_routines.filters.mean import MeanFilter
-from pppe.cl_routines.filters.median import MedianFilter
-from pppe.models.examples import Rosenbrock, MatlabLSQNonlinExample
+from mot.cl_routines.mapping.residual_calculator import ResidualCalculator
+from mot.cl_routines.optimizing.nmsimplex import NMSimplex
+from mot.cl_routines.optimizing.levenberg_marquardt import LevenbergMarquardt
+from mot.cl_routines.optimizing.powell import Powell
+from mot.cl_routines.optimizing.serial_optimizers import SerialBasinHopping
+from mot.cl_routines.optimizing.serial_optimizers import SerialLM
+from mot.cl_routines.optimizing.serial_optimizers import SerialNMSimplex
+from mot.cl_routines.optimizing.serial_optimizers import SerialPowell
+from mot.cl_routines.filters.gaussian import GaussianFilter
+from mot.cl_routines.filters.mean import MeanFilter
+from mot.cl_routines.filters.median import MedianFilter
+from mot.models.examples import Rosenbrock, MatlabLSQNonlinExample
 
 
 class TestRosenbrock(unittest.TestCase):

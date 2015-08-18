@@ -1,8 +1,8 @@
 import numbers
 import numpy as np
 from ..base import ProtocolParameter, ModelDataParameter, FreeParameter, CLDataType
-from pppe import runtime_configuration
-from pppe.cl_routines.mapping.calc_dependent_params import CalculateDependentParameters
+from .. import runtime_configuration
+from ..cl_routines.mapping.calc_dependent_params import CalculateDependentParameters
 from ..utils import set_cl_compatible_data_type, TopologicalSort, init_dict_tree
 from ..parameter_functions.codecs import CodecBuilder
 from ..parameter_functions.dependencies import SimpleAssignment

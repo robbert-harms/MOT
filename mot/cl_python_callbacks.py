@@ -2,7 +2,7 @@ import warnings
 import pyopencl as cl
 import numpy as np
 from .cl_environments import CLEnvironmentFactory
-from pppe.cl_functions import RanluxCL
+from .cl_functions import RanluxCL
 from .utils import get_cl_double_extension_definer, set_correct_cl_data_type, ParameterCLCodeGenerator, \
     initialize_ranlux
 

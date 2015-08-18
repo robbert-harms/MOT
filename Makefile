@@ -37,7 +37,7 @@ clean-test:
 	rm -fr htmlcov/
 
 lint:
-	flake8 pppe tests
+	flake8 mot tests
 
 test:
 	python setup.py test
@@ -48,15 +48,15 @@ test-all:
 	tox
 
 coverage:
-	coverage run --source pppe setup.py test
+	coverage run --source mot setup.py test
 	coverage report -m
 	coverage html
 	@echo "To view results type: htmlcov/index.html &"
 
 docs:
-	rm -f docs/pppe.rst
+	rm -f docs/mot.rst
 	rm -f docs/modules.rst
-	sphinx-apidoc -f -o docs/ pppe
+	sphinx-apidoc -f -o docs/ mot
 	$(MAKE) -C docs clean
 	$(MAKE) -C docs html
 	@echo "To view results type: firefox docs/_build/html/index.html &"
@@ -71,7 +71,7 @@ dist: clean
 	ls -l dist
 
 install: dist
-	pip install --upgrade --no-deps --force-reinstall dist/pppe-*.tar.gz
+	pip install --upgrade --no-deps --force-reinstall dist/mot-*.tar.gz
 
 uninstall: 
-	pip uninstall -y pppe
+	pip uninstall -y mot

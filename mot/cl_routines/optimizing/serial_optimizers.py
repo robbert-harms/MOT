@@ -1,6 +1,6 @@
 from scipy.optimize import basinhopping, fmin_bfgs, leastsq, minimize, fmin_powell
 from .base import AbstractSerialOptimizer
-from pppe.cl_python_callbacks import CLToPythonCallbacks
+from ...cl_python_callbacks import CLToPythonCallbacks
 
 __author__ = 'Robbert Harms'
 __date__ = "2015-04-18"

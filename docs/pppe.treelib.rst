@@ -1,21 +1,21 @@
-pppe.treelib package
+mot.treelib package
 ====================
 
 Submodules
 ----------
 
-pppe.treelib.BaseTree module
+mot.treelib.BaseTree module
 ----------------------------
 
-.. automodule:: pppe.treelib.BaseTree
+.. automodule:: mot.treelib.BaseTree
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.treelib.CompartmentTree module
+mot.treelib.CompartmentTree module
 -----------------------------------
 
-.. automodule:: pppe.treelib.CompartmentTree
+.. automodule:: mot.treelib.CompartmentTree
     :members:
     :undoc-members:
     :show-inheritance:
@@ -24,7 +24,7 @@ pppe.treelib.CompartmentTree module
 Module contents
 ---------------
 
-.. automodule:: pppe.treelib
+.. automodule:: mot.treelib
     :members:
     :undoc-members:
     :show-inheritance:

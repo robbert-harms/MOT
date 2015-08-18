@@ -1,14 +1,14 @@
-from pppe.cl_routines.optimizing.levenberg_marquardt import LevenbergMarquardt
-from pppe.cl_routines.filters.gaussian import GaussianFilter
-from pppe.cl_routines.filters.mean import MeanFilter
-from pppe.cl_routines.filters.median import MedianFilter
-from pppe.cl_routines.optimizing.gridsearch import GridSearch
-from pppe.cl_routines.optimizing.meta_optimizer import MetaOptimizer
-from pppe.cl_routines.optimizing.nmsimplex import NMSimplex
-from pppe.cl_routines.optimizing.powell import Powell
-from pppe.cl_routines.optimizing.serial_optimizers import SerialBasinHopping, SerialBFGS, SerialLM, SerialNMSimplex, \
+from .cl_routines.optimizing.levenberg_marquardt import LevenbergMarquardt
+from .cl_routines.filters.gaussian import GaussianFilter
+from .cl_routines.filters.mean import MeanFilter
+from .cl_routines.filters.median import MedianFilter
+from .cl_routines.optimizing.gridsearch import GridSearch
+from .cl_routines.optimizing.meta_optimizer import MetaOptimizer
+from .cl_routines.optimizing.nmsimplex import NMSimplex
+from .cl_routines.optimizing.powell import Powell
+from .cl_routines.optimizing.serial_optimizers import SerialBasinHopping, SerialBFGS, SerialLM, SerialNMSimplex, \
     SerialPowell
-from pppe.load_balance_strategies import EvenDistribution, RuntimeLoadBalancing, PreferGPU, PreferCPU, \
+from .load_balance_strategies import EvenDistribution, RuntimeLoadBalancing, PreferGPU, PreferCPU, \
     PreferSpecificEnvironment
 
 __author__ = 'Robbert Harms'

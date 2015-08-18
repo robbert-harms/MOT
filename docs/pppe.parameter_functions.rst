@@ -1,53 +1,53 @@
-pppe.parameter_functions package
+mot.parameter_functions package
 ================================
 
 Submodules
 ----------
 
-pppe.parameter_functions.codecs module
+mot.parameter_functions.codecs module
 --------------------------------------
 
-.. automodule:: pppe.parameter_functions.codecs
+.. automodule:: mot.parameter_functions.codecs
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.parameter_functions.dependencies module
+mot.parameter_functions.dependencies module
 --------------------------------------------
 
-.. automodule:: pppe.parameter_functions.dependencies
+.. automodule:: mot.parameter_functions.dependencies
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.parameter_functions.priors module
+mot.parameter_functions.priors module
 --------------------------------------
 
-.. automodule:: pppe.parameter_functions.priors
+.. automodule:: mot.parameter_functions.priors
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.parameter_functions.proposals module
+mot.parameter_functions.proposals module
 -----------------------------------------
 
-.. automodule:: pppe.parameter_functions.proposals
+.. automodule:: mot.parameter_functions.proposals
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.parameter_functions.sample_statistics module
+mot.parameter_functions.sample_statistics module
 -------------------------------------------------
 
-.. automodule:: pppe.parameter_functions.sample_statistics
+.. automodule:: mot.parameter_functions.sample_statistics
     :members:
     :undoc-members:
     :show-inheritance:
 
-pppe.parameter_functions.transformations module
+mot.parameter_functions.transformations module
 -----------------------------------------------
 
-.. automodule:: pppe.parameter_functions.transformations
+.. automodule:: mot.parameter_functions.transformations
     :members:
     :undoc-members:
     :show-inheritance:
@@ -56,7 +56,7 @@ pppe.parameter_functions.transformations module
 Module contents
 ---------------
 
-.. automodule:: pppe.parameter_functions
+.. automodule:: mot.parameter_functions
     :members:
     :undoc-members:
     :show-inheritance:

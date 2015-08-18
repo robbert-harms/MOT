@@ -2,8 +2,8 @@ import os
 import numpy as np
 from pkg_resources import resource_filename
 from .base import LibraryFunction, LibraryParameter, FreeParameter, CLDataType, ModelFunction
-from pppe.parameter_functions.proposals import GaussianProposal
-from pppe.parameter_functions.transformations import ClampTransform, CosSqrTransform
+from .parameter_functions.proposals import GaussianProposal
+from .parameter_functions.transformations import ClampTransform, CosSqrTransform
 
 
 __author__ = 'Robbert Harms'
@@ -26,8 +26,8 @@ class EuclidianNormFunction(LibraryFunction):
             'euclidian_norm_' + memspace,
             (LibraryParameter(CLDataType.from_string('double*'), 'x'),
              LibraryParameter(CLDataType.from_string('int'), 'n')),
-            resource_filename('pppe', 'data/opencl/euclidian_norm.ph'),
-            resource_filename('pppe', 'data/opencl/euclidian_norm.pcl'),
+            resource_filename('mot', 'data/opencl/euclidian_norm.ph'),
+            resource_filename('mot', 'data/opencl/euclidian_norm.pcl'),
             {'MEMSPACE': memspace},
             ())
 
@@ -47,8 +47,8 @@ class LMMin(LibraryFunction):
             'lmmin',
             (LibraryParameter(CLDataType.from_string('double*'), 'x'),
              LibraryParameter(CLDataType.from_string('void*'), 'data')),
-            resource_filename('pppe', 'data/opencl/lmmin.h'),
-            resource_filename('pppe', 'data/opencl/lmmin.pcl'),
+            resource_filename('mot', 'data/opencl/lmmin.h'),
+            resource_filename('mot', 'data/opencl/lmmin.pcl'),
             {'EUCLIDIAN_FUNC': euclid.cl_function_name, 'NMR_PARAMS': nmr_parameters, 'PATIENCE': patience},
             (euclid,))
 
@@ -67,8 +67,8 @@ class NMSimplexFunc(LibraryFunction):
             'nmsimplex',
             (LibraryParameter(CLDataType.from_string('double*'), 'x'),
              LibraryParameter(CLDataType.from_string('void*'), 'data')),
-            resource_filename('pppe', 'data/opencl/nmsimplex.h'),
-            resource_filename('pppe', 'data/opencl/nmsimplex.pcl'),
+            resource_filename('mot', 'data/opencl/nmsimplex.h'),
+            resource_filename('mot', 'data/opencl/nmsimplex.pcl'),
             {'NMR_PARAMS': nmr_parameters, 'PATIENCE': patience},
             ())
 
@@ -87,8 +87,8 @@ class PowellFunc(LibraryFunction):
             'powell',
             (LibraryParameter(CLDataType.from_string('double*'), 'x'),
              LibraryParameter(CLDataType.from_string('void*'), 'data')),
-            resource_filename('pppe', 'data/opencl/powell.h'),
-            resource_filename('pppe', 'data/opencl/powell.pcl'),
+            resource_filename('mot', 'data/opencl/powell.h'),
+            resource_filename('mot', 'data/opencl/powell.pcl'),
             {'NMR_PARAMS': nmr_parameters, 'PATIENCE': patience},
             ())
 
@@ -106,8 +106,8 @@ class SpreadWeights(LibraryFunction):
             'spread_weights_' + memspace,
             (LibraryParameter(CLDataType.from_string('double*'), 'x'),
              LibraryParameter(CLDataType.from_string('int'), 'n')),
-            resource_filename('pppe', 'data/opencl/spread_weights.ph'),
-            resource_filename('pppe', 'data/opencl/spread_weights.pcl'),
+            resource_filename('mot', 'data/opencl/spread_weights.ph'),
+            resource_filename('mot', 'data/opencl/spread_weights.pcl'),
             {'MEMSPACE': memspace},
             ())
 
@@ -125,8 +125,8 @@ class KahanSummation(LibraryFunction):
             'kahan_summation_' + memspace,
             (LibraryParameter(CLDataType.from_string('double*'), 'l'),
              LibraryParameter(CLDataType.from_string('int'), 'n')),
-            resource_filename('pppe', 'data/opencl/kahan_summation.ph'),
-            resource_filename('pppe', 'data/opencl/kahan_summation.pcl'),
+            resource_filename('mot', 'data/opencl/kahan_summation.ph'),
+            resource_filename('mot', 'data/opencl/kahan_summation.pcl'),
             {'MEMSPACE': memspace},
             ())
 
@@ -141,8 +141,8 @@ class FirstLegendreTerm(LibraryFunction):
             'getFirstLegendreTerm',
             (LibraryParameter(CLDataType.from_string('double'), 'x'),
              LibraryParameter(CLDataType.from_string('int'), 'n')),
-            resource_filename('pppe', 'data/opencl/firstLegendreTerm.h'),
-            resource_filename('pppe', 'data/opencl/firstLegendreTerm.cl'),
+            resource_filename('mot', 'data/opencl/firstLegendreTerm.h'),
+            resource_filename('mot', 'data/opencl/firstLegendreTerm.cl'),
             {},
             ())
 
@@ -156,8 +156,8 @@ class RanluxCL(LibraryFunction):
             'float4',
             'ranluxcl',
             (LibraryParameter(CLDataType.from_string('ranluxcl_state_t*'), 'ranluxclstate'), ),
-            resource_filename('pppe', 'data/opencl/ranluxcl.h'),
-            resource_filename('pppe', 'data/opencl/ranluxcl.cl'),
+            resource_filename('mot', 'data/opencl/ranluxcl.h'),
+            resource_filename('mot', 'data/opencl/ranluxcl.cl'),
             {},
             ())
 
@@ -177,8 +177,8 @@ class MCMCStretch(LibraryFunction):
              LibraryParameter(CLDataType.from_string('long*'), 'accepted'),
              LibraryParameter(CLDataType.from_string('void*'), 'data'),
              LibraryParameter(CLDataType.from_string('float'), 'beta')),
-            resource_filename('pppe', 'data/opencl/mcmc_stretch.h'),
-            resource_filename('pppe', 'data/opencl/mcmc_stretch.cl'),
+            resource_filename('mot', 'data/opencl/mcmc_stretch.h'),
+            resource_filename('mot', 'data/opencl/mcmc_stretch.cl'),
             {},
             ())
 
@@ -192,8 +192,8 @@ class CerfImWOfX(LibraryFunction):
             'double',
             'im_w_of_x',
             (LibraryParameter(CLDataType.from_string('double'), 'x'), ),
-            resource_filename('pppe', 'data/opencl/cerf/im_w_of_x.h'),
-            resource_filename('pppe', 'data/opencl/cerf/im_w_of_x.cl'),
+            resource_filename('mot', 'data/opencl/cerf/im_w_of_x.h'),
+            resource_filename('mot', 'data/opencl/cerf/im_w_of_x.cl'),
             {},
             ())
 
@@ -207,8 +207,8 @@ class CerfDawson(LibraryFunction):
             'double',
             'dawson',
             (LibraryParameter(CLDataType.from_string('double'), 'x'), ),
-            resource_filename('pppe', 'data/opencl/cerf/dawson.h'),
-            resource_filename('pppe', 'data/opencl/cerf/dawson.cl'),
+            resource_filename('mot', 'data/opencl/cerf/dawson.h'),
+            resource_filename('mot', 'data/opencl/cerf/dawson.cl'),
             {},
             (CerfImWOfX(),))
 
@@ -222,8 +222,8 @@ class CerfErfi(LibraryFunction):
             'double',
             'erfi',
             (LibraryParameter(CLDataType.from_string('double'), 'x'), ),
-            resource_filename('pppe', 'data/opencl/cerf/erfi.h'),
-            resource_filename('pppe', 'data/opencl/cerf/erfi.cl'),
+            resource_filename('mot', 'data/opencl/cerf/erfi.h'),
+            resource_filename('mot', 'data/opencl/cerf/erfi.cl'),
             {},
             (CerfImWOfX(),))
 
@@ -248,12 +248,12 @@ class Scalar(ModelFunction):
 
     def get_cl_header(self):
         """See base class for details"""
-        path = resource_filename('pppe', 'data/opencl/modelFunctions/Scalar.h')
+        path = resource_filename('mot', 'data/opencl/modelFunctions/Scalar.h')
         return self._get_cl_dependency_headers() + "\n" + open(os.path.abspath(path), 'r').read()
 
     def get_cl_code(self):
         """See base class for details"""
-        path = resource_filename('pppe', 'data/opencl/modelFunctions/Scalar.cl')
+        path = resource_filename('mot', 'data/opencl/modelFunctions/Scalar.cl')
         return self._get_cl_dependency_code() + "\n" + open(os.path.abspath(path), 'r').read()
 
 
