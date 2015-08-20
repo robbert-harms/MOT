@@ -135,6 +135,11 @@ class CLEnvironment(object):
         """
         return self._device.get_info(cl.device_info.TYPE)
 
+    def __str__(self):
+        s = 'GPU' if self.is_gpu else 'CPU'
+        s += ' - ' + self.device.name + ' (' + self.platform.name + ')'
+        return s
+
     def __repr__(self):
         s = "Platform: " + self._platform.name + "\n"
         s += "Vendor: " + self._platform.vendor + "\n"
