@@ -195,38 +195,14 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
     def get_optimization_output_param_names(self):
         """See super class OptimizeModelInterface for details"""
-        l = []
-        for m, params in self.get_optimization_output_param_listing():
-            for p in params:
-                l.append(m + '.' + p)
-        return l
-
-    def get_optimization_output_param_listing(self):
-        """Get a listing of all the models and its parameters that are output by running this model.
-
-        This returns the same parameters and models as get_optimization_output_param_names(),
-        but as a listing instead of dot formatted names.
-
-        This should be a complete overview of all the maps returned from optimizing this model.
-
-        Returns:
-            A list of tuples with the first element of such tuple the model name and the second the list of
-            parameters for that model. Example: (('Stick', ('theta', 'phi', 'd')), ('Ball', ('d',)))
-        """
-        l = init_dict_tree()
+        items = []
         for m in self._get_model_list():
             for p in m.get_free_parameters():
-                l[m.name][p.name]
+                items.append(m.name + '.' + p.name)
 
-        for name, routine in self._post_optimization_modifiers:
-            parts = name.split('.')
-            l[parts[0]][parts[1]]
-
-        l2 = []
-        for k, v in l.items():
-            l2.append((k, v.keys()))
-
-        return tuple(l2)
+        for name, _ in self._post_optimization_modifiers:
+            items.append(name)
+        return items
 
     def get_optimized_param_names(self):
         return [m.name + '.' + p.name for m, p in self._get_estimable_parameters_list()]

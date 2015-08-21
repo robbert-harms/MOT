@@ -88,9 +88,10 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         return self._automatic_apply_codec
 
     def minimize(self, model, init_params=None, full_output=False):
-        self._logger.info('Entered optimization routine. We will use the devices: {0}'.format(
-            ', '.join(map(lambda v: '"' + str(v) + '"', self.cl_environments))
-        ))
+        devices_str = ', '.join(map(lambda v: '"' + str(v) + '"',
+                                    self.load_balancer.get_used_cl_environments(self.cl_environments)))
+        self._logger.info('Entered optimization routine. Given the devices and the load balancer '
+                          'we will use the devices: {0}'.format(devices_str))
 
         self._logger.info('Starting optimization preliminaries')
         starting_points = model.get_initial_parameters(init_params)
