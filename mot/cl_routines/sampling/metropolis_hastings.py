@@ -122,7 +122,8 @@ class _MHWorker(Worker):
         data_buffers.append(np.uint32(self._sample_intervals))
         data_buffers.append(np.uint32(self._nmr_params))
         # We add these parameters to the kernel call instead of inlining them.
-        # This if for a good reason. At the time of writing, the CL kernel compiler crashes if these are inlined
+        # This if for a good reason. At the time of writing, the CL kernel compiler crashes if these parameters
+        # are inlined in the source file.
         # My guess is that the compiler tries to optimize the loops, fails and then crashes.
 
         for data in self._var_data_dict.values():
