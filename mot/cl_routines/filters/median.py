@@ -121,8 +121,8 @@ class _MedianFilterWorker(AbstractFilterWorker):
     def _loop_encapsulate(self, body):
         s = ''
         for i in range(len(self._volume_shape)):
-            s += 'for(dim' + repr(i) + ' = dim' + repr(i) + '_start; dim' + repr(i) + \
-                    ' < dim' + repr(i) + '_end; dim' + repr(i) + '++){' + "\n"
+            s += 'for(dim' + str(i) + ' = dim' + str(i) + '_start; dim' + str(i) + \
+                    ' < dim' + str(i) + '_end; dim' + str(i) + '++){' + "\n"
 
         if self._use_mask:
             s += 'if(mask[' + self._get_ks_sub2ind_func_call(len(self._volume_shape)) + '] > 0){' + "\n"

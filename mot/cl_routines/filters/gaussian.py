@@ -106,7 +106,7 @@ class _GaussianFilterWorker(AbstractFilterWorker):
     def _get_gaussian_kernel_source(self, dimension):
         left_right = self._get_size_in_dimension(dimension)
 
-        working_dim = 'dim' + repr(dimension)
+        working_dim = 'dim' + str(dimension)
 
         kernel_source = get_cl_double_extension_definer(self._cl_environment.platform)
         kernel_source += self._get_ks_sub2ind_func(self._volume_shape)
@@ -125,15 +125,15 @@ class _GaussianFilterWorker(AbstractFilterWorker):
                     int filter_index = 0;
                     double filtered_value = 0;
 
-                    const int start = dim''' + repr(dimension) + ''' - ''' + repr(left_right) + ''';
-                    const int end = dim''' + repr(dimension) + ''' + ''' + repr(left_right) + ''';
+                    const int start = dim''' + str(dimension) + ''' - ''' + str(left_right) + ''';
+                    const int end = dim''' + str(dimension) + ''' + ''' + str(left_right) + ''';
                     int tmp_ind = 0;
 
                     for(''' + working_dim + ''' = start; ''' + working_dim + ''' <= end; ''' + working_dim + '''++){
                         tmp_ind = ''' + self._get_ks_sub2ind_func_call(len(self._volume_shape)) + ''';
 
                         if(''' + working_dim + ''' >= 0 && ''' + working_dim + ''' < ''' + \
-                            repr(self._volume_shape[dimension]) + '''){
+                            str(self._volume_shape[dimension]) + '''){
                             ''' + ('if(mask[tmp_ind] > 0){' if self._use_mask else 'if(true){') + '''
                                 filtered_value += filter[filter_index] * volume[tmp_ind];
                             }

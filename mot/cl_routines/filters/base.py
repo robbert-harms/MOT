@@ -145,21 +145,21 @@ class AbstractFilterWorker(Worker):
         """Get the kernel source part for the dimension initializations"""
         s = ''
         for i in range(nmr_dimensions):
-            s += 'int dim' + repr(i) + ' = get_global_id(' + repr(i) + ');' + "\n"
+            s += 'int dim' + str(i) + ' = get_global_id(' + str(i) + ');' + "\n"
         return s
 
     def _get_ks_sub2ind_func(self, volume_shape):
         """Get the kernel source part for converting array subscripts to indices"""
         s = 'int sub2ind('
         for i in range(len(volume_shape)):
-            s += 'const int dim' + repr(i) + ', '
+            s += 'const int dim' + str(i) + ', '
         s = s[0:-2] + '){' + "\n"
         s += 'return '
         for i, d in enumerate(volume_shape):
             stride = ''
             for ds in volume_shape[(i + 1):]:
-                stride += ' * ' + repr(ds)
-            s += 'dim' + repr(i) + stride + ' + '
+                stride += ' * ' + str(ds)
+            s += 'dim' + str(i) + stride + ' + '
         s = s[0:-3] + ';' + "\n"
         s += '}' + "\n"
         return s
@@ -168,7 +168,7 @@ class AbstractFilterWorker(Worker):
         """Get the kernel source part for the function call for converting array subscripts to indices"""
         s = 'sub2ind('
         for i in range(nmr_dimensions):
-            s += 'dim' + repr(i) + ', '
+            s += 'dim' + str(i) + ', '
         return s[0:-2] + ')'
 
     def _calculate_length(self, nmr_dimensions):
@@ -191,8 +191,8 @@ class AbstractFilterWorker(Worker):
         """Get the kernel source for the start and end of each of the dimensions"""
         s = ''
         for i, d in enumerate(volume_shape):
-            s += 'int dim' + repr(i) + '_start = max(0, dim' + repr(i) + ' - ' + repr(self._get_size_in_dimension(i)) \
+            s += 'int dim' + str(i) + '_start = max(0, dim' + str(i) + ' - ' + str(self._get_size_in_dimension(i)) \
                  + ');' + "\n"
-            s += 'int dim' + repr(i) + '_end = min(' + repr(d) + ', dim' + repr(i) + ' + ' + \
-                 repr(self._get_size_in_dimension(i)) + ' + 1);' + "\n"
+            s += 'int dim' + str(i) + '_end = min(' + str(d) + ', dim' + str(i) + ' + ' + \
+                 str(self._get_size_in_dimension(i)) + ' + 1);' + "\n"
         return s

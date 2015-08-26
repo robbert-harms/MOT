@@ -52,8 +52,8 @@ class _MeanFilterWorker(AbstractFilterWorker):
     def _get_ks_loop(self, volume_shape):
         s = ''
         for i in range(len(volume_shape)):
-            s += 'for(dim' + repr(i) + ' = dim' + repr(i) + '_start; dim' + repr(i) + \
-                 ' < dim' + repr(i) + '_end; dim' + repr(i) + '++){' + "\n"
+            s += 'for(dim' + str(i) + ' = dim' + str(i) + '_start; dim' + str(i) + \
+                 ' < dim' + str(i) + '_end; dim' + str(i) + '++){' + "\n"
 
         if self._use_mask:
             s += 'if(mask[' + self._get_ks_sub2ind_func_call(len(volume_shape)) + '] > 0){' + "\n"
