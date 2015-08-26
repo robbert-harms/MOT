@@ -32,8 +32,8 @@ class UniformPrior(AbstractParameterPrior):
 class UniformWithinBoundsPrior(AbstractParameterPrior):
     """This prior is 1 within the upper and lower bound of the parameter, 0 outside."""
     def get_cl_assignment(self, parameter, parameter_name):
-        return '((' + parameter_name + ' < ' + repr(float(parameter.lower_bound)) + \
-               ' || ' + parameter_name + ' > ' + repr(float(parameter.upper_bound)) + ') ? 0.0 : 1.0);'
+        return '((' + parameter_name + ' < ' + str(float(parameter.lower_bound)) + \
+               ' || ' + parameter_name + ' > ' + str(float(parameter.upper_bound)) + ') ? 0.0 : 1.0);'
 
 
 class AbsSinPrior(AbstractParameterPrior):

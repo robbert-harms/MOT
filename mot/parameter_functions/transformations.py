@@ -100,12 +100,12 @@ class ClampTransform(AbstractTransformation):
     """The clamp transformation limits the parameter between its lower and upper bound using the clamp function."""
 
     def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):
-        return 'clamp(' + parameter_name + ', (double)' + repr(parameter.lower_bound) + \
-               ', (double)' + repr(parameter.upper_bound) + ');'
+        return 'clamp(' + parameter_name + ', (double)' + str(parameter.lower_bound) + \
+               ', (double)' + str(parameter.upper_bound) + ');'
 
     def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
-        return 'clamp(' + parameter_name + ', (double)' + repr(parameter.lower_bound) + \
-               ', (double)' + repr(parameter.upper_bound) + ');'
+        return 'clamp(' + parameter_name + ', (double)' + str(parameter.lower_bound) + \
+               ', (double)' + str(parameter.upper_bound) + ');'
 
 
 class CosSqrClampTransform(AbstractTransformation):
@@ -113,13 +113,13 @@ class CosSqrClampTransform(AbstractTransformation):
 
     def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):
         return 'acos(sqrt(fabs((' + parameter_name + ' - (double)' + \
-               repr(parameter.lower_bound) + ') / (double)' + \
-               repr(parameter.upper_bound-parameter.lower_bound) + ')));'
+               str(parameter.lower_bound) + ') / (double)' + \
+               str(parameter.upper_bound-parameter.lower_bound) + ')));'
 
     def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
         return 'fma(pown(cos(' + parameter_name + '), 2), (double)' + \
-               repr(parameter.upper_bound-parameter.lower_bound) + \
-               ', (double)' + repr(parameter.lower_bound) + ');'
+               str(parameter.upper_bound-parameter.lower_bound) + \
+               ', (double)' + str(parameter.lower_bound) + ');'
 
 
 class SinSqrClampTransform(AbstractTransformation):
@@ -127,13 +127,13 @@ class SinSqrClampTransform(AbstractTransformation):
 
     def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):
         return 'asin(sqrt(fabs((' + parameter_name + ' - (double)' + \
-               repr(parameter.lower_bound) + ') / (double)' + \
-               repr(parameter.upper_bound-parameter.lower_bound) + ')));'
+               str(parameter.lower_bound) + ') / (double)' + \
+               str(parameter.upper_bound-parameter.lower_bound) + ')));'
 
     def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
         return 'fma(pown(sin(' + parameter_name + '), 2), (double)' + \
-               repr(parameter.upper_bound-parameter.lower_bound) + \
-               ', (double)' + repr(parameter.lower_bound) + ');'
+               str(parameter.upper_bound-parameter.lower_bound) + \
+               ', (double)' + str(parameter.lower_bound) + ');'
 
 
 class SqrClampTransform(AbstractTransformation):
@@ -143,8 +143,8 @@ class SqrClampTransform(AbstractTransformation):
         return 'sqrt(' + parameter_name + ');'
 
     def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
-        return 'clamp(pown(' + parameter_name + ', 2), (double)' + repr(parameter.lower_bound) + \
-               ', (double)' + repr(parameter.upper_bound) + ');'
+        return 'clamp(pown(' + parameter_name + ', 2), (double)' + str(parameter.lower_bound) + \
+               ', (double)' + str(parameter.upper_bound) + ');'
 
 
 class SinSqrClampDependentTransform(AbstractTransformation):
@@ -152,13 +152,13 @@ class SinSqrClampDependentTransform(AbstractTransformation):
 
     def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):
         return 'asin(sqrt(fabs((' + parameter_name + ' - (double)' + \
-               repr(parameter.lower_bound) + ') / ((double)' + \
+               str(parameter.lower_bound) + ') / ((double)' + \
                dependencies_names[0] + ' - ' + \
-               repr(parameter.lower_bound) + '))));'
+               str(parameter.lower_bound) + '))));'
 
     def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
         return 'fma(pown(sin(' + parameter_name + '), 2), ' + dependencies_names[0] + ', (double)' + \
-               repr(parameter.lower_bound) + ');'
+               str(parameter.lower_bound) + ');'
 
 
 class AbsModXTransform(AbstractTransformation):
@@ -167,7 +167,7 @@ class AbsModXTransform(AbstractTransformation):
         """Create an transformation that returns the absolute modulo x value of the input."""
         super(AbsModXTransform, self).__init__(dependencies)
         if isinstance(x, numbers.Number):
-            self._x = repr(x)
+            self._x = str(x)
         else:
             self._x = x
 

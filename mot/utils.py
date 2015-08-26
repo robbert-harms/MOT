@@ -187,7 +187,7 @@ def vector_type_lookup(data):
     if length < 2:
         return None
     cl_type_name = _numpy_to_cl_dtype_names(data.dtype.fields['x'][0])
-    return {'dtype': data.dtype, 'length': length, 'data_type': cl_type_name, 'cl_name': (cl_type_name + repr(length))}
+    return {'dtype': data.dtype, 'length': length, 'data_type': cl_type_name, 'cl_name': (cl_type_name + str(length))}
 
 
 def _numpy_to_cl_dtype_names(cl_data_type_name):
@@ -277,7 +277,7 @@ def get_cl_data_type_from_data(data):
         length = vector_info['length']
         if vector_info['length'] % 2 == 1:
             length += 1
-        return vector_info['data_type'] + repr(length)
+        return vector_info['data_type'] + str(length)
     return numpy_types_to_cl(data.dtype.type)
 
 
@@ -357,7 +357,7 @@ class ParameterCLCodeGenerator(object):
 
             if self._add_var_data_multipliers:
                 mult = vdata.shape[1] if len(vdata.shape) > 1 else 1
-                data_struct_init.append(param_name + ' + gid * ' + repr(mult))
+                data_struct_init.append(param_name + ' + gid * ' + str(mult))
             else:
                 data_struct_init.append(param_name)
 
@@ -429,11 +429,11 @@ def initialize_ranlux(cl_environment, queue, nmr_instances, ranlux=RanluxCL(), r
     Returns:
         cl buffer: the buffer containing the initialized ranlux cl tab for use in the given environment/queue.
     """
-    kernel_source = '#define RANLUXCL_LUX ' + repr(ranluxcl_lux) + "\n"
+    kernel_source = '#define RANLUXCL_LUX ' + str(ranluxcl_lux) + "\n"
     kernel_source += ranlux.get_cl_code()
     kernel_source += '''
         __kernel void init(global float4 *ranluxcltab){
-            ranluxcl_initialization(''' + repr(seed) + ''', ranluxcltab);
+            ranluxcl_initialization(''' + str(seed) + ''', ranluxcltab);
         }
     '''
     read_write_flags = cl_environment.get_read_write_cl_mem_flags()

@@ -63,7 +63,7 @@ class SumOfSquares(EvaluationModel):
             double ''' + fname + '''(const optimize_data* const data, double* const x){
                 ''' + param_listing + '''
                 double sum = 0.0;
-                for(int i = 0; i < ''' + repr(inst_per_problem) + '''; i++){
+                for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     sum += pown(''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i), 2);
                 }
                 return sum;
@@ -75,7 +75,7 @@ class SumOfSquares(EvaluationModel):
             double ''' + fname + '''(const optimize_data* const data, const double* const x){
                 ''' + param_listing + '''
                 double sum = 0.0;
-                for(int i = 0; i < ''' + repr(inst_per_problem) + '''; i++){
+                for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     sum += pown(''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i), 2);
                 }
                 return - sum;
@@ -98,7 +98,7 @@ class GaussianEvaluationModel(EvaluationModel):
             double ''' + fname + '''(const optimize_data* const data, double* const x){
                 ''' + param_listing + '''
                 double sum = 0.0;
-                for(int i = 0; i < ''' + repr(inst_per_problem) + '''; i++){
+                for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     sum += pown(''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i), 2);
                 }
                 return sum / (2 * pown(GaussianNoise_sigma, 2));
@@ -110,7 +110,7 @@ class GaussianEvaluationModel(EvaluationModel):
             double ''' + fname + '''(const optimize_data* const data, const double* const x){
                 ''' + param_listing + '''
                 double sum = 0.0;
-                for(int i = 0; i < ''' + repr(inst_per_problem) + '''; i++){
+                for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     sum += pown(''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i), 2);
                 }
                 return - sum / (2 * pown(GaussianNoise_sigma, 2));
@@ -133,7 +133,7 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
             double ''' + fname + '''(const optimize_data* const data, double* const x){
                 ''' + param_listing + '''
                 double sum = 0.0;
-                for(int i = 0; i < ''' + repr(inst_per_problem) + '''; i++){
+                for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     sum += pown(''' + obs_fname + '''(data, i) -
                                     sqrt(pown(''' + eval_fname + '''(data, x, i), 2) +
                                                 2 * pown(OffsetGaussianNoise_sigma, 2)), 2);
@@ -147,7 +147,7 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
             double ''' + fname + '''(const optimize_data* const data, const double* const x){
                 ''' + param_listing + '''
                 double sum = 0.0;
-                for(int i = 0; i < ''' + repr(inst_per_problem) + '''; i++){
+                for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     sum += pown(''' + obs_fname + '''(data, i) -
                                     sqrt(pown(''' + eval_fname + '''(data, x, i), 2) +
                                                 2 * pown(OffsetGaussianNoise_sigma, 2)), 2);

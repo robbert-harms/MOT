@@ -63,7 +63,7 @@ class IdentityCodec(AbstractCodec):
         func = '''
             void ''' + fname + '''(double* x){'''
         for i in range(self._nmr_parameters):
-            func += "\n" + "\t"*4 + 'x[' + repr(i + parameter_offset) + '] = x[' + repr(i + parameter_offset) + '];'
+            func += "\n" + "\t"*4 + 'x[' + str(i + parameter_offset) + '] = x[' + str(i + parameter_offset) + '];'
         return func + '''
             }
         '''
@@ -72,7 +72,7 @@ class IdentityCodec(AbstractCodec):
         func = '''
             void ''' + fname + '''(double* x){'''
         for i in range(self._nmr_parameters):
-            func += "\n" + "\t"*4 + 'x[' + repr(i + parameter_offset) + '] = x[' + repr(i + parameter_offset) + '];'
+            func += "\n" + "\t"*4 + 'x[' + str(i + parameter_offset) + '] = x[' + str(i + parameter_offset) + '];'
         return func + '''
             }
         '''
@@ -148,14 +148,14 @@ class CompositeCodec(AbstractCodec):
         func = ''
         param_offset = 0
         for i, f in enumerate(self._codec_list):
-            func += f.get_cl_decode_function(fname=(fname + '_' + repr(i)), parameter_offset=param_offset)
+            func += f.get_cl_decode_function(fname=(fname + '_' + str(i)), parameter_offset=param_offset)
             param_offset += f.get_decoded_space_width()
 
         func += '''
             void ''' + fname + '''(double* x){
         '''
         for i in range(len(self._codec_list)):
-            func += fname + '_' + repr(i) + '(x);' + "\n"
+            func += fname + '_' + str(i) + '(x);' + "\n"
         func += '''
             }
         '''
@@ -165,13 +165,13 @@ class CompositeCodec(AbstractCodec):
         func = ''
         param_offset = 0
         for i, f in enumerate(self._codec_list):
-            func += f.get_cl_encode_function(fname=(fname + '_' + repr(i)), parameter_offset=param_offset)
+            func += f.get_cl_encode_function(fname=(fname + '_' + str(i)), parameter_offset=param_offset)
             param_offset += f.get_decoded_space_width()
         func += '''
             void ''' + fname + '''(double* x){
         '''
         for i in range(len(self._codec_list)):
-            func += fname + '_' + repr(i) + '(x);' + "\n"
+            func += fname + '_' + str(i) + '(x);' + "\n"
         func += '''
             }
         '''

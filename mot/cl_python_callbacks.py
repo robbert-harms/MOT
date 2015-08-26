@@ -385,8 +385,8 @@ class _ResidualCBGenerator(_BaseCBGenerator):
                     int gid = get_global_id(0);
                     ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
 
-                    double x[''' + repr(nmr_params) + '''];
-                    for(int i = 0; i < ''' + repr(nmr_params) + '''; i++){
+                    double x[''' + str(nmr_params) + '''];
+                    for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
                         x[i] = params[i];
                     }
                     ''' + ('decodeParameters(x);' if use_codec else '') + '''
@@ -472,8 +472,8 @@ class _EvalCBGenerator(_BaseCBGenerator):
                     int gid = get_global_id(0);
                     ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
 
-                    double x[''' + repr(nmr_params) + '''];
-                    for(int i = 0; i < ''' + repr(nmr_params) + '''; i++){
+                    double x[''' + str(nmr_params) + '''];
+                    for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
                         x[i] = params[i];
                     }
                     ''' + ('decodeParameters(x);' if use_codec else '') + '''
@@ -562,8 +562,8 @@ class _ObjectiveCBGenerator(_BaseCBGenerator):
                 ''' + ",\n".join(kernel_param_names) + '''
                 ){
                     ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
-                    double x[''' + repr(nmr_params) + '''];
-                    for(int i = 0; i < ''' + repr(nmr_params) + '''; i++){
+                    double x[''' + str(nmr_params) + '''];
+                    for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
                         x[i] = params[i];
                     }
                     ''' + ('decodeParameters(x);' if use_codec else '') + '''
@@ -650,15 +650,15 @@ class _CodecCBGenerator(_BaseCBGenerator):
         kernel_source += cl_func
         kernel_source += '''
             __kernel void transformParameterSpace(global double* x_global){
-                double x[''' + repr(nmr_params) + '''];
+                double x[''' + str(nmr_params) + '''];
 
-                for(int i = 0; i < ''' + repr(nmr_params) + '''; i++){
+                for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
                     x[i] = x_global[i];
                 }
 
                 ''' + cl_func_name + '''(x);
 
-                for(int i = 0; i < ''' + repr(nmr_params) + '''; i++){
+                for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
                     x_global[i] = x[i];
                 }
             }
@@ -737,14 +737,14 @@ class _FinalTransformationCBGenerator(_BaseCBGenerator):
                 ){
                     ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
 
-                    double x[''' + repr(nmr_params) + '''];
-                    for(int i = 0; i < ''' + repr(nmr_params) + '''; i++){
+                    double x[''' + str(nmr_params) + '''];
+                    for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
                         x[i] = params[i];
                     }
 
                     applyFinalParameterTransformations(&data, x);
 
-                    for(int i = 0; i < ''' + repr(nmr_params) + '''; i++){
+                    for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
                         params[i] = x[i];
                     }
                 }
@@ -799,8 +799,8 @@ class _LogPriorCBGenerator(_BaseCBGenerator):
         kernel_source += self._state.model.get_log_prior_function('getLogPrior')
         kernel_source += '''
             __kernel void calculateLogPrior(constant double* x_global, global double* result){
-                double x[''' + repr(nmr_params) + '''];
-                for(int i = 0; i < ''' + repr(nmr_params) + '''; i++){
+                double x[''' + str(nmr_params) + '''];
+                for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
                     x[i] = x_global[i];
                 }
                 result[0] = getLogPrior(x);
