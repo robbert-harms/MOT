@@ -295,12 +295,12 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             deps_names = []
             for dep in transform.dependencies:
                 dep_ind = self._get_parameter_estimable_index(dep[0].name + '.' + dep[1].name)
-                deps_names.append('{0}[' + repr(dep_ind) + ']')
+                deps_names.append('{0}[' + str(dep_ind) + ']')
 
-            s = '{0}[' + repr(ind) + '] = ' + transform.get_cl_decode(parameter, '{0}[' + repr(ind) + ']', deps_names)
+            s = '{0}[' + str(ind) + '] = ' + transform.get_cl_decode(parameter, '{0}[' + str(ind) + ']', deps_names)
             dec_func_list.append(s)
 
-            s = '{0}[' + repr(ind) + '] = ' + transform.get_cl_encode(parameter, '{0}[' + repr(ind) + ']', deps_names)
+            s = '{0}[' + str(ind) + '] = ' + transform.get_cl_encode(parameter, '{0}[' + str(ind) + ']', deps_names)
             enc_func_list.append(s)
 
         return CodecBuilder(list(reversed(enc_func_list)), dec_func_list)
@@ -341,7 +341,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         for i, (m, p) in enumerate(self._get_parameter_type_lists()['estimable']):
             if not self._is_non_model_tree_model(m):
-                func += "\t"*4 + 'x[' + repr(i) + '] = ' + m.name + '_' + p.name + ';' + "\n"
+                func += "\t"*4 + 'x[' + str(i) + '] = ' + m.name + '_' + p.name + ';' + "\n"
         func += "\t\t\t" + '}' + "\n"
         return func
 
@@ -526,7 +526,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             name = m.name + '_' + p.name
             if name not in exclude_list:
                 data_type = p.cl_data_type.data_type
-                assignment = 'x[' + repr(estimable_param_counter) + ']'
+                assignment = 'x[' + str(estimable_param_counter) + ']'
                 func += "\t"*4 + data_type + ' ' + name + ' = ' + assignment + ';' + "\n"
                 estimable_param_counter += 1
         return func
@@ -554,12 +554,12 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                     if self._all_elements_equal(self._problem_data.prtcl_data_dict[p.name]):
                         if CLDataType.from_string(data_type).is_vector_type:
                             vector_length = CLDataType.from_string(data_type).vector_length
-                            values = [repr(val) for val in self._problem_data.prtcl_data_dict[p.name][0]]
+                            values = [str(val) for val in self._problem_data.prtcl_data_dict[p.name][0]]
                             if len(values) < vector_length:
-                                values.append(repr(0))
+                                values.append(str(0))
                             assignment = '(' + data_type + ')(' + ', '.join(values) + ')'
                         else:
-                            assignment = repr(float(self._problem_data.prtcl_data_dict[p.name][0]))
+                            assignment = str(float(self._problem_data.prtcl_data_dict[p.name][0]))
                     else:
                         assignment = 'data->prtcl_data_' + p.name + '[observation_index]'
                     func += "\t"*4 + data_type + ' ' + p.name + ' = ' + assignment + ';' + "\n"
@@ -586,10 +586,10 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             if name not in exclude_list:
                 data_type = p.cl_data_type.data_type
                 if isinstance(p.value, numbers.Number):
-                    assignment = '(' + data_type + ')' + repr(float(p.value))
+                    assignment = '(' + data_type + ')' + str(float(p.value))
                 else:
                     if p.value.max() == p.value.min():
-                        assignment = '(' + data_type + ')' + repr(float(p.value[0]))
+                        assignment = '(' + data_type + ')' + str(float(p.value[0]))
                     else:
                         assignment = 'data->var_data_' + m.name + '_' + p.name + '[0]'
                 func += "\t"*4 + data_type + ' ' + name + ' = ' + assignment + ';' + "\n"
@@ -666,16 +666,16 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         elif isinstance(p, FreeParameter):
             if p.fixed and not self._parameter_has_dependency(m, p):
                 if isinstance(p.value, numbers.Number):
-                    assignment = '(' + data_type + ')' + repr(float(p.value))
+                    assignment = '(' + data_type + ')' + str(float(p.value))
                 else:
                     if p.value.max() == p.value.min():
-                        assignment = '(' + data_type + ')' + repr(float(p.value[0]))
+                        assignment = '(' + data_type + ')' + str(float(p.value[0]))
                     else:
                         assignment = 'data->var_data_' + m.name + '_' + p.name + '[0]'
             elif not self._parameter_has_dependency(m, p) or (self._parameter_has_dependency(m, p)
                                                               and not self._parameter_fixed_to_dependency(m, p)):
                 ind = self._get_parameter_estimable_index(m.name + '.' + p.name)
-                assignment += 'x[' + repr(ind) + ']'
+                assignment += 'x[' + str(ind) + ']'
             if self._parameter_has_dependency(m, p):
                 return self._get_dependent_parameters_listing(((m, p),))
 
@@ -863,7 +863,7 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         prior = 'double ' + func_name + '(const double* const x){' + "\n"
         prior += "\t" + 'double prior = 1.0;' + "\n"
         for i, (m, p) in enumerate(self._get_estimable_parameters_list()):
-            prior += "\t" + 'prior *= ' + p.sampling_prior.get_cl_assignment(p, 'x[' + repr(i) + ']') + "\n"
+            prior += "\t" + 'prior *= ' + p.sampling_prior.get_cl_assignment(p, 'x[' + str(i) + ']') + "\n"
         prior += "\n" + "\t" + 'return log(prior);' + "\n" + '}'
         return prior
 
@@ -890,7 +890,7 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
 
         adaptable_parameter_count = 0
         for i, (m, p) in enumerate(self._get_estimable_parameters_list()):
-            return_str += 'case ' + repr(i) + ':' + "\n\t\t\t"
+            return_str += 'case ' + str(i) + ':' + "\n\t\t\t"
 
             param_proposal = p.sampling_proposal
             logpdf_call = 'return ' + param_proposal.get_proposal_logpdf_function_name() + '(proposal, current'
@@ -921,7 +921,7 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
 
         adaptable_parameter_count = 0
         for i, (m, p) in enumerate(self._get_estimable_parameters_list()):
-            return_str += 'case ' + repr(i) + ':' + "\n\t\t\t"
+            return_str += 'case ' + str(i) + ':' + "\n\t\t\t"
 
             param_proposal = p.sampling_proposal
             proposal_call = 'return ' + param_proposal.get_proposal_function_name() + '(current, ranluxclstate'
@@ -957,10 +957,10 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
             for param in param_proposal.get_parameters():
                 if param.adaptable:
                     return_str += "\t" * 3
-                    return_str += 'proposal_parameters[' + repr(adaptable_parameter_count) + '] = '
+                    return_str += 'proposal_parameters[' + str(adaptable_parameter_count) + '] = '
                     return_str += param.get_parameter_update_function_name() + '(' +\
-                        'proposal_parameters[' + repr(adaptable_parameter_count) + '], ' + \
-                        'ac_between_proposal_updates[' + repr(i) + '], proposal_update_intervals);' + "\n"
+                        'proposal_parameters[' + str(adaptable_parameter_count) + '], ' + \
+                        'ac_between_proposal_updates[' + str(i) + '], proposal_update_intervals);' + "\n"
                     adaptable_parameter_count += 1
 
         return_str += '}'

@@ -44,7 +44,7 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
             raise ValueError('The number of instances per problem must be greater than the number of parameters')
 
         kernel_source = '''
-            #define NMR_INST_PER_PROBLEM ''' + repr(nmr_inst_per_problem) + '''
+            #define NMR_INST_PER_PROBLEM ''' + str(nmr_inst_per_problem) + '''
         '''
         kernel_source += cl_observation_func
         kernel_source += cl_eval_func
@@ -54,8 +54,8 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
             kernel_source += '''
                 void evaluate(const void* data, double* x, double* result){
                     int i;
-                    double model_x[''' + repr(nmr_params) + '''];
-                    for(i = 0; i < ''' + repr(nmr_params) + '''; i++){
+                    double model_x[''' + str(nmr_params) + '''];
+                    for(i = 0; i < ''' + str(nmr_params) + '''; i++){
                         model_x[i] = x[i];
                     }
                     decodeParameters(model_x);

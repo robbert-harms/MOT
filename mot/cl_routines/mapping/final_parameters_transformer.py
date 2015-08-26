@@ -97,17 +97,17 @@ class _FPTWorker(Worker):
                 ''' + ",\n".join(kernel_param_names) + '''
                 ){
                     int gid = get_global_id(0);
-                    double x[''' + repr(self._nmr_params) + '''];
+                    double x[''' + str(self._nmr_params) + '''];
                     ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
 
-                    for(int i = 0; i < ''' + repr(self._nmr_params) + '''; i++){
-                        x[i] = params[gid * ''' + repr(self._nmr_params) + ''' + i];
+                    for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
+                        x[i] = params[gid * ''' + str(self._nmr_params) + ''' + i];
                     }
 
                     applyFinalParameterTransformations(&data, x);
 
-                    for(int i = 0; i < ''' + repr(self._nmr_params) + '''; i++){
-                        params[gid * ''' + repr(self._nmr_params) + ''' + i] = x[i];
+                    for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
+                        params[gid * ''' + str(self._nmr_params) + ''' + i] = x[i];
                     }
             }
         '''

@@ -96,7 +96,7 @@ class _EvaluateModelWorker(Worker):
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
         kernel_source = '''
-            #define NMR_INST_PER_PROBLEM ''' + repr(self._model.get_nmr_inst_per_problem()) + '''
+            #define NMR_INST_PER_PROBLEM ''' + str(self._model.get_nmr_inst_per_problem()) + '''
         '''
         kernel_source += get_cl_double_extension_definer(self._cl_environment.platform)
         kernel_source += param_code_gen.get_data_struct()
@@ -106,11 +106,11 @@ class _EvaluateModelWorker(Worker):
                 ''' + ",\n".join(kernel_param_names) + '''
                 ){
                     int gid = get_global_id(0);
-                    double x[''' + repr(self._nmr_params) + '''];
+                    double x[''' + str(self._nmr_params) + '''];
                     ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
 
-                    for(int i = 0; i < ''' + repr(self._nmr_params) + '''; i++){
-                        x[i] = params[gid * ''' + repr(self._nmr_params) + ''' + i];
+                    for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
+                        x[i] = params[gid * ''' + str(self._nmr_params) + ''' + i];
                     }
 
                     global double* result = evals + gid * NMR_INST_PER_PROBLEM;

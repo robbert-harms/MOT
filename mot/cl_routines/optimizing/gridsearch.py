@@ -35,8 +35,8 @@ class GridSearchWorker(AbstractParallelOptimizerWorker):
 
         kernel_source += '''
             void grid_search(double * const x, const void* const data){
-                double x_optimal[''' + repr(nmr_params) + '''];
-                for(int i = 0; i < ''' + repr(nmr_params) + '''; i++){
+                double x_optimal[''' + str(nmr_params) + '''];
+                for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
                     x_optimal[i] = x[i];
                 }
 
@@ -47,7 +47,7 @@ class GridSearchWorker(AbstractParallelOptimizerWorker):
 
                 ''' + self._get_cl_test_loops(lower_bounds, upper_bounds, param_codec, nmr_params) + '''
 
-                for(int i = 0; i < ''' + repr(nmr_params) + '''; i++){
+                for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
                     x[i] = x_optimal[i];
                 }
             }
@@ -63,7 +63,7 @@ class GridSearchWorker(AbstractParallelOptimizerWorker):
         evals_per_parameter = int(round((self._parent_optimizer.patience * nmr_params) ** (1.0/len(lower_bounds))))
 
         for i in range(len(lower_bounds)):
-            loops += 'int i_' + repr(i) + '; ' + "\n"
+            loops += 'int i_' + str(i) + '; ' + "\n"
 
         for i in range(len(lower_bounds)):
             loops += 'for(i_{0} = 0; i_{0} < {1}; i_{0}++){{' \
@@ -84,7 +84,7 @@ class GridSearchWorker(AbstractParallelOptimizerWorker):
 
         loops += "\n" + "\t"*6
         for i in range(len(lower_bounds)):
-            loops += "\t" + 'x_optimal[' + repr(i) + '] = x[' + repr(i) + "];\n" + "\t"*6
+            loops += "\t" + 'x_optimal[' + str(i) + '] = x[' + str(i) + "];\n" + "\t"*6
 
         loops += '}'
 

@@ -233,17 +233,17 @@ class AbstractParallelOptimizerWorker(Worker):
                 ){
                     int gid = get_global_id(0);
 
-                    double x[''' + repr(nmr_params) + '''];
-                    for(int i = 0; i < ''' + repr(nmr_params) + '''; i++){
-                        x[i] = params[gid * ''' + repr(nmr_params) + ''' + i];
+                    double x[''' + str(nmr_params) + '''];
+                    for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
+                        x[i] = params[gid * ''' + str(nmr_params) + ''' + i];
                     }
 
                     ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
                     ''' + self._get_optimizer_call_name() + '''(x, (const void*) &data);
                     ''' + ('decodeParameters(x);' if self._use_param_codec else '') + '''
 
-                    for(int i = 0; i < ''' + repr(nmr_params) + '''; i++){
-                        params[gid * ''' + repr(nmr_params) + ''' + i] = x[i];
+                    for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
+                        params[gid * ''' + str(nmr_params) + ''' + i] = x[i];
                     }
             }
         '''
@@ -274,8 +274,8 @@ class AbstractParallelOptimizerWorker(Worker):
             kernel_source += decode_func + "\n"
             kernel_source += '''
                 double evaluate(double* x, const void* data){
-                    double x_model[''' + repr(self._nmr_params) + '''];
-                    for(int i = 0; i < ''' + repr(self._nmr_params) + '''; i++){
+                    double x_model[''' + str(self._nmr_params) + '''];
+                    for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                         x_model[i] = x[i];
                     }
                     decodeParameters(x_model);

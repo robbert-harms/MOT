@@ -166,7 +166,7 @@ class _MHWorker(Worker):
         acceptance_counters_between_proposal_updates = '{' + ', '.join('0' * self._nmr_params) + '}'
 
         kernel_source = '''
-            #define NMR_INST_PER_PROBLEM ''' + repr(self._model.get_nmr_inst_per_problem()) + '''
+            #define NMR_INST_PER_PROBLEM ''' + str(self._model.get_nmr_inst_per_problem()) + '''
         '''
         kernel_source += get_cl_double_extension_definer(self._cl_environment.platform)
         kernel_source += param_code_gen.get_data_struct()
@@ -207,7 +207,7 @@ class _MHWorker(Worker):
                 for(int k = 0; k < nmr_params; k++){
                     randomnmr = ranluxcl(ranluxclstate);
 
-                    for(int i = 0; i < ''' + repr(self._nmr_params) + '''; i++){
+                    for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                         x_proposal[i] = x[i];
                     }
                     x_proposal[k] = getProposal(k, x[k], ranluxclstate, proposal_parameters);
@@ -232,7 +232,7 @@ class _MHWorker(Worker):
                 '''
         kernel_source += '''
                         if(randomnmr.x < bayesian_f){
-                            for(int i = 0; i < ''' + repr(self._nmr_params) + '''; i++){
+                            for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                                 x[i] = x_proposal[i];
                             }
 
@@ -246,10 +246,10 @@ class _MHWorker(Worker):
         '''
         kernel_source += '''
             void _update_proposals(double* const proposal_parameters, uint* const ac_between_proposal_updates){
-                updateProposalParameters(ac_between_proposal_updates, ''' + repr(self.proposal_update_intervals) + ''',
+                updateProposalParameters(ac_between_proposal_updates, ''' + str(self.proposal_update_intervals) + ''',
                                          proposal_parameters);
 
-                for(int i = 0; i < ''' + repr(nrm_adaptable_proposal_parameters) + '''; i++){
+                for(int i = 0; i < ''' + str(nrm_adaptable_proposal_parameters) + '''; i++){
                     ac_between_proposal_updates[i] = 0;
                 }
             }
@@ -269,11 +269,11 @@ class _MHWorker(Worker):
                     ranluxcl_state_t ranluxclstate;
                     ranluxcl_download_seed(&ranluxclstate, ranluxcltab);
 
-                    double x[''' + repr(self._nmr_params) + '''];
-                    double x_proposal[''' + repr(self._nmr_params) + '''];
+                    double x[''' + str(self._nmr_params) + '''];
+                    double x_proposal[''' + str(self._nmr_params) + '''];
 
-                    for(i = 0; i < ''' + repr(self._nmr_params) + '''; i++){
-                        x[i] = params[gid * ''' + repr(self._nmr_params) + ''' + i];
+                    for(i = 0; i < ''' + str(self._nmr_params) + '''; i++){
+                        x[i] = params[gid * ''' + str(self._nmr_params) + ''' + i];
                     }
 
                     double current_likelihood = getLogLikelihood(&data, x);
@@ -286,7 +286,7 @@ class _MHWorker(Worker):
                                      nmr_params);
 
                         proposal_update_count += 1;
-                        if(proposal_update_count == ''' + repr(self.proposal_update_intervals) + '''){
+                        if(proposal_update_count == ''' + str(self.proposal_update_intervals) + '''){
                             _update_proposals(proposal_parameters, ac_between_proposal_updates);
                             proposal_update_count = 0;
                         }
@@ -300,22 +300,22 @@ class _MHWorker(Worker):
                                          nmr_params);
 
                             proposal_update_count += 1;
-                            if(proposal_update_count == ''' + repr(self.proposal_update_intervals) + '''){
+                            if(proposal_update_count == ''' + str(self.proposal_update_intervals) + '''){
                                 _update_proposals(proposal_parameters, ac_between_proposal_updates);
                                 proposal_update_count = 0;
                             }
                         }
 
-                        for(j = 0; j < ''' + repr(self._nmr_params) + '''; j++){
+                        for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
                             x_proposal[j] = x[j];
                         }
 
                         ''' + ('applyFinalParamTransforms(&data, x_proposal);'
                                if cl_final_param_transform else '') + '''
 
-                        for(j = 0; j < ''' + repr(self._nmr_params) + '''; j++){
+                        for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
                             samples[i + j * nmr_samples + gid *
-                                    ''' + repr(self._nmr_params) + ''' * nmr_samples] = x_proposal[j];
+                                    ''' + str(self._nmr_params) + ''' * nmr_samples] = x_proposal[j];
                         }
                     }
 

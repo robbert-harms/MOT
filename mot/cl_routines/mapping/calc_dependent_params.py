@@ -102,8 +102,8 @@ class _CDPWorker(Worker):
 
         parameter_write_out = ''
         for i, p in enumerate(dependent_parameter_names):
-            parameter_write_out += 'results[gid * ' + repr(len(dependent_parameter_names)) + \
-                                   ' + ' + repr(i) + '] = ' + p + ";\n"
+            parameter_write_out += 'results[gid * ' + str(len(dependent_parameter_names)) + \
+                                   ' + ' + str(i) + '] = ' + p + ";\n"
 
         param_code_gen = ParameterCLCodeGenerator(self._cl_environment.device, self._fixed_param_values, {}, {})
         kernel_param_names = ['global double* params', 'global double* results']
@@ -120,10 +120,10 @@ class _CDPWorker(Worker):
                     ''' + param_code_gen.get_data_struct_init_assignment('data_var') + '''
                     optimize_data* data = &data_var;
 
-                    double x[''' + repr(self._nmr_estimated_params) + '''];
+                    double x[''' + str(self._nmr_estimated_params) + '''];
                     int i = 0;
-                    for(i = 0; i < ''' + repr(self._nmr_estimated_params) + '''; i++){
-                        x[i] = params[gid * ''' + repr(self._nmr_estimated_params) + ''' + i];
+                    for(i = 0; i < ''' + str(self._nmr_estimated_params) + '''; i++){
+                        x[i] = params[gid * ''' + str(self._nmr_estimated_params) + ''' + i];
                     }
                     ''' + self._parameters_listing + '''
                     ''' + parameter_write_out + '''

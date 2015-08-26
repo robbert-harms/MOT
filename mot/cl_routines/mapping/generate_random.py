@@ -77,10 +77,10 @@ class GenerateRandom(AbstractCLRoutine):
 
                 int gid = get_global_id(0);
 
-                samples[gid * 4] = ''' + repr(min) + ''' + randomnr.x * ''' + repr(max - min) + ''';
-                samples[gid * 4 + 1] = ''' + repr(min) + ''' + randomnr.y * ''' + repr(max - min) + ''';
-                samples[gid * 4 + 2] = ''' + repr(min) + ''' + randomnr.z * ''' + repr(max - min) + ''';
-                samples[gid * 4 + 3] = ''' + repr(min) + ''' + randomnr.w * ''' + repr(max - min) + ''';
+                samples[gid * 4] = ''' + str(min) + ''' + randomnr.x * ''' + str(max - min) + ''';
+                samples[gid * 4 + 1] = ''' + str(min) + ''' + randomnr.y * ''' + str(max - min) + ''';
+                samples[gid * 4 + 2] = ''' + str(min) + ''' + randomnr.z * ''' + str(max - min) + ''';
+                samples[gid * 4 + 3] = ''' + str(min) + ''' + randomnr.w * ''' + str(max - min) + ''';
             }
         '''
         return kernel_source
@@ -97,10 +97,10 @@ class GenerateRandom(AbstractCLRoutine):
 
                 int gid = get_global_id(0);
 
-                samples[gid * 4] = ''' + repr(mean) + ''' + randomnr.x * ''' + repr(std) + ''';
-                samples[gid * 4 + 1] = ''' + repr(mean) + ''' + randomnr.y * ''' + repr(std) + ''';
-                samples[gid * 4 + 2] = ''' + repr(mean) + ''' + randomnr.z * ''' + repr(std) + ''';
-                samples[gid * 4 + 3] = ''' + repr(mean) + ''' + randomnr.w * ''' + repr(std) + ''';
+                samples[gid * 4] = ''' + str(mean) + ''' + randomnr.x * ''' + str(std) + ''';
+                samples[gid * 4 + 1] = ''' + str(mean) + ''' + randomnr.y * ''' + str(std) + ''';
+                samples[gid * 4 + 2] = ''' + str(mean) + ''' + randomnr.z * ''' + str(std) + ''';
+                samples[gid * 4 + 3] = ''' + str(mean) + ''' + randomnr.w * ''' + str(std) + ''';
             }
         '''
         return kernel_source

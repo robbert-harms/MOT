@@ -101,16 +101,16 @@ class _CodecWorker(Worker):
             __kernel void transformParameterSpace(global double* x_global){
                 int gid = get_global_id(0);
 
-                double x[''' + repr(self._nmr_params) + '''];
+                double x[''' + str(self._nmr_params) + '''];
 
-                for(int i = 0; i < ''' + repr(self._nmr_params) + '''; i++){
-                    x[i] = x_global[gid * ''' + repr(self._nmr_params) + ''' + i];
+                for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
+                    x[i] = x_global[gid * ''' + str(self._nmr_params) + ''' + i];
                 }
 
                 ''' + self._cl_func_name + '''(x);
 
-                for(int i = 0; i < ''' + repr(self._nmr_params) + '''; i++){
-                    x_global[gid * ''' + repr(self._nmr_params) + ''' + i] = x[i];
+                for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
+                    x_global[gid * ''' + str(self._nmr_params) + ''' + i] = x[i];
                 }
             }
         '''

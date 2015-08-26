@@ -36,7 +36,7 @@ class Rosenbrock(OptimizeModelInterface):
             double ''' + fname + '''(const optimize_data* const data, const double* const x,
                                      const int observation_index){
                 double sum = 0;
-                for(int i = 0; i < ''' + repr(self.n) + ''' - 1; i++){
+                for(int i = 0; i < ''' + str(self.n) + ''' - 1; i++){
                     sum += 100 * pown((x[i + 1] - pown(x[i], 2)), 2) + pown((x[i] - 1), 2);
                 }
                 return -sum;
