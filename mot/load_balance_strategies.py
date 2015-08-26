@@ -218,13 +218,17 @@ class LoadBalanceStrategy(object):
         self._logger.debug('Preparing to run on {0} device(s)'.format(len(workers)))
 
         total_nmr_problems = 0
+        most_nmr_batches = 0
         for workers_batches in batches:
+            if len(workers_batches) > most_nmr_batches:
+                most_nmr_batches = len(workers_batches)
+
             for batch in workers_batches:
                 total_nmr_problems += batch[1] - batch[0]
         problems_seen = 0
 
         start_time = timeit.default_timer()
-        for batch_nmr in range(len(batches[0])):
+        for batch_nmr in range(most_nmr_batches):
             events = []
             for worker_ind, worker in enumerate(workers):
                 if batch_nmr < len(batches[worker_ind]):
@@ -319,7 +323,7 @@ class EvenDistribution(LoadBalanceStrategy):
     """Give each worker exactly 1/nth of the work. This does not do any feedback load balancing."""
 
     def process(self, workers, nmr_items, run_in_batches=None, single_batch_length=None):
-        items_per_worker = round(nmr_items / float(len(workers)))
+        items_per_worker = int(round(nmr_items / float(len(workers))))
         batches = []
         current_pos = 0
 
