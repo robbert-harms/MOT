@@ -269,6 +269,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                     starting_points.append(p.value)
 
         starting_points = [np.transpose(np.array([s])) if len(s.shape) < 2 else s for s in starting_points]
+        #todo make model_float
         return set_correct_cl_data_type(np.concatenate(starting_points, axis=1))
 
     def get_lower_bounds(self):
@@ -877,8 +878,8 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
                                                  problem_data)
 
     def get_log_prior_function(self, func_name='getLogPrior'):
-        prior = 'model_float ' + func_name + '(const double* const x){' + "\n"
-        prior += "\t" + 'model_float prior = 1.0;' + "\n"
+        prior = 'double ' + func_name + '(const double* const x){' + "\n"
+        prior += "\t" + 'double prior = 1.0;' + "\n"
         for i, (m, p) in enumerate(self._get_estimable_parameters_list()):
             prior += "\t" + 'prior *= ' + p.sampling_prior.get_cl_assignment(p, 'x[' + str(i) + ']') + "\n"
         prior += "\n" + "\t" + 'return log(prior);' + "\n" + '}'
@@ -900,8 +901,8 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         for _, p in self._get_estimable_parameters_list():
             return_str += p.sampling_proposal.get_proposal_logpdf_function()
 
-        return_str += "\n" + 'model_float ' + func_name + \
-            '(const int i, const model_float proposal, const model_float current, double* const parameters){' + "\n\t"
+        return_str += "\n" + 'double ' + func_name + \
+            '(const int i, const double proposal, const double current, double* const parameters){' + "\n\t"
 
         return_str += "\n\t" + 'switch(i){' + "\n\t\t"
 
@@ -931,9 +932,9 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         for _, p in self._get_estimable_parameters_list():
             return_str += p.sampling_proposal.get_proposal_function()
 
-        return_str += "\n" + 'model_float ' + func_name + \
-            '(const int i, const model_float current, ranluxcl_state_t* const ranluxclstate, ' \
-            ' model_float* const parameters){'
+        return_str += "\n" + 'double ' + func_name + \
+            '(const int i, const double current, ranluxcl_state_t* const ranluxclstate, ' \
+            ' double* const parameters){'
 
         return_str += "\n\t" + 'switch(i){' + "\n\t\t"
 

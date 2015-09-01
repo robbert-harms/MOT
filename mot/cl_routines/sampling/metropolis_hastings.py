@@ -1,7 +1,7 @@
 import pyopencl as cl
 import numpy as np
 from ...cl_functions import RanluxCL
-from ...utils import get_cl_pragma_double, results_to_dict, set_correct_cl_data_type, \
+from ...utils import get_cl_pragma_double, results_to_dict, \
     ParameterCLCodeGenerator, initialize_ranlux, get_float_type_def
 from ...load_balance_strategies import Worker
 from ...cl_routines.sampling.base import AbstractSampler
@@ -16,8 +16,8 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class MetropolisHastings(AbstractSampler):
 
-    def __init__(self, cl_environments, load_balancer, nmr_samples=500, burn_length=1500,
-                 sample_intervals=5, proposal_update_intervals=25):
+    def __init__(self, cl_environments, load_balancer, nmr_samples=500, burn_length=1000,
+                 sample_intervals=5, proposal_update_intervals=30):
         """An CL implementation of Metropolis Hastings.
 
         Args:
