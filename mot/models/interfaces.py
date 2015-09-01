@@ -17,7 +17,7 @@ class OptimizeModelInterface(object):
         return ""
 
     @property
-    def use_double(self):
+    def double_precision(self):
         """Flag to signal if we should use the double float type during calculations.
 
         By default we ask the cl routines to use the single precision float type, you can overwrite this

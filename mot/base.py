@@ -95,12 +95,12 @@ class CLDataType(object):
             return 0
         return self._vector_length
 
-    def convert_value(self, value, use_double):
+    def convert_value(self, value, double_precision):
         """Convert the given value to a numpy array of this data type.
 
         Args:
             value (number of np ndarray): the value we want to convert
-            use_double (boolean): if we use the double type if the type is a typedeffed type
+            double_precision (boolean): if we use the double type if the type is a typedeffed type
 
         Returns:
             np ndarray: the converted value as a numpy type
@@ -122,7 +122,7 @@ class CLDataType(object):
 
         elif self.raw_data_type == 'model_float':
             np_dtype = np.float32
-            if use_double:
+            if double_precision:
                 np_dtype = np.float64
 
             if isinstance(value, numbers.Number):

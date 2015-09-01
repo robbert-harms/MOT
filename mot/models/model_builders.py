@@ -30,7 +30,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         """
         super(OptimizeModelBuilder, self).__init__()
         self._name = name
-        self._use_double = False
+        self._double_precision = False
         self._model_tree = model_tree
         self._evaluation_model = evaluation_model
         self._signal_noise_model = signal_noise_model
@@ -55,18 +55,18 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         return self._name
 
     @property
-    def use_double(self):
+    def double_precision(self):
         """See super class OptimizeModelInterface for details"""
-        return self._use_double
+        return self._double_precision
 
-    @use_double.setter
-    def use_double(self, value):
-        """Set the value for use_double.
+    @double_precision.setter
+    def double_precision(self, value):
+        """Set the value for double_precision.
 
         Args:
             value: boolean: if we would like to do the computations in double of single floating point type.
         """
-        self._use_double = value
+        self._double_precision = value
 
     def fix(self, model_param_name, value):
         """Fix the given model.param to the given value.
@@ -205,7 +205,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
     def get_problems_var_data(self):
         """See super class OptimizeModelInterface for details"""
         var_data_dict = {'observations': set_cl_compatible_data_type(
-            self._problem_data.observations, CLDataType.from_string('model_float*'), self._use_double)}
+            self._problem_data.observations, CLDataType.from_string('model_float*'), self._double_precision)}
         var_data_dict.update(self._get_fixed_parameters_as_var_data())
         return var_data_dict
 
@@ -239,7 +239,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 if p.name in self._problem_data.prtcl_data_dict:
                     if not self._all_elements_equal(self._problem_data.prtcl_data_dict[p.name]):
                         const_d = {p.name: set_cl_compatible_data_type(self._problem_data.prtcl_data_dict[p.name],
-                                                                       p.cl_data_type, self.use_double)}
+                                                                       p.cl_data_type, self.double_precision)}
                         prtcl_data_dict.update(const_d)
                 else:
                     exception = 'Constant parameter "{}" could not be resolved'.format(m.name + '.' + p.name)
@@ -250,7 +250,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         fixed_data_dict = {}
         for m, p in self._get_model_parameter_list():
             if isinstance(p, ModelDataParameter):
-                fixed_data_dict.update({p.name: set_cl_compatible_data_type(p.value, p.cl_data_type, self.use_double)})
+                fixed_data_dict.update({p.name: set_cl_compatible_data_type(p.value, p.cl_data_type, self.double_precision)})
         return fixed_data_dict
 
     def get_initial_parameters(self, results_dict=None):
@@ -470,7 +470,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                                          for m, p in param_lists['dependent']]
 
             cpd = CalculateDependentParameters(runtime_configuration.runtime_config['cl_environments'],
-                                               runtime_configuration.runtime_config['load_balancer'], self.use_double)
+                                               runtime_configuration.runtime_config['load_balancer'], self.double_precision)
             dependent_parameters = cpd.calculate(self._get_fixed_parameters_as_var_data(),
                                                  estimated_parameters, func, dependent_parameter_names)
             results_dict.update(dependent_parameters)
@@ -651,7 +651,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             if p.fixed and not inlined_in_cl_code and not self._parameter_fixed_to_dependency(m, p):
                 var_data_dict.update({m.name + '_' + p.name: set_cl_compatible_data_type(p.value,
                                                                                          p.cl_data_type,
-                                                                                         self.use_double)})
+                                                                                         self.double_precision)})
         return var_data_dict
 
     def _get_non_model_tree_param_listing(self):

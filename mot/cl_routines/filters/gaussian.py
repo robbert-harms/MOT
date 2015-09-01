@@ -108,7 +108,7 @@ class _GaussianFilterWorker(AbstractFilterWorker):
         working_dim = 'dim' + str(dimension)
 
         kernel_source = get_cl_pragma_double()
-        kernel_source += get_float_type_def(self._use_double, 'masking_float')
+        kernel_source += get_float_type_def(self._double_precision, 'masking_float')
         kernel_source += self._get_ks_sub2ind_func(self._volume_shape)
         kernel_source += '''
             __kernel void filter(
@@ -170,7 +170,7 @@ class _GaussianFilterWorker(AbstractFilterWorker):
         kernel = np.array([1 / (sigma * np.sqrt(2 * np.pi)) * np.exp(-x**2.0 / (2 * sigma**2)) for x in r])
 
         np_dtype = np.float32
-        if self._use_double:
+        if self._double_precision:
             np_dtype = np.float64
 
         kernel = kernel.astype(dtype=np_dtype, order='C', copy=False)

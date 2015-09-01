@@ -102,7 +102,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         fixed_data_dict = model.get_problems_fixed_data()
         nmr_params = starting_points.shape[1]
 
-        space_transformer = CodecRunner(self.cl_environments, self.load_balancer, model.use_double)
+        space_transformer = CodecRunner(self.cl_environments, self.load_balancer, model.double_precision)
         param_codec = model.get_parameter_codec()
         if self.use_param_codec and param_codec and self._automatic_apply_codec:
             starting_points = space_transformer.encode(param_codec, starting_points)
@@ -153,7 +153,7 @@ class AbstractParallelOptimizerWorker(Worker):
         self._parent_optimizer = parent_optimizer
 
         self._model = model
-        self._use_double = model.use_double
+        self._double_precision = model.double_precision
         self._nmr_params = nmr_params
         self._var_data_dict = var_data_dict
         self._prtcl_data_dict = prtcl_data_dict
@@ -228,7 +228,7 @@ class AbstractParallelOptimizerWorker(Worker):
 
         kernel_source = ''
         kernel_source += get_cl_pragma_double()
-        kernel_source += get_float_type_def(self._use_double)
+        kernel_source += get_float_type_def(self._double_precision)
         kernel_source += param_code_gen.get_data_struct()
         kernel_source += cl_objective_function
         kernel_source += self._get_optimizer_cl_code()
@@ -355,7 +355,7 @@ class AbstractSerialOptimizer(AbstractOptimizer):
                                                       use_param_codec=use_param_codec)
 
     def minimize(self, model, init_params=None, full_output=False):
-        space_transformer = CodecRunner(self._cl_environments, self._load_balancer, model.use_double)
+        space_transformer = CodecRunner(self._cl_environments, self._load_balancer, model.double_precision)
         cl_environments = self.load_balancer.get_used_cl_environments(self.cl_environments)
         starting_points = model.get_initial_parameters(init_params)
 

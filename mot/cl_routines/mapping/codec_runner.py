@@ -15,15 +15,15 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class CodecRunner(AbstractCLRoutine):
 
-    def __init__(self, cl_environments, load_balancer, use_double=False):
+    def __init__(self, cl_environments, load_balancer, double_precision=False):
         """This class can run the codecs used to transform the parameters to and from optimization space.
 
         Args:
-            use_double (boolean): if we will use the double (True) or single floating (False) type for the calculations
+            double_precision (boolean): if we will use the double (True) or single floating (False) type for the calculations
         """
         super(CodecRunner, self).__init__(cl_environments, load_balancer)
         self._logger = logging.getLogger(__name__)
-        self._use_double = use_double
+        self._double_precision = double_precision
 
     def decode(self, codec, data):
         """Decode the parameters.
@@ -73,24 +73,24 @@ class CodecRunner(AbstractCLRoutine):
 
     def _transform_parameters(self, cl_func, cl_func_name, data, nmr_params):
         np_dtype = np.float32
-        if self._use_double:
+        if self._double_precision:
             np_dtype = np.float64
         data = data.astype(np_dtype, order='C', copy=False)
         rows = data.shape[0]
-        workers = self._create_workers(_CodecWorker, cl_func, cl_func_name, data, nmr_params, self._use_double)
+        workers = self._create_workers(_CodecWorker, cl_func, cl_func_name, data, nmr_params, self._double_precision)
         self.load_balancer.process(workers, rows)
         return data
 
 
 class _CodecWorker(Worker):
 
-    def __init__(self, cl_environment, cl_func, cl_func_name, data, nmr_params, use_double):
+    def __init__(self, cl_environment, cl_func, cl_func_name, data, nmr_params, double_precision):
         super(_CodecWorker, self).__init__(cl_environment)
         self._cl_func = cl_func
         self._cl_func_name = cl_func_name
         self._data = data
         self._nmr_params = nmr_params
-        self._use_double = use_double
+        self._double_precision = double_precision
         self._kernel = self._build_kernel()
 
     def calculate(self, range_start, range_end):
@@ -106,7 +106,7 @@ class _CodecWorker(Worker):
 
     def _get_kernel_source(self):
         kernel_source = get_cl_pragma_double()
-        kernel_source += get_float_type_def(self._use_double)
+        kernel_source += get_float_type_def(self._double_precision)
         kernel_source += self._cl_func
         kernel_source += '''
             __kernel void transformParameterSpace(global model_float* x_global){

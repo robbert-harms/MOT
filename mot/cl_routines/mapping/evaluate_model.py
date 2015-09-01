@@ -41,7 +41,7 @@ class EvaluateModel(AbstractCLRoutine):
         fixed_data_dict = model.get_problems_fixed_data()
 
         workers = self._create_workers(_EvaluateModelWorker, model, parameters, evaluations,
-                                       var_data_dict, prtcl_data_dict, fixed_data_dict, model.use_double)
+                                       var_data_dict, prtcl_data_dict, fixed_data_dict, model.double_precision)
         self.load_balancer.process(workers, nmr_problems)
 
         return evaluations
@@ -50,7 +50,7 @@ class EvaluateModel(AbstractCLRoutine):
 class _EvaluateModelWorker(Worker):
 
     def __init__(self, cl_environment, model, parameters, evaluations, var_data_dict, prtcl_data_dict,
-                 fixed_data_dict, use_double):
+                 fixed_data_dict, double_precision):
         super(_EvaluateModelWorker, self).__init__(cl_environment)
 
         self._model = model
@@ -60,7 +60,7 @@ class _EvaluateModelWorker(Worker):
         self._var_data_dict = var_data_dict
         self._prtcl_data_dict = prtcl_data_dict
         self._fixed_data_dict = fixed_data_dict
-        self._use_double = use_double
+        self._double_precision = double_precision
 
         self._constant_buffers = self._generate_constant_buffers(self._prtcl_data_dict, self._fixed_data_dict)
         self._kernel = self._build_kernel()
@@ -101,7 +101,7 @@ class _EvaluateModelWorker(Worker):
             #define NMR_INST_PER_PROBLEM ''' + str(self._model.get_nmr_inst_per_problem()) + '''
         '''
         kernel_source += get_cl_pragma_double()
-        kernel_source += get_float_type_def(self._use_double)
+        kernel_source += get_float_type_def(self._double_precision)
         kernel_source += param_code_gen.get_data_struct()
         kernel_source += self._model.get_model_eval_function('evaluateModel')
         kernel_source += '''

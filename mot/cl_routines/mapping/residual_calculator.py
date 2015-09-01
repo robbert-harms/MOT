@@ -29,7 +29,7 @@ class ResidualCalculator(AbstractCLRoutine):
             Return per voxel the errors (eval - data) per scheme line
         """
         np_dtype = np.float32
-        if model.use_double:
+        if model.double_precision:
             np_dtype = np.float64
 
         nmr_inst_per_problem = model.get_nmr_inst_per_problem()
@@ -52,7 +52,7 @@ class _ResidualCalculatorWorker(Worker):
         super(_ResidualCalculatorWorker, self).__init__(cl_environment)
 
         self._model = model
-        self._use_double = model.use_double
+        self._double_precision = model.double_precision
         self._residuals = residuals
         self._parameters = parameters
 
@@ -106,7 +106,7 @@ class _ResidualCalculatorWorker(Worker):
             #define NMR_INST_PER_PROBLEM ''' + str(nmr_inst_per_problem) + '''
         '''
         kernel_source += get_cl_pragma_double()
-        kernel_source += get_float_type_def(self._use_double)
+        kernel_source += get_float_type_def(self._double_precision)
         kernel_source += param_code_gen.get_data_struct()
         kernel_source += observation_func
         kernel_source += cl_func

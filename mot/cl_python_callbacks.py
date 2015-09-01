@@ -184,7 +184,7 @@ class _GeneratorState(object):
                                                                       compile_flags=('-cl-strict-aliasing',),
                                                                       fallback_to_any_device_type=True)[0]
         self.model = model
-        self.use_double = model.use_double
+        self.double_precision = model.double_precision
         self.var_data_dict = self.model.get_problems_var_data()
         self.prtcl_data_dict = self.model.get_problems_prtcl_data()
         self.fixed_data_dict = self.model.get_problems_fixed_data()
@@ -218,9 +218,9 @@ class _CLEnvironmentsCachedItems(object):
 
 class _BaseCBGenerator(object):
 
-    def __init__(self, generator_state, use_double=False):
+    def __init__(self, generator_state, double_precision=False):
         self._state = generator_state
-        self._use_double = use_double
+        self._double_precision = double_precision
 
     def _get_var_data_dict(self, voxel_index):
         """Get all the variable data dictionary items for the indicated voxel.
@@ -722,7 +722,7 @@ class _FinalTransformationCBGenerator(_BaseCBGenerator):
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
         kernel_source = get_cl_pragma_double()
-        kernel_source += get_float_type_def(self._use_double)
+        kernel_source += get_float_type_def(self._double_precision)
         kernel_source += param_code_gen.get_data_struct()
         kernel_source += transform_func
         kernel_source += '''

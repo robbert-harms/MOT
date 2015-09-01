@@ -15,7 +15,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class CalculateDependentParameters(AbstractCLRoutine):
 
-    def __init__(self, cl_environments, load_balancer, use_double=False):
+    def __init__(self, cl_environments, load_balancer, double_precision=False):
         """CL code for calculating the dependent parameters.
 
         Some of the models may contain parameter dependencies. We would like to return the maps for these parameters
@@ -23,10 +23,10 @@ class CalculateDependentParameters(AbstractCLRoutine):
         calculate these maps.
 
         Args:
-            use_double (boolean): if we will use the double (True) or single floating (False) type for the calculations
+            double_precision (boolean): if we will use the double (True) or single floating (False) type for the calculations
         """
         super(CalculateDependentParameters, self).__init__(cl_environments, load_balancer)
-        self._use_double = use_double
+        self._double_precision = double_precision
 
     def calculate(self, fixed_param_values, estimated_parameters_list, parameters_listing, dependent_parameter_names):
         """Calculate the dependent parameters
@@ -46,7 +46,7 @@ class CalculateDependentParameters(AbstractCLRoutine):
             dict: A dictionary with the calculated maps for the dependent parameters.
         """
         np_dtype = np.float32
-        if self._use_double:
+        if self._double_precision:
             np_dtype = np.float64
 
         results_list = np.zeros(
@@ -58,7 +58,7 @@ class CalculateDependentParameters(AbstractCLRoutine):
 
         workers = self._create_workers(_CDPWorker, fixed_param_values, len(estimated_parameters_list),
                                        estimated_parameters, parameters_listing,
-                                       dependent_parameter_names, results_list, self._use_double)
+                                       dependent_parameter_names, results_list, self._double_precision)
         self.load_balancer.process(workers, estimated_parameters_list[0].shape[0])
 
         return results_to_dict(results_list, [n[1] for n in dependent_parameter_names])
@@ -67,7 +67,7 @@ class CalculateDependentParameters(AbstractCLRoutine):
 class _CDPWorker(Worker):
 
     def __init__(self, cl_environment, fixed_param_values, nmr_estimated_params, estimated_parameters,
-                 parameters_listing, dependent_parameter_names, results_list, use_double):
+                 parameters_listing, dependent_parameter_names, results_list, double_precision):
         super(_CDPWorker, self).__init__(cl_environment)
 
         self._fixed_param_values = fixed_param_values
@@ -75,7 +75,7 @@ class _CDPWorker(Worker):
         self._parameters_listing = parameters_listing
         self._dependent_parameter_names = dependent_parameter_names
         self._results_list = results_list
-        self._use_double = use_double
+        self._double_precision = double_precision
 
         self._constant_buffers = self._generate_constant_buffers(self._fixed_param_values)
         self._estimated_parameters = estimated_parameters
@@ -117,7 +117,7 @@ class _CDPWorker(Worker):
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
         kernel_source = get_cl_pragma_double()
-        kernel_source += get_float_type_def(self._use_double)
+        kernel_source += get_float_type_def(self._double_precision)
         kernel_source += param_code_gen.get_data_struct()
         kernel_source += '''
             __kernel void transform(

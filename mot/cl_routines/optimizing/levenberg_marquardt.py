@@ -45,7 +45,7 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
             raise ValueError('The number of instances per problem must be greater than the number of parameters')
 
         kernel_source = get_cl_pragma_double()
-        kernel_source += get_float_type_def(self._use_double)
+        kernel_source += get_float_type_def(self._double_precision)
         kernel_source += '''
             #define NMR_INST_PER_PROBLEM ''' + str(nmr_inst_per_problem) + '''
         '''

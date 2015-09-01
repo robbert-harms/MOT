@@ -66,22 +66,22 @@ def results_to_dict(results, param_names):
     return d
 
 
-def set_cl_compatible_data_type(value, data_type, use_double):
+def set_cl_compatible_data_type(value, data_type, double_precision):
     """Set the given value (numpy array) to the given data type, one which is CL compatible.
 
     Args:
         value (ndarray): The value to convert to a CL compatible data type.
         cl_data_type (CLDataType): A CL data type object.
-        use_double (boolean): if cl_data_type is of type model_float we need to know if we are using double or float
+        double_precision (boolean): if cl_data_type is of type model_float we need to know if we are using double or float
 
     Returns:
         ndarray: The same array, but then with the correct data type. If the data type indicates a vector type, a
             vector typed value is returned.
     """
     if data_type.is_vector_type:
-        return array_to_cl_vector(value, data_type.raw_data_type, use_double=use_double)
+        return array_to_cl_vector(value, data_type.raw_data_type, double_precision=double_precision)
     else:
-        return data_type.convert_value(value, use_double)
+        return data_type.convert_value(value, double_precision)
 
 
 def numpy_types_to_cl(data_type):
@@ -122,7 +122,7 @@ def get_opencl_vector_data_type(vector_length, data_type):
     return getattr(cl_array.vec, data_type + str(vector_length))
 
 
-def array_to_cl_vector(array, raw_data_type, vector_length=None, use_double=False):
+def array_to_cl_vector(array, raw_data_type, vector_length=None, double_precision=False):
     """Create a CL vector type of the given array.
 
     If vector_length is specified and one of (2, 3, 4, 8, 16) it is used. Else is chosen for the minimum vector length
@@ -132,7 +132,7 @@ def array_to_cl_vector(array, raw_data_type, vector_length=None, use_double=Fals
         array (ndarray): the array of which to translate each row to a vector
         raw_data_type (str): The raw data type to convert to
         vector_length (int): if specified (non-None) the desired vector length. It must be one of (2, 3, 4, 8, 16)
-        use_double (boolean): if we should use double or float in the case of typedeffed items like 'model_float'
+        double_precision (boolean): if we should use double or float in the case of typedeffed items like 'model_float'
 
     Returns:
         ndarray: An array of the same length as the given array, but with only one column per row.
@@ -154,7 +154,7 @@ def array_to_cl_vector(array, raw_data_type, vector_length=None, use_double=Fals
         dtype = get_opencl_vector_data_type(vector_length, 'double')
 
     elif 'model_float' in raw_data_type:
-        if use_double:
+        if double_precision:
             dtype = get_opencl_vector_data_type(vector_length, 'double')
         else:
             dtype = get_opencl_vector_data_type(vector_length, 'float')
@@ -229,17 +229,17 @@ def get_cl_pragma_double():
     '''
 
 
-def get_float_type_def(use_double, type_def_basename='model_float'):
+def get_float_type_def(double_precision, type_def_basename='model_float'):
     """Get the model floating point type definition.
 
     Args:
-        use_double (boolean): if True we will use the double type for the model_float type. Else, we will use the
+        double_precision (boolean): if True we will use the double type for the model_float type. Else, we will use the
             single precision float type for the model_float type.
 
     Returns:
         str: typedefs for the model_float type
     """
-    if use_double:
+    if double_precision:
         return '''
             typedef double ''' + type_def_basename + ''';
             typedef double2 ''' + type_def_basename + '''2;

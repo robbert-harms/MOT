@@ -33,7 +33,7 @@ class FinalParametersTransformer(AbstractCLRoutine):
     def transform(self, model, parameters):
         """This transforms the parameters matrix in place. Using the final parameters transforms."""
         np_dtype = np.float32
-        if model.use_double:
+        if model.double_precision:
             np_dtype = np.float64
 
         parameters = parameters.astype(np_dtype, order='C', copy=False)
@@ -60,7 +60,7 @@ class _FPTWorker(Worker):
         self._var_data_dict = var_data_dict
         self._prtcl_data_dict = prtcl_data_dict
         self._fixed_data_dict = fixed_data_dict
-        self._use_double = model.use_double
+        self._double_precision = model.double_precision
         self._constant_buffers = self._generate_constant_buffers(self._prtcl_data_dict, self._fixed_data_dict)
         self._kernel = self._build_kernel()
 
@@ -95,7 +95,7 @@ class _FPTWorker(Worker):
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
         kernel_source = get_cl_pragma_double()
-        kernel_source += get_float_type_def(self._use_double)
+        kernel_source += get_float_type_def(self._double_precision)
         kernel_source += param_code_gen.get_data_struct()
         kernel_source += self._model.get_final_parameter_transformations('applyFinalParameterTransformations')
         kernel_source += '''

@@ -87,7 +87,7 @@ class _MHWorker(Worker):
         super(_MHWorker, self).__init__(cl_environment)
 
         self._model = model
-        self._use_double = model.use_double
+        self._double_precision = model.double_precision
         self._parameters = parameters
         self._nmr_params = parameters.shape[1]
         self._samples = samples
@@ -171,7 +171,7 @@ class _MHWorker(Worker):
             #define NMR_INST_PER_PROBLEM ''' + str(self._model.get_nmr_inst_per_problem()) + '''
         '''
         kernel_source += get_cl_pragma_double()
-        kernel_source += get_float_type_def(self._use_double)
+        kernel_source += get_float_type_def(self._double_precision)
         kernel_source += param_code_gen.get_data_struct()
         kernel_source += rng_code.get_cl_header()
         kernel_source += self._model.get_log_prior_function('getLogPrior')

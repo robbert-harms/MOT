@@ -38,7 +38,7 @@ class AbstractFilter(AbstractCLRoutine):
         self.size = size
         self._logger = logging.getLogger(__name__)
 
-    def filter(self, value, mask=None, use_double=False):
+    def filter(self, value, mask=None, double_precision=False):
         """Filter the given volumes in the given dictionary.
 
         If a dict is given as a value the filtering is applied to every value in the dictionary. This can be spread
@@ -50,22 +50,22 @@ class AbstractFilter(AbstractCLRoutine):
             mask (array like): A single array of the same dimension as the input value. This can be used to
                 mask values from being used by the filtering routines. They are not used for filtering other values
                 and are not filtered themselves.
-            use_double (boolean): if we will use double or float
+            double_precision (boolean): if we will use double or float
 
         Returns:
             The same type as the input. A new set of volumes with the same keys, or a single array. All filtered.
         """
         self._logger.info('Applying filtering with filter {0}'.format(self.get_pretty_name()))
         if isinstance(value, dict):
-            return self._filter(value, mask, use_double)
+            return self._filter(value, mask, double_precision)
         else:
-            return self._filter({'value': value}, mask, use_double)['value']
+            return self._filter({'value': value}, mask, double_precision)['value']
 
-    def _filter(self, volumes_dict, mask, use_double):
+    def _filter(self, volumes_dict, mask, double_precision):
         results_dict = {}
 
         np_dtype = np.float32
-        if use_double:
+        if double_precision:
             np_dtype = np.float64
 
         for key, value in volumes_dict.items():
@@ -74,7 +74,7 @@ class AbstractFilter(AbstractCLRoutine):
 
         volumes_list = list(volumes_dict.items())
 
-        workers = self._create_workers(self._get_worker, results_dict, volumes_list, mask, use_double)
+        workers = self._create_workers(self._get_worker, results_dict, volumes_list, mask, double_precision)
         self._load_balancer.process(workers, len(volumes_list))
 
         return results_dict
@@ -92,14 +92,14 @@ class AbstractFilter(AbstractCLRoutine):
 
 class AbstractFilterWorker(Worker):
 
-    def __init__(self, parent_filter, cl_environment, results_dict, volumes_list, mask, use_double):
+    def __init__(self, parent_filter, cl_environment, results_dict, volumes_list, mask, double_precision):
         super(AbstractFilterWorker, self).__init__(cl_environment)
         self._parent_filter = parent_filter
         self._size = self._parent_filter.size
         self._results_dict = results_dict
         self._volumes_list = volumes_list
         self._volume_shape = volumes_list[0][1].shape
-        self._use_double = use_double
+        self._double_precision = double_precision
 
         if mask is None:
             self._use_mask = False
