@@ -205,7 +205,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
     def get_problems_var_data(self):
         """See super class OptimizeModelInterface for details"""
         var_data_dict = {'observations': set_cl_compatible_data_type(
-            self._problem_data.observations, CLDataType.from_string('double*'), self._use_double)}
+            self._problem_data.observations, CLDataType.from_string('model_float*'), self._use_double)}
         var_data_dict.update(self._get_fixed_parameters_as_var_data())
         return var_data_dict
 
@@ -353,7 +353,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                     param_exclude_list.append(m.name + '_' + p.name)
         param_listing = self._get_parameters_listing(exclude_list=param_exclude_list)
 
-        func = "\n\t\t\t" + 'void ' + func_name + '(const optimize_data* const data, double* const x){' + "\n"
+        func = "\n\t\t\t" + 'void ' + func_name + '(const optimize_data* const data, model_float* const x){' + "\n"
         func += param_listing + "\n"
 
         for i, (m, p) in enumerate(self._get_parameter_type_lists()['estimable']):

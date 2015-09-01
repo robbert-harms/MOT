@@ -3,9 +3,8 @@ import pyopencl as cl
 import numpy as np
 from .cl_environments import CLEnvironmentFactory
 from .cl_functions import RanluxCL
-from .utils import get_cl_pragma_double, set_correct_cl_data_type, ParameterCLCodeGenerator, \
-    initialize_ranlux
-
+from .utils import get_cl_pragma_double, ParameterCLCodeGenerator, \
+    initialize_ranlux, get_float_type_def
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-09-25"
@@ -185,18 +184,11 @@ class _GeneratorState(object):
                                                                       compile_flags=('-cl-strict-aliasing',),
                                                                       fallback_to_any_device_type=True)[0]
         self.model = model
+        self.use_double = model.use_double
         self.var_data_dict = self.model.get_problems_var_data()
         self.prtcl_data_dict = self.model.get_problems_prtcl_data()
         self.fixed_data_dict = self.model.get_problems_fixed_data()
         self.cl_environment_items_cache = {}
-        self._clean_data_dicts()
-
-    def _clean_data_dicts(self):
-        """Set the data dicts to the right cl data type."""
-        def set_correct(d):
-            for key, data in d.items():
-                d[key] = set_correct_cl_data_type(data)
-        map(set_correct, [self.var_data_dict, self.prtcl_data_dict, self.fixed_data_dict])
 
 
 class _CLEnvironmentsCachedItems(object):
@@ -226,8 +218,9 @@ class _CLEnvironmentsCachedItems(object):
 
 class _BaseCBGenerator(object):
 
-    def __init__(self, generator_state):
+    def __init__(self, generator_state, use_double=False):
         self._state = generator_state
+        self._use_double = use_double
 
     def _get_var_data_dict(self, voxel_index):
         """Get all the variable data dictionary items for the indicated voxel.
@@ -729,6 +722,7 @@ class _FinalTransformationCBGenerator(_BaseCBGenerator):
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
         kernel_source = get_cl_pragma_double()
+        kernel_source += get_float_type_def(self._use_double)
         kernel_source += param_code_gen.get_data_struct()
         kernel_source += transform_func
         kernel_source += '''
@@ -737,7 +731,7 @@ class _FinalTransformationCBGenerator(_BaseCBGenerator):
                 ){
                     ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
 
-                    double x[''' + str(nmr_params) + '''];
+                    model_float x[''' + str(nmr_params) + '''];
                     for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
                         x[i] = params[i];
                     }

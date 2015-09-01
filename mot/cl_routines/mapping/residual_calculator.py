@@ -28,9 +28,17 @@ class ResidualCalculator(AbstractCLRoutine):
         Returns:
             Return per voxel the errors (eval - data) per scheme line
         """
+        np_dtype = np.float32
+        if model.use_double:
+            np_dtype = np.float64
+
         nmr_inst_per_problem = model.get_nmr_inst_per_problem()
         nmr_problems = model.get_nmr_problems()
-        residuals = np.asmatrix(np.zeros((nmr_problems, nmr_inst_per_problem)).astype(np.float64, copy=False))
+
+        residuals = np.asmatrix(np.zeros((nmr_problems, nmr_inst_per_problem)).astype(np_dtype, copy=False))
+
+        parameters = model.get_initial_parameters(parameters)
+        parameters = parameters.astype(np_dtype, order='C', copy=False)
 
         workers = self._create_workers(_ResidualCalculatorWorker, model, parameters, residuals)
         self.load_balancer.process(workers, model.get_nmr_problems())
@@ -45,8 +53,8 @@ class _ResidualCalculatorWorker(Worker):
 
         self._model = model
         self._use_double = model.use_double
-        self._parameters = model.get_initial_parameters(parameters)
         self._residuals = residuals
+        self._parameters = parameters
 
         self._var_data_dict = model.get_problems_var_data()
         self._prtcl_data_dict = model.get_problems_prtcl_data()
@@ -91,7 +99,7 @@ class _ResidualCalculatorWorker(Worker):
         param_code_gen = ParameterCLCodeGenerator(self._cl_environment.device, self._var_data_dict,
                                                   self._prtcl_data_dict, self._fixed_data_dict)
 
-        kernel_param_names = ['global double* params', 'global double* errors']
+        kernel_param_names = ['global model_float* params', 'global model_float* errors']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
         kernel_source = '''
@@ -107,14 +115,14 @@ class _ResidualCalculatorWorker(Worker):
                 ''' + ",\n".join(kernel_param_names) + '''
                 ){
                     int gid = get_global_id(0);
-                    double x[''' + str(nmr_params) + '''];
                     ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
 
+                    double x[''' + str(nmr_params) + '''];
                     for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
                         x[i] = params[gid * ''' + str(nmr_params) + ''' + i];
                     }
 
-                    global double* result = errors + gid * NMR_INST_PER_PROBLEM;
+                    global model_float* result = errors + gid * NMR_INST_PER_PROBLEM;
 
                     for(int i = 0; i < NMR_INST_PER_PROBLEM; i++){
                         result[i] = getObservation(&data, i) - evaluateModel(&data, x, i);

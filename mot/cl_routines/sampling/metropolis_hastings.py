@@ -146,6 +146,7 @@ class _MHWorker(Worker):
         return event
 
     def _get_kernel_source(self):
+        #todo, this accepts a model_float now, we have to change the code to allow this to work
         cl_final_param_transform = self._model.get_final_parameter_transformations('applyFinalParamTransforms')
 
         param_code_gen = ParameterCLCodeGenerator(self._cl_environment.device, self._var_data_dict,

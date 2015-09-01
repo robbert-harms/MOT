@@ -45,11 +45,16 @@ class CalculateDependentParameters(AbstractCLRoutine):
         Returns:
             dict: A dictionary with the calculated maps for the dependent parameters.
         """
+        np_dtype = np.float32
+        if self._use_double:
+            np_dtype = np.float64
+
         results_list = np.zeros(
             (estimated_parameters_list[0].shape[0], len(dependent_parameter_names)),
-            dtype=np.float64, order='C')
+            dtype=np_dtype, order='C')
 
         estimated_parameters = np.dstack(estimated_parameters_list).flatten()
+        estimated_parameters = estimated_parameters.astype(np_dtype, order='C', copy=False)
 
         workers = self._create_workers(_CDPWorker, fixed_param_values, len(estimated_parameters_list),
                                        estimated_parameters, parameters_listing,
@@ -108,7 +113,7 @@ class _CDPWorker(Worker):
                                    ' + ' + str(i) + '] = ' + p + ";\n"
 
         param_code_gen = ParameterCLCodeGenerator(self._cl_environment.device, self._fixed_param_values, {}, {})
-        kernel_param_names = ['global double* params', 'global double* results']
+        kernel_param_names = ['global model_float* params', 'global model_float* results']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
         kernel_source = get_cl_pragma_double()
@@ -123,7 +128,7 @@ class _CDPWorker(Worker):
                     ''' + param_code_gen.get_data_struct_init_assignment('data_var') + '''
                     optimize_data* data = &data_var;
 
-                    double x[''' + str(self._nmr_estimated_params) + '''];
+                    model_float x[''' + str(self._nmr_estimated_params) + '''];
                     int i = 0;
                     for(i = 0; i < ''' + str(self._nmr_estimated_params) + '''; i++){
                         x[i] = params[gid * ''' + str(self._nmr_estimated_params) + ''' + i];

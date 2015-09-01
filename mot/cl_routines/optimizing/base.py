@@ -1,5 +1,6 @@
 import logging
 import pyopencl as cl
+import numpy as np
 from ...cl_python_callbacks import CLToPythonCallbacks
 from ...utils import results_to_dict, ParameterCLCodeGenerator, \
     get_cl_pragma_double, get_float_type_def
@@ -105,6 +106,8 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         param_codec = model.get_parameter_codec()
         if self.use_param_codec and param_codec and self._automatic_apply_codec:
             starting_points = space_transformer.encode(param_codec, starting_points)
+            #todo change on the moment we support model_float
+            starting_points = starting_points.astype(np.float64, order='C', copy=False)
 
         self._logger.info('Finished optimization preliminaries')
         self._logger.info('Starting optimization with method {0} and patience {1}'.format(self.get_pretty_name(),
@@ -242,11 +245,28 @@ class AbstractParallelOptimizerWorker(Worker):
 
                     ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
                     ''' + self._get_optimizer_call_name() + '''(x, (const void*) &data);
-                    ''' + ('decodeParameters(x);' if self._use_param_codec else '') + '''
+        '''
 
+        if self._use_param_codec:
+            #todo simplify on the moment we support model_floats everywhere
+            kernel_source += '''
+                model_float x_writeout[''' + str(self._nmr_params) + '''];
+                for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
+                    x_writeout[i] = (model_float)x[i];
+                }
+                decodeParameters(x_writeout);
+                for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
+                    params[gid * ''' + str(nmr_params) + ''' + i] = x_writeout[i];
+                }
+            '''
+        else:
+            kernel_source += '''
                     for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
                         params[gid * ''' + str(nmr_params) + ''' + i] = x[i];
                     }
+            '''
+
+        kernel_source += '''
             }
         '''
         return kernel_source
@@ -274,15 +294,21 @@ class AbstractParallelOptimizerWorker(Worker):
         if self._use_param_codec:
             decode_func = param_codec.get_cl_decode_function('decodeParameters')
             kernel_source += decode_func + "\n"
+            #todo change this on the moment we support model_float completely
             kernel_source += '''
                 model_float evaluate(double* x, const void* data){
-                    double x_model[''' + str(self._nmr_params) + '''];
+                    model_float x_model[''' + str(self._nmr_params) + '''];
                     for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                         x_model[i] = x[i];
                     }
                     decodeParameters(x_model);
 
-                    return calculateObjective((optimize_data*)data, x_model);
+                    double tmp_fix[''' + str(self._nmr_params) + '''];
+                    for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
+                        tmp_fix[i] = (double)x_model[i];
+                    }
+
+                    return calculateObjective((optimize_data*)data, tmp_fix);
                 }
             '''
         else:
@@ -336,6 +362,8 @@ class AbstractSerialOptimizer(AbstractOptimizer):
         param_codec = model.get_parameter_codec()
         if self.use_param_codec and param_codec:
             starting_points = space_transformer.encode(param_codec, starting_points)
+            #todo change on the moment we support model_float
+            starting_points = starting_points.astype(np.float64, order='C', copy=False)
 
         optimized = self._minimize(model, starting_points, cl_environments[0])
 

@@ -1,6 +1,7 @@
 import logging
 import pyopencl as cl
-from ...utils import get_cl_pragma_double, set_correct_cl_data_type, get_float_type_def
+import numpy as np
+from ...utils import get_cl_pragma_double, get_float_type_def
 from ...cl_routines.base import AbstractCLRoutine
 from ...load_balance_strategies import Worker
 
@@ -71,8 +72,11 @@ class CodecRunner(AbstractCLRoutine):
                                           codec.get_nmr_parameters())
 
     def _transform_parameters(self, cl_func, cl_func_name, data, nmr_params):
+        np_dtype = np.float32
+        if self._use_double:
+            np_dtype = np.float64
+        data = data.astype(np_dtype, order='C', copy=False)
         rows = data.shape[0]
-        data = set_correct_cl_data_type(data)
         workers = self._create_workers(_CodecWorker, cl_func, cl_func_name, data, nmr_params, self._use_double)
         self.load_balancer.process(workers, rows)
         return data
@@ -105,10 +109,10 @@ class _CodecWorker(Worker):
         kernel_source += get_float_type_def(self._use_double)
         kernel_source += self._cl_func
         kernel_source += '''
-            __kernel void transformParameterSpace(global double* x_global){
+            __kernel void transformParameterSpace(global model_float* x_global){
                 int gid = get_global_id(0);
 
-                double x[''' + str(self._nmr_params) + '''];
+                model_float x[''' + str(self._nmr_params) + '''];
 
                 for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                     x[i] = x_global[gid * ''' + str(self._nmr_params) + ''' + i];

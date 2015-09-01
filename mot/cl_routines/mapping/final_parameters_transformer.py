@@ -1,5 +1,6 @@
 import pyopencl as cl
-from ...utils import get_cl_pragma_double, set_correct_cl_data_type, ParameterCLCodeGenerator, get_float_type_def
+import numpy as np
+from ...utils import get_cl_pragma_double, ParameterCLCodeGenerator, get_float_type_def
 from ...cl_routines.base import AbstractCLRoutine
 from ...load_balance_strategies import Worker
 
@@ -31,8 +32,11 @@ class FinalParametersTransformer(AbstractCLRoutine):
 
     def transform(self, model, parameters):
         """This transforms the parameters matrix in place. Using the final parameters transforms."""
+        np_dtype = np.float32
+        if model.use_double:
+            np_dtype = np.float64
 
-        parameters = set_correct_cl_data_type(parameters)
+        parameters = parameters.astype(np_dtype, order='C', copy=False)
         var_data_dict = model.get_problems_var_data()
         prtcl_data_dict = model.get_problems_prtcl_data()
         fixed_data_dict = model.get_problems_fixed_data()
@@ -87,7 +91,7 @@ class _FPTWorker(Worker):
         param_code_gen = ParameterCLCodeGenerator(self._cl_environment.device,
                                                   self._var_data_dict, self._prtcl_data_dict, self._fixed_data_dict)
 
-        kernel_param_names = ['global double* params']
+        kernel_param_names = ['global model_float* params']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
         kernel_source = get_cl_pragma_double()
@@ -99,7 +103,7 @@ class _FPTWorker(Worker):
                 ''' + ",\n".join(kernel_param_names) + '''
                 ){
                     int gid = get_global_id(0);
-                    double x[''' + str(self._nmr_params) + '''];
+                    model_float x[''' + str(self._nmr_params) + '''];
                     ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
 
                     for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
