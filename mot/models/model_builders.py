@@ -250,7 +250,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         fixed_data_dict = {}
         for m, p in self._get_model_parameter_list():
             if isinstance(p, ModelDataParameter):
-                fixed_data_dict.update({p.name: set_cl_compatible_data_type(p.value, p.cl_data_type, self.double_precision)})
+                fixed_data_dict.update({p.name: set_cl_compatible_data_type(p.value, p.cl_data_type,
+                                                                            self.double_precision)})
         return fixed_data_dict
 
     def get_initial_parameters(self, results_dict=None):
@@ -269,8 +270,11 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                     starting_points.append(p.value)
 
         starting_points = [np.transpose(np.array([s])) if len(s.shape) < 2 else s for s in starting_points]
-        #todo make model_float
-        return set_correct_cl_data_type(np.concatenate(starting_points, axis=1))
+
+        np_dtype = np.float32
+        if self.double_precision:
+            np_dtype = np.float64
+        return np.concatenate(starting_points, axis=1).astype(np_dtype, order='C', copy=False)
 
     def get_lower_bounds(self):
         return np.array([p.lower_bound for m, p in self._get_estimable_parameters_list()])

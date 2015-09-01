@@ -29,7 +29,7 @@ class EvaluateModel(AbstractCLRoutine):
             ndarray: Return per problem instance the evaluation per data point.
         """
         parameters = model.get_initial_parameters(parameters)
-
+        #todo make model_float
         nmr_problems = model.get_nmr_problems()
         nmr_inst_per_problem = model.get_nmr_inst_per_problem()
 

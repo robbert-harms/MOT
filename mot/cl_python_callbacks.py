@@ -13,6 +13,8 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
+#todo, most of these functions are broken since the update to support float
+
 class CLToPythonCallbacks(object):
 
     def __init__(self, model, cl_environment=None):
@@ -500,6 +502,10 @@ class _ObjectiveCBGenerator(_BaseCBGenerator):
             More precise the CB function looks like:
                 func(params) = noise_model(ydata, f(xdata, params))
         """
+        np_dtype = np.float32
+        if self._state.double_precision:
+            np_dtype = np.float64
+
         if not cl_environment:
             cl_environment = self._state.cl_environment
 
@@ -508,10 +514,10 @@ class _ObjectiveCBGenerator(_BaseCBGenerator):
 
         data_buffers = []
         param_buf = cl.Buffer(cl_environment.context, cl.mem_flags.READ_ONLY,
-                              size=np.dtype(np.float64).itemsize * self._state.model.get_nmr_estimable_parameters())
+                              size=np.dtype(np_dtype).itemsize * self._state.model.get_nmr_estimable_parameters())
         data_buffers.append(param_buf)
 
-        errors = np.zeros((1, ), dtype=np.float64, order='C')
+        errors = np.zeros((1, ), dtype=np_dtype, order='C')
         errors_buf = cl.Buffer(cl_environment.context, cl_environment.get_write_only_cl_mem_flags(), hostbuf=errors)
         data_buffers.append(errors_buf)
 
@@ -521,7 +527,7 @@ class _ObjectiveCBGenerator(_BaseCBGenerator):
         queue = self._get_queue(cl_environment)
 
         def eval_cb(x):
-            cl.enqueue_copy(queue, param_buf, x.astype(np.float64, order='C'), is_blocking=True)
+            cl.enqueue_copy(queue, param_buf, x.astype(np_dtype, order='C'), is_blocking=True)
             kernel.evaluate(queue, (1, ), None, *data_buffers)
             cl.enqueue_copy(queue, errors, errors_buf, is_blocking=True)
             return errors[0]
@@ -537,10 +543,11 @@ class _ObjectiveCBGenerator(_BaseCBGenerator):
         param_code_gen = ParameterCLCodeGenerator(environment.device, var_data_dict, prtcl_data_dict,
                                                   fixed_data_dict, add_var_data_multipliers=False)
 
-        kernel_param_names = ['constant double* params', 'global double* fval']
+        kernel_param_names = ['constant model_float* params', 'global model_float* fval']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
         kernel_source = get_cl_pragma_double()
+        kernel_source += get_float_type_def(self._double_precision, 'model_float')
         kernel_source += param_code_gen.get_data_struct()
         kernel_source += self._state.model.get_objective_function('calculateObjective')
 

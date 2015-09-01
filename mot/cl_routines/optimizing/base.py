@@ -106,8 +106,6 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         param_codec = model.get_parameter_codec()
         if self.use_param_codec and param_codec and self._automatic_apply_codec:
             starting_points = space_transformer.encode(param_codec, starting_points)
-            #todo change on the moment we support model_float
-            starting_points = starting_points.astype(np.float64, order='C', copy=False)
 
         self._logger.info('Finished optimization preliminaries')
         self._logger.info('Starting optimization with method {0} and patience {1}'.format(self.get_pretty_name(),
@@ -223,7 +221,7 @@ class AbstractParallelOptimizerWorker(Worker):
                                                   self._prtcl_data_dict,
                                                   self._fixed_data_dict)
 
-        kernel_param_names = ['global double* params']
+        kernel_param_names = ['global model_float* params']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
         kernel_source = ''
@@ -250,14 +248,15 @@ class AbstractParallelOptimizerWorker(Worker):
         if self._use_param_codec:
             #todo simplify on the moment we support model_floats everywhere
             kernel_source += '''
-                model_float x_writeout[''' + str(self._nmr_params) + '''];
-                for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
-                    x_writeout[i] = (model_float)x[i];
-                }
-                decodeParameters(x_writeout);
-                for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
-                    params[gid * ''' + str(nmr_params) + ''' + i] = x_writeout[i];
-                }
+                    model_float x_writeout[''' + str(self._nmr_params) + '''];
+                    for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
+                        x_writeout[i] = (model_float)x[i];
+                    }
+                    decodeParameters(x_writeout);
+
+                    for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
+                        params[gid * ''' + str(nmr_params) + ''' + i] = x_writeout[i];
+                    }
             '''
         else:
             kernel_source += '''
@@ -362,8 +361,6 @@ class AbstractSerialOptimizer(AbstractOptimizer):
         param_codec = model.get_parameter_codec()
         if self.use_param_codec and param_codec:
             starting_points = space_transformer.encode(param_codec, starting_points)
-            #todo change on the moment we support model_float
-            starting_points = starting_points.astype(np.float64, order='C', copy=False)
 
         optimized = self._minimize(model, starting_points, cl_environments[0])
 

@@ -33,16 +33,32 @@ class GridSearchWorker(AbstractParallelOptimizerWorker):
             kernel_source += param_codec.get_cl_encode_function('encodeParameters') + "\n"
             kernel_source += param_codec.get_cl_decode_function('decodeParameters') + "\n"
 
+        #todo simplify if we support float in the model function
         kernel_source += '''
-            void grid_search(double * const x, const void* const data){
+            model_float evaluate(double* x, const void* data){
+                model_float x_model[''' + str(self._nmr_params) + '''];
+                for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
+                    x_model[i] = x[i];
+                }
+                ''' + ('encodeParameters(x_model); decodeParameters(x_model);' if self._use_param_codec else '') + '''
+
+                double tmp_fix[''' + str(self._nmr_params) + '''];
+                for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
+                    tmp_fix[i] = (double)x_model[i];
+                }
+
+                return calculateObjective((optimize_data*)data, tmp_fix);
+            }
+        '''
+
+        kernel_source += '''
+            void grid_search(double* const x, const void* const data){
                 double x_optimal[''' + str(nmr_params) + '''];
                 for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
                     x_optimal[i] = x[i];
                 }
 
-                ''' + ('encodeParameters(x); decodeParameters(x);' if self._use_param_codec else '') + '''
-
-                double lowest_error = calculateObjective((optimize_data*)data, x);
+                double lowest_error = evaluate(x, (optimize_data*)data);
                 double error = 0.0;
 
                 ''' + self._get_cl_test_loops(lower_bounds, upper_bounds, param_codec, nmr_params) + '''
@@ -72,13 +88,8 @@ class GridSearchWorker(AbstractParallelOptimizerWorker):
                                                                 evals_per_parameter)
             loops += "\n"
 
-        if codec is not None:
-            loops += '''
-                        encodeParameters(x);
-                        decodeParameters(x);
-            '''
         loops += """
-                        error = calculateObjective((optimize_data*)data, x);
+                        error = evaluate(x, (optimize_data*)data);
                         if(error < lowest_error){
                             lowest_error = error;"""
 

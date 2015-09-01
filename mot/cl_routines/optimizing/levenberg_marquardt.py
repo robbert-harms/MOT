@@ -54,18 +54,26 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
         if self._use_param_codec:
             decode_func = param_codec.get_cl_decode_function('decodeParameters')
             kernel_source += decode_func + "\n"
+
+            #todo simplify this when we support float everywhere
+
             kernel_source += '''
                 void evaluate(const void* data, double* x, double* result){
                     int i;
-                    double model_x[''' + str(nmr_params) + '''];
+                    model_float x_model[''' + str(nmr_params) + '''];
                     for(i = 0; i < ''' + str(nmr_params) + '''; i++){
-                        model_x[i] = x[i];
+                        x_model[i] = x[i];
                     }
-                    decodeParameters(model_x);
+                    decodeParameters(x_model);
+
+                    double tmp_fix[''' + str(nmr_params) + '''];
+                    for(i = 0; i < ''' + str(nmr_params) + '''; i++){
+                        tmp_fix[i] = (double)x_model[i];
+                    }
 
                     for(i = 0; i < NMR_INST_PER_PROBLEM; i++){
                         result[i] = getObservation((optimize_data*)data, i) -
-                                        evaluateModel((optimize_data*)data, model_x, i);
+                                        evaluateModel((optimize_data*)data, tmp_fix, i);
                     }
                 }
             '''
