@@ -1,6 +1,6 @@
 import logging
 import pyopencl as cl
-from ...utils import get_cl_pragma_double, set_correct_cl_data_type, get_model_float_type_def
+from ...utils import get_cl_pragma_double, set_correct_cl_data_type, get_float_type_def
 from ...cl_routines.base import AbstractCLRoutine
 from ...load_balance_strategies import Worker
 
@@ -102,7 +102,7 @@ class _CodecWorker(Worker):
 
     def _get_kernel_source(self):
         kernel_source = get_cl_pragma_double()
-        kernel_source += get_model_float_type_def(self._use_double)
+        kernel_source += get_float_type_def(self._use_double)
         kernel_source += self._cl_func
         kernel_source += '''
             __kernel void transformParameterSpace(global double* x_global){

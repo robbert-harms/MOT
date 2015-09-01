@@ -1,5 +1,5 @@
 import pyopencl as cl
-from ...utils import get_cl_pragma_double, set_correct_cl_data_type, ParameterCLCodeGenerator, get_model_float_type_def
+from ...utils import get_cl_pragma_double, set_correct_cl_data_type, ParameterCLCodeGenerator, get_float_type_def
 from ...cl_routines.base import AbstractCLRoutine
 from ...load_balance_strategies import Worker
 
@@ -33,9 +33,9 @@ class FinalParametersTransformer(AbstractCLRoutine):
         """This transforms the parameters matrix in place. Using the final parameters transforms."""
 
         parameters = set_correct_cl_data_type(parameters)
-        var_data_dict = set_correct_cl_data_type(model.get_problems_var_data())
-        prtcl_data_dict = set_correct_cl_data_type(model.get_problems_prtcl_data())
-        fixed_data_dict = set_correct_cl_data_type(model.get_problems_fixed_data())
+        var_data_dict = model.get_problems_var_data()
+        prtcl_data_dict = model.get_problems_prtcl_data()
+        fixed_data_dict = model.get_problems_fixed_data()
 
         if model.get_final_parameter_transformations():
             workers = self._create_workers(_FPTWorker, model, parameters, var_data_dict,
@@ -91,7 +91,7 @@ class _FPTWorker(Worker):
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
         kernel_source = get_cl_pragma_double()
-        kernel_source += get_model_float_type_def(self._use_double)
+        kernel_source += get_float_type_def(self._use_double)
         kernel_source += param_code_gen.get_data_struct()
         kernel_source += self._model.get_final_parameter_transformations('applyFinalParameterTransformations')
         kernel_source += '''

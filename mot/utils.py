@@ -193,7 +193,8 @@ def vector_type_lookup(data):
     if length < 2:
         return None
     cl_type_name = _numpy_to_cl_dtype_names(data.dtype.fields['x'][0])
-    return {'dtype': data.dtype, 'length': length, 'raw_data_type': cl_type_name, 'cl_name': (cl_type_name + str(length))}
+    return {'dtype': data.dtype, 'length': length, 'raw_data_type': cl_type_name, 'cl_name':
+        (cl_type_name + str(length))}
 
 
 def _numpy_to_cl_dtype_names(cl_data_type_name):
@@ -228,7 +229,7 @@ def get_cl_pragma_double():
     '''
 
 
-def get_model_float_type_def(use_double):
+def get_float_type_def(use_double, type_def_basename='model_float'):
     """Get the model floating point type definition.
 
     Args:
@@ -240,22 +241,22 @@ def get_model_float_type_def(use_double):
     """
     if use_double:
         return '''
-            typedef double model_float;
-            typedef double2 model_float2;
-            typedef double3 model_float3;
-            typedef double4 model_float4;
-            typedef double8 model_float8;
-            typedef double16 model_float16;
+            typedef double ''' + type_def_basename + ''';
+            typedef double2 ''' + type_def_basename + '''2;
+            typedef double3 ''' + type_def_basename + '''3;
+            typedef double4 ''' + type_def_basename + '''4;
+            typedef double8 ''' + type_def_basename + '''8;
+            typedef double16 ''' + type_def_basename + '''16;
             #define PI 3.14159265358979323846
         '''
     else:
         return '''
-            typedef float model_float;
-            typedef float2 model_float2;
-            typedef float3 model_float3;
-            typedef float4 model_float4;
-            typedef float8 model_float8;
-            typedef float16 model_float16;
+            typedef float ''' + type_def_basename + ''';
+            typedef float2 ''' + type_def_basename + '''2;
+            typedef float3 ''' + type_def_basename + '''3;
+            typedef float4 ''' + type_def_basename + '''4;
+            typedef float8 ''' + type_def_basename + '''8;
+            typedef float16 ''' + type_def_basename + '''16;
             #define PI 3.14159265359f
         '''
 

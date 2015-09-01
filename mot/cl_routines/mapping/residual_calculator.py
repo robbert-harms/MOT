@@ -1,6 +1,6 @@
 import pyopencl as cl
 import numpy as np
-from ...utils import get_cl_pragma_double, set_correct_cl_data_type, ParameterCLCodeGenerator, get_model_float_type_def
+from ...utils import get_cl_pragma_double, ParameterCLCodeGenerator, get_float_type_def
 from ...cl_routines.base import AbstractCLRoutine
 from ...load_balance_strategies import Worker
 
@@ -45,12 +45,12 @@ class _ResidualCalculatorWorker(Worker):
 
         self._model = model
         self._use_double = model.use_double
-        self._parameters = set_correct_cl_data_type(model.get_initial_parameters(parameters))
+        self._parameters = model.get_initial_parameters(parameters)
         self._residuals = residuals
 
-        self._var_data_dict = set_correct_cl_data_type(model.get_problems_var_data())
-        self._prtcl_data_dict = set_correct_cl_data_type(model.get_problems_prtcl_data())
-        self._fixed_data_dict = set_correct_cl_data_type(model.get_problems_fixed_data())
+        self._var_data_dict = model.get_problems_var_data()
+        self._prtcl_data_dict = model.get_problems_prtcl_data()
+        self._fixed_data_dict = model.get_problems_fixed_data()
 
         self._constant_buffers = self._generate_constant_buffers(self._prtcl_data_dict, self._fixed_data_dict)
 
@@ -98,7 +98,7 @@ class _ResidualCalculatorWorker(Worker):
             #define NMR_INST_PER_PROBLEM ''' + str(nmr_inst_per_problem) + '''
         '''
         kernel_source += get_cl_pragma_double()
-        kernel_source += get_model_float_type_def(self._use_double)
+        kernel_source += get_float_type_def(self._use_double)
         kernel_source += param_code_gen.get_data_struct()
         kernel_source += observation_func
         kernel_source += cl_func

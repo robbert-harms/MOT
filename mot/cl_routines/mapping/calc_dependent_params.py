@@ -1,6 +1,6 @@
 import pyopencl as cl
-from ...utils import get_cl_pragma_double, set_correct_cl_data_type, \
-    results_to_dict, ParameterCLCodeGenerator, get_model_float_type_def
+from ...utils import get_cl_pragma_double, \
+    results_to_dict, ParameterCLCodeGenerator, get_float_type_def
 from ...cl_routines.base import AbstractCLRoutine
 from ...load_balance_strategies import Worker
 import numpy as np
@@ -45,13 +45,11 @@ class CalculateDependentParameters(AbstractCLRoutine):
         Returns:
             dict: A dictionary with the calculated maps for the dependent parameters.
         """
-        fixed_param_values = set_correct_cl_data_type(fixed_param_values)
-
         results_list = np.zeros(
             (estimated_parameters_list[0].shape[0], len(dependent_parameter_names)),
             dtype=np.float64, order='C')
 
-        estimated_parameters = set_correct_cl_data_type(np.dstack(estimated_parameters_list).flatten())
+        estimated_parameters = np.dstack(estimated_parameters_list).flatten()
 
         workers = self._create_workers(_CDPWorker, fixed_param_values, len(estimated_parameters_list),
                                        estimated_parameters, parameters_listing,
@@ -114,7 +112,7 @@ class _CDPWorker(Worker):
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
         kernel_source = get_cl_pragma_double()
-        kernel_source += get_model_float_type_def(self._use_double)
+        kernel_source += get_float_type_def(self._use_double)
         kernel_source += param_code_gen.get_data_struct()
         kernel_source += '''
             __kernel void transform(

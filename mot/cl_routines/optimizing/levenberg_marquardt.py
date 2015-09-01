@@ -1,6 +1,6 @@
 from ...cl_functions import LMMin
 from .base import AbstractParallelOptimizer, AbstractParallelOptimizerWorker
-from mot.utils import get_cl_pragma_double, get_model_float_type_def
+from mot.utils import get_cl_pragma_double, get_float_type_def
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-02-05"
@@ -45,7 +45,7 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
             raise ValueError('The number of instances per problem must be greater than the number of parameters')
 
         kernel_source = get_cl_pragma_double()
-        kernel_source += get_model_float_type_def(self._use_double)
+        kernel_source += get_float_type_def(self._use_double)
         kernel_source += '''
             #define NMR_INST_PER_PROBLEM ''' + str(nmr_inst_per_problem) + '''
         '''

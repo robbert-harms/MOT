@@ -1,5 +1,5 @@
 from .base import AbstractFilter, AbstractFilterWorker
-from ...utils import get_cl_pragma_double
+from ...utils import get_cl_pragma_double, get_float_type_def
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-04-26"
@@ -25,12 +25,7 @@ class _MeanFilterWorker(AbstractFilterWorker):
 
     def _get_kernel_source(self):
         kernel_source = get_cl_pragma_double()
-
-        if self._use_double:
-            kernel_source += 'typedef double masking_float;' + "\n"
-        else:
-            kernel_source += 'typedef float masking_float;' + "\n"
-
+        kernel_source += get_float_type_def(self._use_double, 'masking_float')
         kernel_source += self._get_ks_sub2ind_func(self._volume_shape)
         kernel_source += '''
             __kernel void filter(

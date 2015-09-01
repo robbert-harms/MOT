@@ -173,10 +173,10 @@ class AbsModXTransform(AbstractTransformation):
             self._x = x
 
     def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):
-        return 'fmod(fabs(' + parameter_name + '), ' + self._x + ');'
+        return 'fmod((model_float)fabs(' + parameter_name + '), (model_float)' + self._x + ');'
 
     def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
-        return 'fmod(fabs(' + parameter_name + '), ' + self._x + ');'
+        return 'fmod((model_float)fabs(' + parameter_name + '), (model_float)' + self._x + ');'
 
 
 class CosSqrTransform(SimpleTransformation):
@@ -194,7 +194,7 @@ class SinSqrTransform(SimpleTransformation):
 class AbsModPiTransform(AbsModXTransform):
 
     def __init__(self):
-        super(AbsModPiTransform, self).__init__('M_PI')
+        super(AbsModPiTransform, self).__init__('PI')
 
 
 class SqrTransform(SimpleTransformation):

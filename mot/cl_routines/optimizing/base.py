@@ -1,8 +1,8 @@
 import logging
 import pyopencl as cl
 from ...cl_python_callbacks import CLToPythonCallbacks
-from ...utils import set_correct_cl_data_type, results_to_dict, ParameterCLCodeGenerator, \
-    get_cl_pragma_double, get_model_float_type_def
+from ...utils import results_to_dict, ParameterCLCodeGenerator, \
+    get_cl_pragma_double, get_float_type_def
 from ...cl_routines.base import AbstractCLRoutine
 from ...load_balance_strategies import Worker
 from ...cl_routines.mapping.final_parameters_transformer import FinalParametersTransformer
@@ -96,9 +96,9 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         self._logger.info('Starting optimization preliminaries')
         starting_points = model.get_initial_parameters(init_params)
 
-        var_data_dict = set_correct_cl_data_type(model.get_problems_var_data())
-        prtcl_data_dict = set_correct_cl_data_type(model.get_problems_prtcl_data())
-        fixed_data_dict = set_correct_cl_data_type(model.get_problems_fixed_data(), convert_to_array=False)
+        var_data_dict = model.get_problems_var_data()
+        prtcl_data_dict = model.get_problems_prtcl_data()
+        fixed_data_dict = model.get_problems_fixed_data()
         nmr_params = starting_points.shape[1]
 
         space_transformer = CodecRunner(self.cl_environments, self.load_balancer, model.use_double)
@@ -225,7 +225,7 @@ class AbstractParallelOptimizerWorker(Worker):
 
         kernel_source = ''
         kernel_source += get_cl_pragma_double()
-        kernel_source += get_model_float_type_def(self._use_double)
+        kernel_source += get_float_type_def(self._use_double)
         kernel_source += param_code_gen.get_data_struct()
         kernel_source += cl_objective_function
         kernel_source += self._get_optimizer_cl_code()

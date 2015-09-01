@@ -2,7 +2,7 @@ import pyopencl as cl
 import numpy as np
 from ...cl_functions import RanluxCL
 from ...utils import get_cl_pragma_double, results_to_dict, set_correct_cl_data_type, \
-    ParameterCLCodeGenerator, initialize_ranlux, get_model_float_type_def
+    ParameterCLCodeGenerator, initialize_ranlux, get_float_type_def
 from ...load_balance_strategies import Worker
 from ...cl_routines.sampling.base import AbstractSampler
 
@@ -57,9 +57,9 @@ class MetropolisHastings(AbstractSampler):
 
     def sample(self, model, init_params=None, full_output=False):
         parameters = model.get_initial_parameters(init_params).astype(np.float64, order='C')
-        var_data_dict = set_correct_cl_data_type(model.get_problems_var_data())
-        prtcl_data_dict = set_correct_cl_data_type(model.get_problems_prtcl_data())
-        fixed_data_dict = set_correct_cl_data_type(model.get_problems_fixed_data())
+        var_data_dict = model.get_problems_var_data()
+        prtcl_data_dict = model.get_problems_prtcl_data()
+        fixed_data_dict = model.get_problems_fixed_data()
 
         samples = np.zeros((model.get_nmr_problems(), parameters.shape[1] * self.nmr_samples),
                            dtype=np.float64, order='C')
@@ -170,7 +170,7 @@ class _MHWorker(Worker):
             #define NMR_INST_PER_PROBLEM ''' + str(self._model.get_nmr_inst_per_problem()) + '''
         '''
         kernel_source += get_cl_pragma_double()
-        kernel_source += get_model_float_type_def(self._use_double)
+        kernel_source += get_float_type_def(self._use_double)
         kernel_source += param_code_gen.get_data_struct()
         kernel_source += rng_code.get_cl_header()
         kernel_source += self._model.get_log_prior_function('getLogPrior')

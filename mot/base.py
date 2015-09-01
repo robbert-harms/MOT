@@ -108,17 +108,17 @@ class CLDataType(object):
         if self.raw_data_type == 'float':
             if isinstance(value, numbers.Number):
                 return np.float32(value)
-            return value.astype(np.float32, copy=False)
+            return value.astype(np.float32, copy=False, order='C')
 
         elif self.raw_data_type == 'int':
             if isinstance(value, numbers.Number):
                 return np.int32(value)
-            return value.astype(np.int32, copy=False)
+            return value.astype(np.int32, copy=False, order='C')
 
         elif self.raw_data_type == 'double':
             if isinstance(value, numbers.Number):
                 return np.float64(value)
-            return value.astype(np.float64, copy=False)
+            return value.astype(np.float64, copy=False, order='C')
 
         elif self.raw_data_type == 'model_float':
             np_dtype = np.float32
@@ -127,11 +127,11 @@ class CLDataType(object):
 
             if isinstance(value, numbers.Number):
                 return np_dtype(value)
-            return value.astype(np_dtype, copy=False)
+            return value.astype(np_dtype, copy=False, order='C')
 
         if isinstance(value, numbers.Number):
             return np.float64(value)
-        return value.astype(np.float64, copy=False)
+        return value.astype(np.float64, copy=False, order='C')
 
 
 class AbstractProblemData(object):

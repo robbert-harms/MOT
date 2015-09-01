@@ -3,7 +3,7 @@ import numpy as np
 from ..base import ProtocolParameter, ModelDataParameter, FreeParameter, CLDataType
 from .. import runtime_configuration
 from ..cl_routines.mapping.calc_dependent_params import CalculateDependentParameters
-from ..utils import set_cl_compatible_data_type, TopologicalSort, init_dict_tree
+from ..utils import set_cl_compatible_data_type, TopologicalSort, set_correct_cl_data_type
 from ..parameter_functions.codecs import CodecBuilder
 from ..parameter_functions.dependencies import SimpleAssignment
 from ..models.interfaces import OptimizeModelInterface, SampleModelInterface
@@ -204,7 +204,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
     def get_problems_var_data(self):
         """See super class OptimizeModelInterface for details"""
-        var_data_dict = {'observations': self._problem_data.observations}
+        var_data_dict = {'observations': set_cl_compatible_data_type(
+            self._problem_data.observations, CLDataType.from_string('double*'), self._use_double)}
         var_data_dict.update(self._get_fixed_parameters_as_var_data())
         return var_data_dict
 
@@ -268,7 +269,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                     starting_points.append(p.value)
 
         starting_points = [np.transpose(np.array([s])) if len(s.shape) < 2 else s for s in starting_points]
-        return np.concatenate(starting_points, axis=1)
+        return set_correct_cl_data_type(np.concatenate(starting_points, axis=1))
 
     def get_lower_bounds(self):
         return np.array([p.lower_bound for m, p in self._get_estimable_parameters_list()])
@@ -362,7 +363,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
     def get_observation_return_function(self, func_name='getObservation'):
         func = '''
-            double ''' + func_name + '''(const optimize_data* const data, const int observation_index){
+            model_float ''' + func_name + '''(const optimize_data* const data, const int observation_index){
                 return data->var_data_observations[observation_index];
             }
         '''
@@ -379,7 +380,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             func += self._signal_noise_model.get_signal_function(noise_func_name)
 
         func += '''
-            double ''' + func_name + \
+            model_float ''' + func_name + \
                 '(const optimize_data* const data, const double* const x, const int observation_index){' + "\n"
         func += self._get_parameters_listing(exclude_list=[m.name + '_' + p.name for (m, p) in
                                                            self._get_non_model_tree_param_listing()])
@@ -876,8 +877,8 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
                                                  problem_data)
 
     def get_log_prior_function(self, func_name='getLogPrior'):
-        prior = 'double ' + func_name + '(const double* const x){' + "\n"
-        prior += "\t" + 'double prior = 1.0;' + "\n"
+        prior = 'model_float ' + func_name + '(const double* const x){' + "\n"
+        prior += "\t" + 'model_float prior = 1.0;' + "\n"
         for i, (m, p) in enumerate(self._get_estimable_parameters_list()):
             prior += "\t" + 'prior *= ' + p.sampling_prior.get_cl_assignment(p, 'x[' + str(i) + ']') + "\n"
         prior += "\n" + "\t" + 'return log(prior);' + "\n" + '}'
@@ -899,8 +900,8 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         for _, p in self._get_estimable_parameters_list():
             return_str += p.sampling_proposal.get_proposal_logpdf_function()
 
-        return_str += "\n" + 'double ' + func_name + \
-            '(const int i, const double proposal, const double current, double* const parameters){' + "\n\t"
+        return_str += "\n" + 'model_float ' + func_name + \
+            '(const int i, const model_float proposal, const model_float current, double* const parameters){' + "\n\t"
 
         return_str += "\n\t" + 'switch(i){' + "\n\t\t"
 
@@ -930,8 +931,9 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         for _, p in self._get_estimable_parameters_list():
             return_str += p.sampling_proposal.get_proposal_function()
 
-        return_str += "\n" + 'double ' + func_name + \
-            '(const int i, const double current, ranluxcl_state_t* const ranluxclstate, double* const parameters){'
+        return_str += "\n" + 'model_float ' + func_name + \
+            '(const int i, const model_float current, ranluxcl_state_t* const ranluxclstate, ' \
+            ' model_float* const parameters){'
 
         return_str += "\n\t" + 'switch(i){' + "\n\t\t"
 
