@@ -67,7 +67,7 @@ class AbstractFilter(AbstractCLRoutine):
             volumes_dict[key] = np.array(value, dtype=np.float64, order='C')
             results_dict[key] = np.zeros_like(volumes_dict[key], dtype=np.float64, order='C')
 
-        volumes_list = volumes_dict.items()
+        volumes_list = list(volumes_dict.items())
 
         workers = self._create_workers(self._get_worker, results_dict, volumes_list, mask)
         self._load_balancer.process(workers, len(volumes_list))
