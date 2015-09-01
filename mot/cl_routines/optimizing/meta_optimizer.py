@@ -98,8 +98,7 @@ class MetaOptimizer(AbstractOptimizer):
 
         errors = ResidualCalculator(cl_environments=self.cl_environments,
                                     load_balancer=self.load_balancer).calculate(model, results)
-        error_measures = ErrorMeasures(cl_environments=self.cl_environments,
-                                       load_balancer=self.load_balancer).calculate(errors)
+        error_measures = ErrorMeasures(self.cl_environments, self.load_balancer, model.use_double).calculate(errors)
         results.update(error_measures)
 
         if full_output:

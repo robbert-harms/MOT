@@ -3,7 +3,7 @@ import warnings
 from .base import AbstractFilter, AbstractFilterWorker
 import numpy as np
 import pyopencl as cl
-from ...utils import get_cl_double_extension_definer
+from ...utils import get_cl_pragma_double
 
 
 __author__ = 'Robbert Harms'
@@ -70,7 +70,7 @@ class _GaussianFilterWorker(AbstractFilterWorker):
                 kernel_length = self._calculate_kernel_size_in_dimension(dimension)
                 kernel_sigma = self._get_sigma_in_dimension(dimension)
 
-                filter_kernel = self._get_1d_gaussian_kernel(kernel_length, kernel_sigma)
+                filter_kernel = self._get_1d_gaussian_kernel_array(kernel_length, kernel_sigma)
                 filter_kernel_buf = cl.Buffer(self._cl_environment.context, read_only_flags, hostbuf=filter_kernel)
 
                 kernel_source = self._get_gaussian_kernel_source(dimension)
@@ -108,14 +108,20 @@ class _GaussianFilterWorker(AbstractFilterWorker):
 
         working_dim = 'dim' + str(dimension)
 
-        kernel_source = get_cl_double_extension_definer(self._cl_environment.platform)
+        kernel_source = get_cl_pragma_double()
+
+        if self._use_double:
+            kernel_source += 'typedef double masking_float;' + "\n"
+        else:
+            kernel_source += 'typedef float masking_float;' + "\n"
+
         kernel_source += self._get_ks_sub2ind_func(self._volume_shape)
         kernel_source += '''
             __kernel void filter(
-                global double* volume,
+                global masking_float* volume,
                 ''' + ('global char* mask,' if self._use_mask else '') + '''
-                global double* filter,
-                global double* results
+                global masking_float* filter,
+                global masking_float* results
                 ){
 
                 ''' + self._get_ks_dimension_inits(len(self._volume_shape)) + '''
@@ -123,7 +129,7 @@ class _GaussianFilterWorker(AbstractFilterWorker):
 
                 ''' + ('if(mask[ind] > 0){' if self._use_mask else 'if(true){') + '''
                     int filter_index = 0;
-                    double filtered_value = 0;
+                    masking_float filtered_value = 0;
 
                     const int start = dim''' + str(dimension) + ''' - ''' + str(left_right) + ''';
                     const int end = dim''' + str(dimension) + ''' + ''' + str(left_right) + ''';
@@ -155,7 +161,7 @@ class _GaussianFilterWorker(AbstractFilterWorker):
         else:
             return self._parent_filter.sigma[dimension]
 
-    def _get_1d_gaussian_kernel(self, kernel_length, sigma):
+    def _get_1d_gaussian_kernel_array(self, kernel_length, sigma):
         """Generate a new gaussian kernel of length kernel_length and with the given sigma in one dimension.
 
         Args:
@@ -168,5 +174,10 @@ class _GaussianFilterWorker(AbstractFilterWorker):
         """
         r = range(-int(kernel_length/2), int(kernel_length/2)+1)
         kernel = np.array([1 / (sigma * np.sqrt(2 * np.pi)) * np.exp(-x**2.0 / (2 * sigma**2)) for x in r])
-        kernel = kernel.astype(dtype=np.float64, order='C', copy=False)
+
+        np_dtype = np.float32
+        if self._use_double:
+            np_dtype = np.float64
+
+        kernel = kernel.astype(dtype=np_dtype, order='C', copy=False)
         return kernel / sum(kernel)

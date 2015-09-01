@@ -1,6 +1,6 @@
 import pyopencl as cl
-from ...utils import get_cl_double_extension_definer, set_correct_cl_data_type, \
-    results_to_dict, ParameterCLCodeGenerator
+from ...utils import get_cl_pragma_double, set_correct_cl_data_type, \
+    results_to_dict, ParameterCLCodeGenerator, get_model_float_type_def
 from ...cl_routines.base import AbstractCLRoutine
 from ...load_balance_strategies import Worker
 import numpy as np
@@ -15,14 +15,18 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class CalculateDependentParameters(AbstractCLRoutine):
 
-    def __init__(self, cl_environments, load_balancer):
+    def __init__(self, cl_environments, load_balancer, use_double=False):
         """CL code for calculating the dependent parameters.
 
         Some of the models may contain parameter dependencies. We would like to return the maps for these parameters
         as well as all the other maps. Since the dependencies are specified in CL, we have to recourse to CL to
         calculate these maps.
+
+        Args:
+            use_double (boolean): if we will use the double (True) or single floating (False) type for the calculations
         """
         super(CalculateDependentParameters, self).__init__(cl_environments, load_balancer)
+        self._use_double = use_double
 
     def calculate(self, fixed_param_values, estimated_parameters_list, parameters_listing, dependent_parameter_names):
         """Calculate the dependent parameters
@@ -38,7 +42,6 @@ class CalculateDependentParameters(AbstractCLRoutine):
             parameters_listing (str): The parameters listing in CL
             dependent_parameter_names (list of list of str): Per parameter we would like to obtain the CL name and the
                 result map name. For example: (('Wball_w', 'Wball.w'),)
-
         Returns:
             dict: A dictionary with the calculated maps for the dependent parameters.
         """
@@ -52,7 +55,7 @@ class CalculateDependentParameters(AbstractCLRoutine):
 
         workers = self._create_workers(_CDPWorker, fixed_param_values, len(estimated_parameters_list),
                                        estimated_parameters, parameters_listing,
-                                       dependent_parameter_names, results_list)
+                                       dependent_parameter_names, results_list, self._use_double)
         self.load_balancer.process(workers, estimated_parameters_list[0].shape[0])
 
         return results_to_dict(results_list, [n[1] for n in dependent_parameter_names])
@@ -61,7 +64,7 @@ class CalculateDependentParameters(AbstractCLRoutine):
 class _CDPWorker(Worker):
 
     def __init__(self, cl_environment, fixed_param_values, nmr_estimated_params, estimated_parameters,
-                 parameters_listing, dependent_parameter_names, results_list):
+                 parameters_listing, dependent_parameter_names, results_list, use_double):
         super(_CDPWorker, self).__init__(cl_environment)
 
         self._fixed_param_values = fixed_param_values
@@ -69,6 +72,7 @@ class _CDPWorker(Worker):
         self._parameters_listing = parameters_listing
         self._dependent_parameter_names = dependent_parameter_names
         self._results_list = results_list
+        self._use_double = use_double
 
         self._constant_buffers = self._generate_constant_buffers(self._fixed_param_values)
         self._estimated_parameters = estimated_parameters
@@ -109,7 +113,8 @@ class _CDPWorker(Worker):
         kernel_param_names = ['global double* params', 'global double* results']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
-        kernel_source = get_cl_double_extension_definer(self._cl_environment.platform)
+        kernel_source = get_cl_pragma_double()
+        kernel_source += get_model_float_type_def(self._use_double)
         kernel_source += param_code_gen.get_data_struct()
         kernel_source += '''
             __kernel void transform(

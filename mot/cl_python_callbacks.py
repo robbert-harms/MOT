@@ -3,7 +3,7 @@ import pyopencl as cl
 import numpy as np
 from .cl_environments import CLEnvironmentFactory
 from .cl_functions import RanluxCL
-from .utils import get_cl_double_extension_definer, set_correct_cl_data_type, ParameterCLCodeGenerator, \
+from .utils import get_cl_pragma_double, set_correct_cl_data_type, ParameterCLCodeGenerator, \
     initialize_ranlux
 
 
@@ -367,7 +367,7 @@ class _ResidualCBGenerator(_BaseCBGenerator):
         kernel_param_names = ['constant double* params', 'global double* evals']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
-        kernel_source = get_cl_double_extension_definer(environment.platform)
+        kernel_source = get_cl_pragma_double()
         kernel_source += param_code_gen.get_data_struct()
         kernel_source += self._state.model.get_model_eval_function('evaluateModel')
         kernel_source += self._state.model.get_observation_return_function('getObservation')
@@ -455,7 +455,7 @@ class _EvalCBGenerator(_BaseCBGenerator):
         kernel_param_names = ['constant double* params', 'global double* evals']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
-        kernel_source = get_cl_double_extension_definer(environment.platform)
+        kernel_source = get_cl_pragma_double()
         kernel_source += param_code_gen.get_data_struct()
         kernel_source += self._state.model.get_model_eval_function('evaluateModel')
 
@@ -547,7 +547,7 @@ class _ObjectiveCBGenerator(_BaseCBGenerator):
         kernel_param_names = ['constant double* params', 'global double* fval']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
-        kernel_source = get_cl_double_extension_definer(environment.platform)
+        kernel_source = get_cl_pragma_double()
         kernel_source += param_code_gen.get_data_struct()
         kernel_source += self._state.model.get_objective_function('calculateObjective')
 
@@ -646,7 +646,7 @@ class _CodecCBGenerator(_BaseCBGenerator):
         return cb
 
     def _get_kernel(self, cl_func, cl_func_name, nmr_params, environment):
-        kernel_source = get_cl_double_extension_definer(environment.platform)
+        kernel_source = get_cl_pragma_double()
         kernel_source += cl_func
         kernel_source += '''
             __kernel void transformParameterSpace(global double* x_global){
@@ -728,7 +728,7 @@ class _FinalTransformationCBGenerator(_BaseCBGenerator):
         kernel_param_names = ['global double* params']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
-        kernel_source = get_cl_double_extension_definer(environment.platform)
+        kernel_source = get_cl_pragma_double()
         kernel_source += param_code_gen.get_data_struct()
         kernel_source += transform_func
         kernel_source += '''
@@ -795,7 +795,7 @@ class _LogPriorCBGenerator(_BaseCBGenerator):
 
     def _get_kernel(self, cl_environment):
         nmr_params = self._state.model.get_nmr_estimable_parameters()
-        kernel_source = get_cl_double_extension_definer(cl_environment.platform)
+        kernel_source = get_cl_pragma_double()
         kernel_source += self._state.model.get_log_prior_function('getLogPrior')
         kernel_source += '''
             __kernel void calculateLogPrior(constant double* x_global, global double* result){
@@ -855,7 +855,7 @@ class _ProposalCBGenerator(_BaseCBGenerator):
         return proposal_cb
 
     def _get_kernel(self, cl_environment):
-        kernel_source = get_cl_double_extension_definer(cl_environment.platform)
+        kernel_source = get_cl_pragma_double()
         kernel_source += RanluxCL().get_cl_code()
         kernel_source += self._state.model.get_proposal_function('getProposal')
         kernel_source += '''

@@ -24,14 +24,14 @@ class EvaluationModel(ModelFunction):
             fname (str): the name of the resulting function
             inst_per_problem (int): the number of instances per problem
             eval_fname (str): the name of the function that can be called to get the evaluation, its signature is:
-                double <fname>(const optimize_data* data, const double* x, const int observation_index);
+                model_float <fname>(const optimize_data* data, const double* x, const int observation_index);
             obs_fname (str): the name of the function that can be called for the observed data, its signature is:
-                double <fname>(const optimize_data* data, const int observation_index);
+                model_float <fname>(const optimize_data* data, const int observation_index);
             param_listing (str): the parameter listings for the parameters of the noise model
 
         Returns:
             The objective function under this noise model, its signature is:
-                double <fname>(const optimize_data* const data, double* const x);
+                model_float <fname>(const optimize_data* const data, double* const x);
         """
 
     def get_log_likelihood_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
@@ -41,14 +41,14 @@ class EvaluationModel(ModelFunction):
             fname (str): the name of the resulting function
             inst_per_problem (int): the number of instances per problem
             eval_fname (str): the name of the function that can be called to get the evaluation, its signature is:
-                double <fname>(const optimize_data* data, const double* x, const int observation_index);
+                model_float <fname>(const optimize_data* data, const double* x, const int observation_index);
             obs_fname (str): the name of the function that can be called for the observed data, its signature is:
-                double <fname>(const optimize_data* data, const int observation_index);
+                model_float <fname>(const optimize_data* data, const int observation_index);
             param_listing (str): the parameter listings for the parameters of the noise model
 
         Returns:
             the objective function under this noise model, its signature is:
-                double <fname>(const optimize_data* const data, double* const x);
+                model_float <fname>(const optimize_data* const data, double* const x);
         """
 
 
@@ -60,9 +60,9 @@ class SumOfSquares(EvaluationModel):
 
     def get_objective_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
         return '''
-            double ''' + fname + '''(const optimize_data* const data, double* const x){
+            model_float ''' + fname + '''(const optimize_data* const data, double* const x){
                 ''' + param_listing + '''
-                double sum = 0.0;
+                model_float sum = 0.0;
                 for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     sum += pown(''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i), 2);
                 }
@@ -72,9 +72,9 @@ class SumOfSquares(EvaluationModel):
 
     def get_log_likelihood_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
         return '''
-            double ''' + fname + '''(const optimize_data* const data, const double* const x){
+            model_float ''' + fname + '''(const optimize_data* const data, const double* const x){
                 ''' + param_listing + '''
-                double sum = 0.0;
+                model_float sum = 0.0;
                 for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     sum += pown(''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i), 2);
                 }
@@ -90,14 +90,14 @@ class GaussianEvaluationModel(EvaluationModel):
         super(EvaluationModel, self).__init__(
             'GaussianNoise',
             'gaussianNoiseModel',
-            (FreeParameter(CLDataType.from_string('double'), 'sigma', False, math.sqrt(0.5), math.sqrt(0.5), 5,
+            (FreeParameter(CLDataType.from_string('model_float'), 'sigma', False, math.sqrt(0.5), math.sqrt(0.5), 5,
                            parameter_transform=CosSqrClampTransform()),), ())
 
     def get_objective_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
         return '''
-            double ''' + fname + '''(const optimize_data* const data, double* const x){
+            model_float ''' + fname + '''(const optimize_data* const data, double* const x){
                 ''' + param_listing + '''
-                double sum = 0.0;
+                model_float sum = 0.0;
                 for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     sum += pown(''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i), 2);
                 }
@@ -107,9 +107,9 @@ class GaussianEvaluationModel(EvaluationModel):
 
     def get_log_likelihood_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
         return '''
-            double ''' + fname + '''(const optimize_data* const data, const double* const x){
+            model_float ''' + fname + '''(const optimize_data* const data, const double* const x){
                 ''' + param_listing + '''
-                double sum = 0.0;
+                model_float sum = 0.0;
                 for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     sum += pown(''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i), 2);
                 }
@@ -125,14 +125,14 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
         super(EvaluationModel, self).__init__(
             'OffsetGaussianNoise',
             'offsetGaussianNoiseModel',
-            (FreeParameter(CLDataType.from_string('double'), 'sigma', False, math.sqrt(0.5), math.sqrt(0.5), 5,
+            (FreeParameter(CLDataType.from_string('model_float'), 'sigma', False, math.sqrt(0.5), math.sqrt(0.5), 5,
                            parameter_transform=CosSqrClampTransform()),), ())
 
     def get_objective_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
         return '''
-            double ''' + fname + '''(const optimize_data* const data, double* const x){
+            model_float ''' + fname + '''(const optimize_data* const data, double* const x){
                 ''' + param_listing + '''
-                double sum = 0.0;
+                model_float sum = 0.0;
                 for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     sum += pown(''' + obs_fname + '''(data, i) -
                                     sqrt(pown(''' + eval_fname + '''(data, x, i), 2) +
@@ -144,9 +144,9 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
 
     def get_log_likelihood_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
         return '''
-            double ''' + fname + '''(const optimize_data* const data, const double* const x){
+            model_float ''' + fname + '''(const optimize_data* const data, const double* const x){
                 ''' + param_listing + '''
-                double sum = 0.0;
+                model_float sum = 0.0;
                 for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     sum += pown(''' + obs_fname + '''(data, i) -
                                     sqrt(pown(''' + eval_fname + '''(data, x, i), 2) +

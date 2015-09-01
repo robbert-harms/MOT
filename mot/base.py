@@ -1,3 +1,4 @@
+import numbers
 import os
 import re
 from .parameter_functions.priors import UniformWithinBoundsPrior
@@ -15,43 +16,60 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class CLDataType(object):
 
-    def __init__(self, cl_type, is_vector_type, is_pointer_type):
+    def __init__(self, cl_raw_type, is_pointer_type=False, vector_length=None):
         """Create a new CL data type container.
 
+        The CL type can either be a CL native type (half, double, int, ...) or the special model_float type.
+
         Args:
-            cl_type (str): The name of this parameter in CL language
-            is_vector_type (boolean): If this data type is a CL vector type. (appended by a 2, 3, 4...)
+            cl_type (str): the specific data type without the vector number and asterisks
+            numpy_type (numpy data type): the corresponding numpy data type, used in conversions
             is_pointer_type (boolean): If this parameter is a pointer type (appened by a *)
+            vector_length (int or None): If None this data type is not a CL vector type.
+                If it is an interger it is the vector length of this data type (2, 3, 4, ...)
         """
-        self._cl_type = cl_type
-        self._is_vector_type = is_vector_type
+        self._cl_raw_type = cl_raw_type
         self._is_pointer_type = is_pointer_type
+        self._vector_length = vector_length
 
     @classmethod
     def from_string(cls, cl_type_str):
-        return CLDataType(cl_type_str, bool(re.compile('\d').search(cl_type_str)), '*' in cl_type_str)
+        raw_type = cl_type_str.replace('*', '')
+        raw_type = raw_type.replace(' ', '')
+        raw_type = ''.join([i for i in raw_type if not i.isdigit()])
+        vector_length = ''.join([i for i in cl_type_str if i.isdigit()])
+        if vector_length == '':
+            vector_length = None
+        is_pointer = ('*' in cl_type_str)
+        return CLDataType(raw_type, is_pointer_type=is_pointer, vector_length=vector_length)
 
     @property
-    def data_type(self):
-        """Get the CL raw data type.
+    def raw_data_type(self):
+        """Get the data type defined in this object
 
-        Will return for example 'double' even if the cl_type is *double4.
+        Will return for example 'double' even if the actual type
 
         Returns:
             str: The scalar type of this data type.
         """
-        s = self._cl_type.replace('*', '')
-        s = s.replace(' ', '')
-        return s
+        return self._cl_raw_type
 
     @property
     def cl_type(self):
-        """Get the name of this parameter in CL language
+        """Get the complete type of this parameter in CL language
 
         Returns:
             str: The name of this data type
         """
-        return self._cl_type
+        s = self._cl_raw_type
+
+        if self._vector_length is not None:
+            s += str(self._vector_length)
+
+        if self._is_pointer_type:
+            s += '*'
+
+        return s
 
     @property
     def is_vector_type(self):
@@ -60,7 +78,7 @@ class CLDataType(object):
         Returns:
             boolean: True if it is a vector type, false otherwise
         """
-        return self._is_vector_type
+        return self._vector_length is not None
 
     @property
     def is_pointer_type(self):
@@ -73,9 +91,47 @@ class CLDataType(object):
 
     @property
     def vector_length(self):
-        if self.is_vector_type:
-            return re.search('(\d)+', self._cl_type).group(1)
-        return 0
+        if self._vector_length is None:
+            return 0
+        return self._vector_length
+
+    def convert_value(self, value, use_double):
+        """Convert the given value to a numpy array of this data type.
+
+        Args:
+            value (number of np ndarray): the value we want to convert
+            use_double (boolean): if we use the double type if the type is a typedeffed type
+
+        Returns:
+            np ndarray: the converted value as a numpy type
+        """
+        if self.raw_data_type == 'float':
+            if isinstance(value, numbers.Number):
+                return np.float32(value)
+            return value.astype(np.float32, copy=False)
+
+        elif self.raw_data_type == 'int':
+            if isinstance(value, numbers.Number):
+                return np.int32(value)
+            return value.astype(np.int32, copy=False)
+
+        elif self.raw_data_type == 'double':
+            if isinstance(value, numbers.Number):
+                return np.float64(value)
+            return value.astype(np.float64, copy=False)
+
+        elif self.raw_data_type == 'model_float':
+            np_dtype = np.float32
+            if use_double:
+                np_dtype = np.float64
+
+            if isinstance(value, numbers.Number):
+                return np_dtype(value)
+            return value.astype(np_dtype, copy=False)
+
+        if isinstance(value, numbers.Number):
+            return np.float64(value)
+        return value.astype(np.float64, copy=False)
 
 
 class AbstractProblemData(object):

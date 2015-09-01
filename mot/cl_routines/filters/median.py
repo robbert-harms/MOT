@@ -1,5 +1,5 @@
 from .base import AbstractFilter, AbstractFilterWorker
-from ...utils import get_cl_double_extension_definer
+from ...utils import get_cl_pragma_double
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-04-26"
@@ -24,13 +24,19 @@ class MedianFilter(AbstractFilter):
 class _MedianFilterWorker(AbstractFilterWorker):
 
     def _get_kernel_source(self):
-        kernel_source = get_cl_double_extension_definer(self._cl_environment.platform)
+        kernel_source = get_cl_pragma_double()
+
+        if self._use_double:
+            kernel_source += 'typedef double masking_float;' + "\n"
+        else:
+            kernel_source += 'typedef float masking_float;' + "\n"
+
         kernel_source += self._get_ks_sub2ind_func(self._volume_shape)
         kernel_source += '''
             __kernel void filter(
-                global double* volume,
+                global masking_float* volume,
                 ''' + ('global char* mask,' if self._use_mask else '') + '''
-                global double* results
+                global masking_float* results
                 ){
 
                     ''' + self._get_ks_dimension_inits(len(self._volume_shape)) + '''
@@ -40,17 +46,17 @@ class _MedianFilterWorker(AbstractFilterWorker):
 
                         ''' + self._get_ks_dimension_sizes(self._volume_shape) + '''
 
-                        double guess;
-                        double maxltguess;
-                        double mingtguess;
-                        double less;
-                        double greater;
-                        double equal;
-                        double minv = volume[ind];
-                        double maxv = volume[ind];
+                        masking_float guess;
+                        masking_float maxltguess;
+                        masking_float mingtguess;
+                        masking_float less;
+                        masking_float greater;
+                        masking_float equal;
+                        masking_float minv = volume[ind];
+                        masking_float maxv = volume[ind];
                         int number_of_items = 0;
 
-                        double tmp_val = 0.0;
+                        masking_float tmp_val = 0.0;
 
                         ''' + self._loop_encapsulate('''
                             tmp_val = volume[''' +

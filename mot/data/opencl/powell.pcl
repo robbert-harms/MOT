@@ -236,6 +236,7 @@ double bracket_and_brent(const double* const pcom, const double* const x_tmp_min
     }
     FW=FV=fx=evaluate(xt, data);
 
+    #pragma unroll 1
     for(iter=0; iter < MAX_IT; iter++){
         xm = 0.5 * (A + B);
         tol1 = BRENT_TOL * fabs(x) + ZEPS;

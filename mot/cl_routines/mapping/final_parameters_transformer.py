@@ -1,5 +1,5 @@
 import pyopencl as cl
-from ...utils import get_cl_double_extension_definer, set_correct_cl_data_type, ParameterCLCodeGenerator
+from ...utils import get_cl_pragma_double, set_correct_cl_data_type, ParameterCLCodeGenerator, get_model_float_type_def
 from ...cl_routines.base import AbstractCLRoutine
 from ...load_balance_strategies import Worker
 
@@ -56,6 +56,7 @@ class _FPTWorker(Worker):
         self._var_data_dict = var_data_dict
         self._prtcl_data_dict = prtcl_data_dict
         self._fixed_data_dict = fixed_data_dict
+        self._use_double = model.use_double
         self._constant_buffers = self._generate_constant_buffers(self._prtcl_data_dict, self._fixed_data_dict)
         self._kernel = self._build_kernel()
 
@@ -89,7 +90,8 @@ class _FPTWorker(Worker):
         kernel_param_names = ['global double* params']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
-        kernel_source = get_cl_double_extension_definer(self._cl_environment.platform)
+        kernel_source = get_cl_pragma_double()
+        kernel_source += get_model_float_type_def(self._use_double)
         kernel_source += param_code_gen.get_data_struct()
         kernel_source += self._model.get_final_parameter_transformations('applyFinalParameterTransformations')
         kernel_source += '''

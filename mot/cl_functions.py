@@ -242,7 +242,7 @@ class Scalar(ModelFunction):
         super(Scalar, self).__init__(
             name,
             'cmScalar',
-            (FreeParameter(CLDataType.from_string('double'), 's', False, value, lower_bound, upper_bound,
+            (FreeParameter(CLDataType.from_string('model_float'), 's', False, value, lower_bound, upper_bound,
                            parameter_transform=ClampTransform(),
                            sampling_proposal=GaussianProposal(1.0)),))
 

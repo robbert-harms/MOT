@@ -2,7 +2,7 @@ import logging
 import pyopencl as cl
 from ...cl_python_callbacks import CLToPythonCallbacks
 from ...utils import set_correct_cl_data_type, results_to_dict, ParameterCLCodeGenerator, \
-    get_cl_double_extension_definer
+    get_cl_pragma_double, get_model_float_type_def
 from ...cl_routines.base import AbstractCLRoutine
 from ...load_balance_strategies import Worker
 from ...cl_routines.mapping.final_parameters_transformer import FinalParametersTransformer
@@ -98,10 +98,10 @@ class AbstractParallelOptimizer(AbstractOptimizer):
 
         var_data_dict = set_correct_cl_data_type(model.get_problems_var_data())
         prtcl_data_dict = set_correct_cl_data_type(model.get_problems_prtcl_data())
-        fixed_data_dict = set_correct_cl_data_type(model.get_problems_fixed_data())
+        fixed_data_dict = set_correct_cl_data_type(model.get_problems_fixed_data(), convert_to_array=False)
         nmr_params = starting_points.shape[1]
 
-        space_transformer = CodecRunner(self.cl_environments, self.load_balancer)
+        space_transformer = CodecRunner(self.cl_environments, self.load_balancer, model.use_double)
         param_codec = model.get_parameter_codec()
         if self.use_param_codec and param_codec and self._automatic_apply_codec:
             starting_points = space_transformer.encode(param_codec, starting_points)
@@ -150,6 +150,7 @@ class AbstractParallelOptimizerWorker(Worker):
         self._parent_optimizer = parent_optimizer
 
         self._model = model
+        self._use_double = model.use_double
         self._nmr_params = nmr_params
         self._var_data_dict = var_data_dict
         self._prtcl_data_dict = prtcl_data_dict
@@ -223,7 +224,8 @@ class AbstractParallelOptimizerWorker(Worker):
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
         kernel_source = ''
-        kernel_source += get_cl_double_extension_definer(self._cl_environment.platform)
+        kernel_source += get_cl_pragma_double()
+        kernel_source += get_model_float_type_def(self._use_double)
         kernel_source += param_code_gen.get_data_struct()
         kernel_source += cl_objective_function
         kernel_source += self._get_optimizer_cl_code()
@@ -273,7 +275,7 @@ class AbstractParallelOptimizerWorker(Worker):
             decode_func = param_codec.get_cl_decode_function('decodeParameters')
             kernel_source += decode_func + "\n"
             kernel_source += '''
-                double evaluate(double* x, const void* data){
+                model_float evaluate(double* x, const void* data){
                     double x_model[''' + str(self._nmr_params) + '''];
                     for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                         x_model[i] = x[i];
@@ -285,7 +287,7 @@ class AbstractParallelOptimizerWorker(Worker):
             '''
         else:
             kernel_source += '''
-                double evaluate(double* x, const void* data){
+                model_float evaluate(double* x, const void* data){
                     return calculateObjective((optimize_data*)data, x);
                 }
             '''
@@ -327,7 +329,7 @@ class AbstractSerialOptimizer(AbstractOptimizer):
                                                       use_param_codec=use_param_codec)
 
     def minimize(self, model, init_params=None, full_output=False):
-        space_transformer = CodecRunner(self._cl_environments, self._load_balancer)
+        space_transformer = CodecRunner(self._cl_environments, self._load_balancer, model.use_double)
         cl_environments = self.load_balancer.get_used_cl_environments(self.cl_environments)
         starting_points = model.get_initial_parameters(init_params)
 

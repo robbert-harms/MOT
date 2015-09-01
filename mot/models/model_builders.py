@@ -30,6 +30,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         """
         super(OptimizeModelBuilder, self).__init__()
         self._name = name
+        self._use_double = False
         self._model_tree = model_tree
         self._evaluation_model = evaluation_model
         self._signal_noise_model = signal_noise_model
@@ -52,6 +53,20 @@ class OptimizeModelBuilder(OptimizeModelInterface):
     def name(self):
         """See super class OptimizeModelInterface for details"""
         return self._name
+
+    @property
+    def use_double(self):
+        """See super class OptimizeModelInterface for details"""
+        return self._use_double
+
+    @use_double.setter
+    def use_double(self, value):
+        """Set the value for use_double.
+
+        Args:
+            value: boolean: if we would like to do the computations in double of single floating point type.
+        """
+        self._use_double = value
 
     def fix(self, model_param_name, value):
         """Fix the given model.param to the given value.
@@ -223,7 +238,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 if p.name in self._problem_data.prtcl_data_dict:
                     if not self._all_elements_equal(self._problem_data.prtcl_data_dict[p.name]):
                         const_d = {p.name: set_cl_compatible_data_type(self._problem_data.prtcl_data_dict[p.name],
-                                                                       p.cl_data_type)}
+                                                                       p.cl_data_type, self.use_double)}
                         prtcl_data_dict.update(const_d)
                 else:
                     exception = 'Constant parameter "{}" could not be resolved'.format(m.name + '.' + p.name)
@@ -234,7 +249,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         fixed_data_dict = {}
         for m, p in self._get_model_parameter_list():
             if isinstance(p, ModelDataParameter):
-                fixed_data_dict.update({p.name: set_cl_compatible_data_type(p.value, p.cl_data_type)})
+                fixed_data_dict.update({p.name: set_cl_compatible_data_type(p.value, p.cl_data_type, self.use_double)})
         return fixed_data_dict
 
     def get_initial_parameters(self, results_dict=None):
@@ -453,7 +468,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                                          for m, p in param_lists['dependent']]
 
             cpd = CalculateDependentParameters(runtime_configuration.runtime_config['cl_environments'],
-                                               runtime_configuration.runtime_config['load_balancer'])
+                                               runtime_configuration.runtime_config['load_balancer'], self.use_double)
             dependent_parameters = cpd.calculate(self._get_fixed_parameters_as_var_data(),
                                                  estimated_parameters, func, dependent_parameter_names)
             results_dict.update(dependent_parameters)
@@ -525,7 +540,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         for m, p in param_list:
             name = m.name + '_' + p.name
             if name not in exclude_list:
-                data_type = p.cl_data_type.data_type
+                data_type = p.cl_data_type.cl_type
                 assignment = 'x[' + str(estimable_param_counter) + ']'
                 func += "\t"*4 + data_type + ' ' + name + ' = ' + assignment + ';' + "\n"
                 estimable_param_counter += 1
@@ -549,11 +564,11 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         func = ''
         for m, p in param_list:
             if (m.name + '_' + p.name) not in exclude_list:
-                data_type = p.cl_data_type.data_type
+                data_type = p.cl_data_type.cl_type
                 if p.name not in const_params_seen:
                     if self._all_elements_equal(self._problem_data.prtcl_data_dict[p.name]):
-                        if CLDataType.from_string(data_type).is_vector_type:
-                            vector_length = CLDataType.from_string(data_type).vector_length
+                        if p.cl_data_type.is_vector_type:
+                            vector_length = p.cl_data_type.vector_length
                             values = [str(val) for val in self._problem_data.prtcl_data_dict[p.name][0]]
                             if len(values) < vector_length:
                                 values.append(str(0))
@@ -584,7 +599,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         for m, p in param_list:
             name = m.name + '_' + p.name
             if name not in exclude_list:
-                data_type = p.cl_data_type.data_type
+                data_type = p.cl_data_type.raw_data_type
                 if isinstance(p.value, numbers.Number):
                     assignment = '(' + data_type + ')' + str(float(p.value))
                 else:
@@ -617,7 +632,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
             assignment = self._convert_parameters_dot_to_bar(pd.assignment_code)
             name = m.name + '_' + p.name
-            data_type = p.cl_data_type.data_type
+            data_type = p.cl_data_type.raw_data_type
 
             if self._parameter_fixed_to_dependency(m, p):
                 if (m.name + '_' + p.name) not in exclude_list:
@@ -633,7 +648,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
             if p.fixed and not inlined_in_cl_code and not self._parameter_fixed_to_dependency(m, p):
                 var_data_dict.update({m.name + '_' + p.name: set_cl_compatible_data_type(p.value,
-                                                                                         p.cl_data_type)})
+                                                                                         p.cl_data_type,
+                                                                                         self.use_double)})
         return var_data_dict
 
     def _get_non_model_tree_param_listing(self):
@@ -657,7 +673,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         Please note, that on the moment this function does not support the complete dependency graph for the dependent
         parameters.
         """
-        data_type = p.cl_data_type.data_type
+        data_type = p.cl_data_type.raw_data_type
         name = m.name + '_' + p.name
         assignment = ''
 

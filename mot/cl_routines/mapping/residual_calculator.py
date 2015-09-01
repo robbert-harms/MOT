@@ -1,6 +1,6 @@
 import pyopencl as cl
 import numpy as np
-from ...utils import get_cl_double_extension_definer, set_correct_cl_data_type, ParameterCLCodeGenerator
+from ...utils import get_cl_pragma_double, set_correct_cl_data_type, ParameterCLCodeGenerator, get_model_float_type_def
 from ...cl_routines.base import AbstractCLRoutine
 from ...load_balance_strategies import Worker
 
@@ -44,6 +44,7 @@ class _ResidualCalculatorWorker(Worker):
         super(_ResidualCalculatorWorker, self).__init__(cl_environment)
 
         self._model = model
+        self._use_double = model.use_double
         self._parameters = set_correct_cl_data_type(model.get_initial_parameters(parameters))
         self._residuals = residuals
 
@@ -96,7 +97,8 @@ class _ResidualCalculatorWorker(Worker):
         kernel_source = '''
             #define NMR_INST_PER_PROBLEM ''' + str(nmr_inst_per_problem) + '''
         '''
-        kernel_source += get_cl_double_extension_definer(self._cl_environment.platform)
+        kernel_source += get_cl_pragma_double()
+        kernel_source += get_model_float_type_def(self._use_double)
         kernel_source += param_code_gen.get_data_struct()
         kernel_source += observation_func
         kernel_source += cl_func

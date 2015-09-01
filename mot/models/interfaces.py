@@ -16,6 +16,18 @@ class OptimizeModelInterface(object):
         """
         return ""
 
+    @property
+    def use_double(self):
+        """Flag to signal if we should use the double float type during calculations.
+
+        By default we ask the cl routines to use the single precision float type, you can overwrite this
+        of course by your own flags.
+
+        Returns:
+            boolean: if we would like to use double precision floating point during the calculations
+        """
+        return False
+
     def get_problems_var_data(self):
         """Get a dict with all the data per problem.
 

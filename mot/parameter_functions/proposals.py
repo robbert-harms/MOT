@@ -29,7 +29,7 @@ class AbstractParameterProposal(object):
         """Get the proposal function as a CL string. This should include include guards (#ifdef's).
 
         This should follow the signature:
-        double <proposal_fname>(double current, ranluxcl_state_t* ranlux, <additional_parameters>)
+        model_float <proposal_fname>(model_float current, ranluxcl_state_t* ranlux, <additional_parameters>)
 
         That is, it can have more than two parameter, but the first two are obligatory. The additional parameters
         are defined by the get_parameters function of this python class.
@@ -51,7 +51,7 @@ class AbstractParameterProposal(object):
         """Get the proposal pdf function as a CL string. This should include include guards.
 
         This should follow the signature:
-            double <proposal_pdf_fname>(double proposal, double current, <additional_parameters>)
+            model_float <proposal_pdf_fname>(model_float proposal, model_float current, <additional_parameters>)
 
         Returns:
             str: The proposal log pdf function as a CL string
@@ -88,7 +88,8 @@ class ProposalParameter(object):
 
         Returns:
             A function with the signature:
-                double <func_name>(const double current_value, const uint acceptance_counter, const uint jump_counter)
+                model_float <func_name>(const model_float current_value,
+                                        const uint acceptance_counter, const uint jump_counter)
 
             Where current value is the current value for this proposal parameter, acceptance counter is the
             number of accepted steps and jump counter the number of jumps.
@@ -97,10 +98,11 @@ class ProposalParameter(object):
             #ifndef DMRIPROPOSAL_DEFAULT_PARAMETER_UPDATE
             #define DMRIPROPOSAL_DEFAULT_PARAMETER_UPDATE
 
-            double dmriproposal_default_parameter_update(const double current_value, const uint acceptance_counter,
-                                                         const uint jump_counter){
+            model_float dmriproposal_default_parameter_update(const model_float current_value,
+                                                              const uint acceptance_counter,
+                                                              const uint jump_counter){
                 return min(current_value *
-                                sqrt( (double)(acceptance_counter+1) /
+                                sqrt( (model_float)(acceptance_counter+1) /
                                       ((jump_counter - acceptance_counter) + 1)
                                 ),
                            1e10);
@@ -135,8 +137,8 @@ class GaussianProposal(AbstractParameterProposal):
             #ifndef DMRIPROP_GAUSSIANPROPOSAL_CL
             #define DMRIPROP_GAUSSIANPROPOSAL_CL
 
-            double dmriproposal_gaussianProposal(const double current, ranluxcl_state_t* const ranluxclstate,
-                                                 const double std){
+            model_float dmriproposal_gaussianProposal(const model_float current, ranluxcl_state_t* const ranluxclstate,
+                                                      const model_float std){
                 return current + std * ranluxcl_gaussian(ranluxclstate);
             }
 
@@ -151,7 +153,8 @@ class GaussianProposal(AbstractParameterProposal):
             #ifndef DMRIPROP_GAUSSIANPROPOSALLOGPDF_CL
             #define DMRIPROP_GAUSSIANPROPOSALLOGPDF_CL
 
-            double dmriproposal_gaussianProposalLogPDF(const double x, const double mu, const double std){
+            model_float dmriproposal_gaussianProposalLogPDF(const model_float x, const model_float mu,
+                                                            const model_float std){
                 return log(M_2_SQRTPI / std) + (-0.5 * pown((x - mu) / std, 2));
             }
 

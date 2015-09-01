@@ -12,7 +12,7 @@
 /**
  * The Scalar compartment model, this just returns the input.
  */
-double cmScalar(const double c){
+model_float cmScalar(const model_float c){
     return c;
 }
 

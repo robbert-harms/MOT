@@ -66,36 +66,34 @@ def results_to_dict(results, param_names):
     return d
 
 
-def set_cl_compatible_data_type(value, data_type):
+def set_cl_compatible_data_type(value, data_type, use_double):
     """Set the given value (numpy array) to the given data type, one which is CL compatible.
 
     Args:
         value (ndarray): The value to convert to a CL compatible data type.
         cl_data_type (CLDataType): A CL data type object.
+        use_double (boolean): if cl_data_type is of type model_float we need to know if we are using double or float
 
     Returns:
         ndarray: The same array, but then with the correct data type. If the data type indicates a vector type, a
-            vector type is returned
+            vector typed value is returned.
     """
     if data_type.is_vector_type:
-        return array_to_cl_vector(value, data_type.data_type)
+        return array_to_cl_vector(value, data_type.raw_data_type, use_double=use_double)
     else:
-        if data_type.data_type == 'float':
-            if isinstance(value, numbers.Number):
-                return np.float32(value)
-            return value.astype(np.float32, copy=False)
-        elif data_type.data_type == 'int':
-            if isinstance(value, numbers.Number):
-                return np.int32(value)
-            return value.astype(np.int32, copy=False)
-        else:
-            if isinstance(value, numbers.Number):
-                return np.float64(value)
-            return value.astype(np.float64, copy=False)
+        return data_type.convert_value(value, use_double)
 
 
 def numpy_types_to_cl(data_type):
-    """Get the CL type name of the given numpy type. Call this function with argument data.dtype.type."""
+    """Get the CL type name of the given numpy type. Call this function with argument data.dtype.type.
+
+    Args:
+        raw_data_type (np.dtype.type): the datatype of a numpy type. If you have a numpy variable x, call this function
+            with the argument x.dtype.type
+
+    Returns:
+        str: a CL compatible string representing the given datatype.
+    """
     names = {np.float32: 'float',
              np.float64: 'double',
              np.int16: 'short',
@@ -110,8 +108,9 @@ def get_opencl_vector_data_type(vector_length, data_type):
     """Get the data type for a vector of the given length and given type.
 
     Args:
-        - vector_length: the length of the CL vector data type
-        - data_type: the data/double type of the data
+        vector_length (int): the length of the CL vector data type
+        raw_data_type (str): the data/double type of the data
+
     Returns:
         The vector type given the given vector length and data type
     """
@@ -123,7 +122,7 @@ def get_opencl_vector_data_type(vector_length, data_type):
     return getattr(cl_array.vec, data_type + str(vector_length))
 
 
-def array_to_cl_vector(array, raw_data_type, vector_length=None):
+def array_to_cl_vector(array, raw_data_type, vector_length=None, use_double=False):
     """Create a CL vector type of the given array.
 
     If vector_length is specified and one of (2, 3, 4, 8, 16) it is used. Else is chosen for the minimum vector length
@@ -133,6 +132,7 @@ def array_to_cl_vector(array, raw_data_type, vector_length=None):
         array (ndarray): the array of which to translate each row to a vector
         raw_data_type (str): The raw data type to convert to
         vector_length (int): if specified (non-None) the desired vector length. It must be one of (2, 3, 4, 8, 16)
+        use_double (boolean): if we should use double or float in the case of typedeffed items like 'model_float'
 
     Returns:
         ndarray: An array of the same length as the given array, but with only one column per row.
@@ -152,6 +152,12 @@ def array_to_cl_vector(array, raw_data_type, vector_length=None):
 
     if 'double' in raw_data_type:
         dtype = get_opencl_vector_data_type(vector_length, 'double')
+
+    elif 'model_float' in raw_data_type:
+        if use_double:
+            dtype = get_opencl_vector_data_type(vector_length, 'double')
+        else:
+            dtype = get_opencl_vector_data_type(vector_length, 'float')
     else:
         dtype = get_opencl_vector_data_type(vector_length, 'float')
 
@@ -178,8 +184,8 @@ def vector_type_lookup(data):
         A dictionary with the keys
             - dtype: the cl data type as a object
             - length: the length of the vector
-            - data_type: the type of data, double, float etc.
-            - cl_name: <data_type><length>, i.e. the full name of the type for use in CL code
+            - raw_data_type: the type of data, double, float etc.
+            - cl_name: <raw_data_type><length>, i.e. the full name of the type for use in CL code
 
         Returns None if it is an unknown type.
     """
@@ -187,7 +193,7 @@ def vector_type_lookup(data):
     if length < 2:
         return None
     cl_type_name = _numpy_to_cl_dtype_names(data.dtype.fields['x'][0])
-    return {'dtype': data.dtype, 'length': length, 'data_type': cl_type_name, 'cl_name': (cl_type_name + str(length))}
+    return {'dtype': data.dtype, 'length': length, 'raw_data_type': cl_type_name, 'cl_name': (cl_type_name + str(length))}
 
 
 def _numpy_to_cl_dtype_names(cl_data_type_name):
@@ -205,7 +211,14 @@ def _numpy_to_cl_dtype_names(cl_data_type_name):
     return None
 
 
-def get_cl_double_extension_definer(platform):
+def get_cl_pragma_double():
+    """Get the pragma definitions for enabling the double floating type on older hardware.
+
+    This can be removed on the moment OpenCL 1.1 is no longer in use.
+
+    Returns:
+        str: the pragma definitions for the double floating type. Include this on top of your your CL kernel.
+    """
     return '''
         #if defined(cl_khr_fp64)
         #pragma OPENCL EXTENSION cl_khr_fp64 : enable
@@ -213,6 +226,38 @@ def get_cl_double_extension_definer(platform):
         #pragma OPENCL EXTENSION cl_amd_fp64 : enable
         #endif
     '''
+
+
+def get_model_float_type_def(use_double):
+    """Get the model floating point type definition.
+
+    Args:
+        use_double (boolean): if True we will use the double type for the model_float type. Else, we will use the
+            single precision float type for the model_float type.
+
+    Returns:
+        str: typedefs for the model_float type
+    """
+    if use_double:
+        return '''
+            typedef double model_float;
+            typedef double2 model_float2;
+            typedef double3 model_float3;
+            typedef double4 model_float4;
+            typedef double8 model_float8;
+            typedef double16 model_float16;
+            #define PI 3.14159265358979323846
+        '''
+    else:
+        return '''
+            typedef float model_float;
+            typedef float2 model_float2;
+            typedef float3 model_float3;
+            typedef float4 model_float4;
+            typedef float8 model_float8;
+            typedef float16 model_float16;
+            #define PI 3.14159265359f
+        '''
 
 
 class TopologicalSort(object):
@@ -277,7 +322,7 @@ def get_cl_data_type_from_data(data):
         length = vector_info['length']
         if vector_info['length'] % 2 == 1:
             length += 1
-        return vector_info['data_type'] + str(length)
+        return vector_info['raw_data_type'] + str(length)
     return numpy_types_to_cl(data.dtype.type)
 
 
@@ -288,12 +333,19 @@ def get_correct_cl_data_type_from_data(data):
         length = vector_info['length']
         if length % 2 == 1:
             length += 1
-        return get_opencl_vector_data_type(length, data_type=vector_info['data_type'])
+        return get_opencl_vector_data_type(length, data_type=vector_info['raw_data_type'])
     return data.dtype.type
 
 
-def set_correct_cl_data_type(data):
-    """Set for the given data the data type given by get_correct_cl_data_type_from_data()"""
+def set_correct_cl_data_type(data, convert_to_array=False):
+    """Set for the given data the data type given by get_correct_cl_data_type_from_data()
+
+    Uses recursion.
+
+    Args:
+        data: the data to set to the correct data type
+        convert_to_array (boolean): if the data is not a ndarray will we convert it to an ndarray type if True
+    """
     if data is not None:
         if isinstance(data, dict):
             for key, d in data.items():
@@ -305,7 +357,10 @@ def set_correct_cl_data_type(data):
                 items.append(set_correct_cl_data_type(d))
             return items
         elif isinstance(data, (numbers.Number,)):
-            return np.array([data])
+            if convert_to_array:
+                return np.array([data])
+            else:
+                return data
         else:
             return data.astype(get_correct_cl_data_type_from_data(data), order='C', copy=False)
     return None
