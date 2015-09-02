@@ -12,13 +12,13 @@
 /* Used to set the maximum number of iterations to patience*(number_of_parameters+1). */
 #define PATIENCE %(PATIENCE)r
 #define MAX_IT (PATIENCE * (%(NMR_PARAMS)r+1))
-#define PWLL_FTOL 30*DBL_EPSILON
-#define BRENT_TOL 2*30*DBL_EPSILON
+#define PWLL_FTOL 30*EPSILON_OPTIMIZER_FLOAT
+#define BRENT_TOL 2*30*EPSILON_OPTIMIZER_FLOAT
 #define BRACKET_GOLD 1.618034
 #define GLIMIT 100.0
-#define EPSILON 30*DBL_EPSILON
+#define EPSILON 30*EPSILON_OPTIMIZER_FLOAT
 #define CGOLD 0.3819660 /* golden = (3 - sqrt(5))/2 */
-#define ZEPS 30*DBL_EPSILON
+#define ZEPS 30*EPSILON_OPTIMIZER_FLOAT
 
 /** helpers to save memory and keep code clean */
 #define A fa
@@ -27,21 +27,20 @@
 #define FV ulim
 #define FW maxarg
 
-double bracket_and_brent(const double* const pcom, const double* const x_tmp_min,
-                         double* xt, const void* const data, double *xmin);
+optimizer_float bracket_and_brent(const optimizer_float* const pcom, const optimizer_float* const x_tmp_min,
+                                  optimizer_float* xt, const void* const data, optimizer_float *xmin);
 
-double powell(double* model_parameters, const void* const data){
+optimizer_float powell(optimizer_float* model_parameters, const void* const data){
     int i, j, i_greatest;
     int iteration = 0;
-    double fval = evaluate(model_parameters, data);
-    double del, fval_tmp1, fval_tmp2;
+    optimizer_float fval = evaluate(model_parameters, data);
+    optimizer_float del, fval_tmp1, fval_tmp2;
+    optimizer_float xmin;
 
-    double xmin;
-
-    double x_tmp1[%(NMR_PARAMS)r];
-    double x_tmp2[%(NMR_PARAMS)r];
-    double x_tmp_min[%(NMR_PARAMS)r];
-    double starting_vectors[%(NMR_PARAMS)r][%(NMR_PARAMS)r];
+    optimizer_float x_tmp1[%(NMR_PARAMS)r];
+    optimizer_float x_tmp2[%(NMR_PARAMS)r];
+    optimizer_float x_tmp_min[%(NMR_PARAMS)r];
+    optimizer_float starting_vectors[%(NMR_PARAMS)r][%(NMR_PARAMS)r];
 
     for(i=0; i < %(NMR_PARAMS)r; i++){
         for(j=0; j < %(NMR_PARAMS)r; j++){
@@ -106,23 +105,23 @@ double powell(double* model_parameters, const void* const data){
     return fval;
 }
 
-double bracket_and_brent(const double* const pcom, const double* const x_tmp_min, double* xt,
-                         const void* const data, double *xmin){
+optimizer_float bracket_and_brent(const optimizer_float* const pcom, const optimizer_float* const x_tmp_min, optimizer_float* xt,
+                         const void* const data, optimizer_float *xmin){
 
-    double ax = 0.0;
-    double bx = 1.0;
-    double cx;
+    optimizer_float ax = 0.0;
+    optimizer_float bx = 1.0;
+    optimizer_float cx;
 
-    double ulim, u, r, q, fu, tmp;
-    double maxarg = 0.0;
+    optimizer_float ulim, u, r, q, fu, tmp;
+    optimizer_float maxarg = 0.0;
     int j;
-    double fa = 0.0;
-    double fb = 0.0;
-    double fc = 0.0;
+    optimizer_float fa = 0.0;
+    optimizer_float fb = 0.0;
+    optimizer_float fc = 0.0;
 
     int iter;
-    double fx, p, tol1, tol2, v, w, x, xm;
-    double e=0.0;
+    optimizer_float fx, p, tol1, tol2, v, w, x, xm;
+    optimizer_float e=0.0;
 
     for(j=0; j < %(NMR_PARAMS)r; j++){
         xt[j] = pcom[j] + (ax) * x_tmp_min[j];

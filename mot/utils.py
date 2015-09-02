@@ -248,6 +248,7 @@ def get_float_type_def(double_precision, type_def_basename='model_float'):
             typedef double8 ''' + type_def_basename + '''8;
             typedef double16 ''' + type_def_basename + '''16;
             #define PI_''' + type_def_basename.upper() + ''' 3.14159265358979323846
+            #define EPSILON_''' + type_def_basename.upper() + ''' DBL_EPSILON
         '''
     else:
         return '''
@@ -258,6 +259,7 @@ def get_float_type_def(double_precision, type_def_basename='model_float'):
             typedef float8 ''' + type_def_basename + '''8;
             typedef float16 ''' + type_def_basename + '''16;
             #define PI_''' + type_def_basename.upper() + ''' 3.14159265359f
+            #define EPSILON_''' + type_def_basename.upper() + ''' FLT_EPSILON
         '''
 
 

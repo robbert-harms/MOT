@@ -163,6 +163,12 @@ class AbstractParallelOptimizerWorker(Worker):
         self._use_param_codec = self._parent_optimizer.use_param_codec and param_codec \
                                     and self._parent_optimizer._automatic_apply_codec
 
+        self._optimizer_and_model_float_identical = False
+        if self._model.double_precision and self._optimizer_supports_double():
+            self._optimizer_and_model_float_identical = True
+        elif not self._model.double_precision and self._optimizer_supports_float():
+            self._optimizer_and_model_float_identical = True
+
         self._starting_points = starting_points
         self._kernel = self._build_kernel()
 
@@ -242,7 +248,7 @@ class AbstractParallelOptimizerWorker(Worker):
                 ){
                     int gid = get_global_id(0);
 
-                    double x[''' + str(nmr_params) + '''];
+                    optimizer_float x[''' + str(nmr_params) + '''];
                     for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
                         x[i] = params[gid * ''' + str(nmr_params) + ''' + i];
                     }
@@ -252,18 +258,25 @@ class AbstractParallelOptimizerWorker(Worker):
         '''
 
         if self._use_param_codec:
-            #todo simplify on the moment we support model_floats everywhere
-            kernel_source += '''
-                    model_float x_writeout[''' + str(self._nmr_params) + '''];
-                    for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
-                        x_writeout[i] = (model_float)x[i];
-                    }
-                    decodeParameters(x_writeout);
-
+            if self._optimizer_and_model_float_identical:
+                kernel_source += '''
+                    decodeParameters(x);
                     for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
-                        params[gid * ''' + str(nmr_params) + ''' + i] = x_writeout[i];
+                        params[gid * ''' + str(nmr_params) + ''' + i] = x[i];
                     }
             '''
+            else:
+                kernel_source += '''
+                        model_float x_model_space[''' + str(self._nmr_params) + '''];
+                        for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
+                            x_model_space[i] = (model_float)x[i];
+                        }
+                        decodeParameters(x_model_space);
+
+                        for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
+                            params[gid * ''' + str(nmr_params) + ''' + i] = x_model_space[i];
+                        }
+                '''
         else:
             kernel_source += '''
                     for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
@@ -299,9 +312,8 @@ class AbstractParallelOptimizerWorker(Worker):
         if self._use_param_codec:
             decode_func = param_codec.get_cl_decode_function('decodeParameters')
             kernel_source += decode_func + "\n"
-            #todo change this on the moment we support model_float completely
             kernel_source += '''
-                model_float evaluate(double* x, const void* data){
+                optimizer_float evaluate(optimizer_float* x, const void* data){
                     model_float x_model[''' + str(self._nmr_params) + '''];
                     for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                         x_model[i] = x[i];
@@ -312,8 +324,12 @@ class AbstractParallelOptimizerWorker(Worker):
             '''
         else:
             kernel_source += '''
-                model_float evaluate(double* x, const void* data){
-                    return calculateObjective((optimize_data*)data, x);
+                optimizer_float evaluate(optimizer_float* x, const void* data){
+                    model_float x_model[''' + str(self._nmr_params) + '''];
+                    for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
+                        x_model[i] = x[i];
+                    }
+                    return calculateObjective((optimize_data*)data, x_model);
                 }
             '''
         kernel_source += optimizer_func.get_cl_header()

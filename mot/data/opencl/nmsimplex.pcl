@@ -53,34 +53,31 @@
 #define PATIENCE %(PATIENCE)r         /* Used to set the maximum number of iterations
                                          to patience*(number_of_parameters+1). */
 #define MAX_IT (PATIENCE * (%(NMR_PARAMS)r+1))
-#define ALPHA       1.0       /* reflection coefficient */
-#define BETA        0.5       /* contraction coefficient */
-#define GAMMA       2.0       /* expansion coefficient */
-#define EPSILON     30*DBL_EPSILON /** the precision we break at*/
-#define SCALE       1.0       /** the scale for the initial simplex */
+#define ALPHA       1.0                         /* reflection coefficient */
+#define BETA        0.5                         /* contraction coefficient */
+#define GAMMA       2.0                         /* expansion coefficient */
+#define EPSILON     30*EPSILON_OPTIMIZER_FLOAT  /** the precision we break at*/
+#define SCALE       1.0                         /** the scale for the initial simplex */
 
-/**
- * Requires the function: double evaluate(double* x, const void* data);
- */
 
-void nmsimplex(double * const x, const void* const data){
+void nmsimplex(optimizer_float* const model_parameters, const void* const data){
 
 	int vs;         /* vertex with smallest value */
 	int vh;         /* vertex with next smallest value */
 	int vg;         /* vertex with largest value */
     int i,j;        /** helper variables */
 	int itr;	      /* track the number of iterations */
-	double fr;      /* value of function at reflection point */
-	double fe_fc_sum_tmp;      /* value of function at expansion point & value of function at contraction point
+	optimizer_float fr;      /* value of function at reflection point */
+	optimizer_float fe_fc_sum_tmp;      /* value of function at expansion point & value of function at contraction point
 	                                & also used at the end for the convergence test */
-	double v[%(NMR_PARAMS)r + 1][%(NMR_PARAMS)r];     /* holds vertices of simplex */
-    double f[%(NMR_PARAMS)r + 1]; /* value of function at each vertex */
-    double vr[%(NMR_PARAMS)r]; /* reflection - coordinates */
-    double ve_vc[%(NMR_PARAMS)r]; /* expansion - coordinates, & contraction - coordinates */
-    double vm[%(NMR_PARAMS)r]; /* centroid - coordinates */
+	optimizer_float v[%(NMR_PARAMS)r + 1][%(NMR_PARAMS)r];     /* holds vertices of simplex */
+    optimizer_float f[%(NMR_PARAMS)r + 1]; /* value of function at each vertex */
+    optimizer_float vr[%(NMR_PARAMS)r]; /* reflection - coordinates */
+    optimizer_float ve_vc[%(NMR_PARAMS)r]; /* expansion - coordinates, & contraction - coordinates */
+    optimizer_float vm[%(NMR_PARAMS)r]; /* centroid - coordinates */
 
 	for (i=0;i<%(NMR_PARAMS)r;i++) {
-		v[0][i] = x[i];
+		v[0][i] = model_parameters[i];
 	}
 
     /* create the initial simplex */
@@ -88,11 +85,12 @@ void nmsimplex(double * const x, const void* const data){
 	for (i=1;i<=%(NMR_PARAMS)r;i++) {
 		for (j=0;j<%(NMR_PARAMS)r;j++) {
 			if (i-1 == j) {
-				v[i][j] = (SCALE * (sqrt((double) %(NMR_PARAMS)r + 1) - 1 + %(NMR_PARAMS)r)
-				                / (%(NMR_PARAMS)r * sqrt(2.0))) + x[j];
+				v[i][j] = (SCALE * (sqrt((optimizer_float) %(NMR_PARAMS)r + 1) - 1 + %(NMR_PARAMS)r)
+				                / (%(NMR_PARAMS)r * sqrt(2.0))) + model_parameters[j];
 			}
 			else {
-				v[i][j] = (SCALE * (sqrt((double) %(NMR_PARAMS)r + 1) - 1) / (%(NMR_PARAMS)r * sqrt(2.0))) + x[j];
+				v[i][j] = (SCALE * (sqrt((optimizer_float) %(NMR_PARAMS)r + 1) - 1)
+				                / (%(NMR_PARAMS)r * sqrt(2.0))) + model_parameters[j];
 			}
 		}
 	}
@@ -254,7 +252,7 @@ void nmsimplex(double * const x, const void* const data){
 	}
 
     for (j=0;j<%(NMR_PARAMS)r;j++) {
-		x[j] = v[vs][j];
+		model_parameters[j] = v[vs][j];
 	}
 }
 

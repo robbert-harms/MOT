@@ -35,7 +35,7 @@ class NMSimplexWorker(AbstractParallelOptimizerWorker):
         return 'nmsimplex'
 
     def _optimizer_supports_float(self):
-        return False
+        return True
 
     def _optimizer_supports_double(self):
-        return False
+        return True
