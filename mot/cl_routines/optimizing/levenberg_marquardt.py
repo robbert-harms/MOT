@@ -51,36 +51,27 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
         '''
         kernel_source += cl_observation_func
         kernel_source += cl_eval_func
+
         if self._use_param_codec:
             decode_func = param_codec.get_cl_decode_function('decodeParameters')
             kernel_source += decode_func + "\n"
 
-            #todo simplify this when we support float everywhere
-
-            kernel_source += '''
-                void evaluate(const void* data, double* x, double* result){
-                    int i;
-                    model_float x_model[''' + str(nmr_params) + '''];
-                    for(i = 0; i < ''' + str(nmr_params) + '''; i++){
-                        x_model[i] = x[i];
-                    }
-                    decodeParameters(x_model);
-
-                    for(i = 0; i < NMR_INST_PER_PROBLEM; i++){
-                        result[i] = getObservation((optimize_data*)data, i) -
-                                        evaluateModel((optimize_data*)data, x_model, i);
-                    }
+        kernel_source += '''
+            void evaluate(const void* data, double* x, double* result){
+                int i;
+                model_float x_model[''' + str(nmr_params) + '''];
+                for(i = 0; i < ''' + str(nmr_params) + '''; i++){
+                    x_model[i] = x[i];
                 }
-            '''
-        else:
-            kernel_source += '''
-                void evaluate(const void* data, double* x, double* result){
-                    for(int i = 0; i < NMR_INST_PER_PROBLEM; i++){
-                        result[i] = getObservation((optimize_data*)data, i) -
-                                        evaluateModel((optimize_data*)data, x, i);
-                    }
+
+                ''' + ('decodeParameters(x_model);' if self._use_param_codec else '') + '''
+
+                for(i = 0; i < NMR_INST_PER_PROBLEM; i++){
+                    result[i] = getObservation((optimize_data*)data, i) -
+                                    evaluateModel((optimize_data*)data, x_model, i);
                 }
-            '''
+            }
+        '''
         kernel_source += optimizer_func.get_cl_header()
         kernel_source += optimizer_func.get_cl_code()
         return kernel_source
@@ -90,3 +81,9 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
 
     def _get_optimizer_call_name(self):
         return 'lmmin'
+
+    def _optimizer_supports_float(self):
+        return False
+
+    def _optimizer_supports_double(self):
+        return True

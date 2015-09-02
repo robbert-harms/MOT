@@ -1,7 +1,5 @@
 import logging
 import pyopencl as cl
-import numpy as np
-from ...cl_python_callbacks import CLToPythonCallbacks
 from ...utils import results_to_dict, ParameterCLCodeGenerator, \
     get_cl_pragma_double, get_float_type_def
 from ...cl_routines.base import AbstractCLRoutine
@@ -372,51 +370,3 @@ class AbstractParallelOptimizerWorker(Worker):
         """
         return False
 
-
-class AbstractSerialOptimizer(AbstractOptimizer):
-
-    def __init__(self, cl_environments, load_balancer, use_param_codec=True, patience=None):
-        """The base class for serial optimization.
-
-        Serial optimization is the process in which each voxel is optimized one at a time, regularly by a python
-        optimization routine. For this to work all CL function in the model class need to be wrapped in a python
-        callback function. This is taken care of automatically.
-        """
-        super(AbstractSerialOptimizer, self).__init__(cl_environments, load_balancer=load_balancer,
-                                                      use_param_codec=use_param_codec)
-
-    def minimize(self, model, init_params=None, full_output=False):
-        space_transformer = CodecRunner(self._cl_environments, self._load_balancer, model.double_precision)
-        cl_environments = self.load_balancer.get_used_cl_environments(self.cl_environments)
-        starting_points = model.get_initial_parameters(init_params)
-
-        param_codec = model.get_parameter_codec()
-        if self.use_param_codec and param_codec:
-            starting_points = space_transformer.encode(param_codec, starting_points)
-
-        optimized = self._minimize(model, starting_points, cl_environments[0])
-
-        if self.use_param_codec and param_codec:
-            optimized = space_transformer.decode(param_codec, optimized)
-
-        optimized = FinalParametersTransformer(cl_environments=cl_environments,
-                                               load_balancer=self.load_balancer).transform(model, optimized)
-
-        results = model.finalize_optimization_results(results_to_dict(optimized, model.get_optimized_param_names()))
-        if full_output:
-            return results, {}
-        return results
-
-    def _minimize(self, model, starting_points, cl_environment):
-        cb_generator = CLToPythonCallbacks(model, cl_environment=cl_environment)
-
-        for voxel_index in range(model.get_nmr_problems()):
-            objective_cb = cb_generator.get_objective_cb(voxel_index, decode_params=True)
-            x0 = starting_points[voxel_index, :]
-            x_opt = self._minimize_single_voxel(objective_cb, x0)
-            starting_points[voxel_index, :] = x_opt
-
-        return starting_points
-
-    def _minimize_single_voxel(self, objective_cb, x0):
-        """Minimize a single voxel and return the results"""

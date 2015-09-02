@@ -3,7 +3,6 @@ from ...cl_routines.filters.median import MedianFilter
 from ...cl_routines.optimizing.base import AbstractOptimizer
 from ...cl_routines.mapping.error_measures import ErrorMeasures
 from ...cl_routines.mapping.residual_calculator import ResidualCalculator
-from ...cl_routines.optimizing.gridsearch import GridSearch
 from ...cl_routines.optimizing.nmsimplex import NMSimplex
 
 __author__ = 'Robbert Harms'
@@ -30,7 +29,6 @@ class MetaOptimizer(AbstractOptimizer):
                 The exact semantical value of this parameter may change per optimizer.
 
         Attributes:
-            enable_grid_search (boolean, default False); If we want to enable a grid search before optimization
             extra_optim_runs (boolean, default 1): The amount of extra optimization runs with a smoothing step
                 in between.
             extra_optim_runs_optimizers (list, default None): A list of optimizers with one optimizer for every extra
@@ -43,12 +41,10 @@ class MetaOptimizer(AbstractOptimizer):
                 with extra_optim_runs_use_perturbation.
             extra_optim_runs_use_perturbation (boolean): If we want to use the parameter perturbation by the model
                 or not. This is mutually exclusive with extra_optim_runs_apply_smoothing.
-            grid_search (Optimizer, default GridSearch): The grid search optimizer.
             optimizer (Optimizer, default NMSimplex): The default optimization routine
             smoother (Smoother, default MedianFilter(1)): The default smoothing routine
         """
         super(MetaOptimizer, self).__init__(cl_environments, load_balancer, use_param_codec)
-        self.enable_grid_search = False
         self.enable_sampling = False
 
         self.extra_optim_runs = 0
@@ -57,7 +53,6 @@ class MetaOptimizer(AbstractOptimizer):
         self.extra_optim_runs_apply_smoothing = False
         self.extra_optim_runs_use_perturbation = True
 
-        self.grid_search = GridSearch(self.cl_environments, self.load_balancer, use_param_codec=self.use_param_codec)
         self.optimizer = NMSimplex(self.cl_environments, self.load_balancer, use_param_codec=self.use_param_codec,
                                    patience=patience)
         self.smoother = MedianFilter((1, 1, 1), self.cl_environments, self.load_balancer)
@@ -69,10 +64,6 @@ class MetaOptimizer(AbstractOptimizer):
 
     def minimize(self, model, init_params=None, full_output=False):
         results = init_params
-
-        if self.enable_grid_search:
-            self._logger.info('Performing an initial grid search')
-            results = self.grid_search.minimize(model, init_params=results)
 
         results = self.optimizer.minimize(model, init_params=results)
 
@@ -125,7 +116,6 @@ class MetaOptimizer(AbstractOptimizer):
 
     def _propagate_property(self, name, value):
         self.optimizer.__setattr__(name, value)
-        self.grid_search.__setattr__(name, value)
         self.smoother.__setattr__(name, value)
 
         if self.extra_optim_runs_optimizers:

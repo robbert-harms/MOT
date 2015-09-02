@@ -65,7 +65,7 @@ class NMSimplexFunc(LibraryFunction):
         super(NMSimplexFunc, self).__init__(
             'void',
             'nmsimplex',
-            (LibraryParameter(CLDataType.from_string('double*'), 'x'),
+            (LibraryParameter(CLDataType.from_string('optimizer_float*'), 'model_parameters'),
              LibraryParameter(CLDataType.from_string('void*'), 'data')),
             resource_filename('mot', 'data/opencl/nmsimplex.h'),
             resource_filename('mot', 'data/opencl/nmsimplex.pcl'),
@@ -85,49 +85,11 @@ class PowellFunc(LibraryFunction):
         super(PowellFunc, self).__init__(
             'void',
             'powell',
-            (LibraryParameter(CLDataType.from_string('double*'), 'x'),
+            (LibraryParameter(CLDataType.from_string('optimizer_float*'), 'model_parameters'),
              LibraryParameter(CLDataType.from_string('void*'), 'data')),
             resource_filename('mot', 'data/opencl/powell.h'),
             resource_filename('mot', 'data/opencl/powell.pcl'),
             {'NMR_PARAMS': nmr_parameters, 'PATIENCE': patience},
-            ())
-
-
-class SpreadWeights(LibraryFunction):
-
-    def __init__(self, memspace='private'):
-        """A function for spreading n-1 weights to n weights ensuring the sum equals 1.
-
-        Args:
-            memspace (str): The memory space of the double array (private, constant, global).
-        """
-        super(SpreadWeights, self).__init__(
-            'void',
-            'spread_weights_' + memspace,
-            (LibraryParameter(CLDataType.from_string('double*'), 'x'),
-             LibraryParameter(CLDataType.from_string('int'), 'n')),
-            resource_filename('mot', 'data/opencl/spread_weights.ph'),
-            resource_filename('mot', 'data/opencl/spread_weights.pcl'),
-            {'MEMSPACE': memspace},
-            ())
-
-
-class KahanSummation(LibraryFunction):
-
-    def __init__(self, memspace='private'):
-        """A function for summing an array of doubles without to much loss of precision.
-
-        Args:
-            memspace (str): The memory space of the double array (private, constant, global).
-        """
-        super(KahanSummation, self).__init__(
-            'void',
-            'kahan_summation_' + memspace,
-            (LibraryParameter(CLDataType.from_string('double*'), 'l'),
-             LibraryParameter(CLDataType.from_string('int'), 'n')),
-            resource_filename('mot', 'data/opencl/kahan_summation.ph'),
-            resource_filename('mot', 'data/opencl/kahan_summation.pcl'),
-            {'MEMSPACE': memspace},
             ())
 
 
@@ -158,27 +120,6 @@ class RanluxCL(LibraryFunction):
             (LibraryParameter(CLDataType.from_string('ranluxcl_state_t*'), 'ranluxclstate'), ),
             resource_filename('mot', 'data/opencl/ranluxcl.h'),
             resource_filename('mot', 'data/opencl/ranluxcl.cl'),
-            {},
-            ())
-
-
-class MCMCStretch(LibraryFunction):
-
-    def __init__(self):
-        """The MCMC stretch sampler definition. (see the CL code for more details)
-        """
-        super(MCMCStretch, self).__init__(
-            'void',
-            'mcmc_stretch',
-            (LibraryParameter(CLDataType.from_string('float*'), 'X_moving'),
-             LibraryParameter(CLDataType.from_string('float*'), 'log_prob_moving'),
-             LibraryParameter(CLDataType.from_string('float*'), 'X_fixed'),
-             LibraryParameter(CLDataType.from_string('float4*'), 'ranluxcltab'),
-             LibraryParameter(CLDataType.from_string('long*'), 'accepted'),
-             LibraryParameter(CLDataType.from_string('void*'), 'data'),
-             LibraryParameter(CLDataType.from_string('float'), 'beta')),
-            resource_filename('mot', 'data/opencl/mcmc_stretch.h'),
-            resource_filename('mot', 'data/opencl/mcmc_stretch.cl'),
             {},
             ())
 

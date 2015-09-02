@@ -15,6 +15,9 @@ class Rosenbrock(OptimizeModelInterface):
         super(Rosenbrock, self).__init__()
         self.n = n
 
+    def double_precision(self):
+        return True
+
     @property
     def name(self):
         return 'rosenbrock'
@@ -104,6 +107,9 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
 
         """
         super(MatlabLSQNonlinExample, self).__init__()
+
+    def double_precision(self):
+        return True
 
     @property
     def name(self):

@@ -11,26 +11,31 @@ Tests for `mot` module.
 import unittest
 
 import numpy as np
+from mot import runtime_configuration
 
 from mot.cl_routines.mapping.residual_calculator import ResidualCalculator
 from mot.cl_routines.optimizing.nmsimplex import NMSimplex
 from mot.cl_routines.optimizing.levenberg_marquardt import LevenbergMarquardt
 from mot.cl_routines.optimizing.powell import Powell
-from mot.cl_routines.optimizing.serial_optimizers import SerialBasinHopping
-from mot.cl_routines.optimizing.serial_optimizers import SerialLM
-from mot.cl_routines.optimizing.serial_optimizers import SerialNMSimplex
-from mot.cl_routines.optimizing.serial_optimizers import SerialPowell
 from mot.cl_routines.filters.gaussian import GaussianFilter
 from mot.cl_routines.filters.mean import MeanFilter
 from mot.cl_routines.filters.median import MedianFilter
 from mot.models.examples import Rosenbrock, MatlabLSQNonlinExample
 
 
-class TestRosenbrock(unittest.TestCase):
+class CLRoutineTestCase(unittest.TestCase):
+
+    def __init__(self, *args, **kwargs):
+        super(CLRoutineTestCase, self).__init__(*args, **kwargs)
+        self._runtime_args = [runtime_configuration.runtime_config['cl_environments'],
+                              runtime_configuration.runtime_config['load_balancer']]
+
+
+class TestRosenbrock(CLRoutineTestCase):
 
     def setUp(self):
         self.model = Rosenbrock(5)
-        self.optimizers = (NMSimplex(), Powell(), SerialBasinHopping(), SerialNMSimplex(), SerialPowell())
+        self.optimizers = (NMSimplex(*self._runtime_args), Powell(*self._runtime_args))
 
     def test_model(self):
         for optimizer in self.optimizers:
@@ -39,12 +44,12 @@ class TestRosenbrock(unittest.TestCase):
                 self.assertAlmostEqual(v[p], 1, places=4)
 
 
-class TestLSQNonLinExample(unittest.TestCase):
+class TestLSQNonLinExample(CLRoutineTestCase):
 
     def setUp(self):
         self.model = MatlabLSQNonlinExample()
-        self.optimizers = (SerialLM(), LevenbergMarquardt())
-        self.residual_calc = ResidualCalculator()
+        self.optimizers = (LevenbergMarquardt(*self._runtime_args),)
+        self.residual_calc = ResidualCalculator(*self._runtime_args)
 
     def test_model(self):
         for optimizer in self.optimizers:
@@ -56,14 +61,14 @@ class TestLSQNonLinExample(unittest.TestCase):
             self.assertAlmostEqual(s, 124.3622, places=4)
 
 
-class TestFilters(unittest.TestCase):
+class TestFilters(CLRoutineTestCase):
 
     def setUp(self):
         self.d1 = np.array([1, 2, 4, 2, 1], dtype=np.float64)
         self.d2 = np.eye(4)
 
     def test_median(self):
-        filter = MedianFilter(2)
+        filter = MedianFilter(2, *self._runtime_args)
         s1 = filter.filter(self.d1)
         np.testing.assert_almost_equal(s1, np.array([2, 2, 2, 2, 2]))
 
@@ -71,7 +76,7 @@ class TestFilters(unittest.TestCase):
         np.testing.assert_almost_equal(s2, np.zeros((4, 4)))
 
     def test_mean(self):
-        filter = MeanFilter(2)
+        filter = MeanFilter(2, *self._runtime_args)
         s1 = filter.filter(self.d1)
         np.testing.assert_almost_equal(s1, np.array([2 + 1/3.0, 2.25, 2, 2.25, 2 + 1/3.0]))
 
@@ -84,7 +89,7 @@ class TestFilters(unittest.TestCase):
         np.testing.assert_almost_equal(s2, expected)
 
     def test_gaussian(self):
-        filter = GaussianFilter(2, sigma=1.0)
+        filter = GaussianFilter(2, *self._runtime_args, sigma=1.0)
         s1 = filter.filter(self.d1, mask=np.array([1, 1, 1, 1, 0]))
         s2 = filter.filter(self.d2)
 
