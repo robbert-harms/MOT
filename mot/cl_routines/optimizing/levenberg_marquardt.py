@@ -44,8 +44,7 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
         if nmr_inst_per_problem < nmr_params:
             raise ValueError('The number of instances per problem must be greater than the number of parameters')
 
-        kernel_source = get_cl_pragma_double()
-        kernel_source += get_float_type_def(self._double_precision)
+        kernel_source = ''
         kernel_source += '''
             #define NMR_INST_PER_PROBLEM ''' + str(nmr_inst_per_problem) + '''
         '''
@@ -57,7 +56,7 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
             kernel_source += decode_func + "\n"
 
         kernel_source += '''
-            void evaluate(const void* data, double* x, double* result){
+            void evaluate(const void* data, optimizer_float* x, optimizer_float* result){
                 int i;
                 model_float x_model[''' + str(nmr_params) + '''];
                 for(i = 0; i < ''' + str(nmr_params) + '''; i++){
@@ -83,7 +82,7 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
         return 'lmmin'
 
     def _optimizer_supports_float(self):
-        return False
+        return True
 
     def _optimizer_supports_double(self):
         return True

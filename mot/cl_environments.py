@@ -141,21 +141,47 @@ class CLEnvironment(object):
         return s
 
     def __repr__(self):
-        s = "Platform: " + self._platform.name + "\n"
-        s += "Vendor: " + self._platform.vendor + "\n"
-        s += "Version: " + self._platform.version + "\n"
-        s += "Compile flags: " + " ".join(self.compile_flags) + "\n"
-        s += "Device: " + self._device.name + "\n"
-        s += "\tIs GPU: " + repr(self.is_gpu) + "\n"
-        s += "\tSupports double: " + repr(self.supports_double) + "\n"
-        s += "\tVersion: " + self._device.opencl_c_version + "\n"
-        s += "\tMax. Compute Units: " + repr(self._device.max_compute_units) + "\n"
-        s += "\tLocal Memory Size: " + repr(self._device.local_mem_size/1024) + "KB" + "\n"
-        s += "\tGlobal Memory Size: " + repr(self._device.global_mem_size/(1024*1024)) + "MB" + "\n"
-        s += "\tMax Alloc Size: " + repr(self._device.max_mem_alloc_size/(1024*1024)) + "MB" + "\n"
-        s += "\tMax Work-group Size: " + repr(self._device.max_work_group_size) + "\n"
-        dim = self._device.max_work_item_sizes
-        s += "\tMax Work-item Dims: (" + repr(dim[0]) + " " + " ".join(map(str, dim[1:])) + ")" + "\n"
+        s = 75*"=" + "\n"
+        s += repr(self._platform) + "\n"
+        s += 75*"=" + "\n"
+        s += self._print_info(self._platform, cl.platform_info)
+
+        s += 75*"-" + "\n"
+        s += repr(self._device) + "\n"
+        s += 75*"-" + "\n"
+        s += self._print_info(self._device, cl.device_info)
+
+        return s
+
+    def _print_info(self, obj, info_cls):
+        s = ''
+
+        def format_title(title_str):
+            title_str = title_str.lower()
+            title_str = title_str.replace('_', ' ')
+            return title_str
+
+        for info_name in sorted(dir(info_cls)):
+            if not info_name.startswith("_") and info_name != "to_string":
+                info = getattr(info_cls, info_name)
+
+                try:
+                    info_value = obj.get_info(info)
+                except cl.LogicError:
+                    info_value = "<error>"
+
+                if info_cls == cl.device_info and info_name == "PARTITION_TYPES_EXT" and isinstance(info_value, list):
+                    prop_value = [cl.device_partition_property_ext.to_string(v, "<unknown device "
+                                                                                "partition property %d>")
+                                  for v in info_value]
+
+                    s += ("%s: %s" % (format_title(info_name), prop_value)) + "\n"
+                else:
+                    try:
+                        s += ("%s: %s" % (format_title(info_name), info_value)) + "\n"
+                    except cl.LogicError:
+                        s += ("%s: <error>" % info_name) + "\n"
+        s += "\n"
         return s
 
 

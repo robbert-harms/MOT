@@ -21,24 +21,24 @@
  */
 
 /* function declarations. */
-void lm_lmpar( int n, double * const r, int ldr, int * const ipvt, double *const diag,
-               double * const qtb, double delta, double * const par, double * const x,
-               double * const sdiag, double * const aux, double * const xdi );
-void lm_qrfac( int m, int n, double * const a, int * const ipvt,
-               double * const rdiag, double * const acnorm, double * const wa );
-void lm_qrsolv( int n, double * const r, int ldr, int * const ipvt, double * const diag,
-                double * const qtb, double * const x, double * const sdiag, double * const wa );
-double lm_euclidian_norm(const double* const x, const int n);
+void lm_lmpar( int n, optimizer_float * const r, int ldr, int * const ipvt, optimizer_float *const diag,
+               optimizer_float * const qtb, optimizer_float delta, optimizer_float * const par, optimizer_float * const x,
+               optimizer_float * const sdiag, optimizer_float * const aux, optimizer_float * const xdi );
+void lm_qrfac( int m, int n, optimizer_float * const a, int * const ipvt,
+               optimizer_float * const rdiag, optimizer_float * const acnorm, optimizer_float * const wa );
+void lm_qrsolv( int n, optimizer_float * const r, int ldr, int * const ipvt, optimizer_float * const diag,
+                optimizer_float * const qtb, optimizer_float * const x, optimizer_float * const sdiag, optimizer_float * const wa );
+optimizer_float lm_euclidian_norm(const optimizer_float* const x, const int n);
 
 /*****************************************************************************/
 /*  Numeric constants                                                        */
 /*****************************************************************************/
 
 /* machine-dependent constants from float.h */
-#define LM_MACHEP     DBL_EPSILON   /* resolution of arithmetic */
-#define LM_DWARF      DBL_MIN       /* smallest nonzero number */
-#define LM_SQRT_DWARF sqrt(DBL_MIN) /* square should not underflow */
-#define LM_SQRT_GIANT sqrt(DBL_MAX) /* square should not overflow */
+#define LM_MACHEP     EPSILON_OPTIMIZER_FLOAT   /* resolution of arithmetic */
+#define LM_DWARF      MIN_OPTIMIZER_FLOAT       /* smallest nonzero number */
+#define LM_SQRT_DWARF sqrt(MIN_OPTIMIZER_FLOAT) /* square should not underflow */
+#define LM_SQRT_GIANT sqrt(MAX_OPTIMIZER_FLOAT) /* square should not overflow */
 #define LM_USERTOL    30*LM_MACHEP  /* users are recommended to require this */
 
 #define FTOL LM_USERTOL      /* Relative error desired in the sum of squares.
@@ -68,8 +68,8 @@ double lm_euclidian_norm(const double* const x, const int n);
 #define MAXFEV (PATIENCE * (%(NMR_PARAMS)s+1)) /** the maximum number of evaluations */
 #define EPS sqrt(max(EPSILON, LM_MACHEP)) /* for forward differences */
 #define LMPAR_P1 0.1 /** parameter p1 from the lmpar function */
-#define LM_ENORM_SQRT_GIANT sqrt(DBL_MAX) /* square should not overflow */
-#define LM_ENORM_SQRT_DWARF sqrt(DBL_MIN) /* square should not underflow */
+#define LM_ENORM_SQRT_GIANT sqrt(MAX_OPTIMIZER_FLOAT) /* square should not overflow */
+#define LM_ENORM_SQRT_DWARF sqrt(MIN_OPTIMIZER_FLOAT) /* square should not underflow */
 
 /** 
  * The function furthermore requires you to define:
@@ -96,31 +96,31 @@ double lm_euclidian_norm(const double* const x, const int n);
  * n: the parameter length (the number of variables to optimize)
  * m: the number of instances per problem. It must fulfill m>=n
  *
- * void evaluate(const void* data, double* x, double* result);
+ * void evaluate(const void* data, optimizer_float* x, optimizer_float* result);
  *
  */
 
-void lmmin(double * const x, const void* const data){
+void lmmin(optimizer_float * const x, const void* const data){
 	
 	int j, i;
-    double actred, dirder, fnorm, fnorm1, gnorm, pnorm, prered, ratio, step, sum, temp, temp1, temp2, temp3;
+    optimizer_float actred, dirder, fnorm, fnorm1, gnorm, pnorm, prered, ratio, step, sum, temp, temp1, temp2, temp3;
 
     bool   done_first = false;  /* loop counters, for monitoring */
     bool   inner_success; /* flag for loop control */
-    double lmpar = 0;     /* Levenberg-Marquardt parameter */
-    double delta = 0;
-    double xnorm = 0;
+    optimizer_float lmpar = 0;     /* Levenberg-Marquardt parameter */
+    optimizer_float delta = 0;
+    optimizer_float xnorm = 0;
 	int nfev = 0;
 
 	/***  Allocate work space.  ***/
-    double fvec[NMR_INST_PER_PROBLEM];
-    double diag[%(NMR_PARAMS)s];
-    double qtf[%(NMR_PARAMS)s];
-    double fjac[%(NMR_PARAMS)s * NMR_INST_PER_PROBLEM];
-    double wa1[%(NMR_PARAMS)s];
-    double wa2[%(NMR_PARAMS)s];
-    double wa3[%(NMR_PARAMS)s];
-    double wf[NMR_INST_PER_PROBLEM];
+    optimizer_float fvec[NMR_INST_PER_PROBLEM];
+    optimizer_float diag[%(NMR_PARAMS)s];
+    optimizer_float qtf[%(NMR_PARAMS)s];
+    optimizer_float fjac[%(NMR_PARAMS)s * NMR_INST_PER_PROBLEM];
+    optimizer_float wa1[%(NMR_PARAMS)s];
+    optimizer_float wa2[%(NMR_PARAMS)s];
+    optimizer_float wa3[%(NMR_PARAMS)s];
+    optimizer_float wf[NMR_INST_PER_PROBLEM];
     int ipvt[%(NMR_PARAMS)s];
 
     if (!SCALE_DIAG) {
@@ -299,12 +299,12 @@ void lmmin(double * const x, const void* const data){
                     temp = 0.5;
                 }
                 else if ( actred > -99 ){ /* -99 = 1-1/0.1^2 */
-                    temp = max( dirder / (2*dirder + actred), 0.1 );
+                    temp = max( dirder / (2*dirder + actred), (optimizer_float) 0.1 );
                 }
                 else{
                     temp = 0.1;
                 }
-                delta = temp * min(delta, pnorm / 0.1);
+                delta = temp * min(delta, (optimizer_float)(pnorm / 0.1));
                 lmpar /= temp;
             }
             else if ( ratio >= 0.75 ) {
@@ -375,9 +375,9 @@ void lmmin(double * const x, const void* const data){
 /*  lm_lmpar (determine Levenberg-Marquardt parameter)                       */
 /*****************************************************************************/
 
-void lm_lmpar(int n, double * const r, int ldr, int * const ipvt, double * const diag,
-              double * const qtb, double delta, double * const par, double * const x,
-              double * const sdiag, double * const aux, double * const xdi)
+void lm_lmpar(int n, optimizer_float * const r, int ldr, int * const ipvt, optimizer_float * const diag,
+              optimizer_float * const qtb, optimizer_float delta, optimizer_float * const par, optimizer_float * const x,
+              optimizer_float * const sdiag, optimizer_float * const aux, optimizer_float * const xdi)
 {
 /*     Given an m by n matrix a, an n by n nonsingular diagonal
  *     matrix d, an m-vector b, and a positive number delta,
@@ -455,9 +455,9 @@ void lm_lmpar(int n, double * const r, int ldr, int * const ipvt, double * const
     int iter_nsing;
     int i, j;
     // used as both gnorm and parc
-    double gnorm_parc;
-    double dxnorm, fp, fp_old, parl, paru;
-    double temp;
+    optimizer_float gnorm_parc;
+    optimizer_float dxnorm, fp, fp_old, parl, paru;
+    optimizer_float temp;
 
 /*** lmpar: compute and store in x the gauss-newton direction. if the
      jacobian is rank-deficient, obtain a least squares solution. ***/
@@ -532,7 +532,7 @@ void lm_lmpar(int n, double * const r, int ldr, int * const ipvt, double * const
     gnorm_parc = lm_euclidian_norm(aux, n);
     paru = gnorm_parc / delta;
     if (paru == 0.){
-        paru = LM_DWARF / min(delta, LMPAR_P1);
+        paru = LM_DWARF / min(delta, (optimizer_float)LMPAR_P1);
     }
 
 /*** lmpar: if the input par lies outside of the interval (parl,paru),
@@ -551,7 +551,7 @@ void lm_lmpar(int n, double * const r, int ldr, int * const ipvt, double * const
         /** evaluate the function at the current value of par. **/
 
         if (*par == 0.){
-            *par = max(LM_DWARF, 0.001 * paru);
+            *par = max(LM_DWARF, (model_float)(0.001 * paru));
         }
         temp = sqrt(*par);
         for (j = 0; j < n; j++){
@@ -616,8 +616,8 @@ void lm_lmpar(int n, double * const r, int ldr, int * const ipvt, double * const
 /*  lm_qrfac (QR factorization, from lapack)                                 */
 /*****************************************************************************/
 
-void lm_qrfac(int m, int n, double * const a, int * const ipvt,
-              double * const rdiag, double * const acnorm, double * const wa)
+void lm_qrfac(int m, int n, optimizer_float * const a, int * const ipvt,
+              optimizer_float * const rdiag, optimizer_float * const acnorm, optimizer_float * const wa)
 {
 /*
  *     This subroutine uses Householder transformations with column
@@ -665,7 +665,7 @@ void lm_qrfac(int m, int n, double * const a, int * const ipvt,
  *
  */
     int i, j, k, kmax, minmn;
-    double ajnorm, temp;
+    optimizer_float ajnorm, temp;
 
 /*** qrfac: compute initial column norms and initialize several arrays. ***/
 
@@ -733,7 +733,7 @@ void lm_qrfac(int m, int n, double * const a, int * const ipvt,
 
                 if (rdiag[k] != 0.) {
                     temp = a[m * k + j] / rdiag[k];
-                    temp = max(0., 1 - temp * temp);
+                    temp = max((optimizer_float)0. , 1 - temp * temp);
                     rdiag[k] *= sqrt(temp);
                     temp = rdiag[k] / wa[k];
                     if ( 0.05 * pown(temp, 2) <= LM_MACHEP ) {
@@ -753,8 +753,8 @@ void lm_qrfac(int m, int n, double * const a, int * const ipvt,
 /*  lm_qrsolv (linear least-squares)                                         */
 /*****************************************************************************/
 
-void lm_qrsolv(int n, double * const r, int ldr, int * const ipvt, double * const diag,
-               double * const qtb, double * const x, double * const sdiag, double * const wa)
+void lm_qrsolv(int n, optimizer_float * const r, int ldr, int * const ipvt, optimizer_float * const diag,
+               optimizer_float * const qtb, optimizer_float * const x, optimizer_float * const sdiag, optimizer_float * const wa)
 {
 /*
  *     Given an m by n matrix a, an n by n diagonal matrix d,
@@ -818,8 +818,8 @@ void lm_qrsolv(int n, double * const r, int ldr, int * const ipvt, double * cons
  *
  */
     int i, kk, j, k;
-    double qtbpj, temp;
-    double _sin, _cos, _tan, _cot; /* local variables, not functions */
+    optimizer_float qtbpj, temp;
+    optimizer_float _sin, _cos, _tan, _cot; /* local variables, not functions */
 
 /*** qrsolv: copy r and q^T*b to preserve input and initialize s.
      in particular, save the diagonal elements of r in x. ***/
@@ -920,7 +920,7 @@ void lm_qrsolv(int n, double * const r, int ldr, int * const ipvt, double * cons
 /*****************************************************************************/
 /*  euclidian_norm (Euclidean norm)                                          */
 /*****************************************************************************/
-double lm_euclidian_norm(const double* const x, const int n){
+optimizer_float lm_euclidian_norm(const optimizer_float* const x, const int n){
 /*     Given an n-vector x, this function calculates the
  *     euclidean norm of x.
  *
@@ -942,7 +942,7 @@ double lm_euclidian_norm(const double* const x, const int n){
  *      x is an input array of length n.
  */
     int i;
-    double s1, s2, s3, xabs, x1max, x3max, sqrt_n_tmp;
+    optimizer_float s1, s2, s3, xabs, x1max, x3max, sqrt_n_tmp;
 
     s1 = 0;
     s2 = 0;

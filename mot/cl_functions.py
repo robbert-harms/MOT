@@ -44,7 +44,7 @@ class LMMin(LibraryFunction):
         super(LMMin, self).__init__(
             'void',
             'lmmin',
-            (LibraryParameter(CLDataType.from_string('double*'), 'x'),
+            (LibraryParameter(CLDataType.from_string('optimizer_float*'), 'x'),
              LibraryParameter(CLDataType.from_string('void*'), 'data')),
             resource_filename('mot', 'data/opencl/lmmin.h'),
             resource_filename('mot', 'data/opencl/lmmin.pcl'),
