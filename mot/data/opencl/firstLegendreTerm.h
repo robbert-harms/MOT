@@ -12,6 +12,6 @@
 /**
 * Compute the first term of the legendre polynome for the given value x and the polynomial degree n
 */
-double getFirstLegendreTerm(const double x, const int n);
+model_float getFirstLegendreTerm(const model_float x, const int n);
 
 #endif // FIRST_LEGENDRE_TERM_H

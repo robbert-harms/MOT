@@ -10,7 +10,7 @@
  */
 
 ////////////////////////////////////////////////////////////////////////////////
-// double getFirstLegendreTerm(double x, int n)                               //
+// model_float getFirstLegendreTerm(model_float x, int n)                     //
 //                                                                            //
 //  Description:                                                              //
 //     The Legendre polynomials, Pn(x), are orthogonal on the interval [-1,1] //
@@ -23,7 +23,7 @@
 //              P[0](x) = 1, P[1](x) = x.                                     //
 //                                                                            //
 //  Arguments:                                                                //
-//     long double x                                                          //
+//     model_float x                                                          //
 //        The argument of the Legendre polynomial Pn.                         //
 //     int    n                                                               //
 //        The degree of the Legendre polynomial Pn.                           //
@@ -32,8 +32,8 @@
 //     Pn(x) if n is a nonnegative integer.  If n is negative, 0 is returned. //
 //                                                                            //
 //  Example:                                                                  //
-//     long double Pn;                                                        //
-//     long double x;                                                         //
+//     model_float Pn;                                                        //
+//     model_float x;                                                         //
 //     int    n;                                                              //
 //                                                                            //
 //     (user code to set x and n)                                             //
@@ -53,7 +53,7 @@
 /**
 * Compute the first term of the legendre polynome for the given value x and the polynomial degree n
 */
-double getFirstLegendreTerm(const double x, const int n){
+model_float getFirstLegendreTerm(const model_float x, const int n){
     if (n < 0){
         return 0.0;
     }
@@ -77,14 +77,14 @@ double getFirstLegendreTerm(const double x, const int n){
         return x;
     }
 
-    double P0, P1, Pn;
+    model_float P0, P1, Pn;
     int k;
 
     P0 = 1.0;
     P1 = x;
 
     for (k = 1; k < n; k++, P0 = P1, P1 = Pn){
-        Pn = ( (double)( k + k + 1 ) * x * P1 - (double)k * P0) / (double)(k + 1);
+        Pn = ( (model_float)( k + k + 1 ) * x * P1 - (model_float)k * P0) / (model_float)(k + 1);
     }
 
     return Pn;

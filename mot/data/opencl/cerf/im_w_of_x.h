@@ -9,6 +9,6 @@
  * Email = robbert.harms@maastrichtuniversity.nl
  */
 
-double im_w_of_x(double x);
+model_float im_w_of_x(model_float x);
 
  #endif // CERF_IM_W_OF_X_H

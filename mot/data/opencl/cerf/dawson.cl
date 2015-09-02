@@ -17,7 +17,7 @@
  /**
  * Calculate the Dawson's integral for a real argument.
  */
-double dawson(double x){
+model_float dawson(model_float x){
     return M_SQRTPI_2 * im_w_of_x(x);
 }
 

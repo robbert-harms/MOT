@@ -15,14 +15,15 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class EuclidianNormFunction(LibraryFunction):
 
-    def __init__(self, memspace='private', memtype='double'):
+    def __init__(self, memspace='private', memtype='model_float'):
         """A CL functions for calculating the Euclidian distance between n values.
 
         Args:
-            memspace (str): The memory space of the double array (private, constant, global).
+            memspace (str): The memory space of the memtyped array (private, constant, global).
+            memtype (str): the memory type to use, double, float, model_float, ...
         """
         super(EuclidianNormFunction, self).__init__(
-            'double',
+            memtype,
             'euclidian_norm_' + memspace + '_' + memtype,
             (LibraryParameter(CLDataType.from_string(memtype + '*'), 'x'),
              LibraryParameter(CLDataType.from_string('int'), 'n')),
@@ -98,9 +99,9 @@ class FirstLegendreTerm(LibraryFunction):
         """A function for finding the first legendre term. (see the CL code for more details)
         """
         super(FirstLegendreTerm, self).__init__(
-            'double',
+            'model_float',
             'getFirstLegendreTerm',
-            (LibraryParameter(CLDataType.from_string('double'), 'x'),
+            (LibraryParameter(CLDataType.from_string('model_float'), 'x'),
              LibraryParameter(CLDataType.from_string('int'), 'n')),
             resource_filename('mot', 'data/opencl/firstLegendreTerm.h'),
             resource_filename('mot', 'data/opencl/firstLegendreTerm.cl'),
@@ -129,9 +130,9 @@ class CerfImWOfX(LibraryFunction):
         """Calculate the cerf. (see the CL code for more details)
         """
         super(CerfImWOfX, self).__init__(
-            'double',
+            'model_float',
             'im_w_of_x',
-            (LibraryParameter(CLDataType.from_string('double'), 'x'), ),
+            (LibraryParameter(CLDataType.from_string('model_float'), 'x'), ),
             resource_filename('mot', 'data/opencl/cerf/im_w_of_x.h'),
             resource_filename('mot', 'data/opencl/cerf/im_w_of_x.cl'),
             {},
@@ -144,9 +145,9 @@ class CerfDawson(LibraryFunction):
         """Evaluate dawson integral. (see the CL code for more details)
         """
         super(CerfDawson, self).__init__(
-            'double',
+            'model_float',
             'dawson',
-            (LibraryParameter(CLDataType.from_string('double'), 'x'), ),
+            (LibraryParameter(CLDataType.from_string('model_float'), 'x'), ),
             resource_filename('mot', 'data/opencl/cerf/dawson.h'),
             resource_filename('mot', 'data/opencl/cerf/dawson.cl'),
             {},
@@ -159,9 +160,9 @@ class CerfErfi(LibraryFunction):
         """Calculate erfi. (see the CL code for more details)
         """
         super(CerfErfi, self).__init__(
-            'double',
+            'model_float',
             'erfi',
-            (LibraryParameter(CLDataType.from_string('double'), 'x'), ),
+            (LibraryParameter(CLDataType.from_string('model_float'), 'x'), ),
             resource_filename('mot', 'data/opencl/cerf/erfi.h'),
             resource_filename('mot', 'data/opencl/cerf/erfi.cl'),
             {},
