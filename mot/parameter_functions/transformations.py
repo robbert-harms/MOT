@@ -194,7 +194,7 @@ class SinSqrTransform(SimpleTransformation):
 class AbsModPiTransform(AbsModXTransform):
 
     def __init__(self):
-        super(AbsModPiTransform, self).__init__('PI')
+        super(AbsModPiTransform, self).__init__('PI_MODEL_FLOAT')
 
 
 class SqrTransform(SimpleTransformation):

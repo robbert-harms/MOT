@@ -247,7 +247,7 @@ def get_float_type_def(double_precision, type_def_basename='model_float'):
             typedef double4 ''' + type_def_basename + '''4;
             typedef double8 ''' + type_def_basename + '''8;
             typedef double16 ''' + type_def_basename + '''16;
-            #define PI 3.14159265358979323846
+            #define PI_''' + type_def_basename.upper() + ''' 3.14159265358979323846
         '''
     else:
         return '''
@@ -257,7 +257,7 @@ def get_float_type_def(double_precision, type_def_basename='model_float'):
             typedef float4 ''' + type_def_basename + '''4;
             typedef float8 ''' + type_def_basename + '''8;
             typedef float16 ''' + type_def_basename + '''16;
-            #define PI 3.14159265359f
+            #define PI_''' + type_def_basename.upper() + ''' 3.14159265359f
         '''
 
 
@@ -311,62 +311,6 @@ class TopologicalSort(object):
         return result
 
 
-def check_array_fits_cl_memory(array, dtype, max_size):
-    """Check if the given array when casted to the given type can be fit into the given max_size"""
-    return np.product(array.shape) * np.dtype(dtype).itemsize < max_size
-
-
-def get_cl_data_type_from_data(data):
-    """Get the data attributes for the given dataset, this can be used for building a CL kernel"""
-    if is_cl_vector_type(data):
-        vector_info = vector_type_lookup(data)
-        length = vector_info['length']
-        if vector_info['length'] % 2 == 1:
-            length += 1
-        return vector_info['raw_data_type'] + str(length)
-    return numpy_types_to_cl(data.dtype.type)
-
-
-def get_correct_cl_data_type_from_data(data):
-    """Get the data type for the given data"""
-    if is_cl_vector_type(data):
-        vector_info = vector_type_lookup(data)
-        length = vector_info['length']
-        if length % 2 == 1:
-            length += 1
-        return get_opencl_vector_data_type(length, data_type=vector_info['raw_data_type'])
-    return data.dtype.type
-
-
-def set_correct_cl_data_type(data, convert_to_array=False):
-    """Set for the given data the data type given by get_correct_cl_data_type_from_data()
-
-    Uses recursion.
-
-    Args:
-        data: the data to set to the correct data type
-        convert_to_array (boolean): if the data is not a ndarray will we convert it to an ndarray type if True
-    """
-    if data is not None:
-        if isinstance(data, dict):
-            for key, d in data.items():
-                data[key] = set_correct_cl_data_type(d)
-            return data
-        elif isinstance(data, (tuple, list)):
-            items = []
-            for d in data:
-                items.append(set_correct_cl_data_type(d))
-            return items
-        elif isinstance(data, (numbers.Number,)):
-            if convert_to_array:
-                return np.array([data])
-            else:
-                return data
-        else:
-            return data.astype(get_correct_cl_data_type_from_data(data), order='C', copy=False)
-    return None
-
-
 class ParameterCLCodeGenerator(object):
 
     def __init__(self, device, var_data_dict, prtcl_data_dict, model_data_dict, add_var_data_multipliers=True):
@@ -399,14 +343,13 @@ class ParameterCLCodeGenerator(object):
         for key, vdata in self._var_data_dict.items():
             clmemtype = 'global'
 
-            if check_array_fits_cl_memory(vdata, get_correct_cl_data_type_from_data(vdata),
-                                          self._max_constant_buffer_size):
+            if self._check_array_fits_constant_buffer(vdata, self._get_numpy_type_from_data(vdata)):
                 if constant_args_counter < self._max_constant_args:
                     clmemtype = 'constant'
                     constant_args_counter += 1
 
             param_name = 'var_data_' + key
-            cl_data_type = get_cl_data_type_from_data(vdata)
+            cl_data_type = self._get_cl_data_type_from_data(vdata)
 
             kernel_param_names.append(clmemtype + ' ' + cl_data_type + '* ' + param_name)
             data_struct_names.append(clmemtype + ' ' + cl_data_type + '* ' + param_name)
@@ -420,14 +363,13 @@ class ParameterCLCodeGenerator(object):
         for key, vdata in self._prtcl_data_dict.items():
             clmemtype = 'global'
 
-            if check_array_fits_cl_memory(vdata, get_correct_cl_data_type_from_data(vdata),
-                                          self._max_constant_buffer_size):
+            if self._check_array_fits_constant_buffer(vdata, self._get_numpy_type_from_data(vdata)):
                 if constant_args_counter < self._max_constant_args:
                     clmemtype = 'constant'
                     constant_args_counter += 1
 
             param_name = 'prtcl_data_' + key
-            cl_data_type = get_cl_data_type_from_data(vdata)
+            cl_data_type = self._get_cl_data_type_from_data(vdata)
 
             kernel_param_names.append(clmemtype + ' ' + cl_data_type + '* ' + param_name)
             data_struct_init.append(param_name)
@@ -436,7 +378,7 @@ class ParameterCLCodeGenerator(object):
         for key, vdata in self._model_data_dict.items():
             clmemtype = 'global'
             param_name = 'fixed_data_' + key
-            cl_data_type = get_cl_data_type_from_data(vdata)
+            cl_data_type = self._get_cl_data_type_from_data(vdata)
 
             data_struct_init.append(param_name)
 
@@ -458,6 +400,38 @@ class ParameterCLCodeGenerator(object):
                 'data_struct_names': data_struct_names,
                 'data_struct_init': data_struct_init,
                 'data_struct': data_struct}
+
+    def _get_cl_data_type_from_data(self, data):
+        """Get the data attributes for the given dataset, this can be used for building a CL kernel"""
+        if is_cl_vector_type(data):
+            vector_info = vector_type_lookup(data)
+            length = vector_info['length']
+            if vector_info['length'] % 2 == 1:
+                length += 1
+            return vector_info['raw_data_type'] + str(length)
+        return numpy_types_to_cl(data.dtype.type)
+
+    def _get_numpy_type_from_data(self, data):
+        """Get the numpy data type for the given data"""
+        if is_cl_vector_type(data):
+            vector_info = vector_type_lookup(data)
+            length = vector_info['length']
+            if length % 2 == 1:
+                length += 1
+            return get_opencl_vector_data_type(length, data_type=vector_info['raw_data_type'])
+        return data.dtype.type
+
+    def _check_array_fits_constant_buffer(self, array, dtype):
+        """Check if the given array when casted to the given type can be fit into the given max_size
+
+        Args:
+            array (ndarray): the array we want to fit
+            dtype (np data type): the numpy data type we want to use
+
+        Returns:
+            boolean: if it fits in the constant memory buffer or not
+        """
+        return np.product(array.shape) * np.dtype(dtype).itemsize < self._max_constant_buffer_size
 
 
 def init_dict_tree():

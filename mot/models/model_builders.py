@@ -3,7 +3,7 @@ import numpy as np
 from ..base import ProtocolParameter, ModelDataParameter, FreeParameter, CLDataType
 from .. import runtime_configuration
 from ..cl_routines.mapping.calc_dependent_params import CalculateDependentParameters
-from ..utils import set_cl_compatible_data_type, TopologicalSort, set_correct_cl_data_type
+from ..utils import set_cl_compatible_data_type, TopologicalSort
 from ..parameter_functions.codecs import CodecBuilder
 from ..parameter_functions.dependencies import SimpleAssignment
 from ..models.interfaces import OptimizeModelInterface, SampleModelInterface

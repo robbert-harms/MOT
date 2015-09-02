@@ -28,20 +28,24 @@ class EvaluateModel(AbstractCLRoutine):
         Returns:
             ndarray: Return per problem instance the evaluation per data point.
         """
+        np_dtype = np.float32
+        if model.double_precision:
+            np_dtype = np.float64
+
         parameters = model.get_initial_parameters(parameters)
-        #todo make model_float
         nmr_problems = model.get_nmr_problems()
         nmr_inst_per_problem = model.get_nmr_inst_per_problem()
 
-        evaluations = np.asmatrix(np.zeros((nmr_problems, nmr_inst_per_problem)).astype(np.float64,
-                                                                                        order='C', copy=False))
+        evaluations = np.asmatrix(np.zeros((nmr_problems, nmr_inst_per_problem)).astype(np_dtype, order='C',
+                                                                                        copy=False))
+        parameters = parameters.astype(np_dtype, order='C', copy=False)
 
         var_data_dict = model.get_problems_var_data()
         prtcl_data_dict = model.get_problems_prtcl_data()
         fixed_data_dict = model.get_problems_fixed_data()
 
         workers = self._create_workers(_EvaluateModelWorker, model, parameters, evaluations,
-                                       var_data_dict, prtcl_data_dict, fixed_data_dict, model.double_precision)
+                                       var_data_dict, prtcl_data_dict, fixed_data_dict)
         self.load_balancer.process(workers, nmr_problems)
 
         return evaluations
@@ -50,7 +54,7 @@ class EvaluateModel(AbstractCLRoutine):
 class _EvaluateModelWorker(Worker):
 
     def __init__(self, cl_environment, model, parameters, evaluations, var_data_dict, prtcl_data_dict,
-                 fixed_data_dict, double_precision):
+                 fixed_data_dict):
         super(_EvaluateModelWorker, self).__init__(cl_environment)
 
         self._model = model
@@ -60,7 +64,6 @@ class _EvaluateModelWorker(Worker):
         self._var_data_dict = var_data_dict
         self._prtcl_data_dict = prtcl_data_dict
         self._fixed_data_dict = fixed_data_dict
-        self._double_precision = double_precision
 
         self._constant_buffers = self._generate_constant_buffers(self._prtcl_data_dict, self._fixed_data_dict)
         self._kernel = self._build_kernel()
@@ -94,14 +97,14 @@ class _EvaluateModelWorker(Worker):
         param_code_gen = ParameterCLCodeGenerator(self._cl_environment.device,
                                                   self._var_data_dict, self._prtcl_data_dict, self._fixed_data_dict)
 
-        kernel_param_names = ['global double* params', 'global double* evals']
+        kernel_param_names = ['global model_float* params', 'global model_float* evals']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
         kernel_source = '''
             #define NMR_INST_PER_PROBLEM ''' + str(self._model.get_nmr_inst_per_problem()) + '''
         '''
         kernel_source += get_cl_pragma_double()
-        kernel_source += get_float_type_def(self._double_precision)
+        kernel_source += get_float_type_def(self._model.double_precision)
         kernel_source += param_code_gen.get_data_struct()
         kernel_source += self._model.get_model_eval_function('evaluateModel')
         kernel_source += '''
@@ -109,14 +112,15 @@ class _EvaluateModelWorker(Worker):
                 ''' + ",\n".join(kernel_param_names) + '''
                 ){
                     int gid = get_global_id(0);
-                    double x[''' + str(self._nmr_params) + '''];
+
                     ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
 
+                    double x[''' + str(self._nmr_params) + '''];
                     for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                         x[i] = params[gid * ''' + str(self._nmr_params) + ''' + i];
                     }
 
-                    global double* result = evals + gid * NMR_INST_PER_PROBLEM;
+                    global model_float* result = evals + gid * NMR_INST_PER_PROBLEM;
 
                     for(int i = 0; i < NMR_INST_PER_PROBLEM; i++){
                         result[i] = evaluateModel(&data, x, i);
