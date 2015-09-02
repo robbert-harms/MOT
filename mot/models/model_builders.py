@@ -333,7 +333,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         model function which do not happen in the codec must also go here.
 
         Returns:
-            str: A function of the kind: void finalParameterTransformations(const optimize_data* data, double* x)
+            str: A function of the kind: void finalParameterTransformations(const optimize_data* data, model_float* x)
                 Which is called for every voxel and must in place edit the x variable.
         """
         transform_needed = any(dp.has_side_effects or not dp.fixed for dp in
@@ -386,7 +386,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         func += '''
             model_float ''' + func_name + \
-                '(const optimize_data* const data, const double* const x, const int observation_index){' + "\n"
+                '(const optimize_data* const data, const model_float* const x, const int observation_index){' + "\n"
         func += self._get_parameters_listing(exclude_list=[m.name + '_' + p.name for (m, p) in
                                                            self._get_non_model_tree_param_listing()])
 
@@ -474,7 +474,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                                          for m, p in param_lists['dependent']]
 
             cpd = CalculateDependentParameters(runtime_configuration.runtime_config['cl_environments'],
-                                               runtime_configuration.runtime_config['load_balancer'], self.double_precision)
+                                               runtime_configuration.runtime_config['load_balancer'],
+                                               self.double_precision)
             dependent_parameters = cpd.calculate(self._get_fixed_parameters_as_var_data(),
                                                  estimated_parameters, func, dependent_parameter_names)
             results_dict.update(dependent_parameters)
@@ -882,8 +883,8 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
                                                  problem_data)
 
     def get_log_prior_function(self, func_name='getLogPrior'):
-        prior = 'double ' + func_name + '(const double* const x){' + "\n"
-        prior += "\t" + 'double prior = 1.0;' + "\n"
+        prior = 'model_float ' + func_name + '(const model_float* const x){' + "\n"
+        prior += "\t" + 'model_float prior = 1.0;' + "\n"
         for i, (m, p) in enumerate(self._get_estimable_parameters_list()):
             prior += "\t" + 'prior *= ' + p.sampling_prior.get_cl_assignment(p, 'x[' + str(i) + ']') + "\n"
         prior += "\n" + "\t" + 'return log(prior);' + "\n" + '}'

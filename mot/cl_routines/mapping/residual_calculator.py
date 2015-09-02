@@ -116,7 +116,7 @@ class _ResidualCalculatorWorker(Worker):
                     int gid = get_global_id(0);
                     ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
 
-                    double x[''' + str(nmr_params) + '''];
+                    model_float x[''' + str(nmr_params) + '''];
                     for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
                         x[i] = params[gid * ''' + str(nmr_params) + ''' + i];
                     }

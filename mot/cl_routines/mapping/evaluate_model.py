@@ -115,7 +115,7 @@ class _EvaluateModelWorker(Worker):
 
                     ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
 
-                    double x[''' + str(self._nmr_params) + '''];
+                    model_float x[''' + str(self._nmr_params) + '''];
                     for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                         x[i] = params[gid * ''' + str(self._nmr_params) + ''' + i];
                     }

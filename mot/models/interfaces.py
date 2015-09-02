@@ -80,7 +80,8 @@ class OptimizeModelInterface(object):
 
         Returns:
             str: An CL function with the signature:
-                double <func_name>(const optimize_data* const data, const double* const x, const int observation_index);
+                model_float <func_name>(const optimize_data* const data, const model_float* const x,
+                                        const int observation_index);
         """
 
     def get_observation_return_function(self, func_name='getObservation'):
@@ -91,7 +92,7 @@ class OptimizeModelInterface(object):
 
         Returns:
             str: An CL function with the signature:
-                double <func_name>(const optimize_data* const data, const int observation_index);
+                model_float <func_name>(const optimize_data* const data, const int observation_index);
         """
 
     def get_objective_function(self, func_name="calculateObjective"):
@@ -102,7 +103,7 @@ class OptimizeModelInterface(object):
 
         Returns:
             A function of the kind:
-                double <func_name>(const optimize_data* const data, double* const x);
+                model_float <func_name>(const optimize_data* const data, model_float* const x);
         """
 
     def get_initial_parameters(self, results_dict=None):
@@ -200,7 +201,7 @@ class OptimizeModelInterface(object):
 
         Returns:
             Return None if this function is not used, else a function of the kind:
-                void <func_name>(const optimize_data* data, double* x);
+                void <func_name>(const optimize_data* data, model_float* x);
 
             Which is called for every voxel and must in place edit the x variable.
         """
@@ -244,7 +245,7 @@ class SampleModelInterface(OptimizeModelInterface):
 
         Returns:
             str: A function of the kind:
-                double <func_name>(const optimize_data* const data, double* const x);
+                model_float <func_name>(const optimize_data* const data, model_float* const x);
         """
 
     def is_proposal_symmetric(self):
@@ -259,7 +260,8 @@ class SampleModelInterface(OptimizeModelInterface):
 
         Returns:
             A function with the signature:
-                double <func_name>(const int i, const double proposal, const double current, double* const parameters)
+                model_float <func_name>(const int i, const model_float proposal,
+                                        const model_float current, model_float* const parameters)
 
             Where i is the index of the parameter we would like to get the proposal from, current is the current
             value of that parameter and proposal the proposal value of the parameter. It should return for the requested
@@ -273,8 +275,8 @@ class SampleModelInterface(OptimizeModelInterface):
 
         Returns:
             A function with the signature:
-                double <func_name>(const int i, const double current, ranluxcl_state_t* ranluxclstate,
-                                   double* const parameters)
+                model_float <func_name>(const int i, const model_float current, ranluxcl_state_t* ranluxclstate,
+                                   model_float* const parameters)
 
             Where i is the index of the parameter we would like to get the proposal from and current is the current
             value of that parameter. One can obtain random numbers with:
@@ -288,7 +290,7 @@ class SampleModelInterface(OptimizeModelInterface):
         Returns:
             A function with the signature:
                 void <func_name>(uint* const ac_between_proposal_updates, const uint proposal_update_intervals,
-                                 double* const proposal_parameters);
+                                 model_float* const proposal_parameters);
 
             Where ac_between_proposal_updates is the acceptance count in between proposal updates,
             proposal_update_intervals is the interval at which we update the proposals and proposal_parameters
@@ -306,7 +308,7 @@ class SampleModelInterface(OptimizeModelInterface):
 
         Returns:
             A function of the kind:
-                double <func_name>(const double* const x);
+                model_float <func_name>(const model_float* const x);
 
             Which is called by the sampling routine to calculate the posterior probability.
         """

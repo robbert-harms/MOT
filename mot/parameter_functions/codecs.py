@@ -11,7 +11,7 @@ class AbstractCodec(object):
         """Get a CL function that can transform the parameters from encoded space to model space.
 
         The signature of the CL function is:
-            void <fname>(const double* x);
+            void <fname>(const model_float* x);
 
         Args:
             fname (str): The name how the function should call itself.
@@ -26,7 +26,7 @@ class AbstractCodec(object):
         """Get a CL function that can transform the parameters from model space to an encoded space.
 
         The signature of the CL function is:
-            void <fname>(const double* x);
+            void <fname>(const model_float* x);
 
         Args:
             fname (str): The name how the function should call itself.

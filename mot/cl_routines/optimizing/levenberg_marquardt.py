@@ -66,14 +66,9 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
                     }
                     decodeParameters(x_model);
 
-                    double tmp_fix[''' + str(nmr_params) + '''];
-                    for(i = 0; i < ''' + str(nmr_params) + '''; i++){
-                        tmp_fix[i] = (double)x_model[i];
-                    }
-
                     for(i = 0; i < NMR_INST_PER_PROBLEM; i++){
                         result[i] = getObservation((optimize_data*)data, i) -
-                                        evaluateModel((optimize_data*)data, tmp_fix, i);
+                                        evaluateModel((optimize_data*)data, x_model, i);
                     }
                 }
             '''

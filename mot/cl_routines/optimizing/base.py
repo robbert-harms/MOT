@@ -301,13 +301,7 @@ class AbstractParallelOptimizerWorker(Worker):
                         x_model[i] = x[i];
                     }
                     decodeParameters(x_model);
-
-                    double tmp_fix[''' + str(self._nmr_params) + '''];
-                    for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
-                        tmp_fix[i] = (double)x_model[i];
-                    }
-
-                    return calculateObjective((optimize_data*)data, tmp_fix);
+                    return calculateObjective((optimize_data*)data, x_model);
                 }
             '''
         else:
