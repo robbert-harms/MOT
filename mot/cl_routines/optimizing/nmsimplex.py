@@ -33,3 +33,9 @@ class NMSimplexWorker(AbstractParallelOptimizerWorker):
 
     def _get_optimizer_call_name(self):
         return 'nmsimplex'
+
+    def _optimizer_supports_float(self):
+        return False
+
+    def _optimizer_supports_double(self):
+        return False

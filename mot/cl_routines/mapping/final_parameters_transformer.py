@@ -103,9 +103,9 @@ class _FPTWorker(Worker):
                 ''' + ",\n".join(kernel_param_names) + '''
                 ){
                     int gid = get_global_id(0);
-                    model_float x[''' + str(self._nmr_params) + '''];
                     ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
 
+                    model_float x[''' + str(self._nmr_params) + '''];
                     for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                         x[i] = params[gid * ''' + str(self._nmr_params) + ''' + i];
                     }

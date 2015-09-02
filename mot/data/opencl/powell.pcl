@@ -30,10 +30,10 @@
 double bracket_and_brent(const double* const pcom, const double* const x_tmp_min,
                          double* xt, const void* const data, double *xmin);
 
-double powell(double* x, const void* const data){
+double powell(double* model_parameters, const void* const data){
     int i, j, i_greatest;
     int iteration = 0;
-    double fval = evaluate(x, data);
+    double fval = evaluate(model_parameters, data);
     double del, fval_tmp1, fval_tmp2;
 
     double xmin;
@@ -48,7 +48,7 @@ double powell(double* x, const void* const data){
             starting_vectors[i][j] = (i == j ? 1.0 : 0.0);
         }
 
-        x_tmp1[i] = x[i];
+        x_tmp1[i] = model_parameters[i];
     }
 
     while(iteration++ < MAX_IT){
@@ -62,10 +62,10 @@ double powell(double* x, const void* const data){
             }
             fval_tmp2 = fval;
 
-            fval = bracket_and_brent(x, x_tmp_min, x_tmp2, data, &xmin);
+            fval = bracket_and_brent(model_parameters, x_tmp_min, x_tmp2, data, &xmin);
             for(j=0; j < %(NMR_PARAMS)r; j++){
                 x_tmp_min[j] *= xmin;
-                x[j] += x_tmp_min[j];
+                model_parameters[j] += x_tmp_min[j];
             }
 
             if(fval_tmp2 - fval > del){
@@ -79,9 +79,9 @@ double powell(double* x, const void* const data){
         }
 
         for(j=0; j < %(NMR_PARAMS)r; j++){
-            x_tmp2[j] = 2.0 * x[j] - x_tmp1[j];
-            x_tmp_min[j] = x[j] - x_tmp1[j];
-            x_tmp1[j] = x[j];
+            x_tmp2[j] = 2.0 * model_parameters[j] - x_tmp1[j];
+            x_tmp_min[j] = model_parameters[j] - x_tmp1[j];
+            x_tmp1[j] = model_parameters[j];
         }
 
         fval_tmp2 = evaluate(x_tmp2, data);
@@ -90,10 +90,10 @@ double powell(double* x, const void* const data){
             if(2.0 * (fval_tmp1 - 2.0 * fval + fval_tmp2) * pown(fval_tmp1 - fval - del, 2)
                         - del * pown(fval_tmp1 - fval_tmp2, 2) < 0.0){
 
-                fval = bracket_and_brent(x, x_tmp_min, x_tmp2, data, &xmin);
+                fval = bracket_and_brent(model_parameters, x_tmp_min, x_tmp2, data, &xmin);
                 for(j=0; j < %(NMR_PARAMS)r; j++){
                     x_tmp_min[j] *= xmin;
-                    x[j] += x_tmp_min[j];
+                    model_parameters[j] += x_tmp_min[j];
                 }
 
                 for(j=0; j < %(NMR_PARAMS)r; j++){

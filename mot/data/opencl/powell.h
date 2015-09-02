@@ -9,6 +9,6 @@
  * Email = robbert.harms@maastrichtuniversity.nl
  */
 
-double powell(double* x, const void* const data);
+double powell(double* model_parameters, const void* const data);
 
 #endif // POWELL_H

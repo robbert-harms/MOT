@@ -226,7 +226,13 @@ class AbstractParallelOptimizerWorker(Worker):
 
         kernel_source = ''
         kernel_source += get_cl_pragma_double()
-        kernel_source += get_float_type_def(self._double_precision)
+        kernel_source += get_float_type_def(self._double_precision, 'model_float')
+
+        if self._double_precision:
+            kernel_source += get_float_type_def(self._optimizer_supports_double(), 'optimizer_float')
+        else:
+            kernel_source += get_float_type_def(not self._optimizer_supports_float(), 'optimizer_float')
+
         kernel_source += param_code_gen.get_data_struct()
         kernel_source += cl_objective_function
         kernel_source += self._get_optimizer_cl_code()
@@ -333,6 +339,22 @@ class AbstractParallelOptimizerWorker(Worker):
             str: The function name of the optimization function.
         """
         return ''
+
+    def _optimizer_supports_float(self):
+        """Check if the optimizer supports the float type.
+
+        Returns:
+            boolean: true if the optimizer supports float, false otherwise. By default we assume false.
+        """
+        return False
+
+    def _optimizer_supports_double(self):
+        """Check if the optimizer supports the double float type.
+
+        Returns:
+            boolean: true if the optimizer supports double, false otherwise. By default we assume false.
+        """
+        return False
 
 
 class AbstractSerialOptimizer(AbstractOptimizer):
