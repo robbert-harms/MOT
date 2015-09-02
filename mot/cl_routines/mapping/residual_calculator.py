@@ -35,7 +35,7 @@ class ResidualCalculator(AbstractCLRoutine):
         nmr_inst_per_problem = model.get_nmr_inst_per_problem()
         nmr_problems = model.get_nmr_problems()
 
-        residuals = np.asmatrix(np.zeros((nmr_problems, nmr_inst_per_problem)).astype(np_dtype, copy=False))
+        residuals = np.asmatrix(np.zeros((nmr_problems, nmr_inst_per_problem), dtype=np_dtype, order='C'))
 
         parameters = model.get_initial_parameters(parameters)
 

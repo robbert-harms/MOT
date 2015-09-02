@@ -88,7 +88,8 @@ class AbstractParallelOptimizer(AbstractOptimizer):
 
     def minimize(self, model, init_params=None, full_output=False):
         self._logger.info('Entered optimization routine.')
-
+        self._logger.info('We will use a {} precision float type for the calculations.'.format(
+            'double' if model.double_precision else 'single'))
         for env in self.load_balancer.get_used_cl_environments(self.cl_environments):
             self._logger.info('Using device {} with compile flags {}'.format(str(env), str(env.compile_flags)))
         self._logger.info('The parameters we will optimize are: {0}'.format(model.get_optimized_param_names()))
