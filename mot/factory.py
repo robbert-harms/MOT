@@ -2,12 +2,9 @@ from .cl_routines.optimizing.levenberg_marquardt import LevenbergMarquardt
 from .cl_routines.filters.gaussian import GaussianFilter
 from .cl_routines.filters.mean import MeanFilter
 from .cl_routines.filters.median import MedianFilter
-from .cl_routines.optimizing.gridsearch import GridSearch
 from .cl_routines.optimizing.meta_optimizer import MetaOptimizer
 from .cl_routines.optimizing.nmsimplex import NMSimplex
 from .cl_routines.optimizing.powell import Powell
-from .cl_routines.optimizing.serial_optimizers import SerialBasinHopping, SerialBFGS, SerialLM, SerialNMSimplex, \
-    SerialPowell
 from .load_balance_strategies import EvenDistribution, RuntimeLoadBalancing, PreferGPU, PreferCPU, \
     PreferSpecificEnvironment
 
@@ -28,8 +25,7 @@ def get_optimizer_by_name(name):
     Returns:
         class: the class of the optimizer requested
     """
-    optimizers = [LevenbergMarquardt, GridSearch, Powell, NMSimplex, MetaOptimizer, SerialBasinHopping,
-                  SerialBFGS, SerialLM, SerialNMSimplex, SerialPowell]
+    optimizers = [LevenbergMarquardt, Powell, NMSimplex, MetaOptimizer]
     return _get_item(name, optimizers, 'optimizers')
 
 

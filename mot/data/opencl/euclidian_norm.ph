@@ -1,5 +1,5 @@
-#ifndef EUCLIDIAN_NORM_%(MEMSPACE)s_H
-#define EUCLIDIAN_NORM_%(MEMSPACE)s_H
+#ifndef EUCLIDIAN_NORM_%(MEMSPACE)s_%(MEMTYPE)s_H
+#define EUCLIDIAN_NORM_%(MEMSPACE)s_%(MEMTYPE)s_H
 
 /**
  * Author = Robbert Harms
@@ -8,6 +8,6 @@
  * Maintainer = Robbert Harms
  * Email = robbert.harms@maastrichtuniversity.nl
  */
-double euclidian_norm_%(MEMSPACE)s(const %(MEMSPACE)s double* const x, const int n);
+%(MEMTYPE)s euclidian_norm_%(MEMSPACE)s(const %(MEMSPACE)s %(MEMTYPE)s* const x, const int n);
 
 #endif // EUCLIDIAN_NORM_%(MEMSPACE)s_H

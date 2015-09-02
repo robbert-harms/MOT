@@ -15,7 +15,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class EuclidianNormFunction(LibraryFunction):
 
-    def __init__(self, memspace='private'):
+    def __init__(self, memspace='private', memtype='double'):
         """A CL functions for calculating the Euclidian distance between n values.
 
         Args:
@@ -23,12 +23,12 @@ class EuclidianNormFunction(LibraryFunction):
         """
         super(EuclidianNormFunction, self).__init__(
             'double',
-            'euclidian_norm_' + memspace,
-            (LibraryParameter(CLDataType.from_string('double*'), 'x'),
+            'euclidian_norm_' + memspace + '_' + memtype,
+            (LibraryParameter(CLDataType.from_string(memtype + '*'), 'x'),
              LibraryParameter(CLDataType.from_string('int'), 'n')),
             resource_filename('mot', 'data/opencl/euclidian_norm.ph'),
             resource_filename('mot', 'data/opencl/euclidian_norm.pcl'),
-            {'MEMSPACE': memspace},
+            {'MEMSPACE': memspace, 'MEMTYPE': memtype},
             ())
 
 
@@ -41,7 +41,6 @@ class LMMin(LibraryFunction):
             nmr_parameters (int): The number of parameters we are going to optimize, this is compiled into the code.
             patience (int): The patience before stopping the iterations.
         """
-        euclid = EuclidianNormFunction(memspace='private')
         super(LMMin, self).__init__(
             'void',
             'lmmin',
@@ -49,8 +48,8 @@ class LMMin(LibraryFunction):
              LibraryParameter(CLDataType.from_string('void*'), 'data')),
             resource_filename('mot', 'data/opencl/lmmin.h'),
             resource_filename('mot', 'data/opencl/lmmin.pcl'),
-            {'EUCLIDIAN_FUNC': euclid.cl_function_name, 'NMR_PARAMS': nmr_parameters, 'PATIENCE': patience},
-            (euclid,))
+            {'NMR_PARAMS': nmr_parameters, 'PATIENCE': patience},
+            [])
 
 
 class NMSimplexFunc(LibraryFunction):

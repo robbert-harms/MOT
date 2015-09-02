@@ -1,5 +1,5 @@
-#ifndef EUCLIDIAN_NORM_%(MEMSPACE)s_CL
-#define EUCLIDIAN_NORM_%(MEMSPACE)s_CL
+#ifndef EUCLIDIAN_NORM_%(MEMSPACE)s_%(MEMTYPE)s_CL
+#define EUCLIDIAN_NORM_%(MEMSPACE)s_%(MEMTYPE)s_CL
 
 /**
  * Author = Robbert Harms
@@ -20,7 +20,7 @@
 /*****************************************************************************/
 /*  euclidian_norm (Euclidean norm)                                          */
 /*****************************************************************************/
-double euclidian_norm_%(MEMSPACE)s(const %(MEMSPACE)s double* const x, const int n){
+%(MEMTYPE)s euclidian_norm_%(MEMSPACE)s(const %(MEMSPACE)s %(MEMTYPE)s* const x, const int n){
 /*     Given an n-vector x, this function calculates the
  *     euclidean norm of x.
  *
@@ -42,7 +42,7 @@ double euclidian_norm_%(MEMSPACE)s(const %(MEMSPACE)s double* const x, const int
  *      x is an input array of length n.
  */
     int i;
-    double s1, s2, s3, xabs, x1max, x3max, sqrt_n_tmp;
+    %(MEMTYPE)s s1, s2, s3, xabs, x1max, x3max, sqrt_n_tmp;
 
     s1 = 0;
     s2 = 0;
@@ -94,4 +94,4 @@ double euclidian_norm_%(MEMSPACE)s(const %(MEMSPACE)s double* const x, const int
 
 } /*** euclidian_norm. ***/
 
-#endif // EUCLIDIAN_NORM_%(MEMSPACE)s_CL
+#endif // EUCLIDIAN_NORM_%(MEMSPACE)s_%(MEMTYPE)s_CL
