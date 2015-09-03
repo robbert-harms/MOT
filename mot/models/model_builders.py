@@ -883,8 +883,8 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
                                                  problem_data)
 
     def get_log_prior_function(self, func_name='getLogPrior'):
-        prior = 'model_float ' + func_name + '(const model_float* const x){' + "\n"
-        prior += "\t" + 'model_float prior = 1.0;' + "\n"
+        prior = 'double ' + func_name + '(const double* const x){' + "\n"
+        prior += "\t" + 'double prior = 1.0;' + "\n"
         for i, (m, p) in enumerate(self._get_estimable_parameters_list()):
             prior += "\t" + 'prior *= ' + p.sampling_prior.get_cl_assignment(p, 'x[' + str(i) + ']') + "\n"
         prior += "\n" + "\t" + 'return log(prior);' + "\n" + '}'
@@ -899,7 +899,8 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         return return_list
 
     def is_proposal_symmetric(self):
-        return all(p.sampling_proposal.is_symmetric for m, p in self._get_estimable_parameters_list())
+        #todo remove not
+        return not all(p.sampling_proposal.is_symmetric for m, p in self._get_estimable_parameters_list())
 
     def get_proposal_logpdf(self, func_name='getProposalLogPDF'):
         return_str = ''
@@ -907,7 +908,8 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
             return_str += p.sampling_proposal.get_proposal_logpdf_function()
 
         return_str += "\n" + 'double ' + func_name + \
-            '(const int i, const double proposal, const double current, double* const parameters){' + "\n\t"
+            '(const int i, const double proposal, const double current, ' \
+            ' double* const parameters){' + "\n\t"
 
         return_str += "\n\t" + 'switch(i){' + "\n\t\t"
 
@@ -990,7 +992,7 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         return_str += '}'
         return return_str
 
-    def get_log_likelihood_function(self, func_name="getLogLikelihood"):
+    def get_log_likelihood_function(self, func_name='getLogLikelihood'):
         inst_per_problem = self.get_nmr_inst_per_problem()
         eval_func_name = func_name + '_evaluateModel'
         obs_func_name = func_name + '_getObservation'

@@ -40,7 +40,6 @@ class MetropolisHastings(AbstractSampler):
             proposal_update_intervals (int): after how many samples we would like to update the proposals
                 This is during burning and sampling. A value of 1 means update after every jump.
         """
-
         super(MetropolisHastings, self).__init__(cl_environments=cl_environments, load_balancer=load_balancer)
         self._nmr_samples = nmr_samples or 1
         self.burn_length = burn_length
@@ -56,13 +55,19 @@ class MetropolisHastings(AbstractSampler):
         self._nmr_samples = value or 1
 
     def sample(self, model, init_params=None, full_output=False):
-        parameters = model.get_initial_parameters(init_params).astype(np.float64, order='C')
+        np_dtype = np.float32
+        if model.double_precision:
+            np_dtype = np.float64
+
+
+
+        parameters = model.get_initial_parameters(init_params)
         var_data_dict = model.get_problems_var_data()
         prtcl_data_dict = model.get_problems_prtcl_data()
         fixed_data_dict = model.get_problems_fixed_data()
 
         samples = np.zeros((model.get_nmr_problems(), parameters.shape[1] * self.nmr_samples),
-                           dtype=np.float64, order='C')
+                           dtype=np_dtype, order='C')
 
         workers = self._create_workers(_MHWorker, model, parameters, samples,
                                        var_data_dict, prtcl_data_dict, fixed_data_dict,
@@ -87,7 +92,6 @@ class _MHWorker(Worker):
         super(_MHWorker, self).__init__(cl_environment)
 
         self._model = model
-        self._double_precision = model.double_precision
         self._parameters = parameters
         self._nmr_params = parameters.shape[1]
         self._samples = samples
@@ -122,9 +126,8 @@ class _MHWorker(Worker):
         data_buffers.append(np.uint32(self._burn_length))
         data_buffers.append(np.uint32(self._sample_intervals))
         data_buffers.append(np.uint32(self._nmr_params))
-        # We add these parameters to the kernel call instead of inlining them.
-        # This if for a good reason. At the time of writing, the CL kernel compiler crashes if these parameters
-        # are inlined in the source file.
+        # We add these parameters to the kernel call instead of inlining them for a good reason.
+        # At the time of writing, the CL kernel compiler crashes if these parameters are inlined in the source file.
         # My guess is that the compiler tries to optimize the loops, fails and then crashes.
 
         for data in self._var_data_dict.values():
@@ -146,14 +149,13 @@ class _MHWorker(Worker):
         return event
 
     def _get_kernel_source(self):
-        #todo, this accepts a model_float now, we have to change the code to allow this to work
         cl_final_param_transform = self._model.get_final_parameter_transformations('applyFinalParamTransforms')
 
         param_code_gen = ParameterCLCodeGenerator(self._cl_environment.device, self._var_data_dict,
                                                   self._prtcl_data_dict, self._fixed_data_dict)
 
-        kernel_param_names = ['global double* params',
-                              'global double* samples',
+        kernel_param_names = ['global model_float* params',
+                              'global model_float* samples',
                               'global float4* ranluxcltab',
                               'unsigned int nmr_samples',
                               'unsigned int burn_length',
@@ -171,7 +173,7 @@ class _MHWorker(Worker):
             #define NMR_INST_PER_PROBLEM ''' + str(self._model.get_nmr_inst_per_problem()) + '''
         '''
         kernel_source += get_cl_pragma_double()
-        kernel_source += get_float_type_def(self._double_precision)
+        kernel_source += get_float_type_def(self._model.double_precision, 'model_float')
         kernel_source += param_code_gen.get_data_struct()
         kernel_source += rng_code.get_cl_header()
         kernel_source += self._model.get_log_prior_function('getLogPrior')
@@ -187,13 +189,55 @@ class _MHWorker(Worker):
         kernel_source += self._model.get_log_likelihood_function('getLogLikelihood')
 
         kernel_source += '''
-            void update_state(double* const x,
+            double _get_log_likelihood(const optimize_data* const data, const double* const x){
+                model_float x_mf[''' + str(self._nmr_params) + '''];
+                for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
+                    x_mf[i] = x[i];
+                }
+
+                return getLogLikelihood(data, x_mf);
+            }
+
+            double _get_log_prior(const double* const x){
+                return getLogPrior(x);
+            }
+
+            void _update_proposals(double* const proposal_parameters, uint* const ac_between_proposal_updates){
+                updateProposalParameters(ac_between_proposal_updates, ''' + str(self.proposal_update_intervals) + ''',
+                                         proposal_parameters);
+
+                for(int i = 0; i < ''' + str(nrm_adaptable_proposal_parameters) + '''; i++){
+                    ac_between_proposal_updates[i] = 0;
+                }
+            }
+
+            double _get_proposal(const int i, const double current, ranluxcl_state_t* const ranluxclstate,
+                               double* const parameters){
+                return getProposal(i, current, ranluxclstate, parameters);
+            }
+
+            double _get_proposal_logpdf(const int i, const double proposal, const double current,
+                                        double* const parameters){
+                return getProposalLogPDF(i, proposal, current, parameters);
+            }
+        '''
+
+        if cl_final_param_transform:
+            #todo make model float
+            kernel_source += '''
+            void _apply_final_parameters_transform(const optimize_data* const data, double* const x){
+                applyFinalParamTransforms(data, x);
+            }
+        '''
+
+        kernel_source += '''
+            void _update_state(double* const x,
                               double* const x_proposal,
                               ranluxcl_state_t* ranluxclstate,
                               double* const current_likelihood,
                               double* const current_prior,
                               const optimize_data* const data,
-                              double * const proposal_parameters,
+                              double* const proposal_parameters,
                               uint * const ac_between_proposal_updates,
                               const uint nmr_params){
 
@@ -213,12 +257,12 @@ class _MHWorker(Worker):
                     for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                         x_proposal[i] = x[i];
                     }
-                    x_proposal[k] = getProposal(k, x[k], ranluxclstate, proposal_parameters);
+                    x_proposal[k] = _get_proposal(k, x[k], ranluxclstate, proposal_parameters);
 
-                    new_prior = getLogPrior(x_proposal);
+                    new_prior = _get_log_prior(x_proposal);
 
                     if(exp(new_prior) > 0){
-                        new_likelihood = getLogLikelihood(data, x_proposal);
+                        new_likelihood = _get_log_likelihood(data, x_proposal);
 
         '''
         if self._model.is_proposal_symmetric():
@@ -227,8 +271,8 @@ class _MHWorker(Worker):
                 '''
         else:
             kernel_source += '''
-                        x_to_prop = getProposalLogPDF(k, x[k], x_proposal[k], proposal_parameters);
-                        prop_to_x = getProposalLogPDF(k, x_proposal[k], x[k], proposal_parameters);
+                        x_to_prop = _get_proposal_logpdf(k, x[k], x_proposal[k], proposal_parameters);
+                        prop_to_x = _get_proposal_logpdf(k, x_proposal[k], x[k], proposal_parameters);
 
                         bayesian_f = exp((new_likelihood + new_prior + x_to_prop) -
                             (*current_likelihood + *current_prior + prop_to_x));
@@ -246,18 +290,7 @@ class _MHWorker(Worker):
                     }
                 }
             }
-        '''
-        kernel_source += '''
-            void _update_proposals(double* const proposal_parameters, uint* const ac_between_proposal_updates){
-                updateProposalParameters(ac_between_proposal_updates, ''' + str(self.proposal_update_intervals) + ''',
-                                         proposal_parameters);
 
-                for(int i = 0; i < ''' + str(nrm_adaptable_proposal_parameters) + '''; i++){
-                    ac_between_proposal_updates[i] = 0;
-                }
-            }
-        '''
-        kernel_source += '''
             __kernel void sample(
                 ''' + ",\n".join(kernel_param_names) + '''
                 ){
@@ -279,12 +312,12 @@ class _MHWorker(Worker):
                         x[i] = params[gid * ''' + str(self._nmr_params) + ''' + i];
                     }
 
-                    double current_likelihood = getLogLikelihood(&data, x);
-                    double current_prior = getLogPrior(x);
+                    double current_likelihood = _get_log_likelihood(&data, x);
+                    double current_prior = _get_log_prior(x);
 
                     proposal_update_count = 0;
                     for(i = 0; i < burn_length; i++){
-                        update_state(x, x_proposal, &ranluxclstate, &current_likelihood,
+                        _update_state(x, x_proposal, &ranluxclstate, &current_likelihood,
                                      &current_prior, &data, proposal_parameters, ac_between_proposal_updates,
                                      nmr_params);
 
@@ -298,7 +331,7 @@ class _MHWorker(Worker):
                     proposal_update_count = 0;
                     for(i = 0; i < nmr_samples; i++){
                         for(j = 0; j < sample_intervals; j++){
-                            update_state(x, x_proposal, &ranluxclstate, &current_likelihood,
+                            _update_state(x, x_proposal, &ranluxclstate, &current_likelihood,
                                          &current_prior, &data, proposal_parameters, ac_between_proposal_updates,
                                          nmr_params);
 
@@ -313,7 +346,7 @@ class _MHWorker(Worker):
                             x_proposal[j] = x[j];
                         }
 
-                        ''' + ('applyFinalParamTransforms(&data, x_proposal);'
+                        ''' + ('_apply_final_parameters_transform(&data, x_proposal);'
                                if cl_final_param_transform else '') + '''
 
                         for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){

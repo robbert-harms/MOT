@@ -48,7 +48,7 @@ class EvaluationModel(ModelFunction):
 
         Returns:
             the objective function under this noise model, its signature is:
-                model_float <fname>(const optimize_data* const data, model_float* const x);
+                double <fname>(const optimize_data* const data, model_float* const x);
         """
 
 
@@ -62,7 +62,7 @@ class SumOfSquares(EvaluationModel):
         return '''
             model_float ''' + fname + '''(const optimize_data* const data, model_float* const x){
                 ''' + param_listing + '''
-                model_float sum = 0.0;
+                double sum = 0.0;
                 for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     sum += pown(''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i), 2);
                 }
@@ -72,11 +72,11 @@ class SumOfSquares(EvaluationModel):
 
     def get_log_likelihood_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
         return '''
-            model_float ''' + fname + '''(const optimize_data* const data, const model_float* const x){
+            double ''' + fname + '''(const optimize_data* const data, const model_float* const x){
                 ''' + param_listing + '''
-                model_float sum = 0.0;
+                double sum = 0.0;
                 for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
-                    sum += pown(''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i), 2);
+                    double += pown(''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i), 2);
                 }
                 return - sum;
             }
@@ -97,22 +97,23 @@ class GaussianEvaluationModel(EvaluationModel):
         return '''
             model_float ''' + fname + '''(const optimize_data* const data, model_float* const x){
                 ''' + param_listing + '''
-                model_float sum = 0.0;
+                double sum = 0.0;
                 for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     sum += pown(''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i), 2);
                 }
-                return sum / (2 * pown(GaussianNoise_sigma, 2));
+                return (model_float) (sum / (2 * pown(GaussianNoise_sigma, 2)));
             }
         '''
 
     def get_log_likelihood_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
         return '''
-            model_float ''' + fname + '''(const optimize_data* const data, const model_float* const x){
+            double ''' + fname + '''(const optimize_data* const data, const model_float* const x){
                 ''' + param_listing + '''
-                model_float sum = 0.0;
+                double sum = 0.0;
                 for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     sum += pown(''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i), 2);
                 }
+
                 return - sum / (2 * pown(GaussianNoise_sigma, 2));
             }
         '''
@@ -132,21 +133,21 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
         return '''
             model_float ''' + fname + '''(const optimize_data* const data, model_float* const x){
                 ''' + param_listing + '''
-                model_float sum = 0.0;
+                double sum = 0.0;
                 for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     sum += pown(''' + obs_fname + '''(data, i) -
                                     sqrt(pown(''' + eval_fname + '''(data, x, i), 2) +
                                                 2 * pown(OffsetGaussianNoise_sigma, 2)), 2);
                 }
-                return sum / (2 * pown(OffsetGaussianNoise_sigma, 2));
+                return (model_float) (sum / (2 * pown(OffsetGaussianNoise_sigma, 2)));
             }
         '''
 
     def get_log_likelihood_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
         return '''
-            model_float ''' + fname + '''(const optimize_data* const data, const model_float* const x){
+            double ''' + fname + '''(const optimize_data* const data, const model_float* const x){
                 ''' + param_listing + '''
-                model_float sum = 0.0;
+                double sum = 0.0;
                 for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     sum += pown(''' + obs_fname + '''(data, i) -
                                     sqrt(pown(''' + eval_fname + '''(data, x, i), 2) +

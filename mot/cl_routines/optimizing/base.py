@@ -132,8 +132,6 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         """Get the worker class we will use for the calculations.
 
         This should return a class or a callback function capable of generating an object. It should accept
-        the parameters (cl_environment, self, model, starting_points, full_output) where self refers to the
-        the parent optimization class (the class that constructs the worker.
 
         This function is supposed to be implemented by the implementing optimizer.
 

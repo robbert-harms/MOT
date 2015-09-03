@@ -102,10 +102,10 @@ class ProposalParameter(object):
                                                               const uint acceptance_counter,
                                                               const uint jump_counter){
                 return min(current_value *
-                                sqrt( (double)(acceptance_counter+1) /
-                                      ((jump_counter - acceptance_counter) + 1)
-                                ),
-                           (double)1e10);
+                            sqrt( (double)(acceptance_counter+1) /
+                                  ((jump_counter - acceptance_counter) + 1)
+                            ),
+                       (double)1e10);
             }
 
             #endif //DMRIPROPOSAL_DEFAULT_PARAMETER_UPDATE
@@ -138,7 +138,7 @@ class GaussianProposal(AbstractParameterProposal):
             #define DMRIPROP_GAUSSIANPROPOSAL_CL
 
             double dmriproposal_gaussianProposal(const double current, ranluxcl_state_t* const ranluxclstate,
-                                                      const double std){
+                                                 const double std){
                 return current + std * ranluxcl_gaussian(ranluxclstate);
             }
 
@@ -154,7 +154,7 @@ class GaussianProposal(AbstractParameterProposal):
             #define DMRIPROP_GAUSSIANPROPOSALLOGPDF_CL
 
             double dmriproposal_gaussianProposalLogPDF(const double x, const double mu,
-                                                            const double std){
+                                                       const double std){
                 return log(M_2_SQRTPI / std) + (-0.5 * pown((x - mu) / std, 2));
             }
 
