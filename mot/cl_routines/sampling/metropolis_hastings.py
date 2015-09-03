@@ -16,8 +16,8 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class MetropolisHastings(AbstractSampler):
 
-    def __init__(self, cl_environments, load_balancer, nmr_samples=500, burn_length=1000,
-                 sample_intervals=5, proposal_update_intervals=30):
+    def __init__(self, cl_environments, load_balancer, nmr_samples=500, burn_length=15000,
+                 sample_intervals=5, proposal_update_intervals=25):
         """An CL implementation of Metropolis Hastings.
 
         Args:
@@ -59,7 +59,25 @@ class MetropolisHastings(AbstractSampler):
         if model.double_precision:
             np_dtype = np.float64
 
+        self._logger.info('Entered sampling routine.')
+        self._logger.info('We will use a {} precision float type for the calculations.'.format(
+            'double' if model.double_precision else 'single'))
+        if not model.double_precision:
+            self._logger.warn('Please be warned that with single float precision the results may look truncated.')
+        for env in self.load_balancer.get_used_cl_environments(self.cl_environments):
+            self._logger.info('Using device \'{}\' with compile flags {}'.format(str(env), str(env.compile_flags)))
+        self._logger.info('The parameters we will sample are: {0}'.format(model.get_optimized_param_names()))
+        self._logger.info('Sample settings: nmr_samples: {nmr_samples}, burn_length: {burn_length}, '
+                          'sample_intervals: {sample_intervals}, '
+                          'proposal_update_intervals: {proposal_update_intervals}. '.format(
+            nmr_samples=self.nmr_samples, burn_length=self.burn_length, sample_intervals=self.sample_intervals,
+            proposal_update_intervals=self.proposal_update_intervals
+        ))
 
+        self._logger.info('Total samples drawn: {samples_drawn}, total samples returned: {samples_returned}.'.format(
+            samples_drawn=(self.burn_length + self.sample_intervals * self.nmr_samples),
+            samples_returned=(self.sample_intervals * self.nmr_samples)
+        ))
 
         parameters = model.get_initial_parameters(init_params)
         var_data_dict = model.get_problems_var_data()
@@ -69,17 +87,23 @@ class MetropolisHastings(AbstractSampler):
         samples = np.zeros((model.get_nmr_problems(), parameters.shape[1] * self.nmr_samples),
                            dtype=np_dtype, order='C')
 
-        workers = self._create_workers(_MHWorker, model, parameters, samples,
+        self._logger.info('Starting sampling with method {0}'.format(self.get_pretty_name()))
+
+        workers = self._create_workers(_MHWorker, [model, parameters, samples,
                                        var_data_dict, prtcl_data_dict, fixed_data_dict,
                                        self.nmr_samples, self.burn_length, self.sample_intervals,
-                                       self.proposal_update_intervals)
+                                       self.proposal_update_intervals])
         self.load_balancer.process(workers, model.get_nmr_problems())
 
         samples = np.reshape(samples, (model.get_nmr_problems(), parameters.shape[1], self.nmr_samples))
         samples_dict = results_to_dict(samples, model.get_optimized_param_names())
 
+        self._logger.info('Finished sampling')
+
         if full_output:
+            self._logger.info('Starting post-sampling transformations')
             volume_maps = model.finalize_optimization_results(model.samples_to_statistics(samples_dict))
+            self._logger.info('Finished post-sampling transformations')
             return samples_dict, {'volume_maps': volume_maps}
         return samples_dict
 
@@ -104,6 +128,12 @@ class _MHWorker(Worker):
         self._burn_length = burn_length
         self._sample_intervals = sample_intervals
         self.proposal_update_intervals = proposal_update_intervals
+
+        self._sampler_and_model_float_identical = False
+        if self._model.double_precision and self._sampler_supports_double():
+            self._sampler_and_model_float_identical = True
+        elif not self._model.double_precision and self._sampler_supports_float():
+            self._sampler_and_model_float_identical = True
 
         self._constant_buffers = self._generate_constant_buffers(self._prtcl_data_dict, self._fixed_data_dict)
         self._kernel = self._build_kernel()
@@ -148,6 +178,12 @@ class _MHWorker(Worker):
                                 samples_buf, wait_for=(event,), is_blocking=False)
         return event
 
+    def _sampler_supports_double(self):
+        return True
+
+    def _sampler_supports_float(self):
+        return False
+
     def _get_kernel_source(self):
         cl_final_param_transform = self._model.get_final_parameter_transformations('applyFinalParamTransforms')
 
@@ -188,16 +224,26 @@ class _MHWorker(Worker):
 
         kernel_source += self._model.get_log_likelihood_function('getLogLikelihood')
 
-        kernel_source += '''
-            double _get_log_likelihood(const optimize_data* const data, const double* const x){
-                model_float x_mf[''' + str(self._nmr_params) + '''];
-                for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
-                    x_mf[i] = x[i];
+        if self._sampler_and_model_float_identical:
+            kernel_source += '''
+                double _get_log_likelihood(const optimize_data* const data, const double* const x){
+                    return getLogLikelihood(data, x);
                 }
+            '''
+        else:
+            kernel_source += '''
+                double _get_log_likelihood(const optimize_data* const data, const double* const x){
 
-                return getLogLikelihood(data, x_mf);
-            }
+                    model_float x_mf[''' + str(self._nmr_params) + '''];
+                    for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
+                        x_mf[i] = x[i];
+                    }
 
+                    return getLogLikelihood(data, x_mf);
+                }
+            '''
+
+        kernel_source += '''
             double _get_log_prior(const double* const x){
                 return getLogPrior(x);
             }
@@ -223,23 +269,33 @@ class _MHWorker(Worker):
         '''
 
         if cl_final_param_transform:
-            #todo make model float
-            kernel_source += '''
-            void _apply_final_parameters_transform(const optimize_data* const data, double* const x){
-                applyFinalParamTransforms(data, x);
-            }
-        '''
+            if self._sampler_and_model_float_identical:
+                kernel_source += '''
+                    void _apply_final_parameters_transform(const optimize_data* const data, double* const x){
+                        applyFinalParamTransforms(data, x);
+                    }
+                '''
+            else:
+                kernel_source += '''
+                    void _apply_final_parameters_transform(const optimize_data* const data, double* const x){
+                        model_float x_mf[''' + str(self._nmr_params) + '''];
+                        for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
+                            x_mf[i] = x[i];
+                        }
+                        applyFinalParamTransforms(data, x_mf);
+                    }
+                '''
 
         kernel_source += '''
             void _update_state(double* const x,
-                              double* const x_proposal,
-                              ranluxcl_state_t* ranluxclstate,
-                              double* const current_likelihood,
-                              double* const current_prior,
-                              const optimize_data* const data,
-                              double* const proposal_parameters,
-                              uint * const ac_between_proposal_updates,
-                              const uint nmr_params){
+                               double* const x_proposal,
+                               ranluxcl_state_t* ranluxclstate,
+                               double* const current_likelihood,
+                               double* const current_prior,
+                               const optimize_data* const data,
+                               double* const proposal_parameters,
+                               uint * const ac_between_proposal_updates,
+                               const uint nmr_params){
 
                 float4 randomnmr;
                 double new_prior;

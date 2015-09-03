@@ -91,7 +91,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         self._logger.info('We will use a {} precision float type for the calculations.'.format(
             'double' if model.double_precision else 'single'))
         for env in self.load_balancer.get_used_cl_environments(self.cl_environments):
-            self._logger.info('Using device {} with compile flags {}'.format(str(env), str(env.compile_flags)))
+            self._logger.info('Using device \'{}\' with compile flags {}'.format(str(env), str(env.compile_flags)))
         self._logger.info('The parameters we will optimize are: {0}'.format(model.get_optimized_param_names()))
 
         self._logger.info('Starting optimization preliminaries')
@@ -111,8 +111,8 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         self._logger.info('Starting optimization with method {0} and patience {1}'.format(self.get_pretty_name(),
                                                                                           self.patience))
 
-        workers = self._create_workers(self._get_worker_class(), self, model, starting_points, full_output,
-                                       var_data_dict, prtcl_data_dict, fixed_data_dict, nmr_params)
+        workers = self._create_workers(self._get_worker_class(), [self, model, starting_points, full_output,
+                                       var_data_dict, prtcl_data_dict, fixed_data_dict, nmr_params])
         self.load_balancer.process(workers, model.get_nmr_problems())
 
         self._logger.info('Finished optimization')

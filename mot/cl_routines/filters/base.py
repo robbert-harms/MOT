@@ -74,7 +74,7 @@ class AbstractFilter(AbstractCLRoutine):
 
         volumes_list = list(volumes_dict.items())
 
-        workers = self._create_workers(self._get_worker, results_dict, volumes_list, mask, double_precision)
+        workers = self._create_workers(self._get_worker, [results_dict, volumes_list, mask, double_precision])
         self._load_balancer.process(workers, len(volumes_list))
 
         return results_dict

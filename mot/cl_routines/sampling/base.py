@@ -1,3 +1,4 @@
+import logging
 from ...cl_routines.base import AbstractCLRoutine
 
 __author__ = 'Robbert Harms'
@@ -8,6 +9,10 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
 class AbstractSampler(AbstractCLRoutine):
+
+    def __init__(self, cl_environments, load_balancer):
+        super(AbstractSampler, self).__init__(cl_environments, load_balancer)
+        self._logger = logging.getLogger(__name__)
 
     def sample(self, model, init_params=None, full_output=False):
         """Minimize the given model with the given codec using the given environments.
