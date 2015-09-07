@@ -65,18 +65,17 @@ class CalculateDependentParameters(AbstractCLRoutine):
 
 class _CDPWorker(Worker):
 
-    def __init__(self, cl_environment, fixed_param_values, nmr_estimated_params, estimated_parameters,
+    def __init__(self, cl_environment, var_data_dict, nmr_estimated_params, estimated_parameters,
                  parameters_listing, dependent_parameter_names, results_list, double_precision):
         super(_CDPWorker, self).__init__(cl_environment)
 
-        self._fixed_param_values = fixed_param_values
+        self._var_data_dict = var_data_dict
         self._nmr_estimated_params = nmr_estimated_params
         self._parameters_listing = parameters_listing
         self._dependent_parameter_names = dependent_parameter_names
         self._results_list = results_list
         self._double_precision = double_precision
 
-        self._constant_buffers = self._generate_constant_buffers(self._fixed_param_values)
         self._estimated_parameters = estimated_parameters
         self._kernel = self._build_kernel()
 
@@ -96,7 +95,14 @@ class _CDPWorker(Worker):
                                 hostbuf=self._results_list[range_start:range_end, :])
 
         data_buffers = [estimated_parameters_buf, results_buf]
-        data_buffers.extend(self._constant_buffers)
+
+        for data in self._var_data_dict.values():
+            if len(data.shape) < 2:
+                data_buffers.append(cl.Buffer(self._cl_environment.context, read_only_flags,
+                                              hostbuf=data[range_start:range_end]))
+            else:
+                data_buffers.append(cl.Buffer(self._cl_environment.context, read_only_flags,
+                                              hostbuf=data[range_start:range_end, :]))
 
         self._kernel.transform(self._queue, (nmr_problems, ), None, *data_buffers)
         event = cl.enqueue_copy(self._queue, self._results_list[range_start:range_end, :], results_buf,
@@ -111,7 +117,7 @@ class _CDPWorker(Worker):
             parameter_write_out += 'results[gid * ' + str(len(dependent_parameter_names)) + \
                                    ' + ' + str(i) + '] = ' + p + ";\n"
 
-        param_code_gen = ParameterCLCodeGenerator(self._cl_environment.device, self._fixed_param_values, {}, {})
+        param_code_gen = ParameterCLCodeGenerator(self._cl_environment.device, self._var_data_dict, {}, {})
         kernel_param_names = ['global model_float* params', 'global model_float* results']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
