@@ -319,14 +319,13 @@ class TopologicalSort(object):
 
 class ParameterCLCodeGenerator(object):
 
-    def __init__(self, device, var_data_dict, prtcl_data_dict, model_data_dict, add_var_data_multipliers=True):
+    def __init__(self, device, var_data_dict, prtcl_data_dict, model_data_dict):
         self._device = device
         self._max_constant_buffer_size = device.get_info(cl.device_info.MAX_CONSTANT_BUFFER_SIZE)
         self._max_constant_args = device.get_info(cl.device_info.MAX_CONSTANT_ARGS)
         self._var_data_dict = var_data_dict
         self._prtcl_data_dict = prtcl_data_dict
         self._model_data_dict = model_data_dict
-        self._add_var_data_multipliers = add_var_data_multipliers
         self._kernel_items = self._get_all_kernel_source_items()
 
     def get_data_struct(self):
@@ -358,13 +357,14 @@ class ParameterCLCodeGenerator(object):
             cl_data_type = self._get_cl_data_type_from_data(vdata)
 
             kernel_param_names.append(clmemtype + ' ' + cl_data_type + '* ' + param_name)
-            data_struct_names.append(clmemtype + ' ' + cl_data_type + '* ' + param_name)
 
-            if self._add_var_data_multipliers:
-                mult = vdata.shape[1] if len(vdata.shape) > 1 else 1
-                data_struct_init.append(param_name + ' + gid * ' + str(mult))
+            mult = vdata.shape[1] if len(vdata.shape) > 1 else 1
+            if len(vdata.shape) == 1 or vdata.shape[1] == 1:
+                data_struct_names.append(cl_data_type + ' ' + param_name)
+                data_struct_init.append(param_name + '[gid * ' + str(mult) + ']')
             else:
-                data_struct_init.append(param_name)
+                data_struct_names.append(clmemtype + ' ' + cl_data_type + '* ' + param_name)
+                data_struct_init.append(param_name + ' + gid * ' + str(mult))
 
         for key, vdata in self._prtcl_data_dict.items():
             clmemtype = 'global'

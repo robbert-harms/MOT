@@ -478,6 +478,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                                                self.double_precision)
             dependent_parameters = cpd.calculate(self._get_fixed_parameters_as_var_data(),
                                                  estimated_parameters, func, dependent_parameter_names)
+
             results_dict.update(dependent_parameters)
 
     def _build_model_from_tree(self, node, depth):
@@ -613,7 +614,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                     if p.value.max() == p.value.min():
                         assignment = '(' + data_type + ')' + str(float(p.value[0]))
                     else:
-                        assignment = 'data->var_data_' + m.name + '_' + p.name + '[0]'
+                        assignment = '(' + data_type + ') data->var_data_' + m.name + '_' + p.name
                 func += "\t"*4 + data_type + ' ' + name + ' = ' + assignment + ';' + "\n"
         return func
 
@@ -651,12 +652,11 @@ class OptimizeModelBuilder(OptimizeModelInterface):
     def _get_fixed_parameters_as_var_data(self):
         var_data_dict = {}
         for m, p in self._get_free_parameters_list():
-            inlined_in_cl_code = isinstance(p.value, numbers.Number)
-
+            inlined_in_cl_code = isinstance(p.value, numbers.Number) or p.value.max() == p.value.min()
             if p.fixed and not inlined_in_cl_code and not self._parameter_fixed_to_dependency(m, p):
-                var_data_dict.update({m.name + '_' + p.name: set_cl_compatible_data_type(p.value,
-                                                                                         p.cl_data_type,
-                                                                                         self.double_precision)})
+                var_data_dict.update(
+                    {m.name + '_' + p.name: set_cl_compatible_data_type(p.value, p.cl_data_type, self.double_precision)}
+                )
         return var_data_dict
 
     def _get_non_model_tree_param_listing(self):
@@ -694,7 +694,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                     if p.value.max() == p.value.min():
                         assignment = '(' + data_type + ')' + str(float(p.value[0]))
                     else:
-                        assignment = 'data->var_data_' + m.name + '_' + p.name + '[0]'
+                        assignment = '(' + data_type + ') data->var_data_' + m.name + '_' + p.name
             elif not self._parameter_has_dependency(m, p) or (self._parameter_has_dependency(m, p)
                                                               and not self._parameter_fixed_to_dependency(m, p)):
                 ind = self._get_parameter_estimable_index(m.name + '.' + p.name)

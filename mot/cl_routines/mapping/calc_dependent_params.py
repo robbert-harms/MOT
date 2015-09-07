@@ -54,7 +54,6 @@ class CalculateDependentParameters(AbstractCLRoutine):
             dtype=np_dtype, order='C')
 
         estimated_parameters = np.dstack(estimated_parameters_list).flatten()
-        estimated_parameters = estimated_parameters.astype(np_dtype, order='C', copy=False)
 
         workers = self._create_workers(_CDPWorker, [fixed_param_values, len(estimated_parameters_list),
                                        estimated_parameters, parameters_listing,
