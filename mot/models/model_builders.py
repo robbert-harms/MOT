@@ -3,6 +3,7 @@ import numpy as np
 from ..base import ProtocolParameter, ModelDataParameter, FreeParameter, CLDataType
 from .. import runtime_configuration
 from ..cl_routines.mapping.calc_dependent_params import CalculateDependentParameters
+from mot.cl_routines.mapping.evaluate_model import EvaluateModelPerProtocol
 from ..utils import set_cl_compatible_data_type, TopologicalSort
 from ..parameter_functions.codecs import CodecBuilder
 from ..parameter_functions.dependencies import SimpleAssignment
@@ -344,17 +345,12 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         param_exclude_list = [m.name + '_' + p.name for (m, p) in self._get_non_model_tree_param_listing()]
         param_lists = self._get_parameter_type_lists()
-        estimable_names = [m.name + '_' + p.name for m, p in param_lists['estimable']]
         depend_param_listing = self._get_dependent_parameters_listing(param_lists['dependent'])
 
         for m, p in param_lists['fixed'] + param_lists['constant']:
             if (m.name + '_' + p.name) not in depend_param_listing:
                 param_exclude_list.append(m.name + '_' + p.name)
 
-        for m, p in param_lists['dependent']:
-            if self._parameter_fixed_to_dependency(m, p):
-                if (m.name + '_' + p.name) not in estimable_names:
-                    param_exclude_list.append(m.name + '_' + p.name)
         param_listing = self._get_parameters_listing(exclude_list=param_exclude_list)
 
         func = "\n\t\t\t" + 'void ' + func_name + '(const optimize_data* const data, model_float* const x){' + "\n"
@@ -430,7 +426,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         Steps in finalizing the results dict:
             1) It first adds the maps for the dependent and fixed parameters
             2) Second it adds the extra maps defined in the models itself.
-            3) Finally it loops through the post_optimization_modifiers callback functions for the final updates.
+            3) Third it loops through the post_optimization_modifiers callback functions for the final updates.
+            4) It adds a few information maps.
 
         For more documentation see the base method.
 
@@ -443,6 +440,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         for name, routine in self._post_optimization_modifiers:
             results_dict[name] = routine(results_dict)
+
+        self._add_information_criteria_maps(results_dict)
 
         return results_dict
 
@@ -480,6 +479,16 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                                                  estimated_parameters, func, dependent_parameter_names)
 
             results_dict.update(dependent_parameters)
+
+    def _add_information_criteria_maps(self, results_dict):
+        model_evaluator = EvaluateModelPerProtocol(runtime_configuration.runtime_config['cl_environments'],
+                                        runtime_configuration.runtime_config['load_balancer'])
+        evals = model_evaluator.calculate(self, results_dict)
+        # results_dict.update({'model_signal': evals - results_dict['S0.s0']})
+        #todo add BIC and AIC
+        # todo so we need to add a mapping for the loglikelihood of the model optimization
+
+
 
     def _build_model_from_tree(self, node, depth):
         if not node.children:

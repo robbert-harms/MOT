@@ -12,17 +12,18 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class EvaluateModel(AbstractCLRoutine):
+class EvaluateModelPerProtocol(AbstractCLRoutine):
 
     def __init__(self, cl_environments, load_balancer):
-        """Evaluate the model at each problem instance for each data point."""
-        super(EvaluateModel, self).__init__(cl_environments, load_balancer)
+        """Evaluate the model at each problem instance for each data point.
+        """
+        super(EvaluateModelPerProtocol, self).__init__(cl_environments, load_balancer)
 
     def calculate(self, model, parameters):
         """Evaluate the model at each problem instance for each data point.
 
         Args:
-            model (AbstractModel): The model to calculate the residuals of.
+            model (AbstractModel): The model to evaluate.
             parameters ndarray): The parameters to use in the evaluation of the model
 
         Returns:
