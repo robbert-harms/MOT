@@ -80,7 +80,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             Returns self for chainability
         """
         m, p = self._get_model_parameter_matching(model_param_name)
-        p.parameter_state.fix_to(value)
+        p.fix_to(value)
         return self
 
     def init(self, model_param_name, value):
@@ -94,7 +94,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             Returns self for chainability
         """
         m, p = self._get_model_parameter_matching(model_param_name)
-        p.parameter_state.value = value
+        p.value = value
         return self
 
     def unfix(self, model_param_name):
@@ -108,7 +108,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             Returns self for chainability
         """
         m, p = self._get_model_parameter_matching(model_param_name)
-        p.parameter_state.fixed = False
+        p.fixed = False
         return self
 
     def set_problem_data(self, problem_data):
