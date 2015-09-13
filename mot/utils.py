@@ -1,5 +1,4 @@
 from collections import defaultdict
-import numbers
 import pyopencl.array as cl_array
 import numpy as np
 import pyopencl as cl

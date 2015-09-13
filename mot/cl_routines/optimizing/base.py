@@ -93,6 +93,8 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         for env in self.load_balancer.get_used_cl_environments(self.cl_environments):
             self._logger.info('Using device \'{}\' with compile flags {}'.format(str(env), str(env.compile_flags)))
         self._logger.info('The parameters we will optimize are: {0}'.format(model.get_optimized_param_names()))
+        self._logger.info('We will use the optimizer {} with patience {}'.format(self.get_pretty_name(),
+                                                                                  self.patience))
 
         self._logger.info('Starting optimization preliminaries')
         starting_points = model.get_initial_parameters(init_params)
@@ -108,8 +110,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
             starting_points = space_transformer.encode(param_codec, starting_points)
 
         self._logger.info('Finished optimization preliminaries')
-        self._logger.info('Starting optimization with method {0} and patience {1}'.format(self.get_pretty_name(),
-                                                                                          self.patience))
+        self._logger.info('Starting optimization')
 
         workers = self._create_workers(self._get_worker_class(), [self, model, starting_points, full_output,
                                        var_data_dict, prtcl_data_dict, fixed_data_dict, nmr_params])
