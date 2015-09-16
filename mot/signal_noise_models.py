@@ -39,7 +39,7 @@ class SignalNoiseModel(ModelFunction):
 class JohnsonSignalNoise(SignalNoiseModel):
 
     def __init__(self):
-        """Johnson noise adds noise to the signal using the formula: sqrt(signal^2) + eta^2)"""
+        """Johnson noise adds noise to the signal using the formula: sqrt(signal^2 + eta^2)"""
         super(JohnsonSignalNoise, self).__init__(
             'JohnsonNoise',
             'johnsonNoiseModel',
