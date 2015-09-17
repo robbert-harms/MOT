@@ -371,37 +371,25 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         return func
 
     def get_model_eval_function(self, func_name='evaluateModel'):
-        func = ''
-        for leave in self._model_tree.leaves:
-            func += leave.data.get_cl_header() + "\n"
-            func += leave.data.get_cl_code() + "\n"
-
         noise_func_name = func_name + '_signalNoiseModel'
-        if self._signal_noise_model:
-            func += self._signal_noise_model.get_signal_function(noise_func_name)
+        func = self._get_model_functions_cl_code(noise_func_name)
+
+        pre_model_function = self._get_pre_model_expression_eval_function()
+        if pre_model_function:
+            func += pre_model_function
 
         func += '''
             model_float ''' + func_name + \
                 '(const optimize_data* const data, const model_float* const x, const int observation_index){' + "\n"
+
         func += self._get_parameters_listing(exclude_list=[m.name + '_' + p.name for (m, p) in
                                                            self._get_non_model_tree_param_listing()])
 
-        if self._signal_noise_model:
-            noise_params_listing = ''
-            noise_params_func = ''
-            for p in self._signal_noise_model.get_free_parameters():
-                noise_params_listing += "\t" * 4 + self._get_param_listing_for_param(self._signal_noise_model, p)
-                noise_params_func += ', ' + self._signal_noise_model.name + '_' + p.name
-            func += "\n"
-            func += noise_params_listing
+        pre_model_code = self._get_pre_model_expression_eval_code()
+        if pre_model_code:
+            func += self._get_pre_model_expression_eval_code()
 
-            func += '''
-                return ''' + noise_func_name + '''((''' + \
-                self._build_model_from_tree(self._model_tree, 0) + ''')''' + noise_params_func +\
-                ''');'''
-        else:
-            func += '''
-                return (''' + self._build_model_from_tree(self._model_tree, 0) + ''');'''
+        func += "\n" + "\t"*4 + 'return ' + self._construct_model_expression(noise_func_name)
         func += "\n\t\t\t}"
         return func
 
@@ -488,7 +476,27 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         #todo add BIC and AIC
         # todo so we need to add a mapping for the loglikelihood of the model optimization
 
+    def _construct_model_expression(self, noise_func_name):
+        """Construct the model signel expression. This is supposed to be used in get_model_eval_function.
 
+        Args:
+            noise_func_name (str): the name of the noise function.
+        """
+        func = ''
+        if self._signal_noise_model:
+            noise_params_listing = ''
+            noise_params_func = ''
+            for p in self._signal_noise_model.get_free_parameters():
+                noise_params_listing += "\t" * 4 + self._get_param_listing_for_param(self._signal_noise_model, p)
+                noise_params_func += ', ' + self._signal_noise_model.name + '_' + p.name
+            func += "\n"
+            func += noise_params_listing
+
+            func += noise_func_name + '((' + self._build_model_from_tree(self._model_tree, 0) + ')' + \
+                    noise_params_func + ');'
+        else:
+            func += '(' + self._build_model_from_tree(self._model_tree, 0) + ');'
+        return func
 
     def _build_model_from_tree(self, node, depth):
         if not node.children:
@@ -519,6 +527,17 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             else:
                 param_list.append(model.name + '_' + param.name)
         return model.cl_function_name + '(' + ', '.join(param_list) + ')'
+
+    def _get_model_functions_cl_code(self, noise_func_name):
+        """Get the model functions CL. This is used in get_model_eval_function()."""
+        cl_code = ''
+        for leave in self._model_tree.leaves:
+            cl_code += leave.data.get_cl_header() + "\n"
+            cl_code += leave.data.get_cl_code() + "\n"
+
+        if self._signal_noise_model:
+            cl_code += self._signal_noise_model.get_signal_function(noise_func_name)
+        return cl_code
 
     def _get_parameters_listing(self, exclude_list=()):
         """Get the CL code for the parameter listing, this goes on top of the evaluate function.
@@ -865,6 +884,29 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             if m.name + '.' + p.name == model_param_name:
                 return m, p
         return None
+
+    def _get_pre_model_expression_eval_code(self):
+        """The code called in the evaluation function.
+
+        This is called after the parameters are initialized and before the model signal expression. It can call
+        functions defined in _get_pre_model_expression_eval_function()
+
+        Returns:
+            str: cl code containing evaluation changes,
+        """
+        return ''
+
+    def _get_pre_model_expression_eval_function(self):
+        """Function used in the model evaluation generation function.
+
+        The idea is that some implementing models may need to change some of the protocol or fixed parameters
+        before they are handed over to the signal expression function. This function is called by the
+        get_model_eval_function function during model evaluation function construction.
+
+        Returns:
+            str: cl function to be used in conjunction with the output of the function
+                _get_pre_model_expression_eval_model()
+        """
 
     def _set_default_dependencies(self):
         """Initialize the default dependencies.
