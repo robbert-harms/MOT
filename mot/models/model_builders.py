@@ -385,6 +385,13 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         func += self._get_parameters_listing(exclude_list=[m.name + '_' + p.name for (m, p) in
                                                            self._get_non_model_tree_param_listing()])
 
+        if self._signal_noise_model:
+            noise_params_listing = ''
+            for p in self._signal_noise_model.get_free_parameters():
+                noise_params_listing += "\t" * 4 + self._get_param_listing_for_param(self._signal_noise_model, p)
+            func += "\n"
+            func += noise_params_listing
+
         pre_model_code = self._get_pre_model_expression_eval_code()
         if pre_model_code:
             func += self._get_pre_model_expression_eval_code()
@@ -415,7 +422,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             1) It first adds the maps for the dependent and fixed parameters
             2) Second it adds the extra maps defined in the models itself.
             3) Third it loops through the post_optimization_modifiers callback functions for the final updates.
-            4) It adds a few information maps.
+            4) Adds additional maps defined in this model subclass
 
         For more documentation see the base method.
 
@@ -429,7 +436,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         for name, routine in self._post_optimization_modifiers:
             results_dict[name] = routine(results_dict)
 
-        self._add_information_criteria_maps(results_dict)
+        self._add_finalizing_result_maps(results_dict)
 
         return results_dict
 
@@ -468,13 +475,14 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
             results_dict.update(dependent_parameters)
 
-    def _add_information_criteria_maps(self, results_dict):
-        model_evaluator = EvaluateModelPerProtocol(runtime_configuration.runtime_config['cl_environments'],
-                                        runtime_configuration.runtime_config['load_balancer'])
-        evals = model_evaluator.calculate(self, results_dict)
-        # results_dict.update({'model_signal': evals - results_dict['S0.s0']})
-        #todo add BIC and AIC
-        # todo so we need to add a mapping for the loglikelihood of the model optimization
+    def _add_finalizing_result_maps(self, results_dict):
+        """Add some final results maps to the results dictionary.
+
+        This called by the function finalize_optimization_results() as last call to add more maps.
+
+        Args:
+            results_dict (args): the results from model optmization. We are to modify this in-place.
+        """
 
     def _construct_model_expression(self, noise_func_name):
         """Construct the model signel expression. This is supposed to be used in get_model_eval_function.
@@ -484,13 +492,9 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         """
         func = ''
         if self._signal_noise_model:
-            noise_params_listing = ''
             noise_params_func = ''
             for p in self._signal_noise_model.get_free_parameters():
-                noise_params_listing += "\t" * 4 + self._get_param_listing_for_param(self._signal_noise_model, p)
                 noise_params_func += ', ' + self._signal_noise_model.name + '_' + p.name
-            func += "\n"
-            func += noise_params_listing
 
             func += noise_func_name + '((' + self._build_model_from_tree(self._model_tree, 0) + ')' + \
                     noise_params_func + ');'
@@ -950,8 +954,7 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         return return_list
 
     def is_proposal_symmetric(self):
-        #todo remove not
-        return not all(p.sampling_proposal.is_symmetric for m, p in self._get_estimable_parameters_list())
+        return all(p.sampling_proposal.is_symmetric for m, p in self._get_estimable_parameters_list())
 
     def get_proposal_logpdf(self, func_name='getProposalLogPDF'):
         return_str = ''
