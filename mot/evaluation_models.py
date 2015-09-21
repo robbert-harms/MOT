@@ -76,7 +76,7 @@ class SumOfSquares(EvaluationModel):
                 ''' + param_listing + '''
                 double sum = 0.0;
                 for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
-                    double += pown(''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i), 2);
+                    sum += pown(''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i), 2);
                 }
                 return - sum;
             }
