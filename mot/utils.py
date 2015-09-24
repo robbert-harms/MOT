@@ -334,7 +334,10 @@ class ParameterCLCodeGenerator(object):
         return self._kernel_items['kernel_param_names']
 
     def get_data_struct_init_assignment(self, variable_name):
-        return 'optimize_data ' + variable_name + ' = {' + ', '.join(self._kernel_items['data_struct_init']) + '};'
+        struct_code = '0'
+        if self._kernel_items['data_struct_init']:
+            struct_code = ', '.join(self._kernel_items['data_struct_init'])
+        return 'optimize_data ' + variable_name + ' = {' + struct_code + '};'
 
     def _get_all_kernel_source_items(self):
         """Get the CL strings for the kernel source items for most common CL kernels in this library."""

@@ -74,7 +74,8 @@ class MetropolisHastings(AbstractSampler):
             proposal_update_intervals=self.proposal_update_intervals
         ))
 
-        self._logger.info('Total samples drawn: {samples_drawn}, total samples returned: {samples_returned}.'.format(
+        self._logger.info('Total samples drawn: {samples_drawn}, total samples returned: '
+                          '{samples_returned} (per problem).'.format(
             samples_drawn=(self.burn_length + self.sample_intervals * self.nmr_samples),
             samples_returned=(self.sample_intervals * self.nmr_samples)
         ))
@@ -261,11 +262,13 @@ class _MHWorker(Worker):
                                double* const parameters){
                 return getProposal(i, current, ranluxclstate, parameters);
             }
-
-            double _get_proposal_logpdf(const int i, const double proposal, const double current,
-                                        double* const parameters){
-                return getProposalLogPDF(i, proposal, current, parameters);
-            }
+        '''
+        if not self._model.is_proposal_symmetric():
+            kernel_source += '''
+                double _get_proposal_logpdf(const int i, const double proposal, const double current,
+                                            double* const parameters){
+                    return getProposalLogPDF(i, proposal, current, parameters);
+                }
         '''
 
         if cl_final_param_transform:

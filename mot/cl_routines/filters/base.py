@@ -98,7 +98,7 @@ class AbstractFilterWorker(Worker):
         self._size = self._parent_filter.size
         self._results_dict = results_dict
         self._volumes_list = volumes_list
-        self._volume_shape = volumes_list[0][1].shape
+        self._volume_shape = volumes_list[0][1].shape[0:3]
         self._double_precision = double_precision
 
         if mask is None:

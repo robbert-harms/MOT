@@ -55,7 +55,11 @@ class EvaluationModel(ModelFunction):
 class SumOfSquares(EvaluationModel):
 
     def __init__(self):
-        """Evaluates the distance between the estimated signal and the data using the sum of squared distance."""
+        """Evaluates the distance between the estimated signal and the data using the sum of squared distance.
+
+        This is implemented as:
+        sum((observation - evaluation)^2) / 2 * sigma^2
+        """
         super(EvaluationModel, self).__init__('SumOfSquaresNoise', 'sumOfSquaresNoise', (), ())
 
     def get_objective_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
@@ -86,7 +90,12 @@ class SumOfSquares(EvaluationModel):
 class GaussianEvaluationModel(EvaluationModel):
 
     def __init__(self):
-        """Evaluates the distance between the estimated signal and the data using the Gaussian evaluation."""
+        """Evaluates the distance between the estimated signal and the data using the Gaussian evaluation.
+
+        The offset gaussian noise is implemented as:
+
+        sum((observation - evaluation)^2) / 2 * sigma^2
+        """
         super(EvaluationModel, self).__init__(
             'GaussianNoise',
             'gaussianNoiseModel',
@@ -122,11 +131,16 @@ class GaussianEvaluationModel(EvaluationModel):
 class OffsetGaussianEvaluationModel(EvaluationModel):
 
     def __init__(self):
-        """Evaluates the distance between the estimated signal and the data using the Offset Gaussian evaluation."""
+        """Evaluates the distance between the estimated signal and the data using the Offset Gaussian evaluation.
+
+        The offset gaussian noise is implemented as:
+
+        sum((observation - sqrt(evaluation^2 + sigma^2))^2) / sigma^2
+        """
         super(EvaluationModel, self).__init__(
             'OffsetGaussianNoise',
             'offsetGaussianNoiseModel',
-            (FreeParameter(CLDataType.from_string('model_float'), 'sigma', False, math.sqrt(0.5), math.sqrt(0.5), 5,
+            (FreeParameter(CLDataType.from_string('model_float'), 'sigma', False, 1, 1, 1e6,
                            parameter_transform=CosSqrClampTransform()),), ())
 
     def get_objective_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
@@ -137,9 +151,9 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
                 for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     sum += pown(''' + obs_fname + '''(data, i) -
                                     sqrt(pown(''' + eval_fname + '''(data, x, i), 2) +
-                                                2 * pown(OffsetGaussianNoise_sigma, 2)), 2);
+                                                pown(OffsetGaussianNoise_sigma, 2)), 2);
                 }
-                return (model_float) (sum / (2 * pown(OffsetGaussianNoise_sigma, 2)));
+                return (model_float) (sum / (pown(OffsetGaussianNoise_sigma, 2)));
             }
         '''
 
@@ -151,9 +165,9 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
                 for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     sum += pown(''' + obs_fname + '''(data, i) -
                                     sqrt(pown(''' + eval_fname + '''(data, x, i), 2) +
-                                                2 * pown(OffsetGaussianNoise_sigma, 2)), 2);
+                                                pown(OffsetGaussianNoise_sigma, 2)), 2);
                 }
-                return - sum / (2 * pown(OffsetGaussianNoise_sigma, 2));
+                return - sum / (pown(OffsetGaussianNoise_sigma, 2));
             }
         '''
 
