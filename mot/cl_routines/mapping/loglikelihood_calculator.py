@@ -26,7 +26,7 @@ class LogLikelihoodCalculator(AbstractCLRoutine):
             parameters (ndarray): The parameters to use in the evaluation of the model
 
         Returns:
-            Return per voxel the errors (eval - data) per scheme line
+            Return per voxel the log likelihood.
         """
         np_dtype = np.float32
         if model.double_precision:
