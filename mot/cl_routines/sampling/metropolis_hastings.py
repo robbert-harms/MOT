@@ -77,7 +77,7 @@ class MetropolisHastings(AbstractSampler):
         self._logger.info('Total samples drawn: {samples_drawn}, total samples returned: '
                           '{samples_returned} (per problem).'.format(
             samples_drawn=(self.burn_length + self.sample_intervals * self.nmr_samples),
-            samples_returned=(self.sample_intervals * self.nmr_samples)
+            samples_returned=self.nmr_samples
         ))
 
         parameters = model.get_initial_parameters(init_params)
