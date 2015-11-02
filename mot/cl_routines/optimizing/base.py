@@ -17,7 +17,8 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class AbstractOptimizer(AbstractCLRoutine):
 
-    def __init__(self, cl_environments, load_balancer, use_param_codec=True, patience=1):
+    def __init__(self, cl_environments, load_balancer, use_param_codec=True, patience=1,
+                 optimizer_options=None, **kwargs):
         """Create a new optimizer that will minimize the given model with the given codec using the given environments.
 
         If the codec is None it is not used, if the environment is None, a suitable default environment should be
@@ -29,11 +30,14 @@ class AbstractOptimizer(AbstractCLRoutine):
             use_param_codec (boolean): if this minimization should use the parameter codecs (param transformations)
             patience (int): The patience is used in the calculation of how many iterations to iterate the optimizer.
                 The exact usage of this value of this parameter may change per optimizer.
+            optimizer_options (dict): extra options one can set for the optimization routine. These are routine
+                dependent.
         """
         self._use_param_codec = use_param_codec
         self.patience = patience or 1
 
         super(AbstractOptimizer, self).__init__(cl_environments, load_balancer)
+        self._optimizer_options = optimizer_options or {}
 
     @property
     def use_param_codec(self):
@@ -70,8 +74,10 @@ class AbstractOptimizer(AbstractCLRoutine):
 
 class AbstractParallelOptimizer(AbstractOptimizer):
 
-    def __init__(self, cl_environments, load_balancer, use_param_codec=True, patience=1):
-        super(AbstractParallelOptimizer, self).__init__(cl_environments, load_balancer, use_param_codec, patience)
+    def __init__(self, cl_environments, load_balancer, use_param_codec=True, patience=1,
+                 optimizer_options=None, **kwargs):
+        super(AbstractParallelOptimizer, self).__init__(cl_environments, load_balancer, use_param_codec, patience,
+                                                        optimizer_options=optimizer_options, **kwargs)
         self._automatic_apply_codec = True
         self._logger = logging.getLogger(__name__)
 
@@ -93,8 +99,10 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         for env in self.load_balancer.get_used_cl_environments(self.cl_environments):
             self._logger.info('Using device \'{}\' with compile flags {}'.format(str(env), str(env.compile_flags)))
         self._logger.info('The parameters we will optimize are: {0}'.format(model.get_optimized_param_names()))
-        self._logger.info('We will use the optimizer {} with patience {}'.format(self.get_pretty_name(),
-                                                                                  self.patience))
+        self._logger.info('We will use the optimizer {} '
+                          'with patience {} and optimizer options {}'.format(self.get_pretty_name(),
+                                                                             self.patience,
+                                                                             self._optimizer_options))
 
         self._logger.info('Starting optimization preliminaries')
         starting_points = model.get_initial_parameters(init_params)
@@ -113,7 +121,8 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         self._logger.info('Starting optimization')
 
         workers = self._create_workers(self._get_worker_class(), [self, model, starting_points, full_output,
-                                       var_data_dict, prtcl_data_dict, fixed_data_dict, nmr_params])
+                                       var_data_dict, prtcl_data_dict, fixed_data_dict, nmr_params,
+                                                                  self._optimizer_options])
         self.load_balancer.process(workers, model.get_nmr_problems())
 
         self._logger.info('Finished optimization')
@@ -144,8 +153,10 @@ class AbstractParallelOptimizer(AbstractOptimizer):
 class AbstractParallelOptimizerWorker(Worker):
 
     def __init__(self, cl_environment, parent_optimizer, model, starting_points, full_output,
-                 var_data_dict, prtcl_data_dict, fixed_data_dict, nmr_params):
+                 var_data_dict, prtcl_data_dict, fixed_data_dict, nmr_params, optimizer_options=None):
         super(AbstractParallelOptimizerWorker, self).__init__(cl_environment)
+
+        self._optimizer_options = optimizer_options
 
         self._parent_optimizer = parent_optimizer
 

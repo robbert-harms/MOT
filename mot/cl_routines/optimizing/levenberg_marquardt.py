@@ -13,7 +13,8 @@ class LevenbergMarquardt(AbstractParallelOptimizer):
 
     default_patience = 250
 
-    def __init__(self, cl_environments, load_balancer, use_param_codec=True, patience=None):
+    def __init__(self, cl_environments, load_balancer, use_param_codec=True, patience=None,
+                 optimizer_options=None, **kwargs):
         """Use the Levenberg-Marquardt method to calculate the optimimum.
 
         Args:
@@ -21,7 +22,8 @@ class LevenbergMarquardt(AbstractParallelOptimizer):
                 Used to set the maximum number of iterations to patience*(number_of_parameters+1)
         """
         patience = patience or self.default_patience
-        super(LevenbergMarquardt, self).__init__(cl_environments, load_balancer, use_param_codec, patience=patience)
+        super(LevenbergMarquardt, self).__init__(cl_environments, load_balancer, use_param_codec, patience=patience,
+                                                 optimizer_options=optimizer_options, **kwargs)
 
     def _get_worker_class(self):
         return LevenbergMarquardtWorker
@@ -76,7 +78,8 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
         return kernel_source
 
     def _get_optimization_function(self):
-        return LMMin(self._nmr_params, patience=self._parent_optimizer.patience)
+        return LMMin(self._nmr_params, patience=self._parent_optimizer.patience,
+                     optimizer_options=self._optimizer_options)
 
     def _get_optimizer_call_name(self):
         return 'lmmin'

@@ -53,11 +53,11 @@
 #define PATIENCE %(PATIENCE)r         /* Used to set the maximum number of iterations
                                          to patience*(number_of_parameters+1). */
 #define MAX_IT (PATIENCE * (%(NMR_PARAMS)r+1))
-#define ALPHA       1.0                         /* reflection coefficient */
-#define BETA        0.5                         /* contraction coefficient */
-#define GAMMA       2.0                         /* expansion coefficient */
+#define ALPHA       %(ALPHA)r                   /* reflection coefficient */
+#define BETA        %(BETA)r                    /* contraction coefficient */
+#define GAMMA       %(GAMMA)r                   /* expansion coefficient */
 #define EPSILON     30*EPSILON_OPTIMIZER_FLOAT  /** the precision we break at*/
-#define SCALE       1.0                         /** the scale for the initial simplex */
+#define SCALE       %(SCALE)r                   /** the scale for the initial simplex */
 
 
 void nmsimplex(optimizer_float* const model_parameters, const void* const data){

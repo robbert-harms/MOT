@@ -35,13 +35,21 @@ class EuclidianNormFunction(LibraryFunction):
 
 class LMMin(LibraryFunction):
 
-    def __init__(self, nmr_parameters, patience=250):
+    def __init__(self, nmr_parameters, patience=250, optimizer_options=None):
         """The Levenberg Marquardt function.
 
         Args:
             nmr_parameters (int): The number of parameters we are going to optimize, this is compiled into the code.
             patience (int): The patience before stopping the iterations.
         """
+        params = {'NMR_PARAMS': nmr_parameters, 'PATIENCE': patience}
+
+        optimizer_options = optimizer_options or {}
+        option_defaults = {}
+
+        for option, default in option_defaults.items():
+            params.update({option.upper(): optimizer_options.get(option, default)})
+
         super(LMMin, self).__init__(
             'void',
             'lmmin',
@@ -49,19 +57,28 @@ class LMMin(LibraryFunction):
              LibraryParameter(CLDataType.from_string('void*'), 'data')),
             resource_filename('mot', 'data/opencl/lmmin.h'),
             resource_filename('mot', 'data/opencl/lmmin.pcl'),
-            {'NMR_PARAMS': nmr_parameters, 'PATIENCE': patience},
+            params,
             [])
 
 
 class NMSimplexFunc(LibraryFunction):
 
-    def __init__(self, nmr_parameters, patience=250):
+    def __init__(self, nmr_parameters, patience=250, optimizer_options=None):
         """The Nelder-Mead simplex function.
 
         Args:
             nmr_parameters (int): The number of parameters we are going to optimize, this is compiled into the code.
             patience (int): The patience before stopping the iterations.
+            optimizer_options (dict): specific optimizer options
         """
+        params = {'NMR_PARAMS': nmr_parameters, 'PATIENCE': patience}
+
+        optimizer_options = optimizer_options or {}
+        option_defaults = {'alpha': 1.0, 'beta': 0.5, 'gamma': 2.0, 'scale': 1.0}
+
+        for option, default in option_defaults.items():
+            params.update({option.upper(): optimizer_options.get(option, default)})
+
         super(NMSimplexFunc, self).__init__(
             'void',
             'nmsimplex',
@@ -69,19 +86,28 @@ class NMSimplexFunc(LibraryFunction):
              LibraryParameter(CLDataType.from_string('void*'), 'data')),
             resource_filename('mot', 'data/opencl/nmsimplex.h'),
             resource_filename('mot', 'data/opencl/nmsimplex.pcl'),
-            {'NMR_PARAMS': nmr_parameters, 'PATIENCE': patience},
+            params,
             ())
 
 
 class PowellFunc(LibraryFunction):
 
-    def __init__(self, nmr_parameters, patience=150):
+    def __init__(self, nmr_parameters, patience=150, optimizer_options=None):
         """The Powell function.
 
         Args:
             nmr_parameters (int): The number of parameters we are going to optimize, this is compiled into the code.
             patience (int): The patience before stopping the iterations.
+            optimizer_options (dict): specific optimizer options
         """
+        params = {'NMR_PARAMS': nmr_parameters, 'PATIENCE': patience}
+
+        optimizer_options = optimizer_options or {}
+        option_defaults = {'bracket_gold': 1.618034, 'glimit': 100.0}
+
+        for option, default in option_defaults.items():
+            params.update({option.upper(): optimizer_options.get(option, default)})
+
         super(PowellFunc, self).__init__(
             'void',
             'powell',
@@ -89,7 +115,7 @@ class PowellFunc(LibraryFunction):
              LibraryParameter(CLDataType.from_string('void*'), 'data')),
             resource_filename('mot', 'data/opencl/powell.h'),
             resource_filename('mot', 'data/opencl/powell.pcl'),
-            {'NMR_PARAMS': nmr_parameters, 'PATIENCE': patience},
+            params,
             ())
 
 

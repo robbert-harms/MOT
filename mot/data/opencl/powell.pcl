@@ -14,10 +14,10 @@
 #define MAX_IT (PATIENCE * (%(NMR_PARAMS)r+1))
 #define PWLL_FTOL 30*EPSILON_OPTIMIZER_FLOAT
 #define BRENT_TOL 2*30*EPSILON_OPTIMIZER_FLOAT
-#define BRACKET_GOLD 1.618034
-#define GLIMIT 100.0
+#define BRACKET_GOLD 1.618034 /* the default ratio by which successive intervals are magnified in Bracketing */
+#define GLIMIT 100.0 /* the maximum magnification allowed for a parabolic-fit step in Bracketing */
 #define EPSILON 30*EPSILON_OPTIMIZER_FLOAT
-#define CGOLD 0.3819660 /* golden = (3 - sqrt(5))/2 */
+#define CGOLD 0.3819660 /* golden ratio = (3 - sqrt(5))/2 */
 #define ZEPS 30*EPSILON_OPTIMIZER_FLOAT
 
 /** helpers to save memory and keep code clean */
