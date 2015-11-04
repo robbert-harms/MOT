@@ -45,7 +45,7 @@ class LMMin(LibraryFunction):
         params = {'NMR_PARAMS': nmr_parameters, 'PATIENCE': patience}
 
         optimizer_options = optimizer_options or {}
-        option_defaults = {}
+        option_defaults = {'step_bound': 100.0}
 
         for option, default in option_defaults.items():
             params.update({option.upper(): optimizer_options.get(option, default)})

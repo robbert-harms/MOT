@@ -55,7 +55,7 @@ optimizer_float lm_euclidian_norm(const optimizer_float* const x, const int n);
 #define EPSILON LM_USERTOL   /* Step used to calculate the Jacobian, should be
                              slightly larger than the relative error in the
                              user-supplied functions. */
-#define STEP_BOUND 100.0     /* Used in determining the initial step bound. This
+#define STEP_BOUND %(STEP_BOUND)r     /* Used in determining the initial step bound. This
                              bound is set to the product of stepbound and the
                              Euclidean norm of diag*x if nonzero, or else to
                              stepbound itself. In most cases stepbound should lie
@@ -67,7 +67,8 @@ optimizer_float lm_euclidian_norm(const optimizer_float* const x, const int n);
                              Recommended value is 1. */
 #define MAXFEV (PATIENCE * (%(NMR_PARAMS)s+1)) /** the maximum number of evaluations */
 #define EPS sqrt(max(EPSILON, LM_MACHEP)) /* for forward differences */
-#define LMPAR_P1 0.1 /** parameter p1 from the lmpar function */
+#define LMPAR_P1 0.1 /** parameter p1 from the lmpar function,
+                         this is not a tunable value, we put it here to save a double. */
 #define LM_ENORM_SQRT_GIANT sqrt(MAX_OPTIMIZER_FLOAT) /* square should not overflow */
 #define LM_ENORM_SQRT_DWARF sqrt(MIN_OPTIMIZER_FLOAT) /* square should not underflow */
 
