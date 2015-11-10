@@ -186,9 +186,6 @@ void nmsimplex(optimizer_float* const model_parameters, const void* const data){
 					/** ve_vc here used as vc */
 					ve_vc[j] = vm[j]+BETA*(vr[j]-vm[j]);
 				}
-
-                /** use fe_fc_sum_tmp as fc */
-				fe_fc_sum_tmp = evaluate(ve_vc, data);
 			}
 			else {
 				/* perform inside contraction */
@@ -196,10 +193,10 @@ void nmsimplex(optimizer_float* const model_parameters, const void* const data){
 					/*ve_vc[j] = BETA*v[vg][j] + (1-BETA)*vm[j];*/
 					ve_vc[j] = vm[j]-BETA*(vm[j]-v[vg][j]);
 				}
-
-				fe_fc_sum_tmp = evaluate(ve_vc, data);
 			}
 
+			/** use fe_fc_sum_tmp as fc */
+			fe_fc_sum_tmp = evaluate(ve_vc, data);
 
 			if (fe_fc_sum_tmp < f[vg]) {
 				for (j=0;j<=%(NMR_PARAMS)r-1;j++) {
