@@ -61,6 +61,36 @@ class LMMin(LibraryFunction):
             [])
 
 
+
+class PraxisFunc(LibraryFunction):
+
+    def __init__(self, nmr_parameters, patience=1000, optimizer_options=None):
+        """The Praxis function.
+
+        Args:
+            nmr_parameters (int): The number of parameters we are going to optimize, this is compiled into the code.
+            patience (int): The patience before stopping the iterations.
+            optimizer_options (dict): specific optimizer options
+        """
+        params = {'NMR_PARAMS': nmr_parameters, 'PATIENCE': patience}
+
+        optimizer_options = optimizer_options or {}
+        option_defaults = {}
+
+        for option, default in option_defaults.items():
+            params.update({option.upper(): optimizer_options.get(option, default)})
+
+        super(PraxisFunc, self).__init__(
+            'void',
+            'praxis',
+            (LibraryParameter(CLDataType.from_string('optimizer_float*'), 'model_parameters'),
+             LibraryParameter(CLDataType.from_string('void*'), 'data')),
+            resource_filename('mot', 'data/opencl/praxis.h'),
+            resource_filename('mot', 'data/opencl/praxis.pcl'),
+            params,
+            ())
+
+
 class NMSimplexFunc(LibraryFunction):
 
     def __init__(self, nmr_parameters, patience=250, optimizer_options=None):
