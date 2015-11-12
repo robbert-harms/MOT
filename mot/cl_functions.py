@@ -71,14 +71,28 @@ class PrAxisFunc(LibraryFunction):
             nmr_parameters (int): The number of parameters we are going to optimize, this is compiled into the code.
             patience (int): The patience before stopping the iterations.
             optimizer_options (dict): specific optimizer options
+                tolerance (float): default 0.0, praxis attempts to return praxis=f(x) such that if x0 is the
+                    true local minimum near x, then norm(x-x0) < t0 + squareroot(machep)*norm(x)
+                max_step_size (float):  default 1: Originally parameter H0. It is the maximum step size and
+                    should be set to about the max. distance from the initial guess to the minimum.
+                    If set too small or too large, the initial rate of convergence may be slow.
+                ill_conditioned (bool): if the problem is known to be ill-conditioned set it to 1 else, set to 0.
+                scbd (float): if the axes may be badly scaled (which is to be avoided if possible), then set SCBD=10.
+                    otherwise set SCBD=1.
+                ktm (int): KTM is the number of iterations without improvement before the algorithm terminates.
+                    KTM=4 is very cautious; usually KTM=1 is satisfactory.
         """
         params = {'NMR_PARAMS': nmr_parameters, 'PATIENCE': patience}
 
         optimizer_options = optimizer_options or {}
-        option_defaults = {}
+        option_defaults = {'tolerance': 0.0, 'max_step_size': 1, 'ill_conditioned': False, 'scbd': 10., 'ktm': 1}
+        option_converters = {'ill_conditioned': lambda val: int(bool(val))}
 
         for option, default in option_defaults.items():
-            params.update({option.upper(): optimizer_options.get(option, default)})
+            v = optimizer_options.get(option, default)
+            if option in option_converters:
+                v = option_converters[option](v)
+            params.update({option.upper(): v})
 
         super(PrAxisFunc, self).__init__(
             'void',

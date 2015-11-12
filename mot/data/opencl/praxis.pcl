@@ -3,7 +3,7 @@
 
 /**
  * Creator = Robbert Harms
- * Date = 2014-02-05
+ * Date = 2015-11-12
  * License = LGPL v3
  * Maintainer = Robbert Harms
  * Email = robbert.harms@maastrichtuniversity.nl
@@ -31,65 +31,67 @@ Original fortran comment:
                     LAST MODIFIED 3/1/73
             Modified August 2007 by S. G. Johnson:
               after conversion to C via f2c and some manual cleanup,
-          eliminating write statements, I additionally:
-             - modified the routine to use NLopt stop criteria
-             - allocate arrays dynamically to allow n > 20
-             - return the NLopt return code, where the min.
-               function value is now given by the parameter minf
 
-     PRAXIS RETURNS THE MINIMUM OF THE FUNCTION F(N,X) OF N VARIABLES 
-     USING THE PRINCIPAL AXIS METHOD.  THE GRADIENT OF THE FUNCTION IS 
-     NOT REQUIRED. 
+     praxis returns the minimum of the function f(n,x) of n variables
+     using the principal axis method.  the gradient of the function is
+     not required.
 
-     FOR A DESCRIPTION OF THE ALGORITHM, SEE CHAPTER SEVEN OF 
-     "ALGORITHMS FOR FINDING ZEROS AND EXTREMA OF FUNCTIONS WITHOUT 
-     CALCULATING DERIVATIVES" BY RICHARD P BRENT. 
+     for a description of the algorithm, see chapter seven of
+     "algorithms for finding zeros and extrema of functions without
+     calculating derivatives" by Richard P Brent.
 
-     THE PARAMETERS ARE: 
+     the parameters are:
 
-     N        (AT LEAST TWO) IS THE NUMBER OF VARIABLES UPON WHICH 
-              THE FUNCTION DEPENDS. 
-     X        IS AN ARRAY CONTAINING ON ENTRY A GUESS OF THE POINT OF 
-              MINIMUM, ON RETURN THE ESTIMATED POINT OF MINIMUM. 
-     F(N,X)   IS THE FUNCTION TO BE MINIMIZED.  F SHOULD BE A REAL*8 
-              FUNCTION DECLARED EXTERNAL IN THE CALLING PROGRAM. 
-     THE APPROXIMATING QUADRATIC FORM IS 
-              Q(X') = F(N,X) + (1/2) * (X'-X)-TRANSPOSE * A * (X'-X) 
-     WHERE X IS THE BEST ESTIMATE OF THE MINIMUM AND A IS 
-              INVERSE(V-TRANSPOSE) * D * INVERSE(V) 
-     (V(*,*) IS THE MATRIX OF SEARCH DIRECTIONS; D(*) IS THE ARRAY 
-     OF SECOND DIFFERENCES).  IF F HAS CONTINUOUS SECOND DERIVATIVES 
-     NEAR X0, A WILL TEND TO THE HESSIAN OF F AT X0 AS X APPROACHES X0. 
+     x        is an array containing on entry a guess of the point of
+              minimum, on return the estimated point of minimum.
 
-     IT IS ASSUMED THAT ON FLOATING-POINT UNDERFLOW THE RESULT IS SET 
-     TO ZERO. 
-     THE USER SHOULD OBSERVE THE COMMENT ON HEURISTIC NUMBERS AFTER 
-     THE INITIALIZATION OF MACHINE DEPENDENT NUMBERS. 
+     f(n,x)   is the function to be minimized.  f should be a real*8
+              function declared external in the calling program.
 
-
- .....IF N>20 OR IF N<20 AND YOU NEED MORE SPACE, CHANGE '20' TO THE 
-     LARGEST VALUE OF N IN THE NEXT CARD, IN THE CARD 'IDIM=20', AND 
-     IN THE DIMENSION STATEMENTS IN SUBROUTINES MINFIT,MIN,FLIN,QUAD. 
- ...changed by S. G. Johnson, 2007, to use malloc 
-
- .....INITIALIZATION..... 
-     MACHINE DEPENDENT NUMBERS: */
-
-
-/* PATIENCE IS THE NUMBER OF ITERATIONS WITHOUT IMPROVEMENT BEFORE THE ALGORITHM TERMINATES.
- * KTM=4 IS VERY CAUTIOUS; USUALLY KTM=1 IS SATISFACTORY.
+     the approximating quadratic form is
+              q(x') = f(n,x) + (1/2) * (x'-x)-transpose * a * (x'-x)
+     where x is the best estimate of the minimum and a is
+              inverse(v-transpose) * d * inverse(v)
+     (v(*,*) is the matrix of search directions; d(*) is the array
+     of second differences).  if f has continuous second derivatives
+     near x0, a will tend to the hessian of f at x0 as x approaches x0.
  */
-
 
 #define PATIENCE %(PATIENCE)r /* Used to set the maximum number of function evaluations
                                 to patience*(number_of_parameters+1). */
-#define TOLERANCE 0.0         /** praxis attempts to return praxis=f(x) such that if x0 is the true local minimum
+#define TOLERANCE %(TOLERANCE)r  /** praxis attempts to return praxis=f(x) such that if x0 is the true local minimum
                                   near x, then norm(x-x0) < t0 + squareroot(machep)*norm(x).*/
 #define MACH_EPS     30*EPSILON_OPTIMIZER_FLOAT  /** the precision we break at*/
-#define MAX_STEP_SIZE 300     /** Originally parameter H0. It is the maximum step size and
+#define MAX_STEP_SIZE %(MAX_STEP_SIZE)r  /** Originally parameter H0. It is the maximum step size and
                                   should be set to about the max. distance from the initial guess to the minimum.
                                   If set too small or too large, the initial rate of convergence may be slow.*/
 #define MAX_FUNC_EVALS (PATIENCE * (%(NMR_PARAMS)s+1)) /** Maximum function evaluations */
+#define ILL_CONDITIONED %(ILL_CONDITIONED)r /* heuristic: the problem is known to be ill-conditioned,
+                                               set ILL_CONDITIONED to 1 (true). otherwise set ILL_CONDITIONED
+                                               0 (false). */
+#define SCBD %(SCBD)r         /* heuristic: if the axes may be badly scaled (which is to be avoided if possible),
+                                 then set SCBD=10.  otherwise set SCBD=1. */
+#define KTM %(KTM)r           /* heuristic: KTM is the number of iterations without improvement before
+                                 the algorithm terminates. KTM=4 is very cautious; usually KTM=1 is satisfactory. */
+
+/** some definitions of small numbers */
+#define PRAXIS_SMALL (MACH_EPS * MACH_EPS)
+#define PRAXIS_VSMALL (PRAXIS_SMALL * PRAXIS_SMALL)
+#define PRAXIS_LARGE (1. / PRAXIS_SMALL)
+#define PRAXIS_VLARGE (1. / PRAXIS_VSMALL)
+#define PRAXIS_M2 (sqrt(MACH_EPS))
+#define PRAXIS_M4 (sqrt(PRAXIS_M2))
+
+
+typedef enum {
+     RETURN_CODE_FAILURE = -1, /* generic failure code */
+     RETURN_CODE_ROUNDOFF_LIMITED = -2,
+     RETURN_CODE_SUCCESS = 1, /* generic success code */
+     RETURN_CODE_STOPVAL_REACHED = 2,
+     RETURN_CODE_FTOL_REACHED = 3,
+     RETURN_CODE_XTOL_REACHED = 4,
+     RETURN_CODE_MAXEVAL_REACHED = 5,
+} return_code;
 
 
 struct global_s {
@@ -101,14 +103,12 @@ struct q_s {
     optimizer_float *v; /* size n x n */
     optimizer_float *q0, *q1, *t_flin; /* size n */
     optimizer_float qa, qb, qc, qd0, qd1, qf1;
-
     optimizer_float fbest, *xbest; /* size n */
-    nlopt_stopping *stop;
 };
 
 /* Table of constant values */
 /* compute x^n, n >= 0 */
-static int pow_ii(int x, int n){
+int pow_ii(int x, int n){
     int p = 1;
     while (n > 0) {
         if (n & 1) {
@@ -123,39 +123,28 @@ static int pow_ii(int x, int n){
     return p;
 }
 
-nlopt_result praxis_(int n, optimizer_float *x, const void * const data,
-                     nlopt_stopping *stop, optimizer_float *minf);
+return_code praxis_(int n, optimizer_float *x, const void * const data, optimizer_float *minf);
 
 void praxis(optimizer_float* model_parameters, const void* const data){
     optimizer_float minf = 0;
-    nlopt_stopping stop = {%(NMR_PARAMS)r};
-    praxis_(%(NMR_PARAMS)r, model_parameters, data, &stop, &minf);
+    praxis_(%(NMR_PARAMS)r, model_parameters, data, &minf);
 }
 
-
-
-static int relstop(optimizer_float vold, optimizer_float vnew)
-{
+int relstop(optimizer_float vold, optimizer_float vnew){
      if (isinf(vold)){
         return 0;
      }
-
      return(fabs(vnew - vold) < 0
         || fabs(vnew - vold) < 0 * (fabs(vnew) + fabs(vold)) * 0.5
 	    || (0 > 0 && vnew == vold)); /* catch vnew == vold == 0 */
 }
 
-int nlopt_stop_ftol(const nlopt_stopping *s, optimizer_float f, optimizer_float oldf){
-     return (relstop(oldf, f));
+int stopping_test_f(optimizer_float f, optimizer_float oldf){
+     return (f <= 0 || relstop(f, oldf));
 }
 
-int nlopt_stop_f(const nlopt_stopping *s, optimizer_float f, optimizer_float oldf){
-     return (f <= 0 || nlopt_stop_ftol(s, f, oldf));
-}
-
-int nlopt_stop_x(const nlopt_stopping *s, const optimizer_float *x, const optimizer_float *oldx){
-     unsigned i;
-     for (i = 0; i < s->n; ++i){
+int stopping_test_x(const optimizer_float *x, const optimizer_float *oldx){
+     for(int i = 0; i < %(NMR_PARAMS)r; ++i){
         if (!relstop(oldx[i], x[i])){
             return 0;
         }
@@ -163,20 +152,15 @@ int nlopt_stop_x(const nlopt_stopping *s, const optimizer_float *x, const optimi
      return 1;
 }
 
-static void minfit_(int m, int n, optimizer_float *tol, optimizer_float *ab, optimizer_float *q, optimizer_float *ework);
-static nlopt_result min_(int n, int j, int nits, optimizer_float *d2, optimizer_float *x1, optimizer_float *f1, int fk, const void * const data, optimizer_float *x, optimizer_float *t_old, optimizer_float *h__, struct global_s *global_1, struct q_s *q_1);
-static optimizer_float flin_(int n, int j, optimizer_float *l, const void * const data, optimizer_float *x, int *nf, struct q_s *q_1, nlopt_result *ret);
-static void sort_(int m, int n, optimizer_float *d__, optimizer_float *v);
-static void quad_(int n, const void * const data, optimizer_float *x, optimizer_float *t_old, optimizer_float *h__, struct global_s *global_1, struct q_s *q_1);
+void minfit_(int m, int n, optimizer_float tol, optimizer_float *ab, optimizer_float *q, optimizer_float *ework);
+return_code min_(int n, int j, int nits, optimizer_float *d2, optimizer_float *x1, optimizer_float *f1, int fk, const void * const data, optimizer_float *x, optimizer_float *t_old, optimizer_float *h__, struct global_s *global_1, struct q_s *q_1);
+optimizer_float flin_(int n, int j, optimizer_float *l, const void * const data, optimizer_float *x, int *nf, struct q_s *q_1, return_code *ret);
+void sort_(int m, int n, optimizer_float *d__, optimizer_float *v);
+void quad_(int n, const void * const data, optimizer_float *x, optimizer_float *t_old, optimizer_float *h__, struct global_s *global_1, struct q_s *q_1);
 
-nlopt_result praxis_(int n, optimizer_float *x, const void * const data,
-                     nlopt_stopping *stop, optimizer_float *minf)
+return_code praxis_(int n, optimizer_float *x, const void * const data, optimizer_float *minf)
 {
-    /* System generated locals */
-    int i__1, i__2, i__3;
-    nlopt_result ret = NLOPT_SUCCESS;
-    optimizer_float d__1;
-	int copy_index;
+    return_code ret = RETURN_CODE_SUCCESS;
 
     /* Global */
     struct global_s global_1;
@@ -188,32 +172,17 @@ nlopt_result praxis_(int n, optimizer_float *x, const void * const data,
     optimizer_float h__;
     int i__, j, k;
     optimizer_float s, t_old, f1;
-    int k2;
-    optimizer_float m2, m4, t2_old, df, dn;
+    optimizer_float t2_old, df, dn;
     int kl, ii;
     optimizer_float sf;
     int kt;
     optimizer_float sl;
-    int im1, km1;
     optimizer_float dni, lds;
-    int ktm;
-    optimizer_float scbd;
     int illc;
-    int klmk;
-    optimizer_float ldfac, large, small, value;
-    optimizer_float vlarge;
-    optimizer_float vsmall;
+    optimizer_float ldfac, value;
     optimizer_float work[(%(NMR_PARAMS)r * %(NMR_PARAMS)r + %(NMR_PARAMS)r * 9)];
 
     --x;
-
-    /* Function Body */
-    small = MACH_EPS * MACH_EPS;
-    vsmall = small * small;
-    large = 1. / small;
-    vlarge = 1. / vsmall;
-    m2 = sqrt(MACH_EPS);
-    m4 = sqrt(m2);
 
     q_1.v = work;
     q_1.q0 = q_1.v + n*n;
@@ -225,66 +194,53 @@ nlopt_result praxis_(int n, optimizer_float *x, const void * const data,
     z__ = y + n;
     e_minfit = y + n;
     prev_xbest = e_minfit + n;
-
-    /*     HEURISTIC NUMBERS: */
-    /*     IF THE AXES MAY BE BADLY SCALED (WHICH IS TO BE AVOIDED IF */
-    /*     POSSIBLE), THEN SET SCBD=10.  OTHERWISE SET SCBD=1. */
-    /*     IF THE PROBLEM IS KNOWN TO BE ILL-CONDITIONED, SET ILLC=TRUE. */
-    /*     OTHERWISE SET ILLC=FALSE. */
-    /*     KTM IS THE NUMBER OF ITERATIONS WITHOUT IMPROVEMENT BEFORE THE */
-    /*     ALGORITHM TERMINATES.  KTM=4 IS VERY CAUTIOUS; USUALLY KTM=1 */
-    /*     IS SATISFACTORY. */
-
-    scbd = 10.;
-    illc = 0 /* false */;
-    ktm = 1;
+    illc = ILL_CONDITIONED;
 
     ldfac = .01;
     if (illc) {
         ldfac = .1;
     }
+
     kt = 0;
     global_1.nl = 0;
     global_1.nf = 1;
     prev_fbest = q_1.fbest = global_1.fx = evaluate(&x[1], data);
 
-    for(copy_index = 0; copy_index < n; copy_index++){
-		q_1.xbest[copy_index] = (&x[1])[copy_index];
-		prev_xbest[copy_index] = (&x[1])[copy_index];
+    for(j = 0; j < n; j++){
+		q_1.xbest[j] = (&x[1])[j];
+		prev_xbest[j] = (&x[1])[j];
 	}
 
-    q_1.stop = stop;
     q_1.qf1 = global_1.fx;
+
     if (TOLERANCE > 0)
-        t_old = small + TOLERANCE;
+        t_old = PRAXIS_SMALL + TOLERANCE;
     else {
         t_old = 0;
-        t_old += small;
+        t_old += PRAXIS_SMALL;
     }
+
     t2_old = t_old;
-    global_1.dmin__ = small;
+    global_1.dmin__ = PRAXIS_SMALL;
     h__ = MAX_STEP_SIZE;
+
     if (h__ < t_old * 100) {
         h__ = t_old * 100;
     }
     global_1.ldt = h__;
-    /* .....THE FIRST SET OF SEARCH DIRECTIONS V IS THE IDENTITY MATRIX..... */
-    i__1 = n;
-    for (i__ = 1; i__ <= i__1; ++i__) {
-        i__2 = n;
-        for (j = 1; j <= i__2; ++j) {
-            /* L10: */
+
+    /* .....the first set of search directions v is the identity matrix..... */
+    for (i__ = 1; i__ <= n; ++i__) {
+        for (j = 1; j <= n; ++j) {
             q_1.v[i__ + j * n - (n+1)] = 0.;
         }
-        /* L20: */
         q_1.v[i__ + i__ * n - (n+1)] = 1.;
     }
+
     d__[0] = 0.;
     q_1.qd0 = 0.;
-    i__1 = n;
-    for (i__ = 1; i__ <= i__1; ++i__) {
+    for (i__ = 1; i__ <= n; ++i__) {
         q_1.q0[i__ - 1] = x[i__];
-        /* L30: */
         q_1.q1[i__ - 1] = x[i__];
     }
 
@@ -294,46 +250,35 @@ nlopt_result praxis_(int n, optimizer_float *x, const void * const data,
 		d__[0] = 0.;
 		s = 0.;
 
-		/* .....MINIMIZE ALONG THE FIRST DIRECTION V(*,1). */
-		/*     FX MUST BE PASSED TO MIN BY VALUE. */
+		/* .....minimize along the first direction v(*,1). */
+		/*     fx must be passed to min by value. */
 		value = global_1.fx;
-		ret = min_(n, 1, 2, d__, &s, &value, 0, data, &x[1],
-				   &t_old, &h__, &global_1, &q_1);
+		ret = min_(n, 1, 2, d__, &s, &value, 0, data, &x[1], &t_old, &h__, &global_1, &q_1);
 
-		if (ret != NLOPT_SUCCESS){
+		if (ret != RETURN_CODE_SUCCESS){
 			*minf = q_1.fbest;
 
-			for(copy_index = 0; copy_index < n; copy_index++){
-				(&x[1])[copy_index] = q_1.xbest[copy_index];
+			for(j = 0; j < n; j++){
+				(&x[1])[j] = q_1.xbest[j];
 			}
 			return ret;
 		}
 
-		if (s > 0.) {
-		}
-		else{
-			i__1 = n;
-			for (i__ = 1; i__ <= i__1; ++i__) {
-				/* L45: */
+		if (s <= 0.){
+			for (i__ = 1; i__ <= n; ++i__) {
 				q_1.v[i__ - 1] = -q_1.v[i__ - 1];
 			}
 		}
-		if (sf > d__[0] * .9 && sf * .9 < d__[0]) {
-		}
-		else{
-			i__1 = n;
-			for (i__ = 2; i__ <= i__1; ++i__) {
-				/* L60: */
+
+		if(!(sf > d__[0] * .9 && sf * .9 < d__[0])){
+			for (i__ = 2; i__ <= n; ++i__) {
 				d__[i__ - 1] = 0.;
 			}
 		}
 
-		/* .....THE INNER LOOP STARTS HERE..... */
-		i__1 = n;
-		for (k = 2; k <= i__1; ++k) {
-			i__2 = n;
-			for (i__ = 1; i__ <= i__2; ++i__) {
-				/* L75: */
+		/* .....the inner loop starts here..... */
+		for (k = 2; k <= n; ++k) {
+			for (i__ = 1; i__ <= n; ++i__) {
 				y[i__ - 1] = x[i__];
 			}
 			sf = global_1.fx;
@@ -345,15 +290,11 @@ nlopt_result praxis_(int n, optimizer_float *x, const void * const data,
 				kl = k;
 				df = 0.;
 
-				/* .....A RANDOM STEP FOLLOWS (TO AVOID RESOLUTION VALLEYS). */
-				/*     PRAXIS ASSUMES THAT RANDOM RETURNS A RANDOM NUMBER UNIFORMLY */
-				/*     DISTRIBUTED IN (0,1). */
-
-				if (! illc) {
-				}
-				else{
-					i__2 = n;
-					for (i__ = 1; i__ <= i__2; ++i__) {
+				/* .....a random step follows (to avoid resolution valleys). */
+				/*     praxis assumes that random returns a random number uniformly */
+				/*     distributed in (0,1). */
+				if(!(! illc)){
+					for (i__ = 1; i__ <= n; ++i__) {
 						s = (global_1.ldt * .1 + t2_old * pow_ii(10, kt))
 							* 0; /** instead of 0 random number between -0.5 and 0.5*/
 /**********************
@@ -363,335 +304,279 @@ nlopt_result praxis_(int n, optimizer_float *x, const void * const data,
 						/* was: (random_(n) - .5); */
 
 						z__[i__ - 1] = s;
-						i__3 = n;
-						for (j = 1; j <= i__3; ++j) {
-							/* L85: */
+						for (j = 1; j <= n; ++j) {
 							x[j] += s * q_1.v[j + i__ * n - (n+1)];
 						}
-						/* L90: */
 					}
+
 					global_1.fx = evaluate(&x[1], data);
 					++global_1.nf;
 				}
 
-				/* .....MINIMIZE ALONG THE "NON-CONJUGATE" DIRECTIONS V(*,K),...,V(*,N) */
-
-				i__2 = n;
-				for (k2 = k; k2 <= i__2; ++k2) {
+				/* .....minimize along the "non-conjugate" directions v(*,k),...,v(*,n) */
+				for (i__ = k; i__ <= n; ++i__) {
 					sl = global_1.fx;
 					s = 0.;
 					value = global_1.fx;
-					ret = min_(n, k2, 2, &d__[k2 - 1], &s, &value, 0, data, &
-							   x[1], &t_old, &h__, &global_1, &q_1);
-					if (ret != NLOPT_SUCCESS){
+					ret = min_(n, i__, 2, &d__[i__ - 1], &s, &value, 0, data, &x[1], &t_old, &h__, &global_1, &q_1);
+
+					if (ret != RETURN_CODE_SUCCESS){
 						*minf = q_1.fbest;
-						for(copy_index = 0; copy_index < n; copy_index++){
-							(&x[1])[copy_index] = q_1.xbest[copy_index];
+						for(j = 0; j < n; j++){
+							(&x[1])[j] = q_1.xbest[j];
 						}
 						return ret;
 					}
+
 					if (illc) {
-						/* Computing 2nd power */
-						d__1 = s + z__[k2 - 1];
-						s = d__[k2 - 1] * (d__1 * d__1);
+						s = d__[i__ - 1] * pown(s + z__[i__ - 1], 2);
 					}
 					else{
 						s = sl - global_1.fx;
 					}
-					if (df > s) {
-					}
-					else{
+
+					if (df <= s){
 						df = s;
-						kl = k2;
+						kl = i__;
 					}
 				}
 
-				if (illc || df >= (d__1 = MACH_EPS * 100 * global_1.fx, fabs(d__1))) {
-					break; // while(1)
+				if (illc || df >= fabs(MACH_EPS * 100 * global_1.fx)){
+					break; // break out of while(1)
 				}
 
-				/* .....IF THERE WAS NOT MUCH IMPROVEMENT ON THE FIRST TRY, SET */
-				/*     ILLC=TRUE AND START THE INNER LOOP AGAIN..... */
+				/* .....if there was not much improvement on the first try, set */
+				/*     illc=true and start the inner loop again..... */
 				illc = 1 /* true */;
 			}
 
-			/* .....MINIMIZE ALONG THE "CONJUGATE" DIRECTIONS V(*,1),...,V(*,K-1) */
-			km1 = k - 1;
-			i__2 = km1;
-			for (k2 = 1; k2 <= i__2; ++k2) {
+			/* .....minimize along the "conjugate" directions v(*,1),...,v(*,k-1) */
+			for (i__ = 1; i__ <= k - 1; ++i__) {
 				s = 0.;
 				value = global_1.fx;
-				ret = min_(n, k2, 2, &d__[k2 - 1], &s, &value, 0, data, &
-						   x[1], &t_old, &h__, &global_1, &q_1);
-				if (ret != NLOPT_SUCCESS){
+				ret = min_(n, i__, 2, &d__[i__ - 1], &s, &value, 0, data, &x[1], &t_old, &h__, &global_1, &q_1);
+
+				if (ret != RETURN_CODE_SUCCESS){
 					*minf = q_1.fbest;
-					for(copy_index = 0; copy_index < n; copy_index++){
-						(&x[1])[copy_index] = q_1.xbest[copy_index];
+					for(j = 0; j< n; j++){
+						(&x[1])[j] = q_1.xbest[j];
 					}
 					return ret;
 				}
-				/* L120: */
 			}
+
 			f1 = global_1.fx;
 			global_1.fx = sf;
 			lds = 0.;
-			i__2 = n;
-			for (i__ = 1; i__ <= i__2; ++i__) {
+			for (i__ = 1; i__ <= n; ++i__) {
 				sl = x[i__];
 				x[i__] = y[i__ - 1];
 				sl -= y[i__ - 1];
 				y[i__ - 1] = sl;
-				/* L130: */
 				lds += sl * sl;
 			}
-			lds = sqrt(lds);
-			if (lds <= small) {
-			}
-			else{
-				/* .....DISCARD DIRECTION V(*,KL). */
-				/*     IF NO RANDOM STEP WAS TAKEN, V(*,KL) IS THE "NON-CONJUGATE" */
-				/*     DIRECTION ALONG WHICH THE GREATEST IMPROVEMENT WAS MADE..... */
 
-				klmk = kl - k;
-				if (klmk < 1) {
-				}
-				else{
-					i__2 = klmk;
-					for (ii = 1; ii <= i__2; ++ii) {
+			lds = sqrt(lds);
+			if (lds > PRAXIS_SMALL){
+				/* .....discard direction v(*,kl). */
+				/*     if no random step was taken, v(*,kl) is the "non-conjugate" */
+				/*     direction along which the greatest improvement was made..... */
+				if ((kl - k) >= 1){
+					for (ii = 1; ii <= kl - k; ++ii) {
 						i__ = kl - ii;
-						i__3 = n;
-						for (j = 1; j <= i__3; ++j) {
-							/* L135: */
+						for (j = 1; j <= n; ++j) {
 							q_1.v[j + (i__ + 1) * n - (n+1)] = q_1.v[j + i__ * n - (n+1)];
 						}
-						/* L140: */
 						d__[i__] = d__[i__ - 1];
 					}
 				}
+
 				d__[k - 1] = 0.;
-				i__2 = n;
-				for (i__ = 1; i__ <= i__2; ++i__) {
-					/* L145: */
+				for (i__ = 1; i__ <= n; ++i__) {
 					q_1.v[i__ + k * n - (n+1)] = y[i__ - 1] / lds;
 				}
 
-				/* .....MINIMIZE ALONG THE NEW "CONJUGATE" DIRECTION V(*,K), WHICH IS */
-				/*     THE NORMALIZED VECTOR:  (NEW X) - (0LD X)..... */
-
+				/* .....minimize along the new "conjugate" direction v(*,k), which is */
+				/*     the normalized vector:  (new x) - (0ld x)..... */
 				value = f1;
-				ret = min_(n, k, 4, &d__[k - 1], &lds, &value, 1, data, &x[1],
-						   &t_old, &h__, &global_1, &q_1);
-				if (ret != NLOPT_SUCCESS){
+				ret = min_(n, k, 4, &d__[k - 1], &lds, &value, 1, data, &x[1], &t_old, &h__, &global_1, &q_1);
+
+				if (ret != RETURN_CODE_SUCCESS){
 					*minf = q_1.fbest;
-					for(copy_index = 0; copy_index < n; copy_index++){
-						(&x[1])[copy_index] = q_1.xbest[copy_index];
+					for(j = 0; j < n; j++){
+						(&x[1])[j] = q_1.xbest[j];
 					}
 					return ret;
 				}
 
-				if (lds > 0.) {
-				}
-				else{
+				if (lds <= 0.){
 					lds = -lds;
-					i__2 = n;
-					for (i__ = 1; i__ <= i__2; ++i__) {
-						/* L150: */
+					for (i__ = 1; i__ <= n; ++i__) {
 						q_1.v[i__ + k * n - (n+1)] = -q_1.v[i__ + k * n - (n+1)];
 					}
 				}
 			}
+
 			global_1.ldt = ldfac * global_1.ldt;
 			if (global_1.ldt < lds) {
 				global_1.ldt = lds;
 			}
+
 			t2_old = 0.;
-			i__2 = n;
-			for (i__ = 1; i__ <= i__2; ++i__) {
-				/* L165: */
-				/* Computing 2nd power */
-				d__1 = x[i__];
-				t2_old += d__1 * d__1;
+			for (i__ = 1; i__ <= n; ++i__) {
+				t2_old += pown(x[i__], 2);
 			}
-			t2_old = m2 * sqrt(t2_old) + t_old;
+			t2_old = PRAXIS_M2 * sqrt(t2_old) + t_old;
 
-			/* .....SEE WHETHER THE LENGTH OF THE STEP TAKEN SINCE STARTING THE */
-			/*     INNER LOOP EXCEEDS HALF THE TOLERANCE..... */
-
+			/* .....see whether the length of the step taken since starting the */
+			/*     inner loop exceeds half the tolerance..... */
 			if (global_1.ldt > t2_old * .5f
-					&& !nlopt_stop_f(stop, q_1.fbest, prev_fbest)
-					&& !nlopt_stop_x(stop, q_1.xbest, prev_xbest)) {
+					&& !stopping_test_f(q_1.fbest, prev_fbest)
+					&& !stopping_test_x(q_1.xbest, prev_xbest)) {
 				kt = -1;
 			}
+
 			++kt;
-			if (kt > ktm) {
-				if (nlopt_stop_f(stop, q_1.fbest, prev_fbest))
-					ret = NLOPT_FTOL_REACHED;
-				else if (nlopt_stop_x(stop, q_1.xbest, prev_xbest))
-					ret = NLOPT_XTOL_REACHED;
+			if (kt > KTM) {
+				if (stopping_test_f(q_1.fbest, prev_fbest)){
+					ret = RETURN_CODE_FTOL_REACHED;
+				}
+				else if (stopping_test_x(q_1.xbest, prev_xbest)){
+					ret = RETURN_CODE_XTOL_REACHED;
+				}
 
 				*minf = q_1.fbest;
-				for(copy_index = 0; copy_index < n; copy_index++){
-					(&x[1])[copy_index] = q_1.xbest[copy_index];
+				for(j = 0; j < n; j++){
+					(&x[1])[j] = q_1.xbest[j];
 				}
 				return ret;
 
 			}
 			prev_fbest = q_1.fbest;
 
-			for(copy_index = 0; copy_index < n; copy_index++){
-				prev_xbest[copy_index] = q_1.xbest[copy_index];
+			for(j = 0; j < n; j++){
+				prev_xbest[j] = q_1.xbest[j];
 			}
-			/* L170: */
 		}
-		/* .....THE INNER LOOP ENDS HERE. */
 
-		/*     TRY QUADRATIC EXTRAPOLATION IN CASE WE ARE IN A CURVED VALLEY. */
-
-		/* L171: */
+		/* try quadratic extrapolation in case we are in a curved valley. */
 		quad_(n, data, &x[1], &t_old, &h__, &global_1, &q_1);
 		dn = 0.;
-		i__1 = n;
-		for (i__ = 1; i__ <= i__1; ++i__) {
+		for (i__ = 1; i__ <= n; ++i__) {
 			d__[i__ - 1] = 1. / sqrt(d__[i__ - 1]);
 			if (dn < d__[i__ - 1]) {
 				dn = d__[i__ - 1];
 			}
-			/* L175: */
 		}
-		i__1 = n;
-		for (j = 1; j <= i__1; ++j) {
+
+		for (j = 1; j <= n; ++j) {
 			s = d__[j - 1] / dn;
-			i__2 = n;
-			for (i__ = 1; i__ <= i__2; ++i__) {
-				/* L180: */
+			for (i__ = 1; i__ <= n; ++i__) {
 				q_1.v[i__ + j * n - (n+1)] = s * q_1.v[i__ + j * n - (n+1)];
 			}
 		}
 
-		/* .....SCALE THE AXES TO TRY TO REDUCE THE CONDITION NUMBER..... */
-
-		if (scbd <= 1.) {
-		}
-		else{
-			s = vlarge;
-			i__2 = n;
-			for (i__ = 1; i__ <= i__2; ++i__) {
+		/* .....scale the axes to try to reduce the condition number..... */
+		if (SCBD > 1.){
+			s = PRAXIS_VLARGE;
+			for (i__ = 1; i__ <= n; ++i__) {
 				sl = 0.;
-				i__1 = n;
-				for (j = 1; j <= i__1; ++j) {
-					/* L182: */
+
+				for (j = 1; j <= n; ++j) {
 					sl += q_1.v[i__ + j * n - (n+1)] * q_1.v[i__ + j * n - (n+1)];
 				}
 				z__[i__ - 1] = sqrt(sl);
-				if (z__[i__ - 1] < m4) {
-					z__[i__ - 1] = m4;
+
+				if (z__[i__ - 1] < PRAXIS_M4) {
+					z__[i__ - 1] = PRAXIS_M4;
 				}
+
 				if (s > z__[i__ - 1]) {
 					s = z__[i__ - 1];
 				}
-				/* L185: */
 			}
-			i__2 = n;
-			for (i__ = 1; i__ <= i__2; ++i__) {
-				sl = s / z__[i__ - 1];
+
+			for (i__ = 1; i__ <= n; ++i__) {
+            	sl = s / z__[i__ - 1];
 				z__[i__ - 1] = 1. / sl;
-				if (z__[i__ - 1] <= scbd) {
+
+				if (z__[i__ - 1] > SCBD){
+					sl = 1. / SCBD;
+					z__[i__ - 1] = SCBD;
 				}
-				else{
-					sl = 1. / scbd;
-					z__[i__ - 1] = scbd;
-				}
-				i__1 = n;
-				for (j = 1; j <= i__1; ++j) {
+
+				for (j = 1; j <= n; ++j) {
 					q_1.v[i__ + j * n - (n+1)] = sl * q_1.v[i__ + j * n - (n+1)];
 				}
 			}
 		}
-		/* .....CALCULATE A NEW SET OF ORTHOGONAL DIRECTIONS BEFORE REPEATING */
-		/*     THE MAIN LOOP. */
-		/*     FIRST TRANSPOSE V FOR MINFIT: */
-		i__2 = n;
-		for (i__ = 2; i__ <= i__2; ++i__) {
-			im1 = i__ - 1;
-			i__1 = im1;
-			for (j = 1; j <= i__1; ++j) {
+
+		/* .....calculate a new set of orthogonal directions before repeating */
+		/*     the main loop. */
+		/*     first transpose v for minfit: */
+		for (i__ = 2; i__ <= n; ++i__){
+			for (j = 1; j <= i__ - 1; ++j) {
 				s = q_1.v[i__ + j * n - (n+1)];
 				q_1.v[i__ + j * n - (n+1)] = q_1.v[j + i__ * n - (n+1)];
 				q_1.v[j + i__ * n - (n+1)] = s;
 			}
 		}
 
-		/* .....CALL MINFIT TO FIND THE SINGULAR VALUE DECOMPOSITION OF V. */
-		/*     THIS GIVES THE PRINCIPAL VALUES AND PRINCIPAL DIRECTIONS OF THE */
-		/*     APPROXIMATING QUADRATIC FORM WITHOUT SQUARING THE CONDITION */
-		/*     NUMBER..... */
+		/* .....call minfit to find the singular value decomposition of v. */
+		/*     this gives the principal values and principal directions of the */
+		/*     approximating quadratic form without squaring the condition */
+		/*     number..... */
+		minfit_(n, n, PRAXIS_VSMALL, q_1.v, d__, e_minfit);
 
-		minfit_(n, n, &vsmall, q_1.v, d__, e_minfit);
 
-		/* .....UNSCALE THE AXES..... */
-
-		if (scbd <= 1.) {
-		}
-		else{
-			i__2 = n;
-			for (i__ = 1; i__ <= i__2; ++i__) {
+		/* .....unscale the axes..... */
+		if (SCBD > 1.){
+			for (i__ = 1; i__ <= n; ++i__) {
 				s = z__[i__ - 1];
-				i__1 = n;
-				for (j = 1; j <= i__1; ++j) {
-					/* L225: */
+				for (j = 1; j <= n; ++j) {
 					q_1.v[i__ + j * n - (n+1)] = s * q_1.v[i__ + j * n - (n+1)];
 				}
-				/* L230: */
 			}
-			i__2 = n;
-			for (i__ = 1; i__ <= i__2; ++i__) {
+			for (i__ = 1; i__ <= n; ++i__) {
 				s = 0.;
-				i__1 = n;
-				for (j = 1; j <= i__1; ++j) {
-					/* L235: */
-					/* Computing 2nd power */
-					d__1 = q_1.v[j + i__ * n - (n+1)];
-					s += d__1 * d__1;
+				for (j = 1; j <= n; ++j) {
+					s += pown(q_1.v[j + i__ * n - (n+1)], 2);
 				}
+
 				s = sqrt(s);
 				d__[i__ - 1] = s * d__[i__ - 1];
 				s = 1 / s;
-				i__1 = n;
-				for (j = 1; j <= i__1; ++j) {
-					/* L240: */
+				for (j = 1; j <= n; ++j) {
 					q_1.v[j + i__ * n - (n+1)] = s * q_1.v[j + i__ * n - (n+1)];
 				}
-				/* L245: */
 			}
 		}
 
-		i__2 = n;
-		for (i__ = 1; i__ <= i__2; ++i__) {
+		for (i__ = 1; i__ <= n; ++i__) {
 			dni = dn * d__[i__ - 1];
-			if (dni > large) {
-				d__[i__ - 1] = vsmall;
+			if (dni > PRAXIS_LARGE) {
+				d__[i__ - 1] = PRAXIS_VSMALL;
 			}
-			else if (dni < small) {
-				d__[i__ - 1] = vlarge;
+			else if (dni < PRAXIS_SMALL) {
+				d__[i__ - 1] = PRAXIS_VLARGE;
 			}
 			else{
 				d__[i__ - 1] = 1 / (dni * dni);
 			}
 		}
 
-		/* .....SORT THE EIGENVALUES AND EIGENVECTORS..... */
+		/* .....sort the eigenvalues and eigenvectors..... */
 
 		sort_(n, n, d__, q_1.v);
 		global_1.dmin__ = d__[n - 1];
-		if (global_1.dmin__ < small) {
-			global_1.dmin__ = small;
-		}
-		illc = 0 /* false */;
-		if (m2 * d__[0] > global_1.dmin__) {
-			illc = 1 /* true */;
+		if (global_1.dmin__ < PRAXIS_SMALL) {
+			global_1.dmin__ = PRAXIS_SMALL;
 		}
 
-		/* .....THE MAIN LOOP ENDS HERE..... */
+		illc = 0 /* false */;
+		if (PRAXIS_M2 * d__[0] > global_1.dmin__) {
+			illc = 1 /* true */;
+		}
 	}
 } /* praxis_ */
 
@@ -701,13 +586,13 @@ nlopt_result praxis_(int n, optimizer_float *x, const void * const data,
 /*   overwritten with the orthogonal matrix v such that u.diag(q) = ab.v, */
 /*   where u is another orthogonal matrix. */
 /* ...householder's reduction to bidiagonal form... */
-static void minfit_(int m, int n, optimizer_float *tol, optimizer_float *ab, optimizer_float *q, optimizer_float *ework){
+void minfit_(const int m, const int n, optimizer_float tol, optimizer_float *ab, optimizer_float *q, optimizer_float *ework){
 
     optimizer_float *e; /* size n */
     optimizer_float c__, f, g, h__;
     int i__, j, k, l;
     optimizer_float s, x, y, z__;
-    int l2, ii, kk, kt, ll2, lp1;
+    int ii, kk, kt;
     optimizer_float eps, temp;
 
     e = ework;
@@ -736,7 +621,7 @@ static void minfit_(int m, int n, optimizer_float *tol, optimizer_float *ab, opt
 			}
 			g = 0.;
 
-			if (s >= *tol){
+			if (s >= tol){
 				f = ab[i__ + i__ * m];
 				g = sqrt(s);
 
@@ -772,7 +657,7 @@ static void minfit_(int m, int n, optimizer_float *tol, optimizer_float *ab, opt
 			}
 
 			g = 0.;
-			if (s >= *tol){
+			if (s >= tol){
 				if (i__ != n){
 					f = ab[i__ + (i__ + 1) * m];
 				}
@@ -851,14 +736,11 @@ static void minfit_(int m, int n, optimizer_float *tol, optimizer_float *ab, opt
 
 			while(1){
 				++kt;
-				if (kt <= 30) {
-				}
-				else{
+				if(kt > 30){
 					e[k - 1] = 0.;
 				}
-				for (ll2 = 1; ll2 <= k; ++ll2) {
-					l2 = k - ll2 + 1;
-					l = l2;
+				for (ii = 1; ii <= k; ++ii) {
+					l = k - ii + 1;
 					if (fabs(e[l - 1]) <= eps) {
 						break;
 					}
@@ -935,10 +817,9 @@ static void minfit_(int m, int n, optimizer_float *tol, optimizer_float *ab, opt
 					/* ...next qr transformation... */
 					c__ = 1.;
 					s = 1.;
-					lp1 = l + 1;
 
-					if (lp1 <= k){
-						for (i__ = lp1; i__ <= n; ++i__) {
+					if ((l + 1) <= k){
+						for (i__ = l + 1; i__ <= n; ++i__) {
 							g = e[i__ - 1];
 							y = q[i__];
 							h__ = s * g;
@@ -1021,21 +902,18 @@ static void minfit_(int m, int n, optimizer_float *tol, optimizer_float *ab, opt
 /*   on entry unless final fx is greater than f1. */
 /*   nits controls the number of times an attempt will be made to halve */
 /*   the interval. */
-static nlopt_result min_(const int n, const int j, int nits, optimizer_float *
-                         d2, optimizer_float *x1, optimizer_float *f1, int fk, const void * const data, optimizer_float *
-                         x, optimizer_float *t_old, optimizer_float *h__, struct global_s *global_1, struct q_s *q_1){
+return_code min_(const int n, const int j, int nits, optimizer_float * d2,
+                         optimizer_float *x1, optimizer_float *f1, int fk, const void * const data, optimizer_float * x,
+                         optimizer_float *t_old, optimizer_float *h__, struct global_s *global_1, struct q_s *q_1){
     int i__, k;
-    optimizer_float s, d1, f0, f2, m2, m4, t2, x2, fm;
+    optimizer_float s, d1, f0, f2, t2, x2, fm;
     int dz;
     optimizer_float xm, sf1, sx1;
-    optimizer_float temp, small;
-    nlopt_result ret = NLOPT_SUCCESS;
+    optimizer_float temp;
+    return_code ret = RETURN_CODE_SUCCESS;
 
     --x;
 
-    small = MACH_EPS * MACH_EPS;
-    m2 = sqrt(MACH_EPS);
-    m4 = sqrt(m2);
     sf1 = *f1;
     sx1 = *x1;
     k = 0;
@@ -1058,14 +936,13 @@ static nlopt_result min_(const int n, const int j, int nits, optimizer_float *
         temp = global_1->dmin__;
     }
 
-    t2 = m4 * sqrt(fabs(global_1->fx) / temp + s * global_1->ldt) + m2 *
-         global_1->ldt;
-    s = m4 * s + *t_old;
+    t2 = PRAXIS_M4 * sqrt(fabs(global_1->fx) / temp + s * global_1->ldt) + PRAXIS_M2 * global_1->ldt;
+    s = PRAXIS_M4 * s + *t_old;
 
     if (dz && t2 > s) {
         t2 = s;
     }
-    t2 = t2 > small ? t2 : small;
+    t2 = t2 > PRAXIS_SMALL ? t2 : PRAXIS_SMALL;
 
     /* Computing MIN */
     t2 = t2 < (*h__ * .01) ? t2 : (*h__ * .01);
@@ -1084,7 +961,7 @@ static nlopt_result min_(const int n, const int j, int nits, optimizer_float *
 		}
 		*x1 = temp * t2;
 		*f1 = flin_(n, j, x1, data, &x[1], &global_1->nf, q_1, &ret);
-		if (ret != NLOPT_SUCCESS) return ret;
+		if (ret != RETURN_CODE_SUCCESS) return ret;
 	}
     if (*f1 > fm) {
     }
@@ -1101,7 +978,7 @@ static nlopt_result min_(const int n, const int j, int nits, optimizer_float *
 				x2 = *x1 * 2.;
 			}
 			f2 = flin_(n, j, &x2, data, &x[1], &global_1->nf, q_1, &ret);
-			if (ret != NLOPT_SUCCESS) return ret;
+			if (ret != RETURN_CODE_SUCCESS) return ret;
 			if (f2 > fm) {
 			}
 			else{
@@ -1116,7 +993,7 @@ static nlopt_result min_(const int n, const int j, int nits, optimizer_float *
 		dz = 1 /* true */;
 
 		/* ...predict the minimum... */
-		if (*d2 > small) {
+		if (*d2 > PRAXIS_SMALL) {
 			x2 = d1 * -.5 / *d2;
 		}
 		else{
@@ -1136,7 +1013,7 @@ static nlopt_result min_(const int n, const int j, int nits, optimizer_float *
 		/* ...evaluate f at the predicted minimum... */
 		while(1){
 			f2 = flin_(n, j, &x2, data, &x[1], &global_1->nf, q_1, &ret);
-			if (ret != NLOPT_SUCCESS){
+			if (ret != RETURN_CODE_SUCCESS){
 			    return ret;
 			}
 
@@ -1167,7 +1044,7 @@ static nlopt_result min_(const int n, const int j, int nits, optimizer_float *
 	}
 
     /* ...get a new estimate of the second derivative... */
-    if(fabs(x2 * (x2 - *x1)) <= small){
+    if(fabs(x2 * (x2 - *x1)) <= PRAXIS_SMALL){
         if (k > 0) {
 			*d2 = 0.;
 		}
@@ -1176,8 +1053,8 @@ static nlopt_result min_(const int n, const int j, int nits, optimizer_float *
 		*d2 = (x2 * (*f1 - f0) - *x1 * (fm - f0)) / (*x1 * x2 * (*x1 - x2));
 	}
 
-    if (*d2 <= small) {
-        *d2 = small;
+    if (*d2 <= PRAXIS_SMALL) {
+        *d2 = PRAXIS_SMALL;
     }
 
     *x1 = x2;
@@ -1190,19 +1067,18 @@ static nlopt_result min_(const int n, const int j, int nits, optimizer_float *
 
     /* ...update x for linear but not parabolic search... */
     if (j == 0) {
-        return NLOPT_SUCCESS;
+        return RETURN_CODE_SUCCESS;
     }
 
     for (i__ = 1; i__ <= n; ++i__) {
         x[i__] += *x1 * q_1->v[i__ + j * n - (n+1)];
     }
 
-    return NLOPT_SUCCESS;
+    return RETURN_CODE_SUCCESS;
 } /* min_ */
 
 /* ...flin is the function of one real variable l that is minimized by the subroutine min... */
-static optimizer_float flin_(const int n, const int j, optimizer_float *l, const void * const data, optimizer_float *x,
-                    int *nf, struct q_s *q_1, nlopt_result *ret){
+optimizer_float flin_(const int n, const int j, optimizer_float *l, const void * const data, optimizer_float *x, int *nf, struct q_s *q_1, return_code *ret){
 
     optimizer_float ret_val;
     int i__;
@@ -1240,7 +1116,7 @@ static optimizer_float flin_(const int n, const int j, optimizer_float *l, const
     }
 
     if((*nf) > MAX_FUNC_EVALS){
-		*ret = NLOPT_MAXEVAL_REACHED;
+		*ret = RETURN_CODE_MAXEVAL_REACHED;
 	}
     return ret_val;
 } /* flin_ */
@@ -1249,7 +1125,7 @@ static optimizer_float flin_(const int n, const int j, optimizer_float *l, const
 	corresponding columns of v(n,n).
     m is the row dimension of v as declared in the calling program.
  */
-static void sort_(const int m, const int n, optimizer_float *d__, optimizer_float *v){
+void sort_(const int m, const int n, optimizer_float *d__, optimizer_float *v){
 
     /* Local variables */
     int i__, j, k;
@@ -1288,7 +1164,7 @@ static void sort_(const int m, const int n, optimizer_float *d__, optimizer_floa
 } /* sort_ */
 
 /* ...quad looks for the minimum of f along a curve defined by q0,q1,x... */
-static void quad_(const int n, const void * const data, optimizer_float *x, optimizer_float *t_old, optimizer_float *h__, struct global_s *global_1, struct q_s *q_1){
+void quad_(const int n, const void * const data, optimizer_float *x, optimizer_float *t_old, optimizer_float *h__, struct global_s *global_1, struct q_s *q_1){
 
     /* Local variables */
     int i__;

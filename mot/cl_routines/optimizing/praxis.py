@@ -21,9 +21,7 @@ class PrAxis(AbstractParallelOptimizer):
         Args:
             patience (int):
                 Used to set the maximum number of iterations to patience*(number_of_parameters+1)
-            optimizer_options (dict): the optimization settings, you can use the following:
-
-                For the defaults please see PrAxisFunc.
+            optimizer_options (dict): the optimization settings, for the defaults please see PrAxisFunc.
         """
         patience = patience or self.default_patience
         super(PrAxis, self).__init__(cl_environments, load_balancer, use_param_codec, patience=patience,
