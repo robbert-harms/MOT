@@ -9,7 +9,7 @@
  * Email = robbert.harms@maastrichtuniversity.nl
  */
 
-/*   This algorithm was copied from the NLOpt routine.
+/*   This algorithm was copied from the NLOpt library.
 
 praxis gradient-free local optimization via the "principal-axis method",
 downloaded from Netlib:
@@ -28,7 +28,7 @@ and is clearer legally).
 
 Original fortran comment:
 
-   * LAST MODIFIED 3/1/73 
+                    LAST MODIFIED 3/1/73
             Modified August 2007 by S. G. Johnson:
               after conversion to C via f2c and some manual cleanup,
           eliminating write statements, I additionally:
@@ -46,8 +46,6 @@ Original fortran comment:
      CALCULATING DERIVATIVES" BY RICHARD P BRENT. 
 
      THE PARAMETERS ARE: 
-
-
 
      N        (AT LEAST TWO) IS THE NUMBER OF VARIABLES UPON WHICH 
               THE FUNCTION DEPENDS. 
@@ -85,13 +83,13 @@ Original fortran comment:
 
 #define PATIENCE %(PATIENCE)r /* Used to set the maximum number of function evaluations
                                 to patience*(number_of_parameters+1). */
-#define TOLERANCE 0.0 /** praxis attempts to return praxis=f(x) such that if x0 is the true local minimum
-                          near x, then norm(x-x0) < t0 + squareroot(machep)*norm(x).*/
+#define TOLERANCE 0.0         /** praxis attempts to return praxis=f(x) such that if x0 is the true local minimum
+                                  near x, then norm(x-x0) < t0 + squareroot(machep)*norm(x).*/
 #define MACH_EPS     30*EPSILON_OPTIMIZER_FLOAT  /** the precision we break at*/
-#define MAX_STEP_SIZE 300    /** Originally parameter H0. It is the maximum step size and
-                                 should be set to about the max. distance from the initial guess to the minimum.
-                                 If set too small or too large, the initial rate of convergence may be slow.*/
-#define MAX_FUNC_EVALS (PATIENCE * (%(NMR_PARAMS)s+1))
+#define MAX_STEP_SIZE 300     /** Originally parameter H0. It is the maximum step size and
+                                  should be set to about the max. distance from the initial guess to the minimum.
+                                  If set too small or too large, the initial rate of convergence may be slow.*/
+#define MAX_FUNC_EVALS (PATIENCE * (%(NMR_PARAMS)s+1)) /** Maximum function evaluations */
 
 
 struct global_s {
@@ -138,28 +136,30 @@ void praxis(optimizer_float* model_parameters, const void* const data){
 
 static int relstop(optimizer_float vold, optimizer_float vnew)
 {
-     if (isinf(vold)) return 0;
+     if (isinf(vold)){
+        return 0;
+     }
+
      return(fabs(vnew - vold) < 0
-	    || fabs(vnew - vold) < 0 * (fabs(vnew) + fabs(vold)) * 0.5
+        || fabs(vnew - vold) < 0 * (fabs(vnew) + fabs(vold)) * 0.5
 	    || (0 > 0 && vnew == vold)); /* catch vnew == vold == 0 */
 }
 
-int nlopt_stop_ftol(const nlopt_stopping *s, optimizer_float f, optimizer_float oldf)
-{
+int nlopt_stop_ftol(const nlopt_stopping *s, optimizer_float f, optimizer_float oldf){
      return (relstop(oldf, f));
 }
 
-int nlopt_stop_f(const nlopt_stopping *s, optimizer_float f, optimizer_float oldf)
-{
+int nlopt_stop_f(const nlopt_stopping *s, optimizer_float f, optimizer_float oldf){
      return (f <= 0 || nlopt_stop_ftol(s, f, oldf));
 }
 
-int nlopt_stop_x(const nlopt_stopping *s, const optimizer_float *x, const optimizer_float *oldx)
-{
+int nlopt_stop_x(const nlopt_stopping *s, const optimizer_float *x, const optimizer_float *oldx){
      unsigned i;
-     for (i = 0; i < s->n; ++i)
-	  if (!relstop(oldx[i], x[i]))
-	       return 0;
+     for (i = 0; i < s->n; ++i){
+        if (!relstop(oldx[i], x[i])){
+            return 0;
+        }
+     }
      return 1;
 }
 
@@ -693,21 +693,16 @@ nlopt_result praxis_(int n, optimizer_float *x, const void * const data,
 
 		/* .....THE MAIN LOOP ENDS HERE..... */
 	}
-
-	*minf = q_1.fbest;
-	for(copy_index = 0; copy_index < n; copy_index++){
-		(&x[1])[copy_index] = q_1.xbest[copy_index];
-	}
-    return ret;
 } /* praxis_ */
 
-static void minfit_(int m, int n, optimizer_float *tol, optimizer_float *ab, optimizer_float *q, optimizer_float *ework)
-{
-    /* System generated locals */
-    int ab_dim1, ab_offset, i__1, i__2, i__3;
-    optimizer_float d__1, d__2;
+/* ...an improved version of minfit (see golub and reinsch, 1969) */
+/*   restricted to m=n,p=0. */
+/*   the singular values of the array ab are returned in q and ab is */
+/*   overwritten with the orthogonal matrix v such that u.diag(q) = ab.v, */
+/*   where u is another orthogonal matrix. */
+/* ...householder's reduction to bidiagonal form... */
+static void minfit_(int m, int n, optimizer_float *tol, optimizer_float *ab, optimizer_float *q, optimizer_float *ework){
 
-    /* Local variables */
     optimizer_float *e; /* size n */
     optimizer_float c__, f, g, h__;
     int i__, j, k, l;
@@ -717,173 +712,140 @@ static void minfit_(int m, int n, optimizer_float *tol, optimizer_float *ab, opt
 
     e = ework;
 
-    /* ...AN IMPROVED VERSION OF MINFIT (SEE GOLUB AND REINSCH, 1969) */
-    /*   RESTRICTED TO M=N,P=0. */
-    /*   THE SINGULAR VALUES OF THE ARRAY AB ARE RETURNED IN Q AND AB IS */
-    /*   OVERWRITTEN WITH THE ORTHOGONAL MATRIX V SUCH THAT U.DIAG(Q) = AB.V, */
-    /*   WHERE U IS ANOTHER ORTHOGONAL MATRIX. */
-    /* ...HOUSEHOLDER'S REDUCTION TO BIDIAGONAL FORM... */
     /* Parameter adjustments */
     --q;
-    ab_dim1 = m;
-    ab_offset = 1 + ab_dim1;
-    ab -= ab_offset;
+    ab -= 1 + m;
 
     /* Function Body */
     if (n == 1) {
-		q[1] = ab[ab_dim1 + 1];
-		ab[ab_dim1 + 1] = 1.;
+		q[1] = ab[m + 1];
+		ab[m + 1] = 1.;
     }
     else{
 		eps = MACH_EPS;
 		g = 0.;
 		x = 0.;
-		i__1 = n;
-		for (i__ = 1; i__ <= i__1; ++i__) {
+		for (i__ = 1; i__ <= n; ++i__) {
 			e[i__ - 1] = g;
 			s = 0.;
 			l = i__ + 1;
-			i__2 = n;
-			for (j = i__; j <= i__2; ++j) {
-				/* L1: */
+
+			for (j = i__; j <= n; ++j) {
 				/* Computing 2nd power */
-				d__1 = ab[j + i__ * ab_dim1];
-				s += d__1 * d__1;
+				s += pown(ab[j + i__ * m], 2);
 			}
 			g = 0.;
-			if (s < *tol) {
-			}
-			else{
-				f = ab[i__ + i__ * ab_dim1];
+
+			if (s >= *tol){
+				f = ab[i__ + i__ * m];
 				g = sqrt(s);
+
 				if (f >= 0.) {
 					g = -g;
 				}
+
 				h__ = f * g - s;
-				ab[i__ + i__ * ab_dim1] = f - g;
-				if (l > n) {
-				}
-				else{
-					i__2 = n;
-					for (j = l; j <= i__2; ++j) {
+				ab[i__ + i__ * m] = f - g;
+
+				if (l <= n){
+					for (j = l; j <= n; ++j) {
 						f = 0.;
-						i__3 = n;
-						for (k = i__; k <= i__3; ++k) {
-							/* L2: */
-							f += ab[k + i__ * ab_dim1] * ab[k + j * ab_dim1];
+
+						for (k = i__; k <= n; ++k) {
+							f += ab[k + i__ * m] * ab[k + j * m];
 						}
+
 						f /= h__;
-						i__3 = n;
-						for (k = i__; k <= i__3; ++k) {
-							/* L3: */
-							ab[k + j * ab_dim1] += f * ab[k + i__ * ab_dim1];
+						for (k = i__; k <= n; ++k) {
+							ab[k + j * m] += f * ab[k + i__ * m];
 						}
 					}
 				}
 			}
+
 			q[i__] = g;
 			s = 0.;
-			if (i__ == n) {
-			}
-			else{
-				i__3 = n;
-				for (j = l; j <= i__3; ++j) {
-					/* L5: */
-					s += ab[i__ + j * ab_dim1] * ab[i__ + j * ab_dim1];
+			if (i__ != n){
+				for (j = l; j <= n; ++j) {
+					s += ab[i__ + j * m] * ab[i__ + j * m];
 				}
 			}
+
 			g = 0.;
-			if (s < *tol) {
-			}
-			else{
-				if (i__ == n) {
+			if (s >= *tol){
+				if (i__ != n){
+					f = ab[i__ + (i__ + 1) * m];
 				}
-				else{
-					f = ab[i__ + (i__ + 1) * ab_dim1];
-				}
+
 				g = sqrt(s);
+
 				if (f >= 0.) {
 					g = -g;
 				}
+
 				h__ = f * g - s;
-				if (i__ == n) {
-				}
-				else{
-					ab[i__ + (i__ + 1) * ab_dim1] = f - g;
-					i__3 = n;
-					for (j = l; j <= i__3; ++j) {
-						/* L7: */
-						e[j - 1] = ab[i__ + j * ab_dim1] / h__;
+
+				if (i__ != n){
+					ab[i__ + (i__ + 1) * m] = f - g;
+					for (j = l; j <= n; ++j) {
+						e[j - 1] = ab[i__ + j * m] / h__;
 					}
-					i__3 = n;
-					for (j = l; j <= i__3; ++j) {
+
+					for (j = l; j <= n; ++j) {
 						s = 0.;
-						i__2 = n;
-						for (k = l; k <= i__2; ++k) {
-							/* L8: */
-							s += ab[j + k * ab_dim1] * ab[i__ + k * ab_dim1];
+
+						for (k = l; k <= n; ++k) {
+							s += ab[j + k * m] * ab[i__ + k * m];
 						}
-						i__2 = n;
-						for (k = l; k <= i__2; ++k) {
-							/* L9: */
-							ab[j + k * ab_dim1] += s * e[k - 1];
+
+						for (k = l; k <= n; ++k) {
+							ab[j + k * m] += s * e[k - 1];
 						}
 					}
 				}
 			}
-			y = (d__1 = q[i__], fabs(d__1)) + (d__2 = e[i__ - 1], fabs(d__2));
-			/* L11: */
+
+			y = (fabs(q[i__]) + fabs(e[i__ - 1]));
 			if (y > x) {
 				x = y;
 			}
 		}
-		/* ...ACCUMULATION OF RIGHT-HAND TRANSFORMATIONS... */
-		ab[n + n * ab_dim1] = 1.;
+
+		/* ...accumulation of right-hand transformations... */
+		ab[n + n * m] = 1.;
 		g = e[n - 1];
 		l = n;
-		i__1 = n;
-		for (ii = 2; ii <= i__1; ++ii) {
+		for (ii = 2; ii <= n; ++ii) {
 			i__ = n - ii + 1;
-			if (g == 0.) {
-			}
-			else{
-				h__ = ab[i__ + (i__ + 1) * ab_dim1] * g;
-				i__2 = n;
-				for (j = l; j <= i__2; ++j) {
-					/* L20: */
-					ab[j + i__ * ab_dim1] = ab[i__ + j * ab_dim1] / h__;
+
+			if (g != 0.) {
+				h__ = ab[i__ + (i__ + 1) * m] * g;
+				for (j = l; j <= n; ++j) {
+					ab[j + i__ * m] = ab[i__ + j * m] / h__;
 				}
-				i__2 = n;
-				for (j = l; j <= i__2; ++j) {
+				for (j = l; j <= n; ++j) {
 					s = 0.;
-					i__3 = n;
-					for (k = l; k <= i__3; ++k) {
-						/* L21: */
-						s += ab[i__ + k * ab_dim1] * ab[k + j * ab_dim1];
+					for (k = l; k <= n; ++k) {
+						s += ab[i__ + k * m] * ab[k + j * m];
 					}
-					i__3 = n;
-					for (k = l; k <= i__3; ++k) {
-						/* L22: */
-						ab[k + j * ab_dim1] += s * ab[k + i__ * ab_dim1];
+					for (k = l; k <= n; ++k) {
+						ab[k + j * m] += s * ab[k + i__ * m];
 					}
 				}
 			}
-			i__3 = n;
-			for (j = l; j <= i__3; ++j) {
-				ab[i__ + j * ab_dim1] = 0.;
-				/* L24: */
-				ab[j + i__ * ab_dim1] = 0.;
+
+			for (j = l; j <= n; ++j) {
+				ab[i__ + j * m] = 0.;
+				ab[j + i__ * m] = 0.;
 			}
-			ab[i__ + i__ * ab_dim1] = 1.;
+			ab[i__ + i__ * m] = 1.;
 			g = e[i__ - 1];
-			/* L25: */
 			l = i__;
 		}
-		/* ...DIAGONALIZATION OF THE BIDIAGONAL FORM... */
-		/* L100: */
+
+		/* ...diagonalization of the bidiagonal form... */
 		eps *= x;
-		i__1 = n;
-		for (kk = 1; kk <= i__1; ++kk) {
+		for (kk = 1; kk <= n; ++kk) {
 			k = n - kk + 1;
 			kt = 0;
 
@@ -894,52 +856,47 @@ static void minfit_(int m, int n, optimizer_float *tol, optimizer_float *ab, opt
 				else{
 					e[k - 1] = 0.;
 				}
-				i__3 = k;
-				for (ll2 = 1; ll2 <= i__3; ++ll2) {
+				for (ll2 = 1; ll2 <= k; ++ll2) {
 					l2 = k - ll2 + 1;
 					l = l2;
-					if ((d__1 = e[l - 1], fabs(d__1)) <= eps) {
+					if (fabs(e[l - 1]) <= eps) {
 						break;
 					}
 					else if (l == 1) {
 					}
-					else if ((d__1 = q[l - 1], fabs(d__1)) <= eps) {
-						/* ...CANCELLATION OF E(L) IF L>1... */
+					else if (fabs(q[l - 1]) <= eps) {
+						/* ...cancellation of e(l) if l>1... */
 						c__ = 0.;
 						s = 1.;
-						i__3 = k;
-						for (i__ = l; i__ <= i__3; ++i__){
+						for (i__ = l; i__ <= k; ++i__){
 							f = s * e[i__ - 1];
 							e[i__ - 1] = c__ * e[i__ - 1];
+
 							if (fabs(f) <= eps) {
 								break;
 							}
 							g = q[i__];
+
 							/* ...Q(I) = H = DSQRT(G*G + F*F)... */
 							if (fabs(f) < fabs(g)) {
 								/* Computing 2nd power */
-								d__1 = f / g;
-								h__ = fabs(g) * sqrt(d__1 * d__1 + 1);
+								h__ = fabs(g) * sqrt(pown(f / g, 2) + 1);
 							}
 							else if (f != 0.) {
 								/* Computing 2nd power */
-								d__1 = g / f;
-								h__ = fabs(f) * sqrt(d__1 * d__1 + 1);
+								h__ = fabs(f) * sqrt(pown(g / f, 2) + 1);
 							}
 							else {
 								h__ = 0.;
 							}
 
 							q[i__] = h__;
-							if (h__ != 0.) {
-							}
-							else{
+							if(!(h__ != 0.)){
 								g = 1.;
 								h__ = 1.;
 							}
 
 							c__ = g / h__;
-							/* L116: */
 							s = -f / h__;
 						}
 
@@ -947,44 +904,41 @@ static void minfit_(int m, int n, optimizer_float *tol, optimizer_float *ab, opt
 					}
 				}
 
-				/* ...TEST FOR CONVERGENCE... */
+				/* ...test for convergence... */
 				z__ = q[k];
 				if (l == k) {
-					/* ...CONVERGENCE:  Q(K) IS MADE NON-NEGATIVE... */
-					if (z__ >= 0.) {
-					}
-					else{
+					/* ...convergence:  q(k) is made non-negative... */
+					if (z__ < 0.){
 						q[k] = -z__;
-						i__3 = n;
-						for (j = 1; j <= i__3; ++j) {
-							/* L141: */
-							ab[j + k * ab_dim1] = -ab[j + k * ab_dim1];
+						for (j = 1; j <= n; ++j) {
+							ab[j + k * m] = -ab[j + k * m];
 						}
 					}
 					break;
 				}
 				else{
-					/* ...SHIFT FROM BOTTOM 2*2 MINOR... */
+					/* ...shift from bottom 2*2 minor... */
 					x = q[l];
 					y = q[k - 1];
 					g = e[k - 2];
 					h__ = e[k - 1];
 					f = ((y - z__) * (y + z__) + (g - h__) * (g + h__)) / (h__ * 2 * y);
 					g = sqrt(f * f + 1.);
+
 					temp = f - g;
 					if (f >= 0.) {
 						temp = f + g;
 					}
+
 					f = ((x - z__) * (x + z__) + h__ * (y / temp - h__)) / x;
-					/* ...NEXT QR TRANSFORMATION... */
+
+					/* ...next qr transformation... */
 					c__ = 1.;
 					s = 1.;
 					lp1 = l + 1;
-					if (lp1 > k) {
-					}
-					else{
-						i__3 = k;
-						for (i__ = lp1; i__ <= i__3; ++i__) {
+
+					if (lp1 <= k){
+						for (i__ = lp1; i__ <= n; ++i__) {
 							g = e[i__ - 1];
 							y = q[i__];
 							h__ = s * g;
@@ -992,58 +946,50 @@ static void minfit_(int m, int n, optimizer_float *tol, optimizer_float *ab, opt
 
 							if (fabs(f) < fabs(h__)) {
 								/* Computing 2nd power */
-								d__1 = f / h__;
-								z__ = fabs(h__) * sqrt(d__1 * d__1 + 1);
+								z__ = fabs(h__) * sqrt(pown(f / h__, 2) + 1);
 							}
 							else if (f != 0.) {
 								/* Computing 2nd power */
-								d__1 = h__ / f;
-								z__ = fabs(f) * sqrt(d__1 * d__1 + 1);
+								z__ = fabs(f) * sqrt(pown(h__ / f, 2) + 1);
 							}
 							else {
 								z__ = 0.;
 							}
 
 							e[i__ - 2] = z__;
-							if (z__ != 0.) {
-							}
-							else{
+							if (!(z__ != 0.)){
 								f = 1.;
 								z__ = 1.;
 							}
+
 							c__ = f / z__;
 							s = h__ / z__;
 							f = x * c__ + g * s;
 							g = -x * s + g * c__;
 							h__ = y * s;
 							y *= c__;
-							i__2 = n;
-							for (j = 1; j <= i__2; ++j) {
-								x = ab[j + (i__ - 1) * ab_dim1];
-								z__ = ab[j + i__ * ab_dim1];
-								ab[j + (i__ - 1) * ab_dim1] = x * c__ + z__ * s;
-								/* L126: */
-								ab[j + i__ * ab_dim1] = -x * s + z__ * c__;
+
+							for (j = 1; j <= n; ++j) {
+								x = ab[j + (i__ - 1) * m];
+								z__ = ab[j + i__ * m];
+								ab[j + (i__ - 1) * m] = x * c__ + z__ * s;
+								ab[j + i__ * m] = -x * s + z__ * c__;
 							}
 
 							if (fabs(f) < fabs(h__)) {
 								/* Computing 2nd power */
-								d__1 = f / h__;
-								z__ = fabs(h__) * sqrt(d__1 * d__1 + 1);
+								z__ = fabs(h__) * sqrt(pown(f / h__, 2) + 1);
 							}
 							else if (f != 0.) {
 								/* Computing 2nd power */
-								d__1 = h__ / f;
-								z__ = fabs(f) * sqrt(d__1 * d__1 + 1);
+								z__ = fabs(f) * sqrt(pown(h__ / f, 2) + 1);
 							}
 							else {
 								z__ = 0.;
 							}
 
 							q[i__ - 1] = z__;
-							if (z__ != 0.) {
-							}
-							else{
+							if (!(z__ != 0.)){
 								f = 1.;
 								z__ = 1.;
 							}
@@ -1051,7 +997,6 @@ static void minfit_(int m, int n, optimizer_float *tol, optimizer_float *ab, opt
 							c__ = f / z__;
 							s = h__ / z__;
 							f = c__ * g + s * y;
-							/* L132: */
 							x = -s * g + c__ * y;
 						}
 					}
@@ -1065,15 +1010,20 @@ static void minfit_(int m, int n, optimizer_float *tol, optimizer_float *ab, opt
 	}
 } /* minfit_ */
 
-static nlopt_result min_(int n, int j, int nits, optimizer_float *
+/* ...the subroutine min minimizes f from x in the direction v(*,j) unless */
+/*   j is less than 1, when a quadratic search is made in the plane */
+/*   defined by q0,q1,x. */
+/*   d2 is either zero or an approximation to half f". */
+/*   on entry, x1 is an estimate of the distance from x to the minimum */
+/*   along v(*,j) (or, if j=0, a curve).  on return, x1 is the distance */
+/*   found. */
+/*   if fk=.true., then f1 is flin(x1).  otherwise x1 and f1 are ignored */
+/*   on entry unless final fx is greater than f1. */
+/*   nits controls the number of times an attempt will be made to halve */
+/*   the interval. */
+static nlopt_result min_(const int n, const int j, int nits, optimizer_float *
                          d2, optimizer_float *x1, optimizer_float *f1, int fk, const void * const data, optimizer_float *
-                         x, optimizer_float *t_old, optimizer_float *h__, struct global_s *global_1, struct q_s *q_1)
-{
-    /* System generated locals */
-    int i__1;
-    optimizer_float d__1, d__2;
-
-    /* Local variables */
+                         x, optimizer_float *t_old, optimizer_float *h__, struct global_s *global_1, struct q_s *q_1){
     int i__, k;
     optimizer_float s, d1, f0, f2, m2, m4, t2, x2, fm;
     int dz;
@@ -1081,24 +1031,9 @@ static nlopt_result min_(int n, int j, int nits, optimizer_float *
     optimizer_float temp, small;
     nlopt_result ret = NLOPT_SUCCESS;
 
-    /* ...THE SUBROUTINE MIN MINIMIZES F FROM X IN THE DIRECTION V(*,J) UNLESS */
-    /*   J IS LESS THAN 1, WHEN A QUADRATIC SEARCH IS MADE IN THE PLANE */
-    /*   DEFINED BY Q0,Q1,X. */
-    /*   D2 IS EITHER ZERO OR AN APPROXIMATION TO HALF F". */
-    /*   ON ENTRY, X1 IS AN ESTIMATE OF THE DISTANCE FROM X TO THE MINIMUM */
-    /*   ALONG V(*,J) (OR, IF J=0, A CURVE).  ON RETURN, X1 IS THE DISTANCE */
-    /*   FOUND. */
-    /*   IF FK=.TRUE., THEN F1 IS FLIN(X1).  OTHERWISE X1 AND F1 ARE IGNORED */
-    /*   ON ENTRY UNLESS FINAL FX IS GREATER THAN F1. */
-    /*   NITS CONTROLS THE NUMBER OF TIMES AN ATTEMPT WILL BE MADE TO HALVE */
-    /*   THE INTERVAL. */
-    /* Parameter adjustments */
     --x;
 
-    /* Function Body */
-    /* Computing 2nd power */
-    d__1 = MACH_EPS;
-    small = d__1 * d__1;
+    small = MACH_EPS * MACH_EPS;
     m2 = sqrt(MACH_EPS);
     m4 = sqrt(m2);
     sf1 = *f1;
@@ -1108,30 +1043,32 @@ static nlopt_result min_(int n, int j, int nits, optimizer_float *
     fm = global_1->fx;
     f0 = global_1->fx;
     dz = *d2 < MACH_EPS;
-    /* ...FIND THE STEP SIZE... */
+
+    /* ...find the step size... */
     s = 0.;
-    i__1 = n;
-    for (i__ = 1; i__ <= i__1; ++i__) {
-        /* L1: */
-        /* Computing 2nd power */
-        d__1 = x[i__];
-        s += d__1 * d__1;
+
+    for (i__ = 1; i__ <= n; ++i__) {
+        s += pown(x[i__], 2);
     }
+
     s = sqrt(s);
     temp = *d2;
+
     if (dz) {
         temp = global_1->dmin__;
     }
+
     t2 = m4 * sqrt(fabs(global_1->fx) / temp + s * global_1->ldt) + m2 *
          global_1->ldt;
     s = m4 * s + *t_old;
+
     if (dz && t2 > s) {
         t2 = s;
     }
     t2 = t2 > small ? t2 : small;
+
     /* Computing MIN */
-    d__1 = t2, d__2 = *h__ * .01;
-    t2 = d__1 < d__2 ? d__1 : d__2;
+    t2 = t2 < (*h__ * .01) ? t2 : (*h__ * .01);
     if (! (fk) || *f1 > fm) {
     }
     else{
@@ -1157,10 +1094,8 @@ static nlopt_result min_(int n, int j, int nits, optimizer_float *
 	}
 
 	while(1){
-		if (! dz) {
-		}
-		else{
-			/* ...EVALUATE FLIN AT ANOTHER POINT AND ESTIMATE THE SECOND DERIVATIVE... */
+		if(!(! dz)){
+			/* ...evaluate flin at another point and estimate the second derivative... */
 			x2 = -(*x1);
 			if (f0 >= *f1) {
 				x2 = *x1 * 2.;
@@ -1175,10 +1110,12 @@ static nlopt_result min_(int n, int j, int nits, optimizer_float *
 			}
 			*d2 = (x2 * (*f1 - f0) - *x1 * (f2 - f0)) / (*x1 * x2 * (*x1 - x2));
 		}
-		/* ...ESTIMATE THE FIRST DERIVATIVE AT 0... */
+
+		/* ...estimate the first derivative at 0... */
 		d1 = (*f1 - f0) / *x1 - *x1 **d2;
 		dz = 1 /* true */;
-		/* ...PREDICT THE MINIMUM... */
+
+		/* ...predict the minimum... */
 		if (*d2 > small) {
 			x2 = d1 * -.5 / *d2;
 		}
@@ -1188,23 +1125,26 @@ static nlopt_result min_(int n, int j, int nits, optimizer_float *
 				x2 = -x2;
 			}
 		}
-		if (fabs(x2) <= *h__) {
-		}
-		else{
+		if(fabs(x2) > *h__){
 			if (x2 <= 0.) {
 				x2 = -(*h__);
 			} else {
 				x2 = *h__;
 			}
 		}
-		/* ...EVALUATE F AT THE PREDICTED MINIMUM... */
+
+		/* ...evaluate f at the predicted minimum... */
 		while(1){
 			f2 = flin_(n, j, &x2, data, &x[1], &global_1->nf, q_1, &ret);
-			if (ret != NLOPT_SUCCESS) return ret;
+			if (ret != NLOPT_SUCCESS){
+			    return ret;
+			}
+
 			if (k >= nits || f2 <= f0) {
 				break;
 			}
-			/* ...NO SUCCESS, SO TRY AGAIN... */
+
+			/* ...no success, so try again... */
 			++k;
 			if (f0 < *f1 && *x1 * x2 > 0.) {
 				break;
@@ -1216,7 +1156,8 @@ static nlopt_result min_(int n, int j, int nits, optimizer_float *
 			break;
 		}
 	}
-    /* ...INCREMENT THE ONE-DIMENSIONAL SEARCH COUNTER... */
+
+    /* ...increment the one-dimensional search counter... */
     ++global_1->nl;
     if (f2 <= fm) {
         fm = f2;
@@ -1224,8 +1165,9 @@ static nlopt_result min_(int n, int j, int nits, optimizer_float *
     else{
 		x2 = xm;
 	}
-    /* ...GET A NEW ESTIMATE OF THE SECOND DERIVATIVE... */
-    if ((d__1 = x2 * (x2 - *x1), fabs(d__1)) <= small) {
+
+    /* ...get a new estimate of the second derivative... */
+    if(fabs(x2 * (x2 - *x1)) <= small){
         if (k > 0) {
 			*d2 = 0.;
 		}
@@ -1233,77 +1175,67 @@ static nlopt_result min_(int n, int j, int nits, optimizer_float *
     else{
 		*d2 = (x2 * (*f1 - f0) - *x1 * (fm - f0)) / (*x1 * x2 * (*x1 - x2));
 	}
+
     if (*d2 <= small) {
         *d2 = small;
     }
+
     *x1 = x2;
     global_1->fx = fm;
-    if (sf1 >= global_1->fx) {
-    }
-    else{
+
+    if(sf1 < global_1->fx){
 		global_1->fx = sf1;
 		*x1 = sx1;
 	}
-    /* ...UPDATE X FOR LINEAR BUT NOT PARABOLIC SEARCH... */
+
+    /* ...update x for linear but not parabolic search... */
     if (j == 0) {
         return NLOPT_SUCCESS;
     }
-    i__1 = n;
-    for (i__ = 1; i__ <= i__1; ++i__) {
-        /* L18: */
+
+    for (i__ = 1; i__ <= n; ++i__) {
         x[i__] += *x1 * q_1->v[i__ + j * n - (n+1)];
     }
+
     return NLOPT_SUCCESS;
 } /* min_ */
 
-static optimizer_float flin_(int n, int j, optimizer_float *l, const void * const data, optimizer_float *x,
-                    int *nf, struct q_s *q_1, nlopt_result *ret)
-{
-    /* System generated locals */
-    int i__1;
-    optimizer_float ret_val;
-	int copy_index;
+/* ...flin is the function of one real variable l that is minimized by the subroutine min... */
+static optimizer_float flin_(const int n, const int j, optimizer_float *l, const void * const data, optimizer_float *x,
+                    int *nf, struct q_s *q_1, nlopt_result *ret){
 
-    /* Local variables */
+    optimizer_float ret_val;
     int i__;
     optimizer_float *t; /* size n */
 
     t = q_1->t_flin;
-
-    /* ...FLIN IS THE FUNCTION OF ONE REAL VARIABLE L THAT IS MINIMIZED */
-    /*   BY THE SUBROUTINE MIN... */
-    /* Parameter adjustments */
     --x;
 
-    /* Function Body */
-    if (j == 0) {
-        /* ...THE SEARCH IS ALONG A PARABOLIC SPACE CURVE... */
+    if(j == 0){
+        /* ...the search is along a parabolic space curve... */
 		q_1->qa = *l * (*l - q_1->qd1) / (q_1->qd0 * (q_1->qd0 + q_1->qd1));
 		q_1->qb = (*l + q_1->qd0) * (q_1->qd1 - *l) / (q_1->qd0 * q_1->qd1);
 		q_1->qc = *l * (*l + q_1->qd0) / (q_1->qd1 * (q_1->qd0 + q_1->qd1));
-		i__1 = n;
-		for (i__ = 1; i__ <= i__1; ++i__) {
+		for (i__ = 1; i__ <= n; ++i__) {
 			/* L3: */
 			t[i__ - 1] = q_1->qa * q_1->q0[i__ - 1] + q_1->qb * x[i__] + q_1->qc *
 						 q_1->q1[i__ - 1];
 		}
     }
     else{
-		/* ...THE SEARCH IS LINEAR... */
-		i__1 = n;
-		for (i__ = 1; i__ <= i__1; ++i__) {
-			/* L1: */
+		/* ...the search is linear... */
+		for (i__ = 1; i__ <= n; ++i__) {
 			t[i__ - 1] = x[i__] + *l * q_1->v[i__ + j * n - (n+1)];
 		}
 	}
-    /* ...THE FUNCTION EVALUATION COUNTER NF IS INCREMENTED... */
+    /* ...the function evaluation counter nf is incremented... */
     ++(*nf);
     ret_val = evaluate(t, data);
     if (ret_val < q_1->fbest) {
         q_1->fbest = ret_val;
 
-        for(copy_index = 0; copy_index < n; copy_index++){
-			q_1->xbest[copy_index] = t[copy_index];
+        for(i__ = 0; i__ < n; i__++){
+			q_1->xbest[i__] = t[i__];
 		}
     }
 
@@ -1313,60 +1245,50 @@ static optimizer_float flin_(int n, int j, optimizer_float *l, const void * cons
     return ret_val;
 } /* flin_ */
 
-static void sort_(int m, int n, optimizer_float *d__, optimizer_float *v)
-{
-    /* System generated locals */
-    int i__1, i__2;
+/* ...sorts the elements of d(n) into descending order and moves the
+	corresponding columns of v(n,n).
+    m is the row dimension of v as declared in the calling program.
+ */
+static void sort_(const int m, const int n, optimizer_float *d__, optimizer_float *v){
 
     /* Local variables */
     int i__, j, k;
     optimizer_float s;
-    int ip1, nm1;
 
-    /* ...SORTS THE ELEMENTS OF D(N) INTO DESCENDING ORDER AND MOVES THE */
-    /*   CORRESPONDING COLUMNS OF V(N,N). */
-    /*   M IS THE ROW DIMENSION OF V AS DECLARED IN THE CALLING PROGRAM. */
-    /* Parameter adjustments */
+    /* parameter adjustments */
     v -= 1 + m;
     --d__;
 
-    /* Function Body */
     if (n == 1) {
         return;
     }
-    nm1 = n - 1;
-    i__1 = nm1;
-    for (i__ = 1; i__ <= i__1; ++i__) {
+
+    for (i__ = 1; i__ <= n - 1; ++i__) {
         k = i__;
         s = d__[i__];
-        ip1 = i__ + 1;
-        i__2 = n;
-        for (j = ip1; j <= i__2; ++j) {
-            if (d__[j] <= s) {
-            }
-            else{
-				k = j;
+
+        for (j = i__ + 1; j <= n; ++j) {
+            if (d__[j] > s) {
+            	k = j;
 				s = d__[j];
 			}
         }
-        if (k <= i__) {
-        }
-        else{
+
+        if (k > i__){
 			d__[k] = d__[i__];
 			d__[i__] = s;
-			i__2 = n;
-			for (j = 1; j <= i__2; ++j) {
+
+			for (j = 1; j <= n; ++j) {
 				s = v[j + i__ * m];
 				v[j + i__ * m] = v[j + k * m];
-				/* L2: */
 				v[j + k * m] = s;
 			}
 		}
     }
 } /* sort_ */
 
-/* ...QUAD LOOKS FOR THE MINIMUM OF F ALONG A CURVE DEFINED BY Q0,Q1,X... */
-static void quad_(int n, const void * const data, optimizer_float *x, optimizer_float *t_old, optimizer_float *h__, struct global_s *global_1, struct q_s *q_1){
+/* ...quad looks for the minimum of f along a curve defined by q0,q1,x... */
+static void quad_(const int n, const void * const data, optimizer_float *x, optimizer_float *t_old, optimizer_float *h__, struct global_s *global_1, struct q_s *q_1){
 
     /* Local variables */
     int i__;
@@ -1386,9 +1308,11 @@ static void quad_(int n, const void * const data, optimizer_float *x, optimizer_
         q_1->q1[i__ - 1] = s;
         q_1->qd1 += pown(s - l, 2);
     }
+
     q_1->qd1 = sqrt(q_1->qd1);
     l = q_1->qd1;
     s = 0.;
+
     if (q_1->qd0 <= 0. || q_1->qd1 <= 0. || global_1->nl < n * 3 * n) {
         global_1->fx = q_1->qf1;
 		q_1->qa = 0.;

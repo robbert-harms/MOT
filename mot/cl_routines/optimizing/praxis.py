@@ -1,4 +1,4 @@
-from ...cl_functions import PraxisFunc
+from ...cl_functions import PrAxisFunc
 from .base import AbstractParallelOptimizer, AbstractParallelOptimizerWorker
 
 __author__ = 'Robbert Harms'
@@ -8,33 +8,35 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class Praxis(AbstractParallelOptimizer):
+class PrAxis(AbstractParallelOptimizer):
 
     default_patience = 1000
 
     def __init__(self, cl_environments, load_balancer, use_param_codec=True, patience=None,
                  optimizer_options=None, **kwargs):
-        """Use the Praxis method to calculate the optimum.
+        """Use the Principal Axis method to calculate the optimum.
+
+        This uses the Principal Axis implementation from NLOpt, slightly adapted for use in MOT.
 
         Args:
             patience (int):
                 Used to set the maximum number of iterations to patience*(number_of_parameters+1)
             optimizer_options (dict): the optimization settings, you can use the following:
 
-                For the defaults please see PraxisFunc.
+                For the defaults please see PrAxisFunc.
         """
         patience = patience or self.default_patience
-        super(Praxis, self).__init__(cl_environments, load_balancer, use_param_codec, patience=patience,
+        super(PrAxis, self).__init__(cl_environments, load_balancer, use_param_codec, patience=patience,
                                      optimizer_options=optimizer_options, **kwargs)
 
     def _get_worker_class(self):
-        return PraxisWorker
+        return PrAxisWorker
 
 
-class PraxisWorker(AbstractParallelOptimizerWorker):
+class PrAxisWorker(AbstractParallelOptimizerWorker):
 
     def _get_optimization_function(self):
-        return PraxisFunc(self._nmr_params, patience=self._parent_optimizer.patience,
+        return PrAxisFunc(self._nmr_params, patience=self._parent_optimizer.patience,
                           optimizer_options=self._optimizer_options)
 
     def _get_optimizer_call_name(self):

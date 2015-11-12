@@ -62,7 +62,7 @@ class LMMin(LibraryFunction):
 
 
 
-class PraxisFunc(LibraryFunction):
+class PrAxisFunc(LibraryFunction):
 
     def __init__(self, nmr_parameters, patience=1000, optimizer_options=None):
         """The Praxis function.
@@ -80,7 +80,7 @@ class PraxisFunc(LibraryFunction):
         for option, default in option_defaults.items():
             params.update({option.upper(): optimizer_options.get(option, default)})
 
-        super(PraxisFunc, self).__init__(
+        super(PrAxisFunc, self).__init__(
             'void',
             'praxis',
             (LibraryParameter(CLDataType.from_string('optimizer_float*'), 'model_parameters'),
