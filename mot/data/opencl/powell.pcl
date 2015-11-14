@@ -9,6 +9,10 @@
  * Email = robbert.harms@maastrichtuniversity.nl
  */
 
+/**
+   Uses the Powell's Quadratically Convergent Method of minimizing an objective function in a multidimensional space.
+ */
+
 /* Used to set the maximum number of iterations to patience*(number_of_parameters+1). */
 #define PATIENCE %(PATIENCE)r
 #define MAX_IT (PATIENCE * (%(NMR_PARAMS)r+1))

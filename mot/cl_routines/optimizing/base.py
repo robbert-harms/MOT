@@ -1,7 +1,8 @@
 import logging
 import pyopencl as cl
+from mot.cl_functions import RanluxCL
 from ...utils import results_to_dict, ParameterCLCodeGenerator, \
-    get_cl_pragma_double, get_float_type_def
+    get_cl_pragma_double, get_float_type_def, initialize_ranlux
 from ...cl_routines.base import AbstractCLRoutine
 from ...load_balance_strategies import Worker
 from ...cl_routines.mapping.final_parameters_transformer import FinalParametersTransformer
@@ -174,9 +175,8 @@ class AbstractParallelOptimizerWorker(Worker):
                                     and self._parent_optimizer._automatic_apply_codec
 
         self._optimizer_and_model_float_identical = False
-        if self._model.double_precision and self._optimizer_supports_double():
-            self._optimizer_and_model_float_identical = True
-        elif not self._model.double_precision and self._optimizer_supports_float():
+        if (self._model.double_precision and self._optimizer_supports_double()) or \
+            (not self._model.double_precision and self._optimizer_supports_float()):
             self._optimizer_and_model_float_identical = True
 
         self._starting_points = starting_points
@@ -205,6 +205,9 @@ class AbstractParallelOptimizerWorker(Worker):
                                               hostbuf=data[range_start:range_end, :]))
 
         data_buffers.extend(self._constant_buffers)
+
+        if self._uses_random_numbers():
+            data_buffers.append(initialize_ranlux(self._cl_environment, self._queue, nmr_problems))
 
         local_range = None
         global_range = (nmr_problems, )
@@ -240,6 +243,11 @@ class AbstractParallelOptimizerWorker(Worker):
         kernel_param_names = ['global model_float* params']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
+        if self._uses_random_numbers():
+            kernel_param_names.append('global float4 *ranluxcltab')
+
+        optimizer_call_args = 'x, (const void*) &data'
+
         kernel_source = ''
         kernel_source += get_cl_pragma_double()
         kernel_source += get_float_type_def(self._double_precision, 'model_float')
@@ -257,14 +265,23 @@ class AbstractParallelOptimizerWorker(Worker):
                 ''' + ",\n".join(kernel_param_names) + '''
                 ){
                     int gid = get_global_id(0);
+        '''
 
+        if self._uses_random_numbers():
+            kernel_source += '''
+                    ranluxcl_state_t ranluxclstate;
+                    ranluxcl_download_seed(&ranluxclstate, ranluxcltab);
+            '''
+            optimizer_call_args += ', (void*) &ranluxclstate'
+
+        kernel_source += '''
                     optimizer_float x[''' + str(nmr_params) + '''];
                     for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
                         x[i] = params[gid * ''' + str(nmr_params) + ''' + i];
                     }
 
                     ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
-                    ''' + self._get_optimizer_call_name() + '''(x, (const void*) &data);
+                    ''' + self._get_optimizer_call_name() + '''(''' + optimizer_call_args + ''');
         '''
 
         if self._use_param_codec:
@@ -342,6 +359,13 @@ class AbstractParallelOptimizerWorker(Worker):
                     return calculateObjective((optimize_data*)data, x_model);
                 }
             '''
+
+        if self._uses_random_numbers():
+            rand_func = RanluxCL()
+            kernel_source += '#define RANLUXCL_LUX 4' + "\n"
+            kernel_source += rand_func.get_cl_header()
+            kernel_source += rand_func.get_cl_code()
+
         kernel_source += optimizer_func.get_cl_header()
         kernel_source += optimizer_func.get_cl_code()
         return kernel_source
@@ -382,3 +406,16 @@ class AbstractParallelOptimizerWorker(Worker):
         """
         return False
 
+    def _uses_random_numbers(self):
+        """Defines if the optimizer needs random numbers or not.
+
+        This should be overwritten by the base class if it needs random numbers. If so, this class will
+        take care of providing a rand() function.
+
+        If this is set to True, this base class will provide a rand function and will pass an additional argument
+        to the call of the optimizer 'void * rand_settings' containing the settings for the random number generator.
+
+        Returns:
+            boolean: if the optimizer needs a random number generator or not.
+        """
+        return False

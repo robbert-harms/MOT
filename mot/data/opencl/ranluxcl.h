@@ -22,4 +22,6 @@ float ranluxcl_gaussian(ranluxcl_state_t *ranluxclstate);
 float2 ranluxcl_gaussian2(ranluxcl_state_t *ranluxclstate);
 float4 ranluxcl_gaussian4(ranluxcl_state_t *ranluxclstate);
 
+float rand(void * rand_settings);
+
 #endif //RANLUXCL_H

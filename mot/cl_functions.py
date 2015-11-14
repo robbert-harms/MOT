@@ -139,6 +139,9 @@ class PowellFunc(LibraryFunction):
     def __init__(self, nmr_parameters, patience=150, optimizer_options=None):
         """The Powell function.
 
+        Uses the Powell's Quadratically Convergent Method of minimizing an objective function
+        in a multidimensional space.
+
         Args:
             nmr_parameters (int): The number of parameters we are going to optimize, this is compiled into the code.
             patience (int): The patience before stopping the iterations.

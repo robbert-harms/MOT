@@ -708,6 +708,10 @@ float4 ranluxcl_gaussian4(ranluxcl_state_t *ranluxclstate){
     return (float4)(ranluxcl_gaussian2(ranluxclstate), ranluxcl_gaussian2(ranluxclstate));
 }
 
+float rand(void * rand_settings){
+	return ranluxcl((ranluxcl_state_t*)rand_settings).x;
+}
+
 #undef RANLUXCL_TWOM24
 #undef RANLUXCL_TWOM12
 #undef RANLUXCL_NUMWORKITEMS

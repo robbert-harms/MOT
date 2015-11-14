@@ -45,3 +45,6 @@ class PrAxisWorker(AbstractParallelOptimizerWorker):
 
     def _optimizer_supports_double(self):
         return True
+
+    def _uses_random_numbers(self):
+        return True
