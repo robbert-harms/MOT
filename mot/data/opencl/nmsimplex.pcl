@@ -53,12 +53,11 @@
 #define PATIENCE %(PATIENCE)r         /* Used to set the maximum number of iterations
                                          to patience*(number_of_parameters+1). */
 #define MAX_IT (PATIENCE * (%(NMR_PARAMS)r+1))
-#define ALPHA       %(ALPHA)r                   /* reflection coefficient */
-#define BETA        %(BETA)r                    /* contraction coefficient */
-#define GAMMA       %(GAMMA)r                   /* expansion coefficient */
+#define ALPHA       %(ALPHA)r                   /* reflection coefficient, default 1 */
+#define BETA        %(BETA)r                    /* contraction coefficient, default 0.5 */
+#define GAMMA       %(GAMMA)r                   /* expansion coefficient default 2 */
 #define EPSILON     30*EPSILON_OPTIMIZER_FLOAT  /** the precision we break at*/
 #define SCALE       %(SCALE)r                   /** the scale for the initial simplex */
-
 
 void nmsimplex(optimizer_float* const model_parameters, const void* const data){
 
@@ -69,15 +68,16 @@ void nmsimplex(optimizer_float* const model_parameters, const void* const data){
 	int itr;	      /* track the number of iterations */
 	optimizer_float fr;      /* value of function at reflection point */
 	optimizer_float fe_fc_sum_tmp;      /* value of function at expansion point & value of function at contraction point
-	                                & also used at the end for the convergence test */
-	optimizer_float v[%(NMR_PARAMS)r + 1][%(NMR_PARAMS)r];     /* holds vertices of simplex */
-    optimizer_float f[%(NMR_PARAMS)r + 1]; /* value of function at each vertex */
+	                                		and also used at the end for the convergence test */
+	optimizer_float vertices[%(NMR_PARAMS)r + 1][%(NMR_PARAMS)r];     /* holds vertices of simplex */
+    optimizer_float func_vals[%(NMR_PARAMS)r + 1]; /* value of function at each vertex */
     optimizer_float vr[%(NMR_PARAMS)r]; /* reflection - coordinates */
-    optimizer_float ve_vc[%(NMR_PARAMS)r]; /* expansion - coordinates, & contraction - coordinates */
+    optimizer_float ve_vc[%(NMR_PARAMS)r]; /* expansion - coordinates, & contraction - coordinates,
+     										 that is, we use this variable at two points for different purposes.*/
     optimizer_float vm[%(NMR_PARAMS)r]; /* centroid - coordinates */
 
 	for (i=0;i<%(NMR_PARAMS)r;i++) {
-		v[0][i] = model_parameters[i];
+		vertices[0][i] = model_parameters[i];
 	}
 
     /* create the initial simplex */
@@ -85,11 +85,11 @@ void nmsimplex(optimizer_float* const model_parameters, const void* const data){
 	for (i=1;i<=%(NMR_PARAMS)r;i++) {
 		for (j=0;j<%(NMR_PARAMS)r;j++) {
 			if (i-1 == j) {
-				v[i][j] = (SCALE * (sqrt((optimizer_float) %(NMR_PARAMS)r + 1) - 1 + %(NMR_PARAMS)r)
+				vertices[i][j] = (SCALE * (sqrt((optimizer_float) %(NMR_PARAMS)r + 1) - 1 + %(NMR_PARAMS)r)
 				                / (%(NMR_PARAMS)r * sqrt(2.0))) + model_parameters[j];
 			}
 			else {
-				v[i][j] = (SCALE * (sqrt((optimizer_float) %(NMR_PARAMS)r + 1) - 1)
+				vertices[i][j] = (SCALE * (sqrt((optimizer_float) %(NMR_PARAMS)r + 1) - 1)
 				                / (%(NMR_PARAMS)r * sqrt(2.0))) + model_parameters[j];
 			}
 		}
@@ -97,23 +97,22 @@ void nmsimplex(optimizer_float* const model_parameters, const void* const data){
 
 	/* find the initial function values */
 	for (j=0;j<=%(NMR_PARAMS)r;j++) {
-		f[j] = evaluate(v[j], data);
+		func_vals[j] = evaluate(vertices[j], data);
 	}
 
 	/* begin the main loop of the minimization */
 	for (itr=1;itr<=MAX_IT;itr++) {
-		/* find the index of the largest value */
+		/* find the index of the largest and smallest value */
 		vg=0;
-		for (j=0;j<=%(NMR_PARAMS)r;j++) {
-			if (f[j] > f[vg]) {
-				vg = j;
-			}
-		}
-
-		/* find the index of the smallest value */
 		vs=0;
 		for (j=0;j<=%(NMR_PARAMS)r;j++) {
-			if (f[j] < f[vs]) {
+            /* find largest */
+			if (func_vals[j] > func_vals[vg]) {
+				vg = j;
+			}
+
+		    /* find smallest */
+			if (func_vals[j] < func_vals[vs]) {
 				vs = j;
 			}
 		}
@@ -121,7 +120,7 @@ void nmsimplex(optimizer_float* const model_parameters, const void* const data){
 		/* find the index of the second largest value */
 		vh=vs;
 		for (j=0;j<=%(NMR_PARAMS)r;j++) {
-			if (f[j] > f[vh] && f[j] < f[vg]) {
+			if (func_vals[j] > func_vals[vh] && func_vals[j] < func_vals[vg]) {
 				vh = j;
 			}
 		}
@@ -131,7 +130,7 @@ void nmsimplex(optimizer_float* const model_parameters, const void* const data){
 			fe_fc_sum_tmp=0.0;
 			for (i=0;i<=%(NMR_PARAMS)r;i++) {
 				if (i!=vg) {
-					fe_fc_sum_tmp += v[i][j];
+					fe_fc_sum_tmp += vertices[i][j];
 				}
 			}
 			vm[j] = fe_fc_sum_tmp/%(NMR_PARAMS)r;
@@ -139,87 +138,81 @@ void nmsimplex(optimizer_float* const model_parameters, const void* const data){
 
 		/* reflect vg to new vertex vr */
 		for (j=0;j<=%(NMR_PARAMS)r-1;j++) {
-			/*vr[j] = (1+ALPHA)*vm[j] - ALPHA*v[vg][j];*/
-			vr[j] = vm[j]+ALPHA*(vm[j]-v[vg][j]);
+			vr[j] = vm[j] + ALPHA * (vm[j] - vertices[vg][j]);
 		}
-
 		fr = evaluate(vr, data);
 
-		if (fr < f[vh] && fr >= f[vs]) {
-			for (j=0;j<=%(NMR_PARAMS)r-1;j++) {
-				v[vg][j] = vr[j];
+		if (fr < func_vals[vh] && fr >= func_vals[vs]) {
+			for (j=0; j <= %(NMR_PARAMS)r-1; j++){
+				vertices[vg][j] = vr[j];
 			}
-			f[vg] = fr;
+			func_vals[vg] = fr;
 		}
 
 		/* investigate a step further in this direction */
-		if ( fr <  f[vs]) {
+		if(fr < func_vals[vs]){
 			for (j=0;j<=%(NMR_PARAMS)r-1;j++) {
-				/*ve_vc[j] = GAMMA*vr[j] + (1-GAMMA)*vm[j];*/
 				/** ve_vc here used as ve */
-				ve_vc[j] = vm[j]+GAMMA*(vr[j]-vm[j]);
+				ve_vc[j] = vm[j] + GAMMA * (vr[j] - vm[j]);
 			}
-
-            /** use fe_fc_sum_tmp as fe */
+            /** use fe_fc_sum_tmp as fe (function value of expansion) */
 			fe_fc_sum_tmp = evaluate(ve_vc, data);
 
-			if (fe_fc_sum_tmp < fr) {
+			if (fe_fc_sum_tmp < fr){
 				for (j=0;j<=%(NMR_PARAMS)r-1;j++) {
-					v[vg][j] = ve_vc[j];
+					vertices[vg][j] = ve_vc[j];
 				}
-				f[vg] = fe_fc_sum_tmp;
+				func_vals[vg] = fe_fc_sum_tmp;
 			}
 			else {
 				for (j=0;j<=%(NMR_PARAMS)r-1;j++) {
-					v[vg][j] = vr[j];
+					vertices[vg][j] = vr[j];
 				}
-				f[vg] = fr;
+				func_vals[vg] = fr;
 			}
 		}
 
 		/* check to see if a contraction is necessary */
-		if (fr >= f[vh]) {
-			if (fr < f[vg] && fr >= f[vh]) {
+		if (fr >= func_vals[vh]) {
+			if (fr < func_vals[vg] && fr >= func_vals[vh]) {
 				/* perform outside contraction */
 				for (j=0;j<=%(NMR_PARAMS)r-1;j++) {
-					/*ve_vc[j] = BETA*v[vg][j] + (1-BETA)*vm[j];*/
 					/** ve_vc here used as vc */
-					ve_vc[j] = vm[j]+BETA*(vr[j]-vm[j]);
+					ve_vc[j] = vm[j] + BETA * (vr[j]-vm[j]);
 				}
 			}
 			else {
 				/* perform inside contraction */
 				for (j=0;j<=%(NMR_PARAMS)r-1;j++) {
-					/*ve_vc[j] = BETA*v[vg][j] + (1-BETA)*vm[j];*/
-					ve_vc[j] = vm[j]-BETA*(vm[j]-v[vg][j]);
+					ve_vc[j] = vm[j] - BETA * (vm[j] - vertices[vg][j]);
 				}
 			}
 
 			/** use fe_fc_sum_tmp as fc */
 			fe_fc_sum_tmp = evaluate(ve_vc, data);
 
-			if (fe_fc_sum_tmp < f[vg]) {
+			if (fe_fc_sum_tmp < func_vals[vg]) {
 				for (j=0;j<=%(NMR_PARAMS)r-1;j++) {
-					v[vg][j] = ve_vc[j];
+					vertices[vg][j] = ve_vc[j];
 				}
-				f[vg] = fe_fc_sum_tmp;
+				func_vals[vg] = fe_fc_sum_tmp;
 			}
-			/* at this point the contraction is not successful,
-			   we must halve the distance from vs to all the
-			   vertices of the simplex and then continue.
-			   10/31/97 - modified to account for ALL vertices.
-			*/
 			else {
+                /* at this point the contraction is not successful,
+                   we must halve the distance from vs to all the
+                   vertices of the simplex and then continue.
+                   10/31/97 - modified to account for ALL vertices.
+                */
 				for (i=0;i<=%(NMR_PARAMS)r;i++) {
 					if (i != vs) {
 						for (j=0;j<=%(NMR_PARAMS)r-1;j++) {
-							v[i][j] = v[vs][j]+(v[i][j]-v[vs][j])/2.0;
+							vertices[i][j] = vertices[vs][j]+(vertices[i][j]-vertices[vs][j])/2.0;
 						}
 					}
 				}
 
-				f[vg] = evaluate(v[vg], data);
-				f[vh] = evaluate(v[vh], data);
+				func_vals[vg] = evaluate(vertices[vg], data);
+				func_vals[vh] = evaluate(vertices[vh], data);
 			}
 		}
 
@@ -227,29 +220,39 @@ void nmsimplex(optimizer_float* const model_parameters, const void* const data){
 		/** here fe_fc_sum_tmp is used as a summation variable */
 		fe_fc_sum_tmp = 0.0;
 		for (j=0;j<=%(NMR_PARAMS)r;j++) {
-			fe_fc_sum_tmp += f[j];
+			fe_fc_sum_tmp += func_vals[j];
 		}
 		/** fr here used as tmp dummy */
 		fr = fe_fc_sum_tmp/(%(NMR_PARAMS)r+1);
 		fe_fc_sum_tmp = 0.0;
 		for (j=0;j<=%(NMR_PARAMS)r;j++) {
-			fe_fc_sum_tmp += pown((f[j]-fr), 2) / (%(NMR_PARAMS)r);
+			fe_fc_sum_tmp += pown((func_vals[j]-fr), 2) / (%(NMR_PARAMS)r);
 		}
 		fe_fc_sum_tmp = sqrt(fe_fc_sum_tmp);
-		if (fe_fc_sum_tmp < EPSILON) break;
+
+		if (fe_fc_sum_tmp < EPSILON){
+		    break;
+		}
 	}
 	/* end main loop of the minimization */
 
-	/* find the index of the smallest value */
-	vs=0;
+	/* find the index of the largest and smallest value */
+	vs = 0;
+	vg = 0;
 	for (j=0;j<=%(NMR_PARAMS)r;j++) {
-		if (f[j] < f[vs]) {
-			vs = j;
-		}
+		/* find smallest */
+        if (func_vals[j] < func_vals[vs]) {
+            vs = j;
+        }
+
+		/* find largest */
+        if (func_vals[j] > func_vals[vg]) {
+            vg = j;
+        }
 	}
 
     for (j=0;j<%(NMR_PARAMS)r;j++) {
-		model_parameters[j] = v[vs][j];
+		model_parameters[j] = vertices[vs][j];
 	}
 }
 
