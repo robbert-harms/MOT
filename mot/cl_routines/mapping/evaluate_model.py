@@ -37,8 +37,7 @@ class EvaluateModelPerProtocol(AbstractCLRoutine):
         nmr_problems = model.get_nmr_problems()
         nmr_inst_per_problem = model.get_nmr_inst_per_problem()
 
-        evaluations = np.asmatrix(np.zeros((nmr_problems, nmr_inst_per_problem)).astype(np_dtype, order='C',
-                                                                                        copy=False))
+        evaluations = np.asmatrix(np.zeros((nmr_problems, nmr_inst_per_problem), dtype=np_dtype, order='C'))
         parameters = parameters.astype(np_dtype, order='C', copy=False)
 
         var_data_dict = model.get_problems_var_data()

@@ -258,6 +258,12 @@ class AbstractParallelOptimizerWorker(Worker):
             kernel_source += get_float_type_def(not self._optimizer_supports_float(), 'optimizer_float')
 
         kernel_source += param_code_gen.get_data_struct()
+
+        if self._use_param_codec:
+            param_codec = self._model.get_parameter_codec()
+            decode_func = param_codec.get_cl_decode_function('decodeParameters')
+            kernel_source += decode_func + "\n"
+
         kernel_source += cl_objective_function
         kernel_source += self._get_optimizer_cl_code()
         kernel_source += '''
@@ -332,13 +338,10 @@ class AbstractParallelOptimizerWorker(Worker):
         Returns:
             str: The kernel source for the optimization routine.
         """
-        param_codec = self._model.get_parameter_codec()
         optimizer_func = self._get_optimization_function()
 
         kernel_source = ''
         if self._use_param_codec:
-            decode_func = param_codec.get_cl_decode_function('decodeParameters')
-            kernel_source += decode_func + "\n"
             kernel_source += '''
                 optimizer_float evaluate(optimizer_float* x, const void* data){
                     model_float x_model[''' + str(self._nmr_params) + '''];
