@@ -11,7 +11,7 @@ class AbstractCodec(object):
         """Get a CL function that can transform the parameters from encoded space to model space.
 
         The signature of the CL function is:
-            void <fname>(const model_float* x);
+            void <fname>(const MOT_FLOAT_TYPE* x);
 
         Args:
             fname (str): The name how the function should call itself.
@@ -26,7 +26,7 @@ class AbstractCodec(object):
         """Get a CL function that can transform the parameters from model space to an encoded space.
 
         The signature of the CL function is:
-            void <fname>(const model_float* x);
+            void <fname>(const MOT_FLOAT_TYPE* x);
 
         Args:
             fname (str): The name how the function should call itself.
@@ -61,7 +61,7 @@ class IdentityCodec(AbstractCodec):
 
     def get_cl_decode_function(self, fname='decodeParameters', parameter_offset=0):
         func = '''
-            void ''' + fname + '''(model_float* x){'''
+            void ''' + fname + '''(MOT_FLOAT_TYPE* x){'''
         for i in range(self._nmr_parameters):
             func += "\n" + "\t"*4 + 'x[' + str(i + parameter_offset) + '] = x[' + str(i + parameter_offset) + '];'
         return func + '''
@@ -70,7 +70,7 @@ class IdentityCodec(AbstractCodec):
 
     def get_cl_encode_function(self, fname='encodeParameters', parameter_offset=0):
         func = '''
-            void ''' + fname + '''(model_float* x){'''
+            void ''' + fname + '''(MOT_FLOAT_TYPE* x){'''
         for i in range(self._nmr_parameters):
             func += "\n" + "\t"*4 + 'x[' + str(i + parameter_offset) + '] = x[' + str(i + parameter_offset) + '];'
         return func + '''
@@ -105,7 +105,7 @@ class CodecBuilder(AbstractCodec):
 
     def get_cl_decode_function(self, fname='decodeParameters', parameter_offset=0):
         func = '''
-            void ''' + fname + '''(model_float* x){'''
+            void ''' + fname + '''(MOT_FLOAT_TYPE* x){'''
         for d in self._dec_trans_list:
             func += "\n" + "\t"*4 + d.format('x')
         return func + '''
@@ -114,7 +114,7 @@ class CodecBuilder(AbstractCodec):
 
     def get_cl_encode_function(self, fname='encodeParameters', parameter_offset=0):
         func = '''
-            void ''' + fname + '''(model_float* x){'''
+            void ''' + fname + '''(MOT_FLOAT_TYPE* x){'''
         for d in self._enc_trans_list:
             func += "\n" + "\t"*4 + d.format('x')
         return func + '''
@@ -152,7 +152,7 @@ class CompositeCodec(AbstractCodec):
             param_offset += f.get_decoded_space_width()
 
         func += '''
-            void ''' + fname + '''(model_float* x){
+            void ''' + fname + '''(MOT_FLOAT_TYPE* x){
         '''
         for i in range(len(self._codec_list)):
             func += fname + '_' + str(i) + '(x);' + "\n"
@@ -168,7 +168,7 @@ class CompositeCodec(AbstractCodec):
             func += f.get_cl_encode_function(fname=(fname + '_' + str(i)), parameter_offset=param_offset)
             param_offset += f.get_decoded_space_width()
         func += '''
-            void ''' + fname + '''(model_float* x){
+            void ''' + fname + '''(MOT_FLOAT_TYPE* x){
         '''
         for i in range(len(self._codec_list)):
             func += fname + '_' + str(i) + '(x);' + "\n"

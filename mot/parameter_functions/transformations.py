@@ -100,40 +100,40 @@ class ClampTransform(AbstractTransformation):
     """The clamp transformation limits the parameter between its lower and upper bound using the clamp function."""
 
     def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):
-        return 'clamp((model_float)' + parameter_name + ', (model_float)' + str(parameter.lower_bound) + \
-               ', (model_float)' + str(parameter.upper_bound) + ');'
+        return 'clamp((MOT_FLOAT_TYPE)' + parameter_name + ', (MOT_FLOAT_TYPE)' + str(parameter.lower_bound) + \
+               ', (MOT_FLOAT_TYPE)' + str(parameter.upper_bound) + ');'
 
     def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
-        return 'clamp((model_float)' + parameter_name + ', (model_float)' + str(parameter.lower_bound) + \
-               ', (model_float)' + str(parameter.upper_bound) + ');'
+        return 'clamp((MOT_FLOAT_TYPE)' + parameter_name + ', (MOT_FLOAT_TYPE)' + str(parameter.lower_bound) + \
+               ', (MOT_FLOAT_TYPE)' + str(parameter.upper_bound) + ');'
 
 
 class CosSqrClampTransform(AbstractTransformation):
     """The clamp transformation limits the parameter between its lower and upper bound using a cos(sqr()) transform."""
 
     def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):
-        return 'acos(sqrt(fabs((' + parameter_name + ' - (model_float)' + \
-               str(parameter.lower_bound) + ') / (model_float)' + \
+        return 'acos(sqrt(fabs((' + parameter_name + ' - (MOT_FLOAT_TYPE)' + \
+               str(parameter.lower_bound) + ') / (MOT_FLOAT_TYPE)' + \
                str(parameter.upper_bound-parameter.lower_bound) + ')));'
 
     def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
-        return 'fma((model_float)pown(cos(' + parameter_name + '), 2), (model_float)' + \
+        return 'fma((MOT_FLOAT_TYPE)pown(cos(' + parameter_name + '), 2), (MOT_FLOAT_TYPE)' + \
                str(parameter.upper_bound-parameter.lower_bound) + \
-               ', (model_float)' + str(parameter.lower_bound) + ');'
+               ', (MOT_FLOAT_TYPE)' + str(parameter.lower_bound) + ');'
 
 
 class SinSqrClampTransform(AbstractTransformation):
     """The clamp transformation limits the parameter between its lower and upper bound using a sin(sqr()) transform."""
 
     def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):
-        return 'asin(sqrt(fabs((' + parameter_name + ' - (model_float)' + \
-               str(parameter.lower_bound) + ') / (model_float)' + \
+        return 'asin(sqrt(fabs((' + parameter_name + ' - (MOT_FLOAT_TYPE)' + \
+               str(parameter.lower_bound) + ') / (MOT_FLOAT_TYPE)' + \
                str(parameter.upper_bound-parameter.lower_bound) + ')));'
 
     def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
-        return 'fma((model_float) pown(sin(' + parameter_name + '), 2), (model_float)' + \
+        return 'fma((MOT_FLOAT_TYPE) pown(sin(' + parameter_name + '), 2), (MOT_FLOAT_TYPE)' + \
                str(parameter.upper_bound-parameter.lower_bound) + \
-               ', (model_float)' + str(parameter.lower_bound) + ');'
+               ', (MOT_FLOAT_TYPE)' + str(parameter.lower_bound) + ');'
 
 
 class SqrClampTransform(AbstractTransformation):
@@ -143,23 +143,23 @@ class SqrClampTransform(AbstractTransformation):
         return 'sqrt(' + parameter_name + ');'
 
     def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
-        return 'clamp((model_float) pown(' + parameter_name + ', 2), (model_float)' + str(parameter.lower_bound) + \
-               ', (model_float)' + str(parameter.upper_bound) + ');'
+        return 'clamp((MOT_FLOAT_TYPE) pown(' + parameter_name + ', 2), (MOT_FLOAT_TYPE)' + str(parameter.lower_bound) + \
+               ', (MOT_FLOAT_TYPE)' + str(parameter.upper_bound) + ');'
 
 
 class SinSqrClampDependentTransform(AbstractTransformation):
     """The clamp transformation limits the parameter between 0 and the given parameter with the sin(sqr()) transform."""
 
     def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):
-        return 'asin(sqrt(fabs((' + parameter_name + ' - (model_float)' + \
-               str(parameter.lower_bound) + ') / ((model_float)' + \
+        return 'asin(sqrt(fabs((' + parameter_name + ' - (MOT_FLOAT_TYPE)' + \
+               str(parameter.lower_bound) + ') / ((MOT_FLOAT_TYPE)' + \
                dependencies_names[0] + ' - ' + \
                str(parameter.lower_bound) + '))));'
 
     def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
-        return 'fma(pown((model_float)sin(' + parameter_name + '), 2), ' \
-                        '(model_float)' + dependencies_names[0] + ', ' \
-                        '(model_float)' + str(parameter.lower_bound) + ');'
+        return 'fma(pown((MOT_FLOAT_TYPE)sin(' + parameter_name + '), 2), ' \
+                        '(MOT_FLOAT_TYPE)' + dependencies_names[0] + ', ' \
+                        '(MOT_FLOAT_TYPE)' + str(parameter.lower_bound) + ');'
 
 
 class AbsModXTransform(AbstractTransformation):
@@ -173,10 +173,10 @@ class AbsModXTransform(AbstractTransformation):
             self._x = x
 
     def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):
-        return 'fmod((model_float)fabs(' + parameter_name + '), (model_float)' + self._x + ');'
+        return 'fmod((MOT_FLOAT_TYPE)fabs(' + parameter_name + '), (MOT_FLOAT_TYPE)' + self._x + ');'
 
     def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
-        return 'fmod((model_float)fabs(' + parameter_name + '), (model_float)' + self._x + ');'
+        return 'fmod((MOT_FLOAT_TYPE)fabs(' + parameter_name + '), (MOT_FLOAT_TYPE)' + self._x + ');'
 
 
 class CosSqrTransform(SimpleTransformation):
@@ -194,7 +194,7 @@ class SinSqrTransform(SimpleTransformation):
 class AbsModPiTransform(AbsModXTransform):
 
     def __init__(self):
-        super(AbsModPiTransform, self).__init__('PI_MODEL_FLOAT')
+        super(AbsModPiTransform, self).__init__('M_PI')
 
 
 class SqrTransform(SimpleTransformation):

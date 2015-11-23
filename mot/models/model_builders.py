@@ -206,7 +206,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
     def get_problems_var_data(self):
         """See super class OptimizeModelInterface for details"""
         var_data_dict = {'observations': set_cl_compatible_data_type(
-            self._problem_data.observations, CLDataType.from_string('model_float*'), self._double_precision)}
+            self._problem_data.observations, CLDataType.from_string('MOT_FLOAT_TYPE*'), self._double_precision)}
         var_data_dict.update(self._get_fixed_parameters_as_var_data())
         return var_data_dict
 
@@ -334,7 +334,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         model function which do not happen in the codec must also go here.
 
         Returns:
-            str: A function of the kind: void finalParameterTransformations(const optimize_data* data, model_float* x)
+            str: A function of the kind: void finalParameterTransformations(const optimize_data* data, MOT_FLOAT_TYPE* x)
                 Which is called for every voxel and must in place edit the x variable.
         """
         transform_needed = any(dp.has_side_effects or not dp.fixed for dp in
@@ -353,7 +353,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         param_listing = self._get_parameters_listing(exclude_list=param_exclude_list)
 
-        func = "\n\t\t\t" + 'void ' + func_name + '(const optimize_data* const data, model_float* const x){' + "\n"
+        func = "\n\t\t\t" + 'void ' + func_name + '(const optimize_data* const data, MOT_FLOAT_TYPE* const x){' + "\n"
         func += param_listing + "\n"
 
         for i, (m, p) in enumerate(self._get_parameter_type_lists()['estimable']):
@@ -364,7 +364,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
     def get_observation_return_function(self, func_name='getObservation'):
         func = '''
-            model_float ''' + func_name + '''(const optimize_data* const data, const int observation_index){
+            MOT_FLOAT_TYPE ''' + func_name + '''(const optimize_data* const data, const int observation_index){
                 return data->var_data_observations[observation_index];
             }
         '''
@@ -379,8 +379,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             func += pre_model_function
 
         func += '''
-            model_float ''' + func_name + \
-                '(const optimize_data* const data, const model_float* const x, const int observation_index){' + "\n"
+            MOT_FLOAT_TYPE ''' + func_name + \
+                '(const optimize_data* const data, const MOT_FLOAT_TYPE* const x, const int observation_index){' + "\n"
 
         func += self._get_parameters_listing(exclude_list=[m.name + '_' + p.name for (m, p) in
                                                            self._get_non_model_tree_param_listing()])

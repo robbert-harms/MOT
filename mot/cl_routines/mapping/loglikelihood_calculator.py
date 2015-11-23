@@ -95,7 +95,7 @@ class _LogLikelihoodCalculatorWorker(Worker):
         param_code_gen = ParameterCLCodeGenerator(self._cl_environment.device, self._var_data_dict,
                                                   self._prtcl_data_dict, self._fixed_data_dict)
 
-        kernel_param_names = ['global model_float* params', 'global model_float* log_likelihoods']
+        kernel_param_names = ['global MOT_FLOAT_TYPE* params', 'global MOT_FLOAT_TYPE* log_likelihoods']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
         kernel_source = ''
         kernel_source += get_cl_pragma_double()
@@ -110,7 +110,7 @@ class _LogLikelihoodCalculatorWorker(Worker):
                     int gid = get_global_id(0);
                     ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
 
-                    model_float x[''' + str(nmr_params) + '''];
+                    MOT_FLOAT_TYPE x[''' + str(nmr_params) + '''];
                     for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
                         x[i] = params[gid * ''' + str(nmr_params) + ''' + i];
                     }

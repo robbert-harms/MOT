@@ -16,13 +16,13 @@
 /* Used to set the maximum number of iterations to patience*(number_of_parameters+1). */
 #define PATIENCE %(PATIENCE)r
 #define MAX_IT (PATIENCE * (%(NMR_PARAMS)r+1))
-#define PWLL_FTOL 30*EPSILON_OPTIMIZER_FLOAT
-#define BRENT_TOL 2*30*EPSILON_OPTIMIZER_FLOAT
+#define PWLL_FTOL 30*MOT_EPSILON
+#define BRENT_TOL 2*30*MOT_EPSILON
 #define BRACKET_GOLD 1.618034 /* the default ratio by which successive intervals are magnified in Bracketing */
 #define GLIMIT 100.0 /* the maximum magnification allowed for a parabolic-fit step in Bracketing */
-#define EPSILON 30*EPSILON_OPTIMIZER_FLOAT
+#define EPSILON 30*MOT_EPSILON
 #define CGOLD 0.3819660 /* golden ratio = (3 - sqrt(5))/2 */
-#define ZEPS 30*EPSILON_OPTIMIZER_FLOAT
+#define ZEPS 30*MOT_EPSILON
 
 /** helpers to save memory and keep code clean */
 #define A fa
@@ -31,20 +31,20 @@
 #define FV ulim
 #define FW maxarg
 
-optimizer_float bracket_and_brent(const optimizer_float* const pcom, const optimizer_float* const x_tmp_min,
-                                  optimizer_float* xt, const void* const data, optimizer_float *xmin);
+MOT_FLOAT_TYPE bracket_and_brent(const MOT_FLOAT_TYPE* const pcom, const MOT_FLOAT_TYPE* const x_tmp_min,
+                                  MOT_FLOAT_TYPE* xt, const void* const data, MOT_FLOAT_TYPE *xmin);
 
-optimizer_float powell(optimizer_float* model_parameters, const void* const data){
+MOT_FLOAT_TYPE powell(MOT_FLOAT_TYPE* model_parameters, const void* const data){
     int i, j, i_greatest;
     int iteration = 0;
-    optimizer_float fval = evaluate(model_parameters, data);
-    optimizer_float del, fval_tmp1, fval_tmp2;
-    optimizer_float xmin;
+    MOT_FLOAT_TYPE fval = evaluate(model_parameters, data);
+    MOT_FLOAT_TYPE del, fval_tmp1, fval_tmp2;
+    MOT_FLOAT_TYPE xmin;
 
-    optimizer_float x_tmp1[%(NMR_PARAMS)r];
-    optimizer_float x_tmp2[%(NMR_PARAMS)r];
-    optimizer_float x_tmp_min[%(NMR_PARAMS)r];
-    optimizer_float starting_vectors[%(NMR_PARAMS)r][%(NMR_PARAMS)r];
+    MOT_FLOAT_TYPE x_tmp1[%(NMR_PARAMS)r];
+    MOT_FLOAT_TYPE x_tmp2[%(NMR_PARAMS)r];
+    MOT_FLOAT_TYPE x_tmp_min[%(NMR_PARAMS)r];
+    MOT_FLOAT_TYPE starting_vectors[%(NMR_PARAMS)r][%(NMR_PARAMS)r];
 
     for(i=0; i < %(NMR_PARAMS)r; i++){
         for(j=0; j < %(NMR_PARAMS)r; j++){
@@ -109,23 +109,23 @@ optimizer_float powell(optimizer_float* model_parameters, const void* const data
     return fval;
 }
 
-optimizer_float bracket_and_brent(const optimizer_float* const pcom, const optimizer_float* const x_tmp_min, optimizer_float* xt,
-                         const void* const data, optimizer_float *xmin){
+MOT_FLOAT_TYPE bracket_and_brent(const MOT_FLOAT_TYPE* const pcom, const MOT_FLOAT_TYPE* const x_tmp_min, MOT_FLOAT_TYPE* xt,
+                         const void* const data, MOT_FLOAT_TYPE *xmin){
 
-    optimizer_float ax = 0.0;
-    optimizer_float bx = 1.0;
-    optimizer_float cx;
+    MOT_FLOAT_TYPE ax = 0.0;
+    MOT_FLOAT_TYPE bx = 1.0;
+    MOT_FLOAT_TYPE cx;
 
-    optimizer_float ulim, u, r, q, fu, tmp;
-    optimizer_float maxarg = 0.0;
+    MOT_FLOAT_TYPE ulim, u, r, q, fu, tmp;
+    MOT_FLOAT_TYPE maxarg = 0.0;
     int j;
-    optimizer_float fa = 0.0;
-    optimizer_float fb = 0.0;
-    optimizer_float fc = 0.0;
+    MOT_FLOAT_TYPE fa = 0.0;
+    MOT_FLOAT_TYPE fb = 0.0;
+    MOT_FLOAT_TYPE fc = 0.0;
 
     int iter;
-    optimizer_float fx, p, tol1, tol2, v, w, x, xm;
-    optimizer_float e=0.0;
+    MOT_FLOAT_TYPE fx, p, tol1, tol2, v, w, x, xm;
+    MOT_FLOAT_TYPE e=0.0;
 
     for(j=0; j < %(NMR_PARAMS)r; j++){
         xt[j] = pcom[j] + (ax) * x_tmp_min[j];

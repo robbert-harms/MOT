@@ -71,7 +71,7 @@ def set_cl_compatible_data_type(value, data_type, double_precision):
     Args:
         value (ndarray): The value to convert to a CL compatible data type.
         cl_data_type (CLDataType): A CL data type object.
-        double_precision (boolean): if cl_data_type is of type model_float we need to know if we are using double or float
+        double_precision (boolean): if cl_data_type is of type MOT_FLOAT_TYPE we need to know if we are using double or float
 
     Returns:
         ndarray: The same array, but then with the correct data type. If the data type indicates a vector type, a
@@ -131,7 +131,7 @@ def array_to_cl_vector(array, raw_data_type, vector_length=None, double_precisio
         array (ndarray): the array of which to translate each row to a vector
         raw_data_type (str): The raw data type to convert to
         vector_length (int): if specified (non-None) the desired vector length. It must be one of (2, 3, 4, 8, 16)
-        double_precision (boolean): if we should use double or float in the case of typedeffed items like 'model_float'
+        double_precision (boolean): if we should use double or float in the case of typedeffed items like 'MOT_FLOAT_TYPE'
 
     Returns:
         ndarray: An array of the same length as the given array, but with only one column per row.
@@ -152,7 +152,7 @@ def array_to_cl_vector(array, raw_data_type, vector_length=None, double_precisio
     if 'double' in raw_data_type:
         dtype = get_opencl_vector_data_type(vector_length, 'double')
 
-    elif 'model_float' in raw_data_type:
+    elif 'MOT_FLOAT_TYPE' in raw_data_type:
         if double_precision:
             dtype = get_opencl_vector_data_type(vector_length, 'double')
         else:
@@ -228,41 +228,37 @@ def get_cl_pragma_double():
     '''
 
 
-def get_float_type_def(double_precision, type_def_basename='model_float'):
+def get_float_type_def(double_precision):
     """Get the model floating point type definition.
 
     Args:
-        double_precision (boolean): if True we will use the double type for the model_float type. Else, we will use the
-            single precision float type for the model_float type.
+        double_precision (boolean): if True we will use the double type for the MOT_FLOAT_TYPE type.
+            Else, we will use the single precision float type for the MOT_FLOAT_TYPE type.
 
     Returns:
-        str: typedefs for the model_float type
+        str: defines for the MOT_FLOAT_TYPE type
     """
     if double_precision:
         return '''
-            typedef double ''' + type_def_basename + ''';
-            typedef double2 ''' + type_def_basename + '''2;
-            typedef double3 ''' + type_def_basename + '''3;
-            typedef double4 ''' + type_def_basename + '''4;
-            typedef double8 ''' + type_def_basename + '''8;
-            typedef double16 ''' + type_def_basename + '''16;
-            #define PI_''' + type_def_basename.upper() + ''' 3.14159265358979323846
-            #define EPSILON_''' + type_def_basename.upper() + ''' DBL_EPSILON
-            #define MIN_''' + type_def_basename.upper() + ''' DBL_MIN
-            #define MAX_''' + type_def_basename.upper() + ''' DBL_MAX
+            #define MOT_FLOAT_TYPE double
+            #define MOT_FLOAT_TYPE2 double2
+            #define MOT_FLOAT_TYPE4 double4
+            #define MOT_FLOAT_TYPE8 double8
+            #define MOT_FLOAT_TYPE16 double16
+            #define MOT_EPSILON DBL_EPSILON
+            #define MOT_MIN DBL_MIN
+            #define MOT_MAX DBL_MAX
         '''
     else:
         return '''
-            typedef float ''' + type_def_basename + ''';
-            typedef float2 ''' + type_def_basename + '''2;
-            typedef float3 ''' + type_def_basename + '''3;
-            typedef float4 ''' + type_def_basename + '''4;
-            typedef float8 ''' + type_def_basename + '''8;
-            typedef float16 ''' + type_def_basename + '''16;
-            #define PI_''' + type_def_basename.upper() + ''' 3.14159265359f
-            #define EPSILON_''' + type_def_basename.upper() + ''' FLT_EPSILON
-            #define MIN_''' + type_def_basename.upper() + ''' FLT_MIN
-            #define MAX_''' + type_def_basename.upper() + ''' FLT_MAX
+            #define MOT_FLOAT_TYPE float
+            #define MOT_FLOAT_TYPE2 float2
+            #define MOT_FLOAT_TYPE4 float4
+            #define MOT_FLOAT_TYPE8 float8
+            #define MOT_FLOAT_TYPE16 float16
+            #define MOT_EPSILON FLT_EPSILON
+            #define MOT_MIN FLT_MIN
+            #define MOT_MAX FLT_MAX
         '''
 
 

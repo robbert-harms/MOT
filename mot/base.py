@@ -19,7 +19,7 @@ class CLDataType(object):
     def __init__(self, cl_raw_type, is_pointer_type=False, vector_length=None):
         """Create a new CL data type container.
 
-        The CL type can either be a CL native type (half, double, int, ...) or the special model_float type.
+        The CL type can either be a CL native type (half, double, int, ...) or the special MOT_FLOAT_TYPE type.
 
         Args:
             cl_type (str): the specific data type without the vector number and asterisks
@@ -120,7 +120,7 @@ class CLDataType(object):
                 return np.float64(value)
             return value.astype(np.float64, copy=False, order='C')
 
-        elif self.raw_data_type == 'model_float':
+        elif self.raw_data_type == 'MOT_FLOAT_TYPE':
             np_dtype = np.float32
             if double_precision:
                 np_dtype = np.float64

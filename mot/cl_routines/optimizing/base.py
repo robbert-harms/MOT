@@ -174,11 +174,6 @@ class AbstractParallelOptimizerWorker(Worker):
         self._use_param_codec = self._parent_optimizer.use_param_codec and param_codec \
                                     and self._parent_optimizer._automatic_apply_codec
 
-        self._optimizer_and_model_float_identical = False
-        if (self._model.double_precision and self._optimizer_supports_double()) or \
-            (not self._model.double_precision and self._optimizer_supports_float()):
-            self._optimizer_and_model_float_identical = True
-
         self._starting_points = starting_points
         self._kernel = self._build_kernel()
 
@@ -240,7 +235,7 @@ class AbstractParallelOptimizerWorker(Worker):
                                                   self._prtcl_data_dict,
                                                   self._fixed_data_dict)
 
-        kernel_param_names = ['global model_float* params']
+        kernel_param_names = ['global MOT_FLOAT_TYPE* params']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
         if self._uses_random_numbers():
@@ -250,13 +245,7 @@ class AbstractParallelOptimizerWorker(Worker):
 
         kernel_source = ''
         kernel_source += get_cl_pragma_double()
-        kernel_source += get_float_type_def(self._double_precision, 'model_float')
-
-        if self._double_precision:
-            kernel_source += get_float_type_def(self._optimizer_supports_double(), 'optimizer_float')
-        else:
-            kernel_source += get_float_type_def(not self._optimizer_supports_float(), 'optimizer_float')
-
+        kernel_source += get_float_type_def(self._double_precision)
         kernel_source += param_code_gen.get_data_struct()
 
         if self._use_param_codec:
@@ -281,44 +270,20 @@ class AbstractParallelOptimizerWorker(Worker):
             optimizer_call_args += ', (void*) &ranluxclstate'
 
         kernel_source += '''
-                    optimizer_float x[''' + str(nmr_params) + '''];
+                    MOT_FLOAT_TYPE x[''' + str(nmr_params) + '''];
                     for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
                         x[i] = params[gid * ''' + str(nmr_params) + ''' + i];
                     }
 
                     ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
                     ''' + self._get_optimizer_call_name() + '''(''' + optimizer_call_args + ''');
-        '''
 
-        if self._use_param_codec:
-            if self._optimizer_and_model_float_identical:
-                kernel_source += '''
-                    decodeParameters(x);
+                    ''' + ('decodeParameters(x);' if self._use_param_codec else '') + '''
+
                     for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
                         params[gid * ''' + str(nmr_params) + ''' + i] = x[i];
                     }
-            '''
-            else:
-                kernel_source += '''
-                        model_float x_model_space[''' + str(self._nmr_params) + '''];
-                        for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
-                            x_model_space[i] = (model_float)x[i];
-                        }
-                        decodeParameters(x_model_space);
-
-                        for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
-                            params[gid * ''' + str(nmr_params) + ''' + i] = x_model_space[i];
-                        }
-                '''
-        else:
-            kernel_source += '''
-                    for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
-                        params[gid * ''' + str(nmr_params) + ''' + i] = x[i];
-                    }
-            '''
-
-        kernel_source += '''
-            }
+                }
         '''
         return kernel_source
 
@@ -343,8 +308,8 @@ class AbstractParallelOptimizerWorker(Worker):
         kernel_source = ''
         if self._use_param_codec:
             kernel_source += '''
-                optimizer_float evaluate(optimizer_float* x, const void* data){
-                    model_float x_model[''' + str(self._nmr_params) + '''];
+                MOT_FLOAT_TYPE evaluate(MOT_FLOAT_TYPE* x, const void* data){
+                    MOT_FLOAT_TYPE x_model[''' + str(self._nmr_params) + '''];
                     for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                         x_model[i] = x[i];
                     }
@@ -354,12 +319,8 @@ class AbstractParallelOptimizerWorker(Worker):
             '''
         else:
             kernel_source += '''
-                optimizer_float evaluate(optimizer_float* x, const void* data){
-                    model_float x_model[''' + str(self._nmr_params) + '''];
-                    for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
-                        x_model[i] = x[i];
-                    }
-                    return calculateObjective((optimize_data*)data, x_model);
+                MOT_FLOAT_TYPE evaluate(MOT_FLOAT_TYPE* x, const void* data){
+                    return calculateObjective((optimize_data*)data, x);
                 }
             '''
 
@@ -392,22 +353,6 @@ class AbstractParallelOptimizerWorker(Worker):
             str: The function name of the optimization function.
         """
         return ''
-
-    def _optimizer_supports_float(self):
-        """Check if the optimizer supports the float type.
-
-        Returns:
-            boolean: true if the optimizer supports float, false otherwise. By default we assume false.
-        """
-        return False
-
-    def _optimizer_supports_double(self):
-        """Check if the optimizer supports the double float type.
-
-        Returns:
-            boolean: true if the optimizer supports double, false otherwise. By default we assume false.
-        """
-        return False
 
     def _uses_random_numbers(self):
         """Defines if the optimizer needs random numbers or not.

@@ -1,6 +1,5 @@
 from ...cl_functions import LMMin
 from .base import AbstractParallelOptimizer, AbstractParallelOptimizerWorker
-from mot.utils import get_cl_pragma_double, get_float_type_def
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-02-05"
@@ -58,9 +57,9 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
             kernel_source += decode_func + "\n"
 
         kernel_source += '''
-            void evaluate(const void* data, optimizer_float* x, optimizer_float* result){
+            void evaluate(const void* data, MOT_FLOAT_TYPE* x, MOT_FLOAT_TYPE* result){
                 int i;
-                model_float x_model[''' + str(nmr_params) + '''];
+                MOT_FLOAT_TYPE x_model[''' + str(nmr_params) + '''];
                 for(i = 0; i < ''' + str(nmr_params) + '''; i++){
                     x_model[i] = x[i];
                 }
@@ -83,9 +82,3 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
 
     def _get_optimizer_call_name(self):
         return 'lmmin'
-
-    def _optimizer_supports_float(self):
-        return True
-
-    def _optimizer_supports_double(self):
-        return True

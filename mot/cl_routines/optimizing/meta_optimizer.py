@@ -48,8 +48,8 @@ class MetaOptimizer(AbstractOptimizer):
         self.enable_sampling = False
 
         self.extra_optim_runs = 0
-        self.extra_optim_runs_optimizers = None
-        self.extra_optim_runs_smoothers = None
+        self.extra_optim_runs_optimizers = []
+        self.extra_optim_runs_smoothers = []
         self.extra_optim_runs_apply_smoothing = False
         self.extra_optim_runs_use_perturbation = True
 

@@ -25,13 +25,13 @@ class _MeanFilterWorker(AbstractFilterWorker):
 
     def _get_kernel_source(self):
         kernel_source = get_cl_pragma_double()
-        kernel_source += get_float_type_def(self._double_precision, 'masking_float')
+        kernel_source += get_float_type_def(self._double_precision)
         kernel_source += self._get_ks_sub2ind_func(self._volume_shape)
         kernel_source += '''
             __kernel void filter(
-                global masking_float* volume,
+                global MOT_FLOAT_TYPE* volume,
                 ''' + ('global char* mask,' if self._use_mask else '') + '''
-                global masking_float* results
+                global MOT_FLOAT_TYPE* results
                 ){
                     ''' + self._get_ks_dimension_inits(len(self._volume_shape)) + '''
                     int ind = ''' + self._get_ks_sub2ind_func_call(len(self._volume_shape)) + ''';
@@ -39,7 +39,7 @@ class _MeanFilterWorker(AbstractFilterWorker):
                     ''' + ('if(mask[ind] > 0){' if self._use_mask else 'if(true){') + '''
                         ''' + self._get_ks_dimension_sizes(self._volume_shape) + '''
 
-                        masking_float sum = 0.0;
+                        MOT_FLOAT_TYPE sum = 0.0;
                         int count = 0;
 
                         ''' + self._get_ks_loop(self._volume_shape) + '''

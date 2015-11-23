@@ -25,13 +25,13 @@ class _MedianFilterWorker(AbstractFilterWorker):
 
     def _get_kernel_source(self):
         kernel_source = get_cl_pragma_double()
-        kernel_source += get_float_type_def(self._double_precision, 'masking_float')
+        kernel_source += get_float_type_def(self._double_precision)
         kernel_source += self._get_ks_sub2ind_func(self._volume_shape)
         kernel_source += '''
             __kernel void filter(
-                global masking_float* volume,
+                global MOT_FLOAT_TYPE* volume,
                 ''' + ('global char* mask,' if self._use_mask else '') + '''
-                global masking_float* results
+                global MOT_FLOAT_TYPE* results
                 ){
 
                     ''' + self._get_ks_dimension_inits(len(self._volume_shape)) + '''
@@ -41,17 +41,17 @@ class _MedianFilterWorker(AbstractFilterWorker):
 
                         ''' + self._get_ks_dimension_sizes(self._volume_shape) + '''
 
-                        masking_float guess;
-                        masking_float maxltguess;
-                        masking_float mingtguess;
-                        masking_float less;
-                        masking_float greater;
-                        masking_float equal;
-                        masking_float minv = volume[ind];
-                        masking_float maxv = volume[ind];
+                        MOT_FLOAT_TYPE guess;
+                        MOT_FLOAT_TYPE maxltguess;
+                        MOT_FLOAT_TYPE mingtguess;
+                        MOT_FLOAT_TYPE less;
+                        MOT_FLOAT_TYPE greater;
+                        MOT_FLOAT_TYPE equal;
+                        MOT_FLOAT_TYPE minv = volume[ind];
+                        MOT_FLOAT_TYPE maxv = volume[ind];
                         int number_of_items = 0;
 
-                        masking_float tmp_val = 0.0;
+                        MOT_FLOAT_TYPE tmp_val = 0.0;
 
                         ''' + self._loop_encapsulate('''
                             tmp_val = volume[''' +

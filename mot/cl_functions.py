@@ -15,12 +15,12 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class EuclidianNormFunction(LibraryFunction):
 
-    def __init__(self, memspace='private', memtype='model_float'):
+    def __init__(self, memspace='private', memtype='MOT_FLOAT_TYPE'):
         """A CL functions for calculating the Euclidian distance between n values.
 
         Args:
             memspace (str): The memory space of the memtyped array (private, constant, global).
-            memtype (str): the memory type to use, double, float, model_float, ...
+            memtype (str): the memory type to use, double, float, MOT_FLOAT_TYPE, ...
         """
         super(EuclidianNormFunction, self).__init__(
             memtype,
@@ -53,7 +53,7 @@ class LMMin(LibraryFunction):
         super(LMMin, self).__init__(
             'void',
             'lmmin',
-            (LibraryParameter(CLDataType.from_string('optimizer_float*'), 'x'),
+            (LibraryParameter(CLDataType.from_string('MOT_FLOAT_TYPE*'), 'x'),
              LibraryParameter(CLDataType.from_string('void*'), 'data')),
             resource_filename('mot', 'data/opencl/lmmin.h'),
             resource_filename('mot', 'data/opencl/lmmin.pcl'),
@@ -97,7 +97,7 @@ class PrAxisFunc(LibraryFunction):
         super(PrAxisFunc, self).__init__(
             'void',
             'praxis',
-            (LibraryParameter(CLDataType.from_string('optimizer_float*'), 'model_parameters'),
+            (LibraryParameter(CLDataType.from_string('MOT_FLOAT_TYPE*'), 'model_parameters'),
              LibraryParameter(CLDataType.from_string('void*'), 'data')),
             resource_filename('mot', 'data/opencl/praxis.h'),
             resource_filename('mot', 'data/opencl/praxis.pcl'),
@@ -126,7 +126,7 @@ class NMSimplexFunc(LibraryFunction):
         super(NMSimplexFunc, self).__init__(
             'void',
             'nmsimplex',
-            (LibraryParameter(CLDataType.from_string('optimizer_float*'), 'model_parameters'),
+            (LibraryParameter(CLDataType.from_string('MOT_FLOAT_TYPE*'), 'model_parameters'),
              LibraryParameter(CLDataType.from_string('void*'), 'data')),
             resource_filename('mot', 'data/opencl/nmsimplex.h'),
             resource_filename('mot', 'data/opencl/nmsimplex.pcl'),
@@ -158,7 +158,7 @@ class PowellFunc(LibraryFunction):
         super(PowellFunc, self).__init__(
             'void',
             'powell',
-            (LibraryParameter(CLDataType.from_string('optimizer_float*'), 'model_parameters'),
+            (LibraryParameter(CLDataType.from_string('MOT_FLOAT_TYPE*'), 'model_parameters'),
              LibraryParameter(CLDataType.from_string('void*'), 'data')),
             resource_filename('mot', 'data/opencl/powell.h'),
             resource_filename('mot', 'data/opencl/powell.pcl'),
@@ -172,9 +172,9 @@ class FirstLegendreTerm(LibraryFunction):
         """A function for finding the first legendre term. (see the CL code for more details)
         """
         super(FirstLegendreTerm, self).__init__(
-            'model_float',
+            'MOT_FLOAT_TYPE',
             'getFirstLegendreTerm',
-            (LibraryParameter(CLDataType.from_string('model_float'), 'x'),
+            (LibraryParameter(CLDataType.from_string('MOT_FLOAT_TYPE'), 'x'),
              LibraryParameter(CLDataType.from_string('int'), 'n')),
             resource_filename('mot', 'data/opencl/firstLegendreTerm.h'),
             resource_filename('mot', 'data/opencl/firstLegendreTerm.cl'),
@@ -203,9 +203,9 @@ class CerfImWOfX(LibraryFunction):
         """Calculate the cerf. (see the CL code for more details)
         """
         super(CerfImWOfX, self).__init__(
-            'model_float',
+            'MOT_FLOAT_TYPE',
             'im_w_of_x',
-            (LibraryParameter(CLDataType.from_string('model_float'), 'x'), ),
+            (LibraryParameter(CLDataType.from_string('MOT_FLOAT_TYPE'), 'x'), ),
             resource_filename('mot', 'data/opencl/cerf/im_w_of_x.h'),
             resource_filename('mot', 'data/opencl/cerf/im_w_of_x.cl'),
             {},
@@ -218,9 +218,9 @@ class CerfDawson(LibraryFunction):
         """Evaluate dawson integral. (see the CL code for more details)
         """
         super(CerfDawson, self).__init__(
-            'model_float',
+            'MOT_FLOAT_TYPE',
             'dawson',
-            (LibraryParameter(CLDataType.from_string('model_float'), 'x'), ),
+            (LibraryParameter(CLDataType.from_string('MOT_FLOAT_TYPE'), 'x'), ),
             resource_filename('mot', 'data/opencl/cerf/dawson.h'),
             resource_filename('mot', 'data/opencl/cerf/dawson.cl'),
             {},
@@ -233,9 +233,9 @@ class CerfErfi(LibraryFunction):
         """Calculate erfi. (see the CL code for more details)
         """
         super(CerfErfi, self).__init__(
-            'model_float',
+            'MOT_FLOAT_TYPE',
             'erfi',
-            (LibraryParameter(CLDataType.from_string('model_float'), 'x'), ),
+            (LibraryParameter(CLDataType.from_string('MOT_FLOAT_TYPE'), 'x'), ),
             resource_filename('mot', 'data/opencl/cerf/erfi.h'),
             resource_filename('mot', 'data/opencl/cerf/erfi.cl'),
             {},
@@ -256,7 +256,7 @@ class Scalar(ModelFunction):
         super(Scalar, self).__init__(
             name,
             'cmScalar',
-            (FreeParameter(CLDataType.from_string('model_float'), 's', False, value, lower_bound, upper_bound,
+            (FreeParameter(CLDataType.from_string('MOT_FLOAT_TYPE'), 's', False, value, lower_bound, upper_bound,
                            parameter_transform=ClampTransform(),
                            sampling_proposal=GaussianProposal(1.0)),))
 

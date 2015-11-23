@@ -9,6 +9,6 @@
  * Email = robbert.harms@maastrichtuniversity.nl
  */
 
-void nmsimplex(optimizer_float* const model_parameters, const void* const data);
+void nmsimplex(MOT_FLOAT_TYPE* const model_parameters, const void* const data);
 
 #endif // NMSIMPLEX_H

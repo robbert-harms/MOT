@@ -130,12 +130,6 @@ class _MHWorker(Worker):
         self._sample_intervals = sample_intervals
         self.proposal_update_intervals = proposal_update_intervals
 
-        self._sampler_and_model_float_identical = False
-        if self._model.double_precision and self._sampler_supports_double():
-            self._sampler_and_model_float_identical = True
-        elif not self._model.double_precision and self._sampler_supports_float():
-            self._sampler_and_model_float_identical = True
-
         self._constant_buffers = self._generate_constant_buffers(self._prtcl_data_dict, self._fixed_data_dict)
         self._kernel = self._build_kernel()
 
@@ -179,20 +173,14 @@ class _MHWorker(Worker):
                                 samples_buf, wait_for=(event,), is_blocking=False)
         return event
 
-    def _sampler_supports_double(self):
-        return True
-
-    def _sampler_supports_float(self):
-        return False
-
     def _get_kernel_source(self):
         cl_final_param_transform = self._model.get_final_parameter_transformations('applyFinalParamTransforms')
 
         param_code_gen = ParameterCLCodeGenerator(self._cl_environment.device, self._var_data_dict,
                                                   self._prtcl_data_dict, self._fixed_data_dict)
 
-        kernel_param_names = ['global model_float* params',
-                              'global model_float* samples',
+        kernel_param_names = ['global MOT_FLOAT_TYPE* params',
+                              'global MOT_FLOAT_TYPE* samples',
                               'global float4* ranluxcltab',
                               'unsigned int nmr_samples',
                               'unsigned int burn_length',
@@ -210,7 +198,7 @@ class _MHWorker(Worker):
             #define NMR_INST_PER_PROBLEM ''' + str(self._model.get_nmr_inst_per_problem()) + '''
         '''
         kernel_source += get_cl_pragma_double()
-        kernel_source += get_float_type_def(self._model.double_precision, 'model_float')
+        kernel_source += get_float_type_def(self._model.double_precision)
         kernel_source += param_code_gen.get_data_struct()
         kernel_source += rng_code.get_cl_header()
         kernel_source += self._model.get_log_prior_function('getLogPrior')
@@ -225,7 +213,7 @@ class _MHWorker(Worker):
 
         kernel_source += self._model.get_log_likelihood_function('getLogLikelihood')
 
-        if self._sampler_and_model_float_identical:
+        if self._model.double_precision:
             kernel_source += '''
                 double _get_log_likelihood(const optimize_data* const data, const double* const x){
                     return getLogLikelihood(data, x);
@@ -235,12 +223,12 @@ class _MHWorker(Worker):
             kernel_source += '''
                 double _get_log_likelihood(const optimize_data* const data, const double* const x){
 
-                    model_float x_mf[''' + str(self._nmr_params) + '''];
+                    MOT_FLOAT_TYPE x_float[''' + str(self._nmr_params) + '''];
                     for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
-                        x_mf[i] = x[i];
+                        x_float[i] = x[i];
                     }
 
-                    return getLogLikelihood(data, x_mf);
+                    return getLogLikelihood(data, x_float);
                 }
             '''
 
@@ -272,7 +260,7 @@ class _MHWorker(Worker):
         '''
 
         if cl_final_param_transform:
-            if self._sampler_and_model_float_identical:
+            if self._model.double_precision:
                 kernel_source += '''
                     void _apply_final_parameters_transform(const optimize_data* const data, double* const x){
                         applyFinalParamTransforms(data, x);
@@ -281,11 +269,11 @@ class _MHWorker(Worker):
             else:
                 kernel_source += '''
                     void _apply_final_parameters_transform(const optimize_data* const data, double* const x){
-                        model_float x_mf[''' + str(self._nmr_params) + '''];
+                        MOT_FLOAT_TYPE x_float[''' + str(self._nmr_params) + '''];
                         for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
-                            x_mf[i] = x[i];
+                            x_float[i] = x[i];
                         }
-                        applyFinalParamTransforms(data, x_mf);
+                        applyFinalParamTransforms(data, x_float);
                     }
                 '''
 

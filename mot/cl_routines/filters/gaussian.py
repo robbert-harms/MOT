@@ -108,14 +108,14 @@ class _GaussianFilterWorker(AbstractFilterWorker):
         working_dim = 'dim' + str(dimension)
 
         kernel_source = get_cl_pragma_double()
-        kernel_source += get_float_type_def(self._double_precision, 'masking_float')
+        kernel_source += get_float_type_def(self._double_precision)
         kernel_source += self._get_ks_sub2ind_func(self._volume_shape)
         kernel_source += '''
             __kernel void filter(
-                global masking_float* volume,
+                global MOT_FLOAT_TYPE* volume,
                 ''' + ('global char* mask,' if self._use_mask else '') + '''
-                global masking_float* filter,
-                global masking_float* results
+                global MOT_FLOAT_TYPE* filter,
+                global MOT_FLOAT_TYPE* results
                 ){
 
                 ''' + self._get_ks_dimension_inits(len(self._volume_shape)) + '''
@@ -123,7 +123,7 @@ class _GaussianFilterWorker(AbstractFilterWorker):
 
                 ''' + ('if(mask[ind] > 0){' if self._use_mask else 'if(true){') + '''
                     int filter_index = 0;
-                    masking_float filtered_value = 0;
+                    MOT_FLOAT_TYPE filtered_value = 0;
 
                     const int start = dim''' + str(dimension) + ''' - ''' + str(left_right) + ''';
                     const int end = dim''' + str(dimension) + ''' + ''' + str(left_right) + ''';

@@ -9,6 +9,6 @@
  * Email = robbert.harms@maastrichtuniversity.nl
  */
 
-optimizer_float powell(optimizer_float* model_parameters, const void* const data);
+MOT_FLOAT_TYPE powell(MOT_FLOAT_TYPE* model_parameters, const void* const data);
 
 #endif // POWELL_H

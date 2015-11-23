@@ -98,9 +98,9 @@ class WeightSumToOneRule(AbstractParameterDependency):
             for p in parameter_names:
                 divisors += p + ' /= weight_div;' + "\n" + "\t"*4
             self._pre_transform_code += '''
-                model_float weight_dependency_sum = ''' + ' + '.join(parameter_names) + ''';
-                model_float weight_div = max((model_float)1.0, weight_dependency_sum);
-                ''' + divisors + '''weight_dependency_sum = 1 - min((model_float)1.0, weight_dependency_sum);''' + "\n"
+                MOT_FLOAT_TYPE weight_dependency_sum = ''' + ' + '.join(parameter_names) + ''';
+                MOT_FLOAT_TYPE weight_div = max((MOT_FLOAT_TYPE)1.0, weight_dependency_sum);
+                ''' + divisors + '''weight_dependency_sum = 1 - min((MOT_FLOAT_TYPE)1.0, weight_dependency_sum);''' + "\n"
             self._assignment = 'weight_dependency_sum;'
             self._has_side_effects = True
 
