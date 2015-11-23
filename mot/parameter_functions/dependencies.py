@@ -65,7 +65,7 @@ class SimpleAssignment(AbstractParameterDependency):
 
     @property
     def assignment_code(self):
-        return self._assignment + ';'
+        return self._assignment
 
     @property
     def fixed(self):
@@ -100,7 +100,7 @@ class WeightSumToOneRule(AbstractParameterDependency):
             self._pre_transform_code += '''
                 MOT_FLOAT_TYPE weight_dependency_sum = ''' + ' + '.join(parameter_names) + ''';
                 MOT_FLOAT_TYPE weight_div = max((MOT_FLOAT_TYPE)1.0, weight_dependency_sum);
-                ''' + divisors + '''weight_dependency_sum = 1 - min((MOT_FLOAT_TYPE)1.0, weight_dependency_sum);''' + "\n"
+                ''' + divisors + '''weight_dependency_sum = 1 - min((MOT_FLOAT_TYPE)1.0, weight_dependency_sum);'''+"\n"
             self._assignment = 'weight_dependency_sum;'
             self._has_side_effects = True
 
