@@ -257,22 +257,21 @@ class LoadBalanceStrategy(object):
         """Try to process the given worker on the given range.
 
         If processing fails due to memory problems we try to run the worker again with a smaller range.
-        This is currently a blocking call if we run into a memory exception.
+        This function blocks if we run into a memory exception.
 
         Args:
             worker (Worker): The worker to use for the work
             range_start (int): the start of the range to process
             range_end (int): the end of the range to process
-            wait_for_cl_event (CL Event): the CL event we must add to the kernel call. This is needed to support
-                running multiple events nicely after each other with very large buffers.
 
         Returns:
-            a cl event for the last event to happen. Unfortunately this is at the moment a blocking call if the
-            worker throws a memory error. In the future this should be changed to something more appropriate.
+            a cl event for the last event to happen. Unfortunately this function blocks if the worker
+            raises a memory error.
         """
         try:
             return worker.calculate(range_start, range_end)
         except cl.MemoryError:
+            self._logger.debug('We ran out of memory, halving the dataset and trying again.')
             half_range_length = int(math.ceil((range_end - range_start) / 2.0))
             event = self._try_processing(worker, range_start, range_start + half_range_length)
             event.wait()
