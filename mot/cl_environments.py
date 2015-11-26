@@ -11,7 +11,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class CLEnvironment(object):
 
-    def __init__(self, platform, device, context=None, compile_flags=()):
+    def __init__(self, platform, device, compile_flags=()):
         """Storage unit for an OpenCL environment.
 
         Args:
@@ -25,19 +25,16 @@ class CLEnvironment(object):
         """
         self._platform = platform
         self._device = device
-        self._context = context
         self.compile_flags = compile_flags
+        self._cl_context = CLContext(self)
 
-        if not self._context:
-            self._context = cl.Context([self._device])
-
-    def get_new_queue(self):
-        """Create and return a new command queue
+    def get_new_context(self):
+        """Generate a new context using this environment.
 
         Returns:
-            CommandQueue: A command queue from PyOpenCL
+            CLContext: a CL context for single run use
         """
-        return cl.CommandQueue(self._context, device=self._device)
+        return self._cl_context
 
     def get_read_only_cl_mem_flags(self):
         """Get the read only memory flags for this environment.
@@ -98,15 +95,6 @@ class CLEnvironment(object):
             pyopencl device: The device associated with this environment.
         """
         return self._device
-
-    @property
-    def context(self):
-        """Get the context associated with this environment.
-
-        Returns:
-            pyopencl context: The context associated with this environment.
-        """
-        return self._context
 
     @property
     def is_gpu(self):
@@ -183,6 +171,19 @@ class CLEnvironment(object):
                         s += ("%s: <error>" % info_name) + "\n"
         s += "\n"
         return s
+
+
+class CLContext(object):
+
+    def __init__(self, cl_environment):
+        """Context for single run use
+
+        Arguments:
+            context (pyopencl context): The context associated with this environment.
+            queue: a queue from that context
+        """
+        self.context = cl.Context([cl_environment.device])
+        self.queue = cl.CommandQueue(self.context, device=cl_environment.device)
 
 
 class CLEnvironmentFactory(object):

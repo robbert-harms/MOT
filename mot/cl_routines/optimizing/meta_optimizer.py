@@ -87,11 +87,13 @@ class MetaOptimizer(AbstractOptimizer):
                 else:
                     results = optimizer.minimize(model, init_params=results)
 
+        self._logger.info('Calculating residuals')
         errors = ResidualCalculator(cl_environments=self.cl_environments,
                                     load_balancer=self.load_balancer).calculate(model, results)
         error_measures = ErrorMeasures(self.cl_environments, self.load_balancer,
                                        model.double_precision).calculate(errors)
         results.update(error_measures)
+        self._logger.info('Done calculating residuals')
 
         if full_output:
             return results, {}

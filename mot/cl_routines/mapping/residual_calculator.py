@@ -68,25 +68,26 @@ class _ResidualCalculatorWorker(Worker):
         read_only_flags = self._cl_environment.get_read_only_cl_mem_flags()
         nmr_problems = range_end - range_start
 
-        errors_buf = cl.Buffer(self._cl_environment.context,
+        errors_buf = cl.Buffer(self._cl_context.context,
                                write_only_flags, hostbuf=self._residuals[range_start:range_end, :])
 
-        data_buffers = [cl.Buffer(self._cl_environment.context,
+        data_buffers = [cl.Buffer(self._cl_context.context,
                                   read_only_flags, hostbuf=self._parameters[range_start:range_end, :]),
                         errors_buf]
 
         for data in self._var_data_dict.values():
             if len(data.shape) < 2:
-                data_buffers.append(cl.Buffer(self._cl_environment.context,
+                data_buffers.append(cl.Buffer(self._cl_context.context,
                                               read_only_flags, hostbuf=data[range_start:range_end]))
             else:
-                data_buffers.append(cl.Buffer(self._cl_environment.context,
+                data_buffers.append(cl.Buffer(self._cl_context.context,
                                               read_only_flags, hostbuf=data[range_start:range_end, :]))
 
         data_buffers.extend(self._constant_buffers)
 
-        self._kernel.get_errors(self._queue, (int(nmr_problems), ), None, *data_buffers)
-        event = cl.enqueue_copy(self._queue, self._residuals[range_start:range_end, :], errors_buf, is_blocking=False)
+        self._kernel.get_errors(self._cl_context.queue, (int(nmr_problems), ), None, *data_buffers)
+        event = cl.enqueue_copy(self._cl_context.queue, self._residuals[range_start:range_end, :], errors_buf,
+                                is_blocking=False)
 
         return event
 

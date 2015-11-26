@@ -187,28 +187,28 @@ class AbstractParallelOptimizerWorker(Worker):
         read_write_flags = self._cl_environment.get_read_write_cl_mem_flags()
 
         data_buffers = []
-        parameters_buf = cl.Buffer(self._cl_environment.context, read_write_flags,
+        parameters_buf = cl.Buffer(self._cl_context.context, read_write_flags,
                                    hostbuf=self._starting_points[range_start:range_end, :])
         data_buffers.append(parameters_buf)
 
         for data in self._var_data_dict.values():
             if len(data.shape) < 2:
-                data_buffers.append(cl.Buffer(self._cl_environment.context, read_only_flags,
+                data_buffers.append(cl.Buffer(self._cl_context.context, read_only_flags,
                                               hostbuf=data[range_start:range_end]))
             else:
-                data_buffers.append(cl.Buffer(self._cl_environment.context, read_only_flags,
+                data_buffers.append(cl.Buffer(self._cl_context.context, read_only_flags,
                                               hostbuf=data[range_start:range_end, :]))
 
         data_buffers.extend(self._constant_buffers)
 
         if self._uses_random_numbers():
-            data_buffers.append(initialize_ranlux(self._cl_environment, self._queue, nmr_problems))
+            data_buffers.append(initialize_ranlux(self._cl_environment, self._cl_context, nmr_problems))
 
         local_range = None
         global_range = (nmr_problems, )
-        self._kernel.minimize(self._queue, global_range, local_range, *data_buffers)
+        self._kernel.minimize(self._cl_context.queue, global_range, local_range, *data_buffers)
 
-        event = cl.enqueue_copy(self._queue, self._starting_points[range_start:range_end, :], parameters_buf,
+        event = cl.enqueue_copy(self._cl_context.queue, self._starting_points[range_start:range_end, :], parameters_buf,
                                 is_blocking=False)
         return event
 

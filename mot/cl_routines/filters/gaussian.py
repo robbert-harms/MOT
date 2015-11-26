@@ -61,8 +61,8 @@ class _GaussianFilterWorker(AbstractFilterWorker):
 
         return_event = None
         for volume_name, volume in volumes_to_run:
-            volume_buf = cl.Buffer(self._cl_environment.context, read_write_flags, hostbuf=volume)
-            results_buf = cl.Buffer(self._cl_environment.context, read_write_flags,
+            volume_buf = cl.Buffer(self._cl_context.context, read_write_flags, hostbuf=volume)
+            results_buf = cl.Buffer(self._cl_context.context, read_write_flags,
                                     hostbuf=self._results_dict[volume_name])
 
             for dimension in range(len(self._volume_shape)):
@@ -70,12 +70,12 @@ class _GaussianFilterWorker(AbstractFilterWorker):
                 kernel_sigma = self._get_sigma_in_dimension(dimension)
 
                 filter_kernel = self._get_1d_gaussian_kernel_array(kernel_length, kernel_sigma)
-                filter_kernel_buf = cl.Buffer(self._cl_environment.context, read_only_flags, hostbuf=filter_kernel)
+                filter_kernel_buf = cl.Buffer(self._cl_context.context, read_only_flags, hostbuf=filter_kernel)
 
                 kernel_source = self._get_gaussian_kernel_source(dimension)
 
                 warnings.simplefilter("ignore")
-                kernel = cl.Program(self._cl_environment.context,
+                kernel = cl.Program(self._cl_context.context,
                                     kernel_source).build(' '.join(self._cl_environment.compile_flags))
 
                 if dimension % 2 == 0:
@@ -91,10 +91,10 @@ class _GaussianFilterWorker(AbstractFilterWorker):
                     buffers_list.extend([filter_kernel_buf, volume_buf])
                     results_buf_ptr = volume_buf
 
-                kernel.filter(self._queue, self._volume_shape, None, *buffers_list)
+                kernel.filter(self._cl_context.queue, self._volume_shape, None, *buffers_list)
 
                 if dimension == len(self._volume_shape) - 1:
-                    return_event = cl.enqueue_copy(self._queue, self._results_dict[volume_name],
+                    return_event = cl.enqueue_copy(self._cl_context.queue, self._results_dict[volume_name],
                                                    results_buf_ptr, is_blocking=False)
 
         return return_event

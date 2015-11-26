@@ -29,7 +29,7 @@ class Worker(object):
             cl_environment (CLEnvironment): The cl environment, can be used to determine the load
         """
         self._cl_environment = cl_environment
-        self._queue = self._cl_environment.get_new_queue()
+        self._cl_context = self._cl_environment.get_new_context()
         self._constant_buffers = []
 
     @property
@@ -70,7 +70,7 @@ class Worker(object):
         # todo remove this as soon as OpenCL 1.1 is no longer supported
         cl._DEFAULT_INCLUDE_OPTIONS = []
 
-        kernel = cl.Program(self._cl_environment.context,
+        kernel = cl.Program(self._cl_context.context,
                             kernel_source).build(' '.join(self._cl_environment.compile_flags))
         return kernel
 
@@ -94,7 +94,7 @@ class Worker(object):
         for data_dict in args:
             for data in data_dict.values():
                 if isinstance(data, np.ndarray):
-                    buffers.append(cl.Buffer(self._cl_environment.context,
+                    buffers.append(cl.Buffer(self._cl_context.context,
                                              self._cl_environment.get_read_only_cl_mem_flags(),
                                              hostbuf=data))
                 else:

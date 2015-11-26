@@ -88,24 +88,24 @@ class _CDPWorker(Worker):
         ep_end = range_end * self._nmr_estimated_params
 
         estimated_parameters_buf = cl.Buffer(
-            self._cl_environment.context, read_only_flags,
+            self._cl_context.context, read_only_flags,
             hostbuf=self._estimated_parameters[ep_start:ep_end])
 
-        results_buf = cl.Buffer(self._cl_environment.context, write_only_flags,
+        results_buf = cl.Buffer(self._cl_context.context, write_only_flags,
                                 hostbuf=self._results_list[range_start:range_end, :])
 
         data_buffers = [estimated_parameters_buf, results_buf]
 
         for data in self._var_data_dict.values():
             if len(data.shape) < 2:
-                data_buffers.append(cl.Buffer(self._cl_environment.context, read_only_flags,
+                data_buffers.append(cl.Buffer(self._cl_context.context, read_only_flags,
                                               hostbuf=data[range_start:range_end]))
             else:
-                data_buffers.append(cl.Buffer(self._cl_environment.context, read_only_flags,
+                data_buffers.append(cl.Buffer(self._cl_context.context, read_only_flags,
                                               hostbuf=data[range_start:range_end, :]))
 
-        self._kernel.transform(self._queue, (nmr_problems, ), None, *data_buffers)
-        event = cl.enqueue_copy(self._queue, self._results_list[range_start:range_end, :], results_buf,
+        self._kernel.transform(self._cl_context.queue, (nmr_problems, ), None, *data_buffers)
+        event = cl.enqueue_copy(self._cl_context.queue, self._results_list[range_start:range_end, :], results_buf,
                                 is_blocking=False)
         return event
 

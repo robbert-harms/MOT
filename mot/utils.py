@@ -449,12 +449,12 @@ def init_dict_tree():
     return defaultdict(init_dict_tree)
 
 
-def initialize_ranlux(cl_environment, queue, nmr_instances, ranlux=RanluxCL(), ranluxcl_lux=4, seed=1):
+def initialize_ranlux(cl_environment, cl_context, nmr_instances, ranlux=RanluxCL(), ranluxcl_lux=4, seed=1):
     """Create an opencl buffer with the initialized RanluxCLTab.
 
     Args:
         cl_environment (CLEnvironment): the environment to use
-        queue: the cl queue to use
+        cl_context: the context to use (containing the queue and actual context)
         nmr_instances (int): for how many thread instances we should initialize the ranlux cl tab.
         ranlux (RanluxCL): the ranlux cl function to use
         ranluxcl_lux (int): the luxury level of the ranluxcl generator. See the ranluxcl.cl source for details.
@@ -471,8 +471,8 @@ def initialize_ranlux(cl_environment, queue, nmr_instances, ranlux=RanluxCL(), r
         }
     '''
     read_write_flags = cl_environment.get_read_write_cl_mem_flags()
-    ranluxcltab_buffer = cl.Buffer(cl_environment.context, read_write_flags,
+    ranluxcltab_buffer = cl.Buffer(cl_context.context, read_write_flags,
                                    hostbuf=np.zeros((nmr_instances * 7, 1), dtype=cl_array.vec.float4, order='C'))
-    kernel = cl.Program(cl_environment.context, kernel_source).build(' '.join(cl_environment.compile_flags))
-    kernel.init(queue, (int(nmr_instances), ), None, ranluxcltab_buffer)
+    kernel = cl.Program(cl_context.context, kernel_source).build(' '.join(cl_environment.compile_flags))
+    kernel.init(cl_context.queue, (int(nmr_instances), ), None, ranluxcltab_buffer)
     return ranluxcltab_buffer
