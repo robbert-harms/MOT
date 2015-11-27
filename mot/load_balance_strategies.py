@@ -29,7 +29,7 @@ class Worker(object):
             cl_environment (CLEnvironment): The cl environment, can be used to determine the load
         """
         self._cl_environment = cl_environment
-        self._cl_context = self._cl_environment.get_new_context()
+        self._cl_run_context = self._cl_environment.get_new_context()
         self._constant_buffers = []
 
     @property
@@ -64,7 +64,7 @@ class Worker(object):
         """
         kernel_source = self._get_kernel_source()
         warnings.simplefilter("ignore")
-        kernel = cl.Program(self._cl_context.context,
+        kernel = cl.Program(self._cl_run_context.context,
                             kernel_source).build(' '.join(self._cl_environment.compile_flags))
         return kernel
 
@@ -88,7 +88,7 @@ class Worker(object):
         for data_dict in args:
             for data in data_dict.values():
                 if isinstance(data, np.ndarray):
-                    buffers.append(cl.Buffer(self._cl_context.context,
+                    buffers.append(cl.Buffer(self._cl_run_context.context,
                                              self._cl_environment.get_read_only_cl_mem_flags(),
                                              hostbuf=data))
                 else:

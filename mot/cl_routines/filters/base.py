@@ -106,7 +106,7 @@ class AbstractFilterWorker(Worker):
         else:
             self._use_mask = True
             self._mask = mask.astype(np.int8, order='C')
-            self._mask_buf = cl.Buffer(self._cl_context.context, self._cl_environment.get_read_only_cl_mem_flags(),
+            self._mask_buf = cl.Buffer(self._cl_run_context.context, self._cl_environment.get_read_only_cl_mem_flags(),
                                        hostbuf=self._mask)
 
         self._kernel = self._build_kernel()
@@ -119,16 +119,16 @@ class AbstractFilterWorker(Worker):
 
         event = None
         for key, value in volumes_to_run:
-            volume_buf = cl.Buffer(self._cl_context.context, read_only_flags, hostbuf=value)
-            results_buf = cl.Buffer(self._cl_context.context, write_only_flags, hostbuf=self._results_dict[key])
+            volume_buf = cl.Buffer(self._cl_run_context.context, read_only_flags, hostbuf=value)
+            results_buf = cl.Buffer(self._cl_run_context.context, write_only_flags, hostbuf=self._results_dict[key])
 
             buffers = [volume_buf]
             if self._use_mask:
                 buffers.append(self._mask_buf)
             buffers.append(results_buf)
 
-            self._kernel.filter(self._cl_context.queue, self._volume_shape, None, *buffers)
-            event = cl.enqueue_copy(self._cl_context.queue, self._results_dict[key], results_buf, is_blocking=False)
+            self._kernel.filter(self._cl_run_context.queue, self._volume_shape, None, *buffers)
+            event = cl.enqueue_copy(self._cl_run_context.queue, self._results_dict[key], results_buf, is_blocking=False)
 
         return event
 

@@ -73,23 +73,23 @@ class _EvaluateModelWorker(Worker):
         read_only_flags = self._cl_environment.get_read_only_cl_mem_flags()
         nmr_problems = range_end - range_start
 
-        evals_buf = cl.Buffer(self._cl_context.context, write_only_flags,
+        evals_buf = cl.Buffer(self._cl_run_context.context, write_only_flags,
                               hostbuf=self._evaluations[range_start:range_end, :])
 
-        data_buffers = [cl.Buffer(self._cl_context.context, read_only_flags,
+        data_buffers = [cl.Buffer(self._cl_run_context.context, read_only_flags,
                                   hostbuf=self._parameters[range_start:range_end, :]),
                         evals_buf]
         for data in self._var_data_dict.values():
             if len(data.shape) < 2:
-                data_buffers.append(cl.Buffer(self._cl_context.context, read_only_flags,
+                data_buffers.append(cl.Buffer(self._cl_run_context.context, read_only_flags,
                                               hostbuf=data[range_start:range_end]))
             else:
-                data_buffers.append(cl.Buffer(self._cl_context.context, read_only_flags,
+                data_buffers.append(cl.Buffer(self._cl_run_context.context, read_only_flags,
                                               hostbuf=data[range_start:range_end, :]))
         data_buffers.extend(self._constant_buffers)
 
-        self._kernel.get_errors(self._cl_context.queue, (int(nmr_problems), ), None, *data_buffers)
-        event = cl.enqueue_copy(self._cl_context.queue, self._evaluations[range_start:range_end, :], evals_buf,
+        self._kernel.get_errors(self._cl_run_context.queue, (int(nmr_problems), ), None, *data_buffers)
+        event = cl.enqueue_copy(self._cl_run_context.queue, self._evaluations[range_start:range_end, :], evals_buf,
                                 is_blocking=False)
 
         return event

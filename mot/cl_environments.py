@@ -26,7 +26,7 @@ class CLEnvironment(object):
         self._platform = platform
         self._device = device
         self.compile_flags = compile_flags
-        self._cl_context = CLContext(self)
+        self._cl_context = CLRunContext(self)
 
     def get_new_context(self):
         """Generate a new context using this environment.
@@ -173,7 +173,7 @@ class CLEnvironment(object):
         return s
 
 
-class CLContext(object):
+class CLRunContext(object):
 
     def __init__(self, cl_environment):
         """Context for single run use

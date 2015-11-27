@@ -124,15 +124,15 @@ class _GenerateRandomWorker(Worker):
 
         write_only_flags = self._cl_environment.get_write_only_cl_mem_flags()
 
-        ranluxcltab_buffer = initialize_ranlux(self._cl_environment, self._cl_context, nmr_problems, seed=self._seed)
-        samples_buf = cl.Buffer(self._cl_context.context, write_only_flags,
+        ranluxcltab_buffer = initialize_ranlux(self._cl_environment, self._cl_run_context, nmr_problems, seed=self._seed)
+        samples_buf = cl.Buffer(self._cl_run_context.context, write_only_flags,
                                 hostbuf=self._samples[range_start:range_end])
 
         global_range = (int(nmr_problems), )
         local_range = None
 
-        self._kernel.sample(self._cl_context.queue, global_range, local_range, ranluxcltab_buffer, samples_buf)
-        event = cl.enqueue_copy(self._cl_context.queue, self._samples[range_start:range_end], samples_buf,
+        self._kernel.sample(self._cl_run_context.queue, global_range, local_range, ranluxcltab_buffer, samples_buf)
+        event = cl.enqueue_copy(self._cl_run_context.queue, self._samples[range_start:range_end], samples_buf,
                                 is_blocking=False)
         return event
 

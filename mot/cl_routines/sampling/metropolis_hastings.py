@@ -135,14 +135,14 @@ class _MHWorker(Worker):
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
-        ranluxcltab_buffer = initialize_ranlux(self._cl_environment, self._cl_context, nmr_problems)
+        ranluxcltab_buffer = initialize_ranlux(self._cl_environment, self._cl_run_context, nmr_problems)
 
         read_only_flags = self._cl_environment.get_read_only_cl_mem_flags()
         write_only_flags = self._cl_environment.get_write_only_cl_mem_flags()
 
-        data_buffers = [cl.Buffer(self._cl_context.context, read_only_flags,
+        data_buffers = [cl.Buffer(self._cl_run_context.context, read_only_flags,
                                   hostbuf=self._parameters[range_start:range_end, :])]
-        samples_buf = cl.Buffer(self._cl_context.context, write_only_flags,
+        samples_buf = cl.Buffer(self._cl_run_context.context, write_only_flags,
                                 hostbuf=self._samples[range_start:range_end, :])
         data_buffers.append(samples_buf)
 
@@ -157,10 +157,10 @@ class _MHWorker(Worker):
 
         for data in self._var_data_dict.values():
             if len(data.shape) < 2:
-                data_buffers.append(cl.Buffer(self._cl_context.context,
+                data_buffers.append(cl.Buffer(self._cl_run_context.context,
                                               read_only_flags, hostbuf=data[range_start:range_end]))
             else:
-                data_buffers.append(cl.Buffer(self._cl_context.context, read_only_flags,
+                data_buffers.append(cl.Buffer(self._cl_run_context.context, read_only_flags,
                                               hostbuf=data[range_start:range_end, :]))
 
         data_buffers.extend(self._constant_buffers)
@@ -168,8 +168,8 @@ class _MHWorker(Worker):
         global_range = (int(nmr_problems), )
         local_range = None
 
-        event = self._kernel.sample(self._cl_context.queue, global_range, local_range, *data_buffers)
-        event = cl.enqueue_copy(self._cl_context.queue, self._samples[range_start:range_end, :],
+        event = self._kernel.sample(self._cl_run_context.queue, global_range, local_range, *data_buffers)
+        event = cl.enqueue_copy(self._cl_run_context.queue, self._samples[range_start:range_end, :],
                                 samples_buf, wait_for=(event,), is_blocking=False)
         return event
 

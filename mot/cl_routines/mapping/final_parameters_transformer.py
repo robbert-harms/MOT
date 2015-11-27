@@ -70,20 +70,20 @@ class _FPTWorker(Worker):
         nmr_problems = range_end - range_start
 
         data_buffers = []
-        parameters_buf = cl.Buffer(self._cl_context.context, read_write_flags,
+        parameters_buf = cl.Buffer(self._cl_run_context.context, read_write_flags,
                                    hostbuf=self._parameters[range_start:range_end, :])
         data_buffers.append(parameters_buf)
         for data in self._var_data_dict.values():
             if len(data.shape) < 2:
-                data_buffers.append(cl.Buffer(self._cl_context.context, read_only_flags,
+                data_buffers.append(cl.Buffer(self._cl_run_context.context, read_only_flags,
                                               hostbuf=data[range_start:range_end]))
             else:
-                data_buffers.append(cl.Buffer(self._cl_context.context, read_only_flags,
+                data_buffers.append(cl.Buffer(self._cl_run_context.context, read_only_flags,
                                               hostbuf=data[range_start:range_end, :]))
         data_buffers.extend(self._constant_buffers)
 
-        self._kernel.transform(self._cl_context.queue, (int(nmr_problems), ), None, *data_buffers)
-        event = cl.enqueue_copy(self._cl_context.queue, self._parameters[range_start:range_end, :],
+        self._kernel.transform(self._cl_run_context.queue, (int(nmr_problems), ), None, *data_buffers)
+        event = cl.enqueue_copy(self._cl_run_context.queue, self._parameters[range_start:range_end, :],
                                 parameters_buf, is_blocking=False)
         return event
 
