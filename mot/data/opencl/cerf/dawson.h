@@ -12,6 +12,6 @@
  /**
  * Calculate the Dawson's integral for a real argument.
  */
-MOT_FLOAT_TYPE dawson(MOT_FLOAT_TYPE x);
+double dawson(double x);
 
 #endif // CERF_DAWSON_H

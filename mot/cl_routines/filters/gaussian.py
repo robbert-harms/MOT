@@ -3,7 +3,7 @@ import warnings
 from .base import AbstractFilter, AbstractFilterWorker
 import numpy as np
 import pyopencl as cl
-from ...utils import get_cl_pragma_double, get_float_type_def
+from ...utils import get_float_type_def
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-04-26"
@@ -107,7 +107,7 @@ class _GaussianFilterWorker(AbstractFilterWorker):
 
         working_dim = 'dim' + str(dimension)
 
-        kernel_source = get_cl_pragma_double()
+        kernel_source = ''
         kernel_source += get_float_type_def(self._double_precision)
         kernel_source += self._get_ks_sub2ind_func(self._volume_shape)
         kernel_source += '''

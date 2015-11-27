@@ -1,6 +1,6 @@
 import pyopencl as cl
 import numpy as np
-from ...utils import get_cl_pragma_double, ParameterCLCodeGenerator, get_float_type_def
+from ...utils import ParameterCLCodeGenerator, get_float_type_def
 from ...cl_routines.base import AbstractCLRoutine
 from ...load_balance_strategies import Worker
 
@@ -105,7 +105,7 @@ class _ResidualCalculatorWorker(Worker):
         kernel_source = '''
             #define NMR_INST_PER_PROBLEM ''' + str(nmr_inst_per_problem) + '''
         '''
-        kernel_source += get_cl_pragma_double()
+
         kernel_source += get_float_type_def(self._double_precision)
         kernel_source += param_code_gen.get_data_struct()
         kernel_source += observation_func

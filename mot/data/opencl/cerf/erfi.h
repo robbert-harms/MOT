@@ -12,7 +12,7 @@
 /**
  * Calculate the imaginary error function for a real argument (special case)
  */
-MOT_FLOAT_TYPE erfi(MOT_FLOAT_TYPE x);
+double erfi(double x);
 
 
 #endif //CERF_ERFI_H

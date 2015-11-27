@@ -9,6 +9,6 @@
  * Email = robbert.harms@maastrichtuniversity.nl
  */
 
-MOT_FLOAT_TYPE im_w_of_x(MOT_FLOAT_TYPE x);
+double im_w_of_x(double x);
 
  #endif // CERF_IM_W_OF_X_H

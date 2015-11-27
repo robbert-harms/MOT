@@ -2,7 +2,7 @@ import logging
 import pyopencl as cl
 from mot.cl_functions import RanluxCL
 from ...utils import results_to_dict, ParameterCLCodeGenerator, \
-    get_cl_pragma_double, get_float_type_def, initialize_ranlux
+    get_float_type_def, initialize_ranlux
 from ...cl_routines.base import AbstractCLRoutine
 from ...load_balance_strategies import Worker
 from ...cl_routines.mapping.final_parameters_transformer import FinalParametersTransformer
@@ -244,7 +244,6 @@ class AbstractParallelOptimizerWorker(Worker):
         optimizer_call_args = 'x, (const void*) &data'
 
         kernel_source = ''
-        kernel_source += get_cl_pragma_double()
         kernel_source += get_float_type_def(self._double_precision)
         kernel_source += param_code_gen.get_data_struct()
 

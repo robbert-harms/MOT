@@ -211,23 +211,6 @@ def _numpy_to_cl_dtype_names(cl_data_type_name):
     return None
 
 
-def get_cl_pragma_double():
-    """Get the pragma definitions for enabling the double floating type on older hardware.
-
-    This can be removed on the moment OpenCL 1.1 is no longer in use.
-
-    Returns:
-        str: the pragma definitions for the double floating type. Include this on top of your your CL kernel.
-    """
-    return '''
-        #if defined(cl_khr_fp64)
-        #pragma OPENCL EXTENSION cl_khr_fp64 : enable
-        #elif defined(cl_amd_fp64)
-        #pragma OPENCL EXTENSION cl_amd_fp64 : enable
-        #endif
-    '''
-
-
 def get_float_type_def(double_precision):
     """Get the model floating point type definition.
 

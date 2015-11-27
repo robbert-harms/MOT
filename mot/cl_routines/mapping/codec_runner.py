@@ -1,7 +1,7 @@
 import logging
 import pyopencl as cl
 import numpy as np
-from ...utils import get_cl_pragma_double, get_float_type_def
+from ...utils import get_float_type_def
 from ...cl_routines.base import AbstractCLRoutine
 from ...load_balance_strategies import Worker
 
@@ -105,7 +105,7 @@ class _CodecWorker(Worker):
         return event
 
     def _get_kernel_source(self):
-        kernel_source = get_cl_pragma_double()
+        kernel_source = ''
         kernel_source += get_float_type_def(self._double_precision)
         kernel_source += self._cl_func
         kernel_source += '''

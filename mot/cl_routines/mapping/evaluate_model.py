@@ -1,6 +1,6 @@
 import pyopencl as cl
 import numpy as np
-from ...utils import get_cl_pragma_double, ParameterCLCodeGenerator, get_float_type_def
+from ...utils import ParameterCLCodeGenerator, get_float_type_def
 from ...cl_routines.base import AbstractCLRoutine
 from ...load_balance_strategies import Worker
 
@@ -104,7 +104,7 @@ class _EvaluateModelWorker(Worker):
         kernel_source = '''
             #define NMR_INST_PER_PROBLEM ''' + str(self._model.get_nmr_inst_per_problem()) + '''
         '''
-        kernel_source += get_cl_pragma_double()
+        kernel_source += ''
         kernel_source += get_float_type_def(self._model.double_precision)
         kernel_source += param_code_gen.get_data_struct()
         kernel_source += self._model.get_model_eval_function('evaluateModel')

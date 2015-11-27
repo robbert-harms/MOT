@@ -24,12 +24,12 @@
 #define M_SQRTPI 1.7724538509055160
 #endif
 
-MOT_FLOAT_TYPE w_im_y100(MOT_FLOAT_TYPE y100, MOT_FLOAT_TYPE x);
+double w_im_y100(double y100, double x);
 
 /**
  * Main function from libcerf
  */
-MOT_FLOAT_TYPE im_w_of_x(MOT_FLOAT_TYPE x){
+double im_w_of_x(double x){
     // Steven G. Johnson, October 2012.
 
     // Uses methods similar to the erfcx calculation:
@@ -63,7 +63,7 @@ MOT_FLOAT_TYPE im_w_of_x(MOT_FLOAT_TYPE x){
 /******************************************************************************/
 /* Lookup-table for Chebyshev polynomials for smaller |x|                     */
 /******************************************************************************/
-MOT_FLOAT_TYPE w_im_y100(MOT_FLOAT_TYPE y100, MOT_FLOAT_TYPE x)
+double w_im_y100(double y100, double x)
 {
 
     // Steven G. Johnson, October 2012.
@@ -77,7 +77,7 @@ MOT_FLOAT_TYPE w_im_y100(MOT_FLOAT_TYPE y100, MOT_FLOAT_TYPE x)
     // degree (about 1/30) compared to fitting the whole [0,1] interval
     // with a single polynomial.
 
-    MOT_FLOAT_TYPE t;
+    double t;
 
     switch ((int) y100) {
     case 0: {

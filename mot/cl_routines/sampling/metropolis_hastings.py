@@ -1,7 +1,7 @@
 import pyopencl as cl
 import numpy as np
 from ...cl_functions import RanluxCL
-from ...utils import get_cl_pragma_double, results_to_dict, \
+from ...utils import results_to_dict, \
     ParameterCLCodeGenerator, initialize_ranlux, get_float_type_def
 from ...load_balance_strategies import Worker
 from ...cl_routines.sampling.base import AbstractSampler
@@ -197,7 +197,6 @@ class _MHWorker(Worker):
         kernel_source = '''
             #define NMR_INST_PER_PROBLEM ''' + str(self._model.get_nmr_inst_per_problem()) + '''
         '''
-        kernel_source += get_cl_pragma_double()
         kernel_source += get_float_type_def(self._model.double_precision)
         kernel_source += param_code_gen.get_data_struct()
         kernel_source += rng_code.get_cl_header()

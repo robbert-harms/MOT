@@ -12,7 +12,7 @@
 /**
  * Calculate the imaginary error function for a real argument (special case)
  */
-MOT_FLOAT_TYPE erfi(MOT_FLOAT_TYPE x){
+double erfi(double x){
     // Compute erfi(x) = -i erf(ix),
     // the imaginary error function.
     return x*x > 720 ? (x > 0 ? INFINITY : -INFINITY) : exp(x*x) * im_w_of_x(x);

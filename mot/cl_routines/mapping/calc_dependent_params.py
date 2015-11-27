@@ -1,6 +1,5 @@
 import pyopencl as cl
-from ...utils import get_cl_pragma_double, \
-    results_to_dict, ParameterCLCodeGenerator, get_float_type_def
+from ...utils import results_to_dict, ParameterCLCodeGenerator, get_float_type_def
 from ...cl_routines.base import AbstractCLRoutine
 from ...load_balance_strategies import Worker
 import numpy as np
@@ -121,7 +120,7 @@ class _CDPWorker(Worker):
         kernel_param_names = ['global MOT_FLOAT_TYPE* params', 'global MOT_FLOAT_TYPE* results']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
-        kernel_source = get_cl_pragma_double()
+        kernel_source = ''
         kernel_source += get_float_type_def(self._double_precision)
         kernel_source += param_code_gen.get_data_struct()
         kernel_source += '''
