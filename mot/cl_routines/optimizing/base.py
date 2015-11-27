@@ -178,39 +178,34 @@ class AbstractParallelOptimizerWorker(Worker):
         self._kernel = self._build_kernel()
 
     def calculate(self, range_start, range_end):
-        range_start = int(range_start)
-        range_end = int(range_end)
+        nmr_problems = range_end - range_start
+        all_buffers, parameters_buffer = self._create_buffers(range_start, range_end)
 
+        self._kernel.minimize(self._cl_run_context.queue, (nmr_problems, ), None, *all_buffers)
+
+        event = cl.enqueue_copy(self._cl_run_context.queue, self._starting_points[range_start:range_end, :],
+                                parameters_buffer, is_blocking=False)
+        return event
+
+    def _create_buffers(self, range_start, range_end):
         nmr_problems = range_end - range_start
 
         read_only_flags = self._cl_environment.get_read_only_cl_mem_flags()
         read_write_flags = self._cl_environment.get_read_write_cl_mem_flags()
 
-        data_buffers = []
-        parameters_buf = cl.Buffer(self._cl_run_context.context, read_write_flags,
-                                   hostbuf=self._starting_points[range_start:range_end, :])
-        data_buffers.append(parameters_buf)
-
+        all_buffers = []
+        parameters_buffer = cl.Buffer(self._cl_run_context.context, read_write_flags,
+                                      hostbuf=self._starting_points[range_start:range_end, :])
+        all_buffers.append(parameters_buffer)
         for data in self._var_data_dict.values():
-            if len(data.shape) < 2:
-                data_buffers.append(cl.Buffer(self._cl_run_context.context, read_only_flags,
-                                              hostbuf=data[range_start:range_end]))
-            else:
-                data_buffers.append(cl.Buffer(self._cl_run_context.context, read_only_flags,
-                                              hostbuf=data[range_start:range_end, :]))
-
-        data_buffers.extend(self._constant_buffers)
+            all_buffers.append(cl.Buffer(self._cl_run_context.context, read_only_flags,
+                                         hostbuf=data[range_start:range_end, ...]))
+        all_buffers.extend(self._constant_buffers)
 
         if self._uses_random_numbers():
-            data_buffers.append(initialize_ranlux(self._cl_environment, self._cl_run_context, nmr_problems))
+            all_buffers.append(initialize_ranlux(self._cl_environment, self._cl_run_context, nmr_problems))
 
-        local_range = None
-        global_range = (nmr_problems, )
-        self._kernel.minimize(self._cl_run_context.queue, global_range, local_range, *data_buffers)
-
-        event = cl.enqueue_copy(self._cl_run_context.queue, self._starting_points[range_start:range_end, :], parameters_buf,
-                                is_blocking=False)
-        return event
+        return all_buffers, parameters_buffer
 
     def _get_kernel_source(self):
         """Generate the kernel source for this optimization routine.

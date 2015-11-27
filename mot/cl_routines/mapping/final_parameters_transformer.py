@@ -65,27 +65,32 @@ class _FPTWorker(Worker):
         self._kernel = self._build_kernel()
 
     def calculate(self, range_start, range_end):
-        read_write_flags = self._cl_environment.get_read_write_cl_mem_flags()
-        read_only_flags = self._cl_environment.get_read_only_cl_mem_flags()
         nmr_problems = range_end - range_start
 
-        data_buffers = []
-        parameters_buf = cl.Buffer(self._cl_run_context.context, read_write_flags,
-                                   hostbuf=self._parameters[range_start:range_end, :])
-        data_buffers.append(parameters_buf)
+        all_buffers, parameters_buffer = self._create_buffers(range_start, range_end)
+
+        self._kernel.transform(self._cl_run_context.queue, (int(nmr_problems), ), None, *all_buffers)
+        event = cl.enqueue_copy(self._cl_run_context.queue, self._parameters[range_start:range_end, :],
+                                parameters_buffer, is_blocking=False)
+        return event
+
+    def _create_buffers(self, range_start, range_end):
+        read_write_flags = self._cl_environment.get_read_write_cl_mem_flags()
+        read_only_flags = self._cl_environment.get_read_only_cl_mem_flags()
+
+        all_buffers = []
+        parameters_buffer = cl.Buffer(self._cl_run_context.context, read_write_flags,
+                                      hostbuf=self._parameters[range_start:range_end, :])
+        all_buffers.append(parameters_buffer)
         for data in self._var_data_dict.values():
             if len(data.shape) < 2:
-                data_buffers.append(cl.Buffer(self._cl_run_context.context, read_only_flags,
-                                              hostbuf=data[range_start:range_end]))
+                all_buffers.append(cl.Buffer(self._cl_run_context.context, read_only_flags,
+                                             hostbuf=data[range_start:range_end]))
             else:
-                data_buffers.append(cl.Buffer(self._cl_run_context.context, read_only_flags,
-                                              hostbuf=data[range_start:range_end, :]))
-        data_buffers.extend(self._constant_buffers)
-
-        self._kernel.transform(self._cl_run_context.queue, (int(nmr_problems), ), None, *data_buffers)
-        event = cl.enqueue_copy(self._cl_run_context.queue, self._parameters[range_start:range_end, :],
-                                parameters_buf, is_blocking=False)
-        return event
+                all_buffers.append(cl.Buffer(self._cl_run_context.context, read_only_flags,
+                                             hostbuf=data[range_start:range_end, :]))
+        all_buffers.extend(self._constant_buffers)
+        return all_buffers, parameters_buffer
 
     def _get_kernel_source(self):
         param_code_gen = ParameterCLCodeGenerator(self._cl_environment.device,

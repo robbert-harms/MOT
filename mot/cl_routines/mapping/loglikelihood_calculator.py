@@ -61,32 +61,33 @@ class _LogLikelihoodCalculatorWorker(Worker):
         self._kernel = self._build_kernel()
 
     def calculate(self, range_start, range_end):
-        write_only_flags = self._cl_environment.get_write_only_cl_mem_flags()
-        read_only_flags = self._cl_environment.get_read_only_cl_mem_flags()
         nmr_problems = range_end - range_start
 
-        likelihoods_buf = cl.Buffer(self._cl_run_context.context,
-                                    write_only_flags, hostbuf=self._log_likelihoods[range_start:range_end])
+        all_buffers, likelihoods_buffer = self._create_buffers(range_start, range_end)
 
-        data_buffers = [cl.Buffer(self._cl_run_context.context,
-                                  read_only_flags, hostbuf=self._parameters[range_start:range_end, :]),
-                        likelihoods_buf]
-
-        for data in self._var_data_dict.values():
-            if len(data.shape) < 2:
-                data_buffers.append(cl.Buffer(self._cl_run_context.context,
-                                              read_only_flags, hostbuf=data[range_start:range_end]))
-            else:
-                data_buffers.append(cl.Buffer(self._cl_run_context.context,
-                                              read_only_flags, hostbuf=data[range_start:range_end, :]))
-
-        data_buffers.extend(self._constant_buffers)
-
-        self._kernel.run_kernel(self._cl_run_context.queue, (int(nmr_problems), ), None, *data_buffers)
+        self._kernel.run_kernel(self._cl_run_context.queue, (int(nmr_problems), ), None, *all_buffers)
         event = cl.enqueue_copy(self._cl_run_context.queue, self._log_likelihoods[range_start:range_end],
-                                likelihoods_buf, is_blocking=False)
+                                likelihoods_buffer, is_blocking=False)
 
         return event
+
+    def _create_buffers(self, range_start, range_end):
+        write_only_flags = self._cl_environment.get_write_only_cl_mem_flags()
+        read_only_flags = self._cl_environment.get_read_only_cl_mem_flags()
+
+        likelihoods_buffer = cl.Buffer(self._cl_run_context.context,
+                                       write_only_flags, hostbuf=self._log_likelihoods[range_start:range_end])
+
+        all_buffers = [cl.Buffer(self._cl_run_context.context,
+                                 read_only_flags, hostbuf=self._parameters[range_start:range_end, :]),
+                       likelihoods_buffer]
+
+        for data in self._var_data_dict.values():
+            all_buffers.append(cl.Buffer(self._cl_run_context.context,
+                                         read_only_flags, hostbuf=data[range_start:range_end, ...]))
+
+        all_buffers.extend(self._constant_buffers)
+        return all_buffers, likelihoods_buffer
 
     def _get_kernel_source(self):
         cl_func = self._model.get_log_likelihood_function('getLogLikelihood')

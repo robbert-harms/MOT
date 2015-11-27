@@ -263,7 +263,7 @@ class LoadBalanceStrategy(object):
             raises a memory error.
         """
         try:
-            return worker.calculate(range_start, range_end)
+            return worker.calculate(int(range_start), int(range_end))
         except cl.MemoryError:
             self._logger.debug('We ran out of memory, halving the dataset and trying again.')
             half_range_length = int(math.ceil((range_end - range_start) / 2.0))
