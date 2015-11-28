@@ -7,7 +7,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class AbstractCLRoutine(object):
 
-    def __init__(self, cl_environments, load_balancer):
+    def __init__(self, cl_environments, load_balancer, **kwargs):
         """This class serves as an abstract basis for all CL routine classes.
 
         Args:

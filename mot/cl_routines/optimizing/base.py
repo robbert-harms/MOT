@@ -37,7 +37,7 @@ class AbstractOptimizer(AbstractCLRoutine):
         self._use_param_codec = use_param_codec
         self.patience = patience or 1
 
-        super(AbstractOptimizer, self).__init__(cl_environments, load_balancer)
+        super(AbstractOptimizer, self).__init__(cl_environments, load_balancer, **kwargs)
         self._optimizer_options = optimizer_options or {}
 
     @property
@@ -68,8 +68,9 @@ class AbstractOptimizer(AbstractCLRoutine):
                 with other outputs. If false, only return the results per problem instance.
 
         Returns:
-            Either only the results per problem, or a list: (results, {}) where the dictionary contains all
-            other parameters (named) that can be returned. Depends on full_output argument.
+            Either only the results per problem, or a list: (results, {}), depending on if full_output is set.
+            Both the results dictionary as well as the extra output  dictionary should return results per
+            problem instance.
         """
 
 
