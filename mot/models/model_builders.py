@@ -8,7 +8,7 @@ from ..cl_routines.mapping.calc_dependent_params import CalculateDependentParame
 from ..utils import set_cl_compatible_data_type, TopologicalSort
 from ..model_building.parameter_functions.codecs import CodecBuilder
 from ..model_building.parameter_functions.dependencies import SimpleAssignment
-from ..models.interfaces import OptimizeModelInterface, SampleModelInterface
+from ..models.models import OptimizeModelInterface, SampleModelInterface
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-03-14"

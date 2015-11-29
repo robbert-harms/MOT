@@ -1,6 +1,6 @@
-from .base import ModelFunction, FreeParameter
-from .model_building.parameter_functions.transformations import CosSqrClampTransform
-from .base import CLDataType
+from mot.base import ModelFunction, FreeParameter
+from mot.model_building.parameter_functions.transformations import CosSqrClampTransform
+from mot.base import CLDataType
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-08-05"

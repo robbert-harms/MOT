@@ -1,4 +1,4 @@
-from .interfaces import OptimizeModelInterface
+from .models import OptimizeModelInterface
 import numpy as np
 
 __author__ = 'Robbert Harms'
