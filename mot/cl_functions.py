@@ -2,9 +2,8 @@ import os
 import numpy as np
 from pkg_resources import resource_filename
 from .base import LibraryFunction, LibraryParameter, FreeParameter, CLDataType, ModelFunction
-from .parameter_functions.proposals import GaussianProposal
-from .parameter_functions.transformations import ClampTransform, CosSqrTransform
-
+from .model_building.parameter_functions.proposals import GaussianProposal
+from .model_building.parameter_functions.transformations import ClampTransform, CosSqrTransform
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-05-12"
@@ -59,7 +58,6 @@ class LMMin(LibraryFunction):
             resource_filename('mot', 'data/opencl/lmmin.pcl'),
             params,
             [])
-
 
 
 class PrAxisFunc(LibraryFunction):

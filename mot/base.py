@@ -1,11 +1,10 @@
 import numbers
 import os
-import re
-from .parameter_functions.priors import UniformWithinBoundsPrior
-from .parameter_functions.proposals import GaussianProposal
-from .parameter_functions.sample_statistics import GaussianPSS
-from .parameter_functions.transformations import IdentityTransform
 import numpy as np
+from .model_building.parameter_functions.priors import UniformWithinBoundsPrior
+from .model_building.parameter_functions.proposals import GaussianProposal
+from .model_building.parameter_functions.sample_statistics import GaussianPSS
+from .model_building.parameter_functions.transformations import IdentityTransform
 
 __author__ = 'Robbert Harms'
 __date__ = "2015-03-21"

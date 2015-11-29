@@ -1,5 +1,4 @@
 from six import string_types
-from .base import ModelFunction
 
 __author__ = 'Robbert Harms'
 __date__ = "2015-03-26"

@@ -1,6 +1,5 @@
-import math
 from .base import ModelFunction, FreeParameter
-from .parameter_functions.transformations import CosSqrClampTransform
+from .model_building.parameter_functions.transformations import CosSqrClampTransform
 from .base import CLDataType
 
 
