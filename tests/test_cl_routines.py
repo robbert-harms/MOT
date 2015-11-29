@@ -20,7 +20,7 @@ from mot.cl_routines.optimizing.powell import Powell
 from mot.cl_routines.filters.gaussian import GaussianFilter
 from mot.cl_routines.filters.mean import MeanFilter
 from mot.cl_routines.filters.median import MedianFilter
-from mot.models.examples import Rosenbrock, MatlabLSQNonlinExample
+from mot.model_building.models_examples import Rosenbrock, MatlabLSQNonlinExample
 
 
 class CLRoutineTestCase(unittest.TestCase):

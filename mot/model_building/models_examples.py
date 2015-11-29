@@ -1,5 +1,6 @@
-from .models import OptimizeModelInterface
 import numpy as np
+
+from mot.models import OptimizeModelInterface
 
 __author__ = 'Robbert Harms'
 __date__ = "2015-04-02"

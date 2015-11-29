@@ -2,13 +2,13 @@ import numbers
 
 import numpy as np
 
-from ..base import ProtocolParameter, ModelDataParameter, FreeParameter, CLDataType
-from .. import runtime_configuration
-from ..cl_routines.mapping.calc_dependent_params import CalculateDependentParameters
-from ..utils import set_cl_compatible_data_type, TopologicalSort
-from ..model_building.parameter_functions.codecs import CodecBuilder
-from ..model_building.parameter_functions.dependencies import SimpleAssignment
-from ..models.models import OptimizeModelInterface, SampleModelInterface
+from mot.base import ProtocolParameter, ModelDataParameter, FreeParameter, CLDataType
+from mot import runtime_configuration
+from mot.cl_routines.mapping.calc_dependent_params import CalculateDependentParameters
+from mot.utils import set_cl_compatible_data_type, TopologicalSort
+from mot.model_building.parameter_functions.codecs import CodecBuilder
+from mot.model_building.parameter_functions.dependencies import SimpleAssignment
+from mot.models import OptimizeModelInterface, SampleModelInterface
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-03-14"
