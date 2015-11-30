@@ -1,7 +1,5 @@
 import numbers
-
 import numpy as np
-
 from mot.base import ProtocolParameter, ModelDataParameter, FreeParameter, CLDataType
 from mot import runtime_configuration
 from mot.cl_routines.mapping.calc_dependent_params import CalculateDependentParameters
@@ -28,6 +26,11 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             evaluation_model (EvaluationModel): the evaluation model to use for the resulting complete model
             signal_noise_model (SignalNoiseModel): the optional signal noise model to use to noise the model prediction
             problem_data (ProblemData): the problem data object
+
+        Attributes;
+            problems_to_analyze (list): the list with problems we want to analyze. Suppose we have a few thousands
+                problems defined in this model, but we want to run the optimization on a few problems first. By setting
+                this attribute to a list of problems you wish to analyze, only those problems are analyzed.
         """
         super(OptimizeModelBuilder, self).__init__()
         self._name = name
@@ -38,6 +41,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         self._parameters_dot_to_bar = {}
         self._dependency_store = DependencyStore()
         self._post_optimization_modifiers = []
+        self.problems_to_analyze = None
 
         self._problem_data = None
         if problem_data:
@@ -47,7 +51,6 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             self._parameters_dot_to_bar.update({m.name + '.' + p.name: m.name + '_' + p.name})
 
         self._check_for_double_model_names()
-
         self._set_default_dependencies()
 
     @property
@@ -204,10 +207,19 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                          isinstance(p, ProtocolParameter)]))
 
     def get_problems_var_data(self):
-        """See super class OptimizeModelInterface for details"""
+        """See super class OptimizeModelInterface for details
+
+        When overriding this function, please note that it should adhere to the attribute problems_to_analyze.
+
+        """
         var_data_dict = {'observations': set_cl_compatible_data_type(
             self._problem_data.observations, CLDataType.from_string('MOT_FLOAT_TYPE*'), self._double_precision)}
         var_data_dict.update(self._get_fixed_parameters_as_var_data())
+
+        if self.problems_to_analyze is not None:
+            for key in var_data_dict.keys():
+                var_data_dict[key] = var_data_dict[key][self.problems_to_analyze, ...]
+
         return var_data_dict
 
     def get_optimization_output_param_names(self):
@@ -225,7 +237,9 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         return [m.name + '.' + p.name for m, p in self._get_estimable_parameters_list()]
 
     def get_nmr_problems(self):
-        return self._problem_data.observations.shape[0]
+        if self.problems_to_analyze is None:
+            return self._problem_data.observations.shape[0]
+        return len(self.problems_to_analyze)
 
     def get_nmr_inst_per_problem(self):
         return self._problem_data.observations.shape[1]
@@ -256,25 +270,30 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         return fixed_data_dict
 
     def get_initial_parameters(self, results_dict=None):
+        """When overriding this function, please note that it should adhere to the attribute problems_to_analyze."""
         starting_points = []
         for m, p in self._get_estimable_parameters_list():
             if results_dict and (m.name + '.' + p.name) in results_dict:
                 starting_points.append(results_dict[m.name + '.' + p.name])
             elif isinstance(p.value, numbers.Number):
-                starting_points.append(np.tile(np.array(p.value), (self.get_nmr_problems(), 1)))
+                starting_points.append(np.full((self.get_nmr_problems(), 1), p.value))
             else:
                 if len(p.value.shape) < 2:
-                    starting_points.append(np.transpose(np.asarray([p.value])))
+                    value = np.transpose(np.asarray([p.value]))
                 elif p.value.shape[1] > p.value.shape[0]:
-                    starting_points.append(np.transpose(p.value))
+                    value = np.transpose(p.value)
                 else:
-                    starting_points.append(p.value)
+                    value = p.value
+
+                if self.problems_to_analyze is not None:
+                    starting_points.append(value[self.problems_to_analyze, ...])
 
         starting_points = [np.transpose(np.array([s])) if len(s.shape) < 2 else s for s in starting_points]
 
         np_dtype = np.float32
         if self.double_precision:
             np_dtype = np.float64
+
         return np.concatenate(starting_points, axis=1).astype(np_dtype, order='C', copy=False)
 
     def get_lower_bounds(self):
