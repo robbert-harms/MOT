@@ -1,3 +1,5 @@
+from contextlib import contextmanager
+import copy
 from .cl_environments import CLEnvironmentFactory
 from .load_balance_strategies import PreferGPU
 
@@ -25,3 +27,18 @@ runtime_config = {
     'cl_environments': CLEnvironmentFactory.all_devices(),
     'load_balancer': PreferGPU(),
 }
+
+@contextmanager
+def runtime_config_context(cl_environments=None, load_balancer=None):
+    old_config = {k: v for k, v in runtime_config.items()}
+
+    if cl_environments:
+        runtime_config['cl_environments'] = cl_environments
+
+    if load_balancer:
+        runtime_config['load_balancer'] = load_balancer
+
+    yield
+
+    for key, value in old_config.items():
+        runtime_config[key] = value
