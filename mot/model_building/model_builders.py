@@ -285,7 +285,9 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 else:
                     value = p.value
 
-                if self.problems_to_analyze is not None:
+                if self.problems_to_analyze is None:
+                    starting_points.append(value)
+                else:
                     starting_points.append(value[self.problems_to_analyze, ...])
 
         starting_points = [np.transpose(np.array([s])) if len(s.shape) < 2 else s for s in starting_points]
