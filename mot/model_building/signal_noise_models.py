@@ -1,6 +1,6 @@
 from mot.base import ModelFunction, FreeParameter
 from mot.model_building.parameter_functions.transformations import CosSqrClampTransform
-from mot.base import CLDataType
+from mot.base import DataType
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-08-05"
@@ -43,7 +43,7 @@ class JohnsonSignalNoise(SignalNoiseModel):
         super(JohnsonSignalNoise, self).__init__(
             'JohnsonNoise',
             'johnsonNoiseModel',
-            (FreeParameter(CLDataType.from_string('MOT_FLOAT_TYPE'), 'eta', False, 0.1, 0, 1e6,
+            (FreeParameter(DataType.from_string('MOT_FLOAT_TYPE'), 'eta', False, 0.1, 0, 1e6,
                            parameter_transform=CosSqrClampTransform()),), ())
 
     def get_signal_function(self, fname='signalNoiseModel'):

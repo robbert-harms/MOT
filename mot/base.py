@@ -13,7 +13,7 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class CLDataType(object):
+class DataType(object):
 
     def __init__(self, cl_raw_type, is_pointer_type=False, vector_length=None):
         """Create a new CL data type container.
@@ -40,13 +40,11 @@ class CLDataType(object):
         if vector_length == '':
             vector_length = None
         is_pointer = ('*' in cl_type_str)
-        return CLDataType(raw_type, is_pointer_type=is_pointer, vector_length=vector_length)
+        return DataType(raw_type, is_pointer_type=is_pointer, vector_length=vector_length)
 
     @property
     def raw_data_type(self):
         """Get the data type defined in this object
-
-        Will return for example 'double' even if the actual type
 
         Returns:
             str: The scalar type of this data type.
@@ -320,7 +318,7 @@ class ModelFunction(DependentCLFunction):
         """Get all parameters whose state instance is one of the given types.
 
         Args:
-            instance_types (list of CLDataType class names, or single CLDataType classname);
+            instance_types (list of DataType class names, or single DataType classname);
                 The instance type we want to get all the parameters of.
 
         Returns:
@@ -519,31 +517,31 @@ class LibraryFunction(DependentCLFunction):
 
 class CLFunctionParameter(object):
 
-    def __init__(self, cl_data_type, name):
+    def __init__(self, data_type, name):
         """Creates a new function parameter for the CL functions.
 
         Args:
-            cl_data_type (CLDataType): the data type expected by this parameter
+            data_type (DataType): the data type expected by this parameter
             name (str): The name of this parameter
 
         Attributes:
             name (str): The name of this parameter
         """
-        self._cl_data_type = cl_data_type
+        self._data_type = data_type
         self.name = name
 
     @property
-    def cl_data_type(self):
+    def data_type(self):
         """Get the CL data type of this parameter
 
         Returns:
             str: The CL data type.
         """
-        return self._cl_data_type
+        return self._data_type
 
     @property
     def is_cl_vector_type(self):
-        """Parse the cl_data_type to see if this parameter holds a vector type (in CL)
+        """Parse the data_type to see if this parameter holds a vector type (in CL)
 
         Returns:
             bool: True if the type of this function parameter is a CL vector type.
@@ -551,12 +549,12 @@ class CLFunctionParameter(object):
             CL vector types are recognized by an integer after the data type. For example: double4 is a
             CL vector type with 4 doubles.
         """
-        return self._cl_data_type.is_vector_type
+        return self._data_type.is_vector_type
 
 
 class FreeParameter(CLFunctionParameter):
 
-    def __init__(self, cl_data_type, name, fixed, value, lower_bound, upper_bound,
+    def __init__(self, data_type, name, fixed, value, lower_bound, upper_bound,
                  parameter_transform=None, sampling_proposal=None,
                  sampling_prior=None, sampling_statistics=None, perturbation_function=None):
         """This are the kind of parameters that are generally meant to be optimized.
@@ -564,7 +562,7 @@ class FreeParameter(CLFunctionParameter):
         These parameters may optionally be fixed to a value or list of values for all voxels.
 
         Args:
-            cl_data_type (CLDataType): the data type expected by this parameter
+            data_type (DataType): the data type expected by this parameter
             name (str): The name of this parameter
             fixed (boolean): Fix this parameter is fixed to the value given
             value (double or ndarray): A single value for all voxels or a list of values for each voxel
@@ -594,7 +592,7 @@ class FreeParameter(CLFunctionParameter):
                 in between optimization runs. It should accept a single parameter, an array with values to uniquely
                 perturb.
         """
-        super(FreeParameter, self).__init__(cl_data_type, name)
+        super(FreeParameter, self).__init__(data_type, name)
         self.value = value
         self.lower_bound = lower_bound
         self.upper_bound = upper_bound
@@ -643,19 +641,19 @@ class ProtocolParameter(CLFunctionParameter):
 
 class ModelDataParameter(CLFunctionParameter):
 
-    def __init__(self, cl_data_type, name, value):
+    def __init__(self, data_type, name, value):
         """This parameter is meant for data that changes the way a model function behaves.
 
         These parameters are fixed and remain constant for every problem instance (voxels in DMRI)
         and for every measurement point (protocol in DMRI). They can consist of vector and array types.
 
         Args:
-            cl_data_type (CLDataType): the data type expected by this parameter
+            data_type (DataType): the data type expected by this parameter
             name (str): The name of this parameter
             value (double or ndarray): A single value for all voxels or a list of values for each voxel
 
         Attributes:
             value (double or ndarray): A single value for all voxels or a list of values for each voxel
         """
-        super(ModelDataParameter, self).__init__(cl_data_type, name)
+        super(ModelDataParameter, self).__init__(data_type, name)
         self.value = value

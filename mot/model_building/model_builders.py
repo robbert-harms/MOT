@@ -1,9 +1,11 @@
 import numbers
 import numpy as np
-from mot.base import ProtocolParameter, ModelDataParameter, FreeParameter, CLDataType
+
+from mot.adapters import DataAdapter
+from mot.base import ProtocolParameter, ModelDataParameter, FreeParameter, DataType
 from mot import runtime_configuration
 from mot.cl_routines.mapping.calc_dependent_params import CalculateDependentParameters
-from mot.utils import set_cl_compatible_data_type, TopologicalSort
+from mot.utils import TopologicalSort
 from mot.model_building.parameter_functions.codecs import CodecBuilder
 from mot.model_building.parameter_functions.dependencies import SimpleAssignment
 from mot.models import OptimizeModelInterface, SampleModelInterface
@@ -68,7 +70,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         """Set the value for double_precision.
 
         Args:
-            value: boolean: if we would like to do the computations in double of single floating point type.
+            value (boolean): if we would like to do the computations in double of single floating point type.
         """
         self._double_precision = value
 
@@ -212,15 +214,15 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         When overriding this function, please note that it should adhere to the attribute problems_to_analyze.
 
         """
-        var_data_dict = {'observations': set_cl_compatible_data_type(
-            self._problem_data.observations, CLDataType.from_string('MOT_FLOAT_TYPE*'), self._double_precision)}
+        observations = self._problem_data.observations
+        if self.problems_to_analyze is not None:
+            observations = observations[self.problems_to_analyze, ...]
+
+        var_data_dict = {'observations': DataAdapter(observations, DataType.from_string('MOT_FLOAT_TYPE*'),
+                                                     self._get_mot_float_type())}
         var_data_dict.update(self._get_fixed_parameters_as_var_data())
 
-        if self.problems_to_analyze is not None:
-            for key in var_data_dict.keys():
-                var_data_dict[key] = var_data_dict[key][self.problems_to_analyze, ...]
-
-        return var_data_dict
+        return {k: v.adapt_to_opencl() for k, v in var_data_dict.items()}
 
     def get_optimization_output_param_names(self):
         """See super class OptimizeModelInterface for details"""
@@ -253,21 +255,22 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             if isinstance(p, ProtocolParameter):
                 if p.name in self._problem_data.prtcl_data_dict:
                     if not self._all_elements_equal(self._problem_data.prtcl_data_dict[p.name]):
-                        const_d = {p.name: set_cl_compatible_data_type(self._problem_data.prtcl_data_dict[p.name],
-                                                                       p.cl_data_type, self.double_precision)}
+
+                        const_d = {p.name: DataAdapter(self._problem_data.prtcl_data_dict[p.name],
+                                                       p.data_type, self._get_mot_float_type())}
                         prtcl_data_dict.update(const_d)
                 else:
                     exception = 'Constant parameter "{}" could not be resolved'.format(m.name + '.' + p.name)
                     raise ParameterResolutionException(exception)
-        return prtcl_data_dict
+
+        return {k: v.adapt_to_opencl() for k, v in prtcl_data_dict.items()}
 
     def get_problems_fixed_data(self):
         fixed_data_dict = {}
         for m, p in self._get_model_parameter_list():
             if isinstance(p, ModelDataParameter):
-                fixed_data_dict.update({p.name: set_cl_compatible_data_type(p.value, p.cl_data_type,
-                                                                            self.double_precision)})
-        return fixed_data_dict
+                fixed_data_dict.update({p.name: DataAdapter(p.value, p.data_type, self._get_mot_float_type())})
+        return {k: v.adapt_to_opencl() for k, v in fixed_data_dict.items()}
 
     def get_initial_parameters(self, results_dict=None):
         """When overriding this function, please note that it should adhere to the attribute problems_to_analyze."""
@@ -290,13 +293,11 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 else:
                     starting_points.append(value[self.problems_to_analyze, ...])
 
-        starting_points = [np.transpose(np.array([s])) if len(s.shape) < 2 else s for s in starting_points]
+        starting_points = np.concatenate([np.transpose(np.array([s]))
+                                          if len(s.shape) < 2 else s for s in starting_points], axis=1)
 
-        np_dtype = np.float32
-        if self.double_precision:
-            np_dtype = np.float64
-
-        return np.concatenate(starting_points, axis=1).astype(np_dtype, order='C', copy=False)
+        data_adapter = DataAdapter(starting_points, DataType.from_string('MOT_FLOAT_TYPE'), self._get_mot_float_type())
+        return data_adapter.adapt_to_opencl()
 
     def get_lower_bounds(self):
         return np.array([p.lower_bound for m, p in self._get_estimable_parameters_list()])
@@ -346,7 +347,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             s = '{0}[' + str(ind) + '] = ' + transform.get_cl_encode(parameter, '{0}[' + str(ind) + ']', deps_names)
             enc_func_list.append(s)
 
-        return CodecBuilder(list(reversed(enc_func_list)), dec_func_list)
+        return CodecBuilder(tuple(reversed(enc_func_list)), dec_func_list)
 
     def get_final_parameter_transformations(self, func_name='applyFinalParameterTransformations'):
         """Get the transformations that must be applied at the end of an optimization (or sampling) routine.
@@ -601,7 +602,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         for m, p in param_list:
             name = m.name + '_' + p.name
             if name not in exclude_list:
-                data_type = p.cl_data_type.cl_type
+                data_type = p.data_type.cl_type
                 assignment = 'x[' + str(estimable_param_counter) + ']'
                 func += "\t"*4 + data_type + ' ' + name + ' = ' + assignment + ';' + "\n"
                 estimable_param_counter += 1
@@ -625,11 +626,11 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         func = ''
         for m, p in param_list:
             if (m.name + '_' + p.name) not in exclude_list:
-                data_type = p.cl_data_type.cl_type
+                data_type = p.data_type.cl_type
                 if p.name not in const_params_seen:
                     if self._all_elements_equal(self._problem_data.prtcl_data_dict[p.name]):
-                        if p.cl_data_type.is_vector_type:
-                            vector_length = p.cl_data_type.vector_length
+                        if p.data_type.is_vector_type:
+                            vector_length = p.data_type.vector_length
                             values = [str(val) for val in self._problem_data.prtcl_data_dict[p.name][0]]
                             if len(values) < vector_length:
                                 values.append(str(0))
@@ -660,7 +661,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         for m, p in param_list:
             name = m.name + '_' + p.name
             if name not in exclude_list:
-                data_type = p.cl_data_type.raw_data_type
+                data_type = p.data_type.raw_data_type
                 if isinstance(p.value, numbers.Number):
                     assignment = '(' + data_type + ')' + str(float(p.value))
                 else:
@@ -693,7 +694,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
             assignment = self._convert_parameters_dot_to_bar(pd.assignment_code)
             name = m.name + '_' + p.name
-            data_type = p.cl_data_type.raw_data_type
+            data_type = p.data_type.raw_data_type
 
             if self._parameter_fixed_to_dependency(m, p):
                 if (m.name + '_' + p.name) not in exclude_list:
@@ -707,9 +708,12 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         for m, p in self._get_free_parameters_list():
             inlined_in_cl_code = isinstance(p.value, numbers.Number) or p.value.max() == p.value.min()
             if p.fixed and not inlined_in_cl_code and not self._parameter_fixed_to_dependency(m, p):
-                var_data_dict.update(
-                    {m.name + '_' + p.name: set_cl_compatible_data_type(p.value, p.cl_data_type, self.double_precision)}
-                )
+                value = p.value
+                if self.problems_to_analyze is not None:
+                    value = value[self.problems_to_analyze, ...]
+
+                var_data_dict.update({m.name + '_' + p.name: DataAdapter(value, p.data_type,
+                                                                         self._get_mot_float_type())})
         return var_data_dict
 
     def _get_non_model_tree_param_listing(self):
@@ -733,7 +737,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         Please note, that on the moment this function does not support the complete dependency graph for the dependent
         parameters.
         """
-        data_type = p.cl_data_type.raw_data_type
+        data_type = p.data_type.raw_data_type
         name = m.name + '_' + p.name
         assignment = ''
 
@@ -950,6 +954,12 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             bool: true if all elements are equal to each other, false otherwise
         """
         return (col == col[0]).all()
+
+    def _get_mot_float_type(self):
+        """Get the data type for the MOT_FLOAT_TYPE"""
+        if self.double_precision:
+            return DataType.from_string('double')
+        return DataType.from_string('float')
 
 
 class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):

@@ -1,6 +1,6 @@
 from mot.base import ModelFunction, FreeParameter
 from mot.model_building.parameter_functions.transformations import CosSqrClampTransform
-from mot.base import CLDataType
+from mot.base import DataType
 
 
 __author__ = 'Robbert Harms'
@@ -111,7 +111,7 @@ class GaussianEvaluationModel(EvaluationModel):
         super(EvaluationModel, self).__init__(
             'GaussianNoise',
             'gaussianNoiseModel',
-            (FreeParameter(CLDataType.from_string('MOT_FLOAT_TYPE'), 'sigma', False, 1, 0, 'INF',
+            (FreeParameter(DataType.from_string('MOT_FLOAT_TYPE'), 'sigma', False, 1, 0, 'INF',
                            parameter_transform=CosSqrClampTransform()),), ())
 
     def get_objective_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
@@ -155,7 +155,7 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
         super(EvaluationModel, self).__init__(
             'OffsetGaussianNoise',
             'offsetGaussianNoiseModel',
-            (FreeParameter(CLDataType.from_string('MOT_FLOAT_TYPE'), 'sigma', False, 1, 0, 'INF',
+            (FreeParameter(DataType.from_string('MOT_FLOAT_TYPE'), 'sigma', False, 1, 0, 'INF',
                            parameter_transform=CosSqrClampTransform()),), ())
 
     def get_objective_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):

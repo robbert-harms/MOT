@@ -70,8 +70,8 @@ def set_cl_compatible_data_type(value, data_type, double_precision):
 
     Args:
         value (ndarray): The value to convert to a CL compatible data type.
-        cl_data_type (CLDataType): A CL data type object.
-        double_precision (boolean): if cl_data_type is of type MOT_FLOAT_TYPE we need to know if we are using double or float
+        data_type (DataType): A CL data type object.
+        double_precision (boolean): if data_type is of type MOT_FLOAT_TYPE we need to know if we are using double or float
 
     Returns:
         ndarray: The same array, but then with the correct data type. If the data type indicates a vector type, a
@@ -196,18 +196,18 @@ def vector_type_lookup(data):
         (cl_type_name + str(length))}
 
 
-def _numpy_to_cl_dtype_names(cl_data_type_name):
+def _numpy_to_cl_dtype_names(data_type_name):
     """Translates the names from numpy types to CL types.
 
     Example: float64 -> double
     """
-    if isinstance(cl_data_type_name, np.dtype):
-        cl_data_type_name = cl_data_type_name.name
+    if isinstance(data_type_name, np.dtype):
+        data_type_name = data_type_name.name
 
     m = {'float64': 'double',
          'float32': 'float'}
-    if cl_data_type_name in m:
-        return m[cl_data_type_name]
+    if data_type_name in m:
+        return m[data_type_name]
     return None
 
 
@@ -335,16 +335,16 @@ class ParameterCLCodeGenerator(object):
                     constant_args_counter += 1
 
             param_name = 'var_data_' + key
-            cl_data_type = self._get_cl_data_type_from_data(vdata)
+            data_type = self._get_data_type_from_data(vdata)
 
-            kernel_param_names.append(clmemtype + ' ' + cl_data_type + '* ' + param_name)
+            kernel_param_names.append(clmemtype + ' ' + data_type + '* ' + param_name)
 
             mult = vdata.shape[1] if len(vdata.shape) > 1 else 1
             if len(vdata.shape) == 1 or vdata.shape[1] == 1:
-                data_struct_names.append(cl_data_type + ' ' + param_name)
+                data_struct_names.append(data_type + ' ' + param_name)
                 data_struct_init.append(param_name + '[gid * ' + str(mult) + ']')
             else:
-                data_struct_names.append(clmemtype + ' ' + cl_data_type + '* ' + param_name)
+                data_struct_names.append(clmemtype + ' ' + data_type + '* ' + param_name)
                 data_struct_init.append(param_name + ' + gid * ' + str(mult))
 
         for key, vdata in self._prtcl_data_dict.items():
@@ -356,25 +356,25 @@ class ParameterCLCodeGenerator(object):
                     constant_args_counter += 1
 
             param_name = 'prtcl_data_' + key
-            cl_data_type = self._get_cl_data_type_from_data(vdata)
+            data_type = self._get_data_type_from_data(vdata)
 
-            kernel_param_names.append(clmemtype + ' ' + cl_data_type + '* ' + param_name)
+            kernel_param_names.append(clmemtype + ' ' + data_type + '* ' + param_name)
             data_struct_init.append(param_name)
-            data_struct_names.append(clmemtype + ' ' + cl_data_type + '* ' + param_name)
+            data_struct_names.append(clmemtype + ' ' + data_type + '* ' + param_name)
 
         for key, vdata in self._model_data_dict.items():
             clmemtype = 'global'
             param_name = 'fixed_data_' + key
-            cl_data_type = self._get_cl_data_type_from_data(vdata)
+            data_type = self._get_data_type_from_data(vdata)
 
             data_struct_init.append(param_name)
 
             if isinstance(vdata, np.ndarray):
-                kernel_param_names.append(clmemtype + ' ' + cl_data_type + '* ' + param_name)
-                data_struct_names.append(clmemtype + ' ' + cl_data_type + '* ' + param_name)
+                kernel_param_names.append(clmemtype + ' ' + data_type + '* ' + param_name)
+                data_struct_names.append(clmemtype + ' ' + data_type + '* ' + param_name)
             else:
-                kernel_param_names.append(cl_data_type + ' ' + param_name)
-                data_struct_names.append(cl_data_type + ' ' + param_name)
+                kernel_param_names.append(data_type + ' ' + param_name)
+                data_struct_names.append(data_type + ' ' + param_name)
 
         data_struct = '''
             typedef struct{
@@ -388,7 +388,7 @@ class ParameterCLCodeGenerator(object):
                 'data_struct_init': data_struct_init,
                 'data_struct': data_struct}
 
-    def _get_cl_data_type_from_data(self, data):
+    def _get_data_type_from_data(self, data):
         """Get the data attributes for the given dataset, this can be used for building a CL kernel"""
         if is_cl_vector_type(data):
             vector_info = vector_type_lookup(data)
