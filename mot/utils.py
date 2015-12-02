@@ -65,24 +65,6 @@ def results_to_dict(results, param_names):
     return d
 
 
-def set_cl_compatible_data_type(value, data_type, double_precision):
-    """Set the given value (numpy array) to the given data type, one which is CL compatible.
-
-    Args:
-        value (ndarray): The value to convert to a CL compatible data type.
-        data_type (DataType): A CL data type object.
-        double_precision (boolean): if data_type is of type MOT_FLOAT_TYPE we need to know if we are using double or float
-
-    Returns:
-        ndarray: The same array, but then with the correct data type. If the data type indicates a vector type, a
-            vector typed value is returned.
-    """
-    if data_type.is_vector_type:
-        return array_to_cl_vector(value, data_type.raw_data_type, double_precision=double_precision)
-    else:
-        return data_type.convert_value(value, double_precision)
-
-
 def numpy_types_to_cl(data_type):
     """Get the CL type name of the given numpy type. Call this function with argument data.dtype.type.
 
@@ -119,53 +101,6 @@ def get_opencl_vector_data_type(vector_length, data_type):
         raise ValueError('The given data type ({}) is not supported.'.format(data_type))
 
     return getattr(cl_array.vec, data_type + str(vector_length))
-
-
-def array_to_cl_vector(array, raw_data_type, vector_length=None, double_precision=False):
-    """Create a CL vector type of the given array.
-
-    If vector_length is specified and one of (2, 3, 4, 8, 16) it is used. Else is chosen for the minimum vector length
-    that can hold the given array.
-
-    Args:
-        array (ndarray): the array of which to translate each row to a vector
-        raw_data_type (str): The raw data type to convert to
-        vector_length (int): if specified (non-None) the desired vector length. It must be one of (2, 3, 4, 8, 16)
-        double_precision (boolean): if we should use double or float in the case of typedeffed items like 'MOT_FLOAT_TYPE'
-
-    Returns:
-        ndarray: An array of the same length as the given array, but with only one column per row.
-            This column contains the opencl vector.
-
-    Raises:
-        ValueError: if the vector length is not one of (2, 3, 4, 8, 16)
-    """
-    s = array.shape
-    if len(s) > 1:
-        width = s[1]
-    else:
-        width = 1
-
-    if vector_length is None:
-        vector_length = width
-
-    if 'double' in raw_data_type:
-        dtype = get_opencl_vector_data_type(vector_length, 'double')
-
-    elif 'MOT_FLOAT_TYPE' in raw_data_type:
-        if double_precision:
-            dtype = get_opencl_vector_data_type(vector_length, 'double')
-        else:
-            dtype = get_opencl_vector_data_type(vector_length, 'float')
-    else:
-        dtype = get_opencl_vector_data_type(vector_length, 'float')
-
-    ve = np.zeros((s[0], 1), dtype=dtype, order='C')
-    for i in range(s[0]):
-        for j in range(width):
-            ve[i, 0][j] = array[i, j]
-
-    return ve
 
 
 def is_cl_vector_type(data):

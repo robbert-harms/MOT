@@ -208,22 +208,6 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         return list(set([p.name for m, p in self._get_model_parameter_list() if
                          isinstance(p, ProtocolParameter)]))
 
-    def get_problems_var_data(self):
-        """See super class OptimizeModelInterface for details
-
-        When overriding this function, please note that it should adhere to the attribute problems_to_analyze.
-
-        """
-        observations = self._problem_data.observations
-        if self.problems_to_analyze is not None:
-            observations = observations[self.problems_to_analyze, ...]
-
-        var_data_dict = {'observations': DataAdapter(observations, DataType.from_string('MOT_FLOAT_TYPE*'),
-                                                     self._get_mot_float_type())}
-        var_data_dict.update(self._get_fixed_parameters_as_var_data())
-
-        return {k: v.adapt_to_opencl() for k, v in var_data_dict.items()}
-
     def get_optimization_output_param_names(self):
         """See super class OptimizeModelInterface for details"""
         items = []
@@ -248,6 +232,21 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
     def get_nmr_estimable_parameters(self):
         return len(self.get_optimized_param_names())
+
+    def get_problems_var_data(self):
+        """See super class OptimizeModelInterface for details
+
+        When overriding this function, please note that it should adhere to the attribute problems_to_analyze.
+        """
+        observations = self._problem_data.observations
+        if self.problems_to_analyze is not None:
+            observations = observations[self.problems_to_analyze, ...]
+
+        var_data_dict = {'observations': DataAdapter(observations, DataType.from_string('MOT_FLOAT_TYPE*'),
+                                                     self._get_mot_float_type())}
+        var_data_dict.update(self._get_fixed_parameters_as_var_data())
+
+        return {k: v.adapt_to_opencl() for k, v in var_data_dict.items()}
 
     def get_problems_prtcl_data(self):
         prtcl_data_dict = {}

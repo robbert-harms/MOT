@@ -1,4 +1,3 @@
-import numbers
 import os
 import numpy as np
 from .model_building.parameter_functions.priors import UniformWithinBoundsPrior
@@ -91,44 +90,6 @@ class DataType(object):
         if self._vector_length is None:
             return 0
         return self._vector_length
-
-    def convert_value(self, value, double_precision):
-        """Convert the given value to a numpy array of this data type.
-
-        Args:
-            value (number of np ndarray): the value we want to convert
-            double_precision (boolean): if we use the double type if the type is a typedeffed type
-
-        Returns:
-            np ndarray: the converted value as a numpy type
-        """
-        if self.raw_data_type == 'float':
-            if isinstance(value, numbers.Number):
-                return np.float32(value)
-            return value.astype(np.float32, copy=False, order='C')
-
-        elif self.raw_data_type == 'int':
-            if isinstance(value, numbers.Number):
-                return np.int32(value)
-            return value.astype(np.int32, copy=False, order='C')
-
-        elif self.raw_data_type == 'double':
-            if isinstance(value, numbers.Number):
-                return np.float64(value)
-            return value.astype(np.float64, copy=False, order='C')
-
-        elif self.raw_data_type == 'MOT_FLOAT_TYPE':
-            np_dtype = np.float32
-            if double_precision:
-                np_dtype = np.float64
-
-            if isinstance(value, numbers.Number):
-                return np_dtype(value)
-            return value.astype(np_dtype, copy=False, order='C')
-
-        if isinstance(value, numbers.Number):
-            return np.float64(value)
-        return value.astype(np.float64, copy=False, order='C')
 
 
 class AbstractProblemData(object):
