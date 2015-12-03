@@ -108,11 +108,11 @@ class AbstractParallelOptimizer(AbstractOptimizer):
 
         self._logger.info('Starting optimization preliminaries')
         starting_points = model.get_initial_parameters(init_params)
+        nmr_params = starting_points.shape[1]
 
         var_data_dict = model.get_problems_var_data()
         prtcl_data_dict = model.get_problems_prtcl_data()
         fixed_data_dict = model.get_problems_fixed_data()
-        nmr_params = starting_points.shape[1]
 
         space_transformer = CodecRunner(self.cl_environments, self.load_balancer, model.double_precision)
         param_codec = model.get_parameter_codec()

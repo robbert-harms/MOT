@@ -35,7 +35,8 @@ class CalculateDependentParameters(AbstractCLRoutine):
 
         Args:
             fixed_param_values (dict): The dictionary with fixed parameter values to be used for parameters that are
-                constant. The values are supposed to be DataAdapters
+                constant. The values are supposed to be DataAdapters. This is interpreted as 'var_data_dict'.
+                Data that is variable per problem instance.
             estimated_parameters_list (list of ndarray): The list with the one-dimensional
                 ndarray of estimated parameters
             parameters_listing (str): The parameters listing in CL

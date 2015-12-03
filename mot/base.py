@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import pyopencl.array as cl_array
 from .model_building.parameter_functions.priors import UniformWithinBoundsPrior
 from .model_building.parameter_functions.proposals import GaussianProposal
 from .model_building.parameter_functions.sample_statistics import GaussianPSS
@@ -14,19 +15,19 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class DataType(object):
 
-    def __init__(self, cl_raw_type, is_pointer_type=False, vector_length=None):
+    def __init__(self, raw_data_type, is_pointer_type=False, vector_length=None):
         """Create a new CL data type container.
 
         The CL type can either be a CL native type (half, double, int, ...) or the special MOT_FLOAT_TYPE type.
 
         Args:
-            cl_type (str): the specific data type without the vector number and asterisks
+            raw_data_type (str): the specific data type without the vector number and asterisks
             numpy_type (numpy data type): the corresponding numpy data type, used in conversions
             is_pointer_type (boolean): If this parameter is a pointer type (appened by a *)
             vector_length (int or None): If None this data type is not a CL vector type.
                 If it is an interger it is the vector length of this data type (2, 3, 4, ...)
         """
-        self._cl_raw_type = cl_raw_type
+        self._raw_data_type = raw_data_type
         self._is_pointer_type = is_pointer_type
         self._vector_length = vector_length
 
@@ -48,7 +49,7 @@ class DataType(object):
         Returns:
             str: The scalar type of this data type.
         """
-        return self._cl_raw_type
+        return self._raw_data_type
 
     @property
     def cl_type(self):
@@ -57,7 +58,7 @@ class DataType(object):
         Returns:
             str: The name of this data type
         """
-        s = self._cl_raw_type
+        s = self._raw_data_type
 
         if self._vector_length is not None:
             s += str(self._vector_length)

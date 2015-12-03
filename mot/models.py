@@ -119,7 +119,7 @@ class OptimizeModelInterface(object):
                 the result of a previous calculation.
 
         Returns:
-            array like: A two dimensional matrix with on the first axis the the problem instances and on the second
+            array like: A two dimensional matrix with on the first axis the problem instances and on the second
                 the parameter values per problem instance
         """
 

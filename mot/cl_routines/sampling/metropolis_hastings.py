@@ -59,29 +59,10 @@ class MetropolisHastings(AbstractSampler):
         if model.double_precision:
             np_dtype = np.float64
 
-        self._logger.info('Entered sampling routine.')
-        self._logger.info('We will use a {} precision float type for the calculations.'.format(
-            'double' if model.double_precision else 'single'))
-        if not model.double_precision:
-            self._logger.warn('Please be warned that with single float precision the results may look truncated.')
-        for env in self.load_balancer.get_used_cl_environments(self.cl_environments):
-            self._logger.info('Using device \'{}\' with compile flags {}'.format(str(env), str(env.compile_flags)))
-        self._logger.info('The parameters we will sample are: {0}'.format(model.get_optimized_param_names()))
-        self._logger.info('Sample settings: nmr_samples: {nmr_samples}, burn_length: {burn_length}, '
-                          'sample_intervals: {sample_intervals}, '
-                          'proposal_update_intervals: {proposal_update_intervals}. '.format(
-            nmr_samples=self.nmr_samples, burn_length=self.burn_length, sample_intervals=self.sample_intervals,
-            proposal_update_intervals=self.proposal_update_intervals
-        ))
-
-        self._logger.info('Total samples drawn: {samples_drawn}, total samples returned: '
-                          '{samples_returned} (per problem).'.format(
-            samples_drawn=(self.burn_length + self.sample_intervals * self.nmr_samples),
-            samples_returned=self.nmr_samples
-        ))
+        self._do_initial_logging(model)
 
         parameters = model.get_initial_parameters(init_params)
-        var_data_dict = model.get_opencl_data().get_problems_var_data()
+        var_data_dict = model.get_problems_var_data()
         prtcl_data_dict = model.get_problems_prtcl_data()
         fixed_data_dict = model.get_problems_fixed_data()
 
@@ -107,6 +88,27 @@ class MetropolisHastings(AbstractSampler):
             self._logger.info('Finished post-sampling transformations')
             return samples_dict, {'volume_maps': volume_maps}
         return samples_dict
+
+    def _do_initial_logging(self, model):
+        self._logger.info('Entered sampling routine.')
+        self._logger.info('We will use a {} precision float type for the calculations.'.format(
+            'double' if model.double_precision else 'single'))
+        if not model.double_precision:
+            self._logger.warn('Please be warned that with single float precision the results may look truncated.')
+        for env in self.load_balancer.get_used_cl_environments(self.cl_environments):
+            self._logger.info('Using device \'{}\' with compile flags {}'.format(str(env), str(env.compile_flags)))
+        self._logger.info('The parameters we will sample are: {0}'.format(model.get_optimized_param_names()))
+        self._logger.info('Sample settings: nmr_samples: {nmr_samples}, burn_length: {burn_length}, '
+                          'sample_intervals: {sample_intervals}, '
+                          'proposal_update_intervals: {proposal_update_intervals}. '.format(
+            nmr_samples=self.nmr_samples, burn_length=self.burn_length, sample_intervals=self.sample_intervals,
+            proposal_update_intervals=self.proposal_update_intervals
+        ))
+        self._logger.info('Total samples drawn: {samples_drawn}, total samples returned: '
+                          '{samples_returned} (per problem).'.format(
+            samples_drawn=(self.burn_length + self.sample_intervals * self.nmr_samples),
+            samples_returned=self.nmr_samples
+        ))
 
 
 class _MHWorker(Worker):
