@@ -6,6 +6,7 @@ import warnings
 import numpy as np
 import pyopencl as cl
 from six import string_types
+from mot.adapters import DataAdapter
 from .utils import device_type_from_string
 
 
@@ -87,6 +88,9 @@ class Worker(object):
         buffers = []
         for data_dict in args:
             for data in data_dict.values():
+                if isinstance(data, DataAdapter):
+                    data = data.get_opencl_data()
+
                 if isinstance(data, np.ndarray):
                     buffers.append(cl.Buffer(self._cl_run_context.context,
                                              self._cl_environment.get_read_only_cl_mem_flags(),

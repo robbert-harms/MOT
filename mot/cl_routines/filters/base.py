@@ -69,7 +69,7 @@ class AbstractFilter(AbstractCLRoutine):
             np_dtype = np.float64
 
         for key, value in volumes_dict.items():
-            volumes_dict[key] = np.array(value, dtype=np_dtype, order='C')
+            volumes_dict[key] = np.array(value, dtype=np_dtype, copy=False, order='C')
             results_dict[key] = np.zeros_like(volumes_dict[key], dtype=np_dtype, order='C')
 
         volumes_list = list(volumes_dict.items())

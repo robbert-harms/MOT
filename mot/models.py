@@ -32,11 +32,12 @@ class OptimizeModelInterface(object):
         """Get a dict with all the data per problem.
 
         As an example, suppose per problem instance we have the data named 'observations'.
-        We should then return something like: {'observations': ndarray((<nmr_problems>, <number of items>))}
+        We should then return something like:
+            {'observations': SimpleDataAdapter(ndarray((<nmr_problems>, <number of items>)), ...)}
 
         Returns:
-            dict: A dictionary where each element holds a 2d numpy array.
-                That array should contains for each problem (first dimension / rows) a
+            dict: A dictionary where each element holds a SimpleDataAdapter from which to get the data
+                The data in the adapter should contain for each problem (first dimension / rows) a
                 number of items (second dimension / columns) that is used in the evaluation function.
         """
 
@@ -45,15 +46,16 @@ class OptimizeModelInterface(object):
         differs per measurement.
 
         Returns:
-            dict: A dict where each element holds an numpy array that is used in the evaluation function
-                and each key is used as name in the cl data struct
+            dict: A dict where each element holds a SimpleDataAdapter that is used in the evaluation function.
+                Each key is used as name in the cl data struct.
         """
 
     def get_problems_fixed_data(self):
         """Get a dict with all the fixed data. These are fixed for all voxels, for all measurement points.
 
         Returns:
-            dict: The dict with all the fixed data. The names of the keys are used in the CL cl data structs.
+            dict: The dict with all the fixed data in DataAdapters.
+                The names of the keys are used in the CL cl data structs.
         """
 
     def get_nmr_problems(self):

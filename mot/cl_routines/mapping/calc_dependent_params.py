@@ -35,7 +35,7 @@ class CalculateDependentParameters(AbstractCLRoutine):
 
         Args:
             fixed_param_values (dict): The dictionary with fixed parameter values to be used for parameters that are
-                constant.
+                constant. The values are supposed to be DataAdapters
             estimated_parameters_list (list of ndarray): The list with the one-dimensional
                 ndarray of estimated parameters
             parameters_listing (str): The parameters listing in CL
@@ -96,7 +96,7 @@ class _CDPWorker(Worker):
         data_buffers = [estimated_parameters_buf, results_buffer]
         for data in self._var_data_dict.values():
             data_buffers.append(cl.Buffer(self._cl_run_context.context, read_only_flags,
-                                          hostbuf=data[range_start:range_end, ...]))
+                                          hostbuf=data.get_opencl_data()[range_start:range_end, ...]))
 
         self._kernel.transform(self._cl_run_context.queue, (nmr_problems, ), None, *data_buffers)
         event = cl.enqueue_copy(self._cl_run_context.queue, self._results_list[range_start:range_end, :],

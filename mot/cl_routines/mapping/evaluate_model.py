@@ -91,7 +91,7 @@ class _EvaluateModelWorker(Worker):
                        evals_buffer]
         for data in self._var_data_dict.values():
             all_buffers.append(cl.Buffer(self._cl_run_context.context, read_only_flags,
-                                         hostbuf=data[range_start:range_end, ...]))
+                                         hostbuf=data.get_opencl_data()[range_start:range_end, ...]))
 
         all_buffers.extend(self._constant_buffers)
 

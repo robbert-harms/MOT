@@ -1,5 +1,7 @@
 import numpy as np
 
+from mot.adapters import SimpleDataAdapter
+from mot.base import DataType
 from mot.models import OptimizeModelInterface
 
 __author__ = 'Robbert Harms'
@@ -71,7 +73,7 @@ class Rosenbrock(OptimizeModelInterface):
             for i in range(self.n):
                 if i in results_dict:
                     params[0, i] = results_dict[i]
-        return params
+        return SimpleDataAdapter(params, DataType.from_string('double'), DataType.from_string('double'))
 
     def get_lower_bounds(self):
         return ['-inf'] * self.n
@@ -164,7 +166,7 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
             for i in range(2):
                 if i in results_dict:
                     params[0, i] = results_dict[i]
-        return params
+        return SimpleDataAdapter(params, DataType.from_string('double'), DataType.from_string('double'))
 
     def get_lower_bounds(self):
         return [0, 0]

@@ -1,7 +1,7 @@
 import numbers
 import numpy as np
 
-from mot.adapters import DataAdapter
+from mot.adapters import SimpleDataAdapter
 from mot.base import ProtocolParameter, ModelDataParameter, FreeParameter, DataType
 from mot import runtime_configuration
 from mot.cl_routines.mapping.calc_dependent_params import CalculateDependentParameters
@@ -242,11 +242,10 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         if self.problems_to_analyze is not None:
             observations = observations[self.problems_to_analyze, ...]
 
-        var_data_dict = {'observations': DataAdapter(observations, DataType.from_string('MOT_FLOAT_TYPE*'),
-                                                     self._get_mot_float_type())}
+        var_data_dict = {'observations': SimpleDataAdapter(observations, DataType.from_string('MOT_FLOAT_TYPE*'),
+                                                           self._get_mot_float_type())}
         var_data_dict.update(self._get_fixed_parameters_as_var_data())
-
-        return {k: v.adapt_to_opencl() for k, v in var_data_dict.items()}
+        return var_data_dict
 
     def get_problems_prtcl_data(self):
         prtcl_data_dict = {}
@@ -254,22 +253,20 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             if isinstance(p, ProtocolParameter):
                 if p.name in self._problem_data.prtcl_data_dict:
                     if not self._all_elements_equal(self._problem_data.prtcl_data_dict[p.name]):
-
-                        const_d = {p.name: DataAdapter(self._problem_data.prtcl_data_dict[p.name],
-                                                       p.data_type, self._get_mot_float_type())}
+                        const_d = {p.name: SimpleDataAdapter(self._problem_data.prtcl_data_dict[p.name],
+                                                             p.data_type, self._get_mot_float_type())}
                         prtcl_data_dict.update(const_d)
                 else:
                     exception = 'Constant parameter "{}" could not be resolved'.format(m.name + '.' + p.name)
                     raise ParameterResolutionException(exception)
-
-        return {k: v.adapt_to_opencl() for k, v in prtcl_data_dict.items()}
+        return prtcl_data_dict
 
     def get_problems_fixed_data(self):
         fixed_data_dict = {}
         for m, p in self._get_model_parameter_list():
             if isinstance(p, ModelDataParameter):
-                fixed_data_dict.update({p.name: DataAdapter(p.value, p.data_type, self._get_mot_float_type())})
-        return {k: v.adapt_to_opencl() for k, v in fixed_data_dict.items()}
+                fixed_data_dict.update({p.name: SimpleDataAdapter(p.value, p.data_type, self._get_mot_float_type())})
+        return fixed_data_dict
 
     def get_initial_parameters(self, results_dict=None):
         """When overriding this function, please note that it should adhere to the attribute problems_to_analyze."""
@@ -295,8 +292,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         starting_points = np.concatenate([np.transpose(np.array([s]))
                                           if len(s.shape) < 2 else s for s in starting_points], axis=1)
 
-        data_adapter = DataAdapter(starting_points, DataType.from_string('MOT_FLOAT_TYPE'), self._get_mot_float_type())
-        return data_adapter.adapt_to_opencl()
+        data_adapter = SimpleDataAdapter(starting_points, DataType.from_string('MOT_FLOAT_TYPE'), self._get_mot_float_type())
+        return data_adapter.get_opencl_data()
 
     def get_lower_bounds(self):
         return np.array([p.lower_bound for m, p in self._get_estimable_parameters_list()])
@@ -711,8 +708,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 if self.problems_to_analyze is not None:
                     value = value[self.problems_to_analyze, ...]
 
-                var_data_dict.update({m.name + '_' + p.name: DataAdapter(value, p.data_type,
-                                                                         self._get_mot_float_type())})
+                var_data_dict.update({m.name + '_' + p.name: SimpleDataAdapter(value, p.data_type,
+                                                                               self._get_mot_float_type())})
         return var_data_dict
 
     def _get_non_model_tree_param_listing(self):

@@ -83,12 +83,8 @@ class _FPTWorker(Worker):
                                       hostbuf=self._parameters[range_start:range_end, :])
         all_buffers.append(parameters_buffer)
         for data in self._var_data_dict.values():
-            if len(data.shape) < 2:
-                all_buffers.append(cl.Buffer(self._cl_run_context.context, read_only_flags,
-                                             hostbuf=data[range_start:range_end]))
-            else:
-                all_buffers.append(cl.Buffer(self._cl_run_context.context, read_only_flags,
-                                             hostbuf=data[range_start:range_end, :]))
+            all_buffers.append(cl.Buffer(self._cl_run_context.context, read_only_flags,
+                                         hostbuf=data.get_opencl_data()[range_start:range_end, ...]))
         all_buffers.extend(self._constant_buffers)
         return all_buffers, parameters_buffer
 

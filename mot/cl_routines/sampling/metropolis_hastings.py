@@ -81,7 +81,7 @@ class MetropolisHastings(AbstractSampler):
         ))
 
         parameters = model.get_initial_parameters(init_params)
-        var_data_dict = model.get_problems_var_data()
+        var_data_dict = model.get_opencl_data().get_problems_var_data()
         prtcl_data_dict = model.get_problems_prtcl_data()
         fixed_data_dict = model.get_problems_fixed_data()
 
@@ -156,12 +156,8 @@ class _MHWorker(Worker):
         # My guess is that the compiler tries to optimize the loops, fails and then crashes.
 
         for data in self._var_data_dict.values():
-            if len(data.shape) < 2:
-                data_buffers.append(cl.Buffer(self._cl_run_context.context,
-                                              read_only_flags, hostbuf=data[range_start:range_end]))
-            else:
-                data_buffers.append(cl.Buffer(self._cl_run_context.context, read_only_flags,
-                                              hostbuf=data[range_start:range_end, :]))
+            data_buffers.append(cl.Buffer(self._cl_run_context.context,
+                                          read_only_flags, hostbuf=data.get_opencl_data()[range_start:range_end, ...]))
 
         data_buffers.extend(self._constant_buffers)
 
