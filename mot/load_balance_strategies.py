@@ -148,7 +148,7 @@ class LoadBalanceStrategy(object):
         Args:
             workers (Worker): a list of workers
             nmr_items (int): an integer specifying the total number of items to be processed
-            run_with_batches (boolean): a implementing class may overwrite run_in_batches with this parameter. If None
+            run_in_batches (boolean): a implementing class may overwrite run_in_batches with this parameter. If None
                 the value is not used.
             single_batch_length (int): a implementing class may overwrite single_batch_length with this parameter.
                 If None the value is not used.

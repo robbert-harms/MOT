@@ -31,7 +31,12 @@ class FinalParametersTransformer(AbstractCLRoutine):
         super(FinalParametersTransformer, self).__init__(cl_environments, load_balancer)
 
     def transform(self, model, parameters):
-        """This transforms the parameters matrix in place. Using the final parameters transforms."""
+        """This transforms the parameters matrix in place. Using the final parameters transforms.
+
+        Args:
+            model (OptimizeModelInterface): the model for which we want to do the final parameter transformations
+            parameters (ndarray): the parameters we want to transform
+        """
         np_dtype = np.float32
         if model.double_precision:
             np_dtype = np.float64

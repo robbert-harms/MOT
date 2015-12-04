@@ -134,6 +134,9 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         This may be useful for later fixing or adding items to a specific model.
 
+        Args:
+            model_name (str): the name of the compartment model to get
+
         Returns:
             CLFunction: the compartment model function with the given name. None if no matching function found.
         """
@@ -180,6 +183,10 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         It is possible to add more than one modifier function. In that case, they are called in the order they
         were appended to this model.
+
+        Args:
+            model_param_name (str): the parameter to which to add the modification routine
+            mod_routine (python function): the callback function to apply on the results of the referenced parameter.
         """
         self._post_optimization_modifiers.append((model_param_name, mod_routine))
         return self
@@ -191,7 +198,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         should be a tuple like (model_param_name, mod_routine)
 
         Args:
-            modifiers (tuple of tuples): The list of modifiers to add (in order).
+            modifiers (tuple or list): The list of modifiers to add (in order).
 
         """
         self._post_optimization_modifiers.extend(modifiers)
@@ -269,7 +276,11 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         return fixed_data_dict
 
     def get_initial_parameters(self, results_dict=None):
-        """When overriding this function, please note that it should adhere to the attribute problems_to_analyze."""
+        """When overriding this function, please note that it should adhere to the attribute problems_to_analyze.
+
+        Args:
+            results_dict (dict): the initialization settings for the specfisic parameters.
+        """
         starting_points = []
         for m, p in self._get_estimable_parameters_list():
             if results_dict and (m.name + '.' + p.name) in results_dict:
@@ -292,7 +303,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         starting_points = np.concatenate([np.transpose(np.array([s]))
                                           if len(s.shape) < 2 else s for s in starting_points], axis=1)
 
-        data_adapter = SimpleDataAdapter(starting_points, DataType.from_string('MOT_FLOAT_TYPE'), self._get_mot_float_type())
+        data_adapter = SimpleDataAdapter(starting_points, DataType.from_string('MOT_FLOAT_TYPE'),
+                                         self._get_mot_float_type())
         return data_adapter.get_opencl_data()
 
     def get_lower_bounds(self):
@@ -306,7 +318,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         and non fixed parameters.
 
         Args:
-            - initial_params: a dictionary containing as keys full parameter names (<model>_<param>) and as values
+            initial_params (dict): a dictionary containing as keys full parameter names (<model>_<param>) and as values
                 numbers or arrays to be used as starting point
         """
         for m, p in self._get_estimable_parameters_list():
@@ -323,7 +335,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             dep_list.update({name: dep_names})
             transform_dict.update({name: p})
 
-        dep_list = TopologicalSort(dep_list).get_flattened_sort()
+        dep_list = TopologicalSort(dep_list).get_flattened()
 
         dec_func_list = []
         enc_func_list = []
@@ -351,8 +363,12 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         These transformations must contain all parameter dependencies, as such that all transformation happening in the
         model function which do not happen in the codec must also go here.
 
+        Args:
+            func_name (str): the CL function name of the returned function
+
         Returns:
-            str: A function of the kind: void finalParameterTransformations(const optimize_data* data, MOT_FLOAT_TYPE* x)
+            str: A function of the kind:
+                void finalParameterTransformations(const optimize_data* data, MOT_FLOAT_TYPE* x)
                 Which is called for every voxel and must in place edit the x variable.
         """
         transform_needed = any(dp.has_side_effects or not dp.fixed for dp in
@@ -443,6 +459,10 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             4) Adds additional maps defined in this model subclass
 
         For more documentation see the base method.
+
+        Args:
+            results_dict (dict): the dictionary with the results (the keys are the parameter names, the values are the
+                1d parameter lists)
 
         """
         self._add_dependent_parameter_maps(results_dict)
@@ -748,8 +768,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                         assignment = '(' + data_type + ')' + str(float(p.value[0]))
                     else:
                         assignment = '(' + data_type + ') data->var_data_' + m.name + '_' + p.name
-            elif not self._parameter_has_dependency(m, p) or (self._parameter_has_dependency(m, p)
-                                                              and not self._parameter_fixed_to_dependency(m, p)):
+            elif not self._parameter_has_dependency(m, p) \
+                or (self._parameter_has_dependency(m, p) and not self._parameter_fixed_to_dependency(m, p)):
                 ind = self._get_parameter_estimable_index(m.name + '.' + p.name)
                 assignment += 'x[' + str(ind) + ']'
             if self._parameter_has_dependency(m, p):

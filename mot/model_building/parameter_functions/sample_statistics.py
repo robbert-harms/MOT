@@ -8,7 +8,6 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
 class ParameterSampleStatistics(object):
-
     def get_mean(self, samples):
         """Given the distribution represented by this statistic, get the mean of the samples.
 
@@ -31,7 +30,6 @@ class ParameterSampleStatistics(object):
 
 
 class GaussianPSS(ParameterSampleStatistics):
-
     def get_mean(self, samples):
         return np.mean(samples, axis=1)
 
@@ -40,7 +38,6 @@ class GaussianPSS(ParameterSampleStatistics):
 
 
 class CircularGaussianPSS(ParameterSampleStatistics):
-
     def __init__(self, max_angle=np.pi):
         """Compute the circular mean for samples in a range
 
@@ -59,31 +56,31 @@ class CircularGaussianPSS(ParameterSampleStatistics):
         return CircularGaussianPSS.circstd(samples, high=self.max_angle, low=0, axis=1)
 
     @staticmethod
-    def circmean(samples, high=2*np.pi, low=0, axis=None):
+    def circmean(samples, high=2 * np.pi, low=0, axis=None):
         """Compute the circular mean for samples in a range.
         Taken from scipy.stats
 
         Args:
             samples (array_like): Input array.
-        high (float or int): High boundary for circular mean range.  Default is ``2*pi``.
-        low (float or int): Low boundary for circular mean range.  Default is 0.
-        axis (int, optional): Axis along which means are computed.
-            The default is to compute the mean of the flattened array.
+            high (float or int): High boundary for circular mean range.  Default is ``2*pi``.
+            low (float or int): Low boundary for circular mean range.  Default is 0.
+            axis (int, optional): Axis along which means are computed.
+                The default is to compute the mean of the flattened array.
 
         Returns:
-            circmean (float): Circular mean.
+            float: Circular mean.
         """
-        ang = (samples - low)*2*np.pi / (high-low)
-        res = np.angle(np.mean(np.exp(1j*ang), axis=axis))
+        ang = (samples - low) * 2 * np.pi / (high - low)
+        res = np.angle(np.mean(np.exp(1j * ang), axis=axis))
         mask = res < 0
         if mask.ndim > 0:
-            res[mask] += 2*np.pi
+            res[mask] += 2 * np.pi
         elif mask:
-            res += 2*np.pi
-        return res*(high-low)/2.0/np.pi + low
+            res += 2 * np.pi
+        return res * (high - low) / 2.0 / np.pi + low
 
     @staticmethod
-    def circstd(samples, high=2*np.pi, low=0, axis=None):
+    def circstd(samples, high=2 * np.pi, low=0, axis=None):
         """Compute the circular standard deviation for samples assumed to be in the range [low to high].
 
         Taken from scipy.stats
@@ -93,15 +90,15 @@ class CircularGaussianPSS(ParameterSampleStatistics):
 
         Args:
             samples (array_like): Input array.
-        low (float or int): Low boundary for circular standard deviation range.  Default is 0.
-        high (float or int): High boundary for circular standard deviation range. Default is ``2*pi``.
-        axis (int): Axis along which standard deviations are computed.  The default is
-            to compute the standard deviation of the flattened array.
+            low (float or int): Low boundary for circular standard deviation range.  Default is 0.
+            high (float or int): High boundary for circular standard deviation range. Default is ``2*pi``.
+            axis (int): Axis along which standard deviations are computed.  The default is
+                to compute the standard deviation of the flattened array.
 
         Returns:
             float: Circular standard deviation.
         """
-        ang = (samples - low)*2*np.pi / (high-low)
-        res = np.mean(np.exp(1j*ang), axis=axis)
+        ang = (samples - low) * 2 * np.pi / (high - low)
+        res = np.mean(np.exp(1j * ang), axis=axis)
         R = abs(res)
-        return ((high-low)/2.0/np.pi) * np.sqrt(-2 * np.log(R))
+        return ((high - low) / 2.0 / np.pi) * np.sqrt(-2 * np.log(R))

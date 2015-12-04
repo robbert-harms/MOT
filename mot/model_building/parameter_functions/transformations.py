@@ -8,7 +8,6 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
 class AbstractTransformation(object):
-
     def __init__(self, dependencies=()):
         """The transformations define the encode and decode operations needed to build a codec.
 
@@ -66,7 +65,6 @@ class AbstractTransformation(object):
 
 
 class SimpleTransformation(AbstractTransformation):
-
     def __init__(self, cl_encode, cl_decode):
         """Adds a simple parameter transformation rule.
 
@@ -90,7 +88,6 @@ class SimpleTransformation(AbstractTransformation):
 
 
 class IdentityTransform(SimpleTransformation):
-
     def __init__(self):
         """The identity transform does no transformation and returns the input given."""
         super(IdentityTransform, self).__init__('{};', '{};')
@@ -114,11 +111,11 @@ class CosSqrClampTransform(AbstractTransformation):
     def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):
         return 'acos(sqrt(fabs((' + parameter_name + ' - (MOT_FLOAT_TYPE)' + \
                str(parameter.lower_bound) + ') / (MOT_FLOAT_TYPE)' + \
-               str(parameter.upper_bound-parameter.lower_bound) + ')));'
+               str(parameter.upper_bound - parameter.lower_bound) + ')));'
 
     def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
         return 'fma((MOT_FLOAT_TYPE)pown(cos(' + parameter_name + '), 2), (MOT_FLOAT_TYPE)' + \
-               str(parameter.upper_bound-parameter.lower_bound) + \
+               str(parameter.upper_bound - parameter.lower_bound) + \
                ', (MOT_FLOAT_TYPE)' + str(parameter.lower_bound) + ');'
 
 
@@ -128,11 +125,11 @@ class SinSqrClampTransform(AbstractTransformation):
     def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):
         return 'asin(sqrt(fabs((' + parameter_name + ' - (MOT_FLOAT_TYPE)' + \
                str(parameter.lower_bound) + ') / (MOT_FLOAT_TYPE)' + \
-               str(parameter.upper_bound-parameter.lower_bound) + ')));'
+               str(parameter.upper_bound - parameter.lower_bound) + ')));'
 
     def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
         return 'fma((MOT_FLOAT_TYPE) pown(sin(' + parameter_name + '), 2), (MOT_FLOAT_TYPE)' + \
-               str(parameter.upper_bound-parameter.lower_bound) + \
+               str(parameter.upper_bound - parameter.lower_bound) + \
                ', (MOT_FLOAT_TYPE)' + str(parameter.lower_bound) + ');'
 
 
@@ -143,8 +140,8 @@ class SqrClampTransform(AbstractTransformation):
         return 'sqrt(' + parameter_name + ');'
 
     def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
-        return 'clamp((MOT_FLOAT_TYPE) pown(' + parameter_name + ', 2), (MOT_FLOAT_TYPE)' + str(parameter.lower_bound) + \
-               ', (MOT_FLOAT_TYPE)' + str(parameter.upper_bound) + ');'
+        return 'clamp((MOT_FLOAT_TYPE) pown(' + parameter_name + ', 2), (MOT_FLOAT_TYPE)' + \
+               str(parameter.lower_bound) + ', (MOT_FLOAT_TYPE)' + str(parameter.upper_bound) + ');'
 
 
 class SinSqrClampDependentTransform(AbstractTransformation):
@@ -158,12 +155,11 @@ class SinSqrClampDependentTransform(AbstractTransformation):
 
     def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
         return 'fma(pown((MOT_FLOAT_TYPE)sin(' + parameter_name + '), 2), ' \
-                        '(MOT_FLOAT_TYPE)' + dependencies_names[0] + ', ' \
-                        '(MOT_FLOAT_TYPE)' + str(parameter.lower_bound) + ');'
+                '(MOT_FLOAT_TYPE)' + dependencies_names[0] + ', ' \
+                '(MOT_FLOAT_TYPE)' + str(parameter.lower_bound) + ');'
 
 
 class AbsModXTransform(AbstractTransformation):
-
     def __init__(self, x, dependencies=()):
         """Create an transformation that returns the absolute modulo x value of the input."""
         super(AbsModXTransform, self).__init__(dependencies)
@@ -180,24 +176,20 @@ class AbsModXTransform(AbstractTransformation):
 
 
 class CosSqrTransform(SimpleTransformation):
-
     def __init__(self):
         super(CosSqrTransform, self).__init__('acos(sqrt({}));', 'pown(cos({}), 2);')
 
 
 class SinSqrTransform(SimpleTransformation):
-
     def __init__(self):
         super(SinSqrTransform, self).__init__('asin(sqrt({}));', 'pown(sin({}), 2);')
 
 
 class AbsModPiTransform(AbsModXTransform):
-
     def __init__(self):
         super(AbsModPiTransform, self).__init__('M_PI')
 
 
 class SqrTransform(SimpleTransformation):
-
     def __init__(self):
         super(SqrTransform, self).__init__('sqrt({});', 'pown({}, 2);')

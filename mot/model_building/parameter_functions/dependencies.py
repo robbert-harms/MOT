@@ -6,7 +6,6 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
 class AbstractParameterDependency(object):
-
     @property
     def pre_transform_code(self):
         """Some code that may be prefixed to this parameter dependency.
@@ -31,7 +30,7 @@ class AbstractParameterDependency(object):
     def fixed(self):
         """Check if this dependency fixes the parameter to the assigned value, or if it is still estimable.
 
-        Args:
+        Returns:
             boolean: True if this parameter is now fixed to the dependency, or false if it is not.
         """
         return True
@@ -40,14 +39,13 @@ class AbstractParameterDependency(object):
     def has_side_effects(self):
         """Check if the pre_transform_code from this parameter dependency has side effects to other parameters.
 
-        Args:
+        Returns:
             boolean: True if this parameter has side effects (in the pre_transform_code) or does not have side-effects.
         """
         return False
 
 
 class SimpleAssignment(AbstractParameterDependency):
-
     def __init__(self, assignment_code, fixed=True, has_side_effects=False):
         """Adds a simple parameter dependency rule for the given parameter.
 
@@ -56,8 +54,8 @@ class SimpleAssignment(AbstractParameterDependency):
         Args:
             assignment_code (str): the assignment code (in CL) for this parameter
             fixed (boolean): if this parameters fixes to the assigned value or not
-            has_side_effects (boolean): if this parameter changes one of the parameters before it goes into the model functions.
-                Note that these side effects must be idempotent.
+            has_side_effects (boolean): if this parameter changes one of the parameters before it goes into the model
+                functions. Note that these side effects must be idempotent.
         """
         self._assignment = assignment_code
         self._fixed = fixed
@@ -77,7 +75,6 @@ class SimpleAssignment(AbstractParameterDependency):
 
 
 class WeightSumToOneRule(AbstractParameterDependency):
-
     def __init__(self, parameter_names):
         """Adds the unity sum (parameter) dependency for the weights indicated by the given parameters.
 
@@ -96,11 +93,11 @@ class WeightSumToOneRule(AbstractParameterDependency):
         else:
             divisors = ''
             for p in parameter_names:
-                divisors += p + ' /= weight_div;' + "\n" + "\t"*4
+                divisors += p + ' /= weight_div;' + "\n" + "\t" * 4
             self._pre_transform_code += '''
                 MOT_FLOAT_TYPE weight_dependency_sum = ''' + ' + '.join(parameter_names) + ''';
                 MOT_FLOAT_TYPE weight_div = max((MOT_FLOAT_TYPE)1.0, weight_dependency_sum);
-                ''' + divisors + '''weight_dependency_sum = 1 - min((MOT_FLOAT_TYPE)1.0, weight_dependency_sum);'''+"\n"
+                ''' + divisors + '''weight_dependency_sum = 1 - min((MOT_FLOAT_TYPE)1.0, weight_dependency_sum);''' + "\n"
             self._assignment = 'weight_dependency_sum'
             self._has_side_effects = True
 

@@ -104,15 +104,15 @@ def get_float_type_def(double_precision):
 class TopologicalSort(object):
 
     def __init__(self, data):
-        self.data = data
-
-    def get_sorted(self):
         """Topological sort the the given data. The data should consist of a dictionary structure.
 
         Args:
             data (dict); dictionary structure where the value is a list of dependencies for that given key.
-                Example: {'a', (), 'b': ('a',)}, here a depends on nothing and b depends on a.
+                as an example {'a', (), 'b': ('a',)}, here a depends on nothing and b depends on a.
         """
+        self.data = data
+
+    def get_sorted(self):
         if not len(self.data):
             return
 
@@ -140,10 +140,13 @@ class TopologicalSort(object):
             raise ValueError('Cyclic dependencies exist among these items: {}'.format(', '.join(repr(x)
                                                                                                 for x in data.items())))
 
-    def get_flattened_sort(self, sort=True):
-        """Returns a single list of dependencies. For any set returned by
-            toposort(), those items are sorted and appended to the result (just to
-            make the results deterministic).
+    def get_flattened(self, sort=True):
+        """Returns a single list of dependencies.
+
+        Get the sorted result flattened. Optionally sorted to make the results repeatable.
+
+        Args:
+            sort (boolean): if we want to sort the results list
         """
         result = []
         for d in self.get_sorted():
@@ -205,8 +208,11 @@ class ParameterCLCodeGenerator(object):
                     clmemtype = 'constant'
                     constant_args_counter += 1
 
-            param_name = 'var_data_' + key
+            param_name = 'var_data_' + str(key)
             data_type = data_adapter.get_data_type().raw_data_type
+
+            if data_adapter.get_data_type().is_vector_type:
+                data_type += data_adapter.get_data_type().vector_length
 
             kernel_param_names.append(clmemtype + ' ' + data_type + '* ' + param_name)
 
@@ -228,8 +234,11 @@ class ParameterCLCodeGenerator(object):
                     clmemtype = 'constant'
                     constant_args_counter += 1
 
-            param_name = 'prtcl_data_' + key
+            param_name = 'prtcl_data_' + str(key)
             data_type = data_adapter.get_data_type().raw_data_type
+
+            if data_adapter.get_data_type().is_vector_type:
+                data_type += data_adapter.get_data_type().vector_length
 
             kernel_param_names.append(clmemtype + ' ' + data_type + '* ' + param_name)
             data_struct_init.append(param_name)
@@ -237,8 +246,11 @@ class ParameterCLCodeGenerator(object):
 
         for key, data_adapter in self._fixed_data_dict.items():
             clmemtype = 'global'
-            param_name = 'fixed_data_' + key
+            param_name = 'fixed_data_' + str(key)
             data_type = data_adapter.get_data_type().raw_data_type
+
+            if data_adapter.get_data_type().is_vector_type:
+                data_type += data_adapter.get_data_type().vector_length
 
             data_struct_init.append(param_name)
 

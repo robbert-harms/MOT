@@ -24,7 +24,7 @@ class EvaluateModelPerProtocol(AbstractCLRoutine):
 
         Args:
             model (AbstractModel): The model to evaluate.
-            parameters ndarray): The parameters to use in the evaluation of the model
+            parameters (ndarray): The parameters to use in the evaluation of the model
 
         Returns:
             ndarray: Return per problem instance the evaluation per data point.

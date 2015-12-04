@@ -260,6 +260,9 @@ class SampleModelInterface(OptimizeModelInterface):
     def get_proposal_logpdf(self, func_name='getProposalLogPDF'):
         """Get the probability density function of the proposal in log space.
 
+        Args:
+            func_name (str): the CL function name of the returned function
+
         Returns:
             A function with the signature:
                 MOT_FLOAT_TYPE <func_name>(const int i, const MOT_FLOAT_TYPE proposal,
@@ -275,6 +278,9 @@ class SampleModelInterface(OptimizeModelInterface):
     def get_proposal_function(self, func_name='getProposal'):
         """Get a proposal function that returns proposals for a requested parameter.
 
+        Args:
+            func_name (str): the CL function name of the returned function
+
         Returns:
             A function with the signature:
                 MOT_FLOAT_TYPE <func_name>(const int i, const MOT_FLOAT_TYPE current, ranluxcl_state_t* ranluxclstate,
@@ -288,6 +294,9 @@ class SampleModelInterface(OptimizeModelInterface):
 
     def get_proposal_parameters_update_function(self, func_name='updateProposalParameters'):
         """Get a function that can update the parameters of the proposals
+
+        Args:
+            func_name (str): the CL function name of the returned function
 
         Returns:
             A function with the signature:
@@ -307,6 +316,9 @@ class SampleModelInterface(OptimizeModelInterface):
         """Get the prior function that returns a double representing the prior information about the given parameters.
 
         The prior function must be in log space.
+
+        Args:
+            func_name (str): the CL function name of the returned function
 
         Returns:
             A function of the kind:

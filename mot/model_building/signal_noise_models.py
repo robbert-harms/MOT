@@ -32,7 +32,8 @@ class SignalNoiseModel(ModelFunction):
             For example, if the noise model has only one parameter 'sigma' the function should look like:
                 MOT_FLOAT_TYPE fname(const MOT_FLOAT_TYPE signal, const MOT_FLOAT_TYPE sigma);
 
-            The CL function should return a single MOT_FLOAT_TYPE that represents the signal with the signal noise added to it.
+            The CL function should return a single MOT_FLOAT_TYPE that represents the signal with the signal noise
+                added to it.
         """
 
 

@@ -65,7 +65,7 @@ class GenerateRandom(AbstractCLRoutine):
             return samples[:nmr_samples-padding]
         return samples
 
-    def _get_uniform_kernel(self, min, max):
+    def _get_uniform_kernel(self, min_val, max_val):
         kernel_source = '#define RANLUXCL_LUX 4' + "\n"
         kernel_source += RanluxCL().get_cl_code()
         kernel_source += '''
@@ -77,10 +77,10 @@ class GenerateRandom(AbstractCLRoutine):
 
                 int gid = get_global_id(0);
 
-                samples[gid * 4] = ''' + str(min) + ''' + randomnr.x * ''' + str(max - min) + ''';
-                samples[gid * 4 + 1] = ''' + str(min) + ''' + randomnr.y * ''' + str(max - min) + ''';
-                samples[gid * 4 + 2] = ''' + str(min) + ''' + randomnr.z * ''' + str(max - min) + ''';
-                samples[gid * 4 + 3] = ''' + str(min) + ''' + randomnr.w * ''' + str(max - min) + ''';
+                samples[gid * 4] = ''' + str(min_val) + ''' + randomnr.x * ''' + str(max_val - min_val) + ''';
+                samples[gid * 4 + 1] = ''' + str(min_val) + ''' + randomnr.y * ''' + str(max_val - min_val) + ''';
+                samples[gid * 4 + 2] = ''' + str(min_val) + ''' + randomnr.z * ''' + str(max_val - min_val) + ''';
+                samples[gid * 4 + 3] = ''' + str(min_val) + ''' + randomnr.w * ''' + str(max_val - min_val) + ''';
             }
         '''
         return kernel_source

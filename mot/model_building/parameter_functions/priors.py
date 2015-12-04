@@ -17,8 +17,12 @@ class AbstractParameterPrior(object):
         In CL assignments look like: a = b;
         This function should return the "b;" part. That is, all that follows after the assignment operator.
 
+        Args:
+            parameter (FreeParameter): the free parameter for which to create a prior
+            parameter_name (str): the name of the parameter for which we create the prior
+
         Returns:
-            str: The assignment code
+            str: The assignment code for the prior
         """
         return ''
 

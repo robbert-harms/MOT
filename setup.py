@@ -4,6 +4,7 @@
 import re
 from setuptools import setup, find_packages
 
+
 def load_requirements(fname):
     is_comment = re.compile('^\s*(#|--).*').match
     with open(fname) as fo:

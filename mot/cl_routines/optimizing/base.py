@@ -80,19 +80,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
                  optimizer_options=None, **kwargs):
         super(AbstractParallelOptimizer, self).__init__(cl_environments, load_balancer, use_param_codec, patience,
                                                         optimizer_options=optimizer_options, **kwargs)
-        self._automatic_apply_codec = True
         self._logger = logging.getLogger(__name__)
-
-    @property
-    def automatic_apply_codec(self):
-        """If the base class takes care of the Codec transformations, or not.
-
-        This can only be set internally, but can be read externally such that the workers can read it.
-
-        Returns:
-            boolean: if the base class takes care of the codec or not
-        """
-        return self._automatic_apply_codec
 
     def minimize(self, model, init_params=None, full_output=False):
         self._logger.info('Entered optimization routine.')
@@ -116,7 +104,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
 
         space_transformer = CodecRunner(self.cl_environments, self.load_balancer, model.double_precision)
         param_codec = model.get_parameter_codec()
-        if self.use_param_codec and param_codec and self._automatic_apply_codec:
+        if self.use_param_codec and param_codec:
             starting_points = space_transformer.encode(param_codec, starting_points)
 
         self._logger.info('Finished optimization preliminaries')
@@ -172,8 +160,7 @@ class AbstractParallelOptimizerWorker(Worker):
         self._constant_buffers = self._generate_constant_buffers(self._prtcl_data_dict, self._fixed_data_dict)
 
         param_codec = model.get_parameter_codec()
-        self._use_param_codec = self._parent_optimizer.use_param_codec and param_codec \
-                                    and self._parent_optimizer._automatic_apply_codec
+        self._use_param_codec = self._parent_optimizer.use_param_codec and param_codec
 
         self._starting_points = starting_points
         self._kernel = self._build_kernel()
