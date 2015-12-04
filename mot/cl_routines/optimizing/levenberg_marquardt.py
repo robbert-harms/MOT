@@ -36,7 +36,6 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
         cl_eval_func = self._model.get_model_eval_function('evaluateModel')
         cl_observation_func = self._model.get_observation_return_function('getObservation')
         nmr_params = self._nmr_params
-        param_codec = self._model.get_parameter_codec()
         nmr_inst_per_problem = self._model.get_nmr_inst_per_problem()
 
         if nmr_params <= 0:
@@ -51,10 +50,6 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
         '''
         kernel_source += cl_observation_func
         kernel_source += cl_eval_func
-
-        if self._use_param_codec:
-            decode_func = param_codec.get_cl_decode_function('decodeParameters')
-            kernel_source += decode_func + "\n"
 
         kernel_source += '''
             void evaluate(const void* data, MOT_FLOAT_TYPE* x, MOT_FLOAT_TYPE* result){
