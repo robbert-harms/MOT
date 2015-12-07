@@ -488,7 +488,10 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 if isinstance(p.value, numbers.Number):
                     results_dict.update({name: np.tile(np.array([p.value]), (self.get_nmr_problems(),))})
                 else:
-                    results_dict.update({name: p.value})
+                    value = p.value
+                    if self.problems_to_analyze is not None:
+                        value = value[self.problems_to_analyze, ...]
+                    results_dict.update({name: value})
 
     def _add_dependent_parameter_maps(self, results_dict):
         """In place add complete maps for the dependent parameters."""
