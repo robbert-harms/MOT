@@ -13,6 +13,6 @@
  * Calculate the imaginary error function for a real argument (special case)
  */
 double erfi(double x);
-
+float ferfi(float x);
 
 #endif //CERF_ERFI_H

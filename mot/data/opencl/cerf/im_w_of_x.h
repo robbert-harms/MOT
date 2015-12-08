@@ -10,5 +10,6 @@
  */
 
 double im_w_of_x(double x);
+float fim_w_of_x(float x);
 
  #endif // CERF_IM_W_OF_X_H

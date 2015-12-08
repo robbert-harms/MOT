@@ -18,4 +18,10 @@ double erfi(double x){
     return x*x > 720 ? (x > 0 ? INFINITY : -INFINITY) : exp(x*x) * im_w_of_x(x);
 }
 
+float ferfi(float x){
+    // Compute erfi(x) = -i erf(ix),
+    // the imaginary error function.
+    return x*x > 720 ? (x > 0 ? INFINITY : -INFINITY) : exp(x*x) * fim_w_of_x(x);
+}
+
 #endif //CERF_ERFI_CL

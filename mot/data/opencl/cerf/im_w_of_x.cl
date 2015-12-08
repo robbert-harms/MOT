@@ -59,6 +59,36 @@ double im_w_of_x(double x){
     }
 }
 
+float fim_w_of_x(float x){
+    // Steven G. Johnson, October 2012.
+
+    // Uses methods similar to the erfcx calculation:
+    // continued fractions for large |x|,
+    // a lookup table of Chebyshev polynomials for smaller |x|,
+    // and finally a Taylor expansion for |x|<0.01.
+
+    if (x >= 0) {
+        if (x > 45) { // continued-fraction expansion is faster
+            if (x > 5e7) // 1-term expansion, important to avoid overflow
+                return M_1_SQRTPI / x;
+            /* 5-term expansion (rely on compiler for CSE), simplified from:
+               ispi / (x-0.5/(x-1/(x-1.5/(x-2/x))))  */
+            return M_1_SQRTPI*((x*x) * (x*x-4.5) + 2) / (x * ((x*x) * (x*x-5) + 3.75));
+        }
+        return w_im_y100(100/(1+x), x);
+    }
+    else { // = -im_w_of_x(-x)
+        if (x < -45) { // continued-fraction expansion is faster
+            if (x < -5e7) // 1-term expansion, important to avoid overflow
+                return M_1_SQRTPI / x;
+            /* 5-term expansion (rely on compiler for CSE), simplified from:
+               ispi / (x-0.5/(x-1/(x-1.5/(x-2/x))))  */
+            return M_1_SQRTPI*((x*x) * (x*x-4.5) + 2) / (x * ((x*x) * (x*x-5) + 3.75));
+        }
+        return -w_im_y100(100.0/(1-x), -x);
+    }
+}
+
 
 /******************************************************************************/
 /* Lookup-table for Chebyshev polynomials for smaller |x|                     */
