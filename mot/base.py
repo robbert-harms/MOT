@@ -1,6 +1,5 @@
 import os
 import numpy as np
-import pyopencl.array as cl_array
 from .model_building.parameter_functions.priors import UniformWithinBoundsPrior
 from .model_building.parameter_functions.proposals import GaussianProposal
 from .model_building.parameter_functions.sample_statistics import GaussianPSS

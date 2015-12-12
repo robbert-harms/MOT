@@ -75,9 +75,9 @@ class CompartmentModelTree(Tree):
 
         Valid model trees abides this grammar:
 
-        operator := '*' | '/' | '+' | '-'
-        model    := ModelFunction
-        tree     := '(' (model | tree)+ ',' operator ')'
+        tree     ::= model | '(' tree ')' | '(' tree ',' operator ')'
+        model    ::= ModelFunction
+        operator ::= '*' | '/' | '+' | '-'
 
         This means that one can build complex models consisting of "Model Functions" (for example,
         compartment models) that are combined using basic math operators.
