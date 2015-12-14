@@ -14,7 +14,8 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class DataType(object):
 
-    def __init__(self, raw_data_type, is_pointer_type=False, vector_length=None):
+    def __init__(self, raw_data_type, is_pointer_type=False, vector_length=None,
+                 address_space_qualifier=None, pre_data_type_type_qualifiers=None, post_data_type_type_qualifier=None):
         """Create a new CL data type container.
 
         The CL type can either be a CL native type (half, double, int, ...) or the special MOT_FLOAT_TYPE type.
@@ -24,14 +25,31 @@ class DataType(object):
             numpy_type (numpy data type): the corresponding numpy data type, used in conversions
             is_pointer_type (boolean): If this parameter is a pointer type (appened by a *)
             vector_length (int or None): If None this data type is not a CL vector type.
-                If it is an interger it is the vector length of this data type (2, 3, 4, ...)
+                If it is an integer it is the vector length of this data type (2, 3, 4, ...)
+            address_space_qualifier (str or None): the address space qualifier or None if not used
+            pre_data_type_type_qualifiers (list of str or None): the type qualifiers to use before the data type
+            post_data_type_type_qualifier (str or None): the type qualifier to use before the data type
         """
         self._raw_data_type = raw_data_type
         self._is_pointer_type = is_pointer_type
         self._vector_length = vector_length
+        self.address_space_qualifier = address_space_qualifier
+        self.pre_data_type_type_qualifiers = pre_data_type_type_qualifiers
+        self.post_data_type_type_qualifier = post_data_type_type_qualifier
 
     @classmethod
     def from_string(cls, cl_type_str):
+        """Generate a datatype from a CL type.
+
+        This only accepts data types as input. If you need to add other qualifiers, please use the functions to do so.
+
+        Args:
+            cl_type_str (str): the type qualifier
+        """
+        address_space_qualifier = None
+        pre_data_type_type_qualifier = None
+        post_data_type_type_qualifier = None
+
         raw_type = cl_type_str.replace('*', '')
         raw_type = raw_type.replace(' ', '')
         raw_type = ''.join([i for i in raw_type if not i.isdigit()])
@@ -52,7 +70,10 @@ class DataType(object):
 
     @property
     def cl_type(self):
-        """Get the complete type of this parameter in CL language
+        """Get the type of this parameter in CL language
+
+        This only returns the parameter type (like 'double' or 'int*' or 'float4*' ...). It does not include other
+        qualifiers.
 
         Returns:
             str: The name of this data type
@@ -90,6 +111,42 @@ class DataType(object):
         if self._vector_length is None:
             return 0
         return self._vector_length
+
+    def set_address_space_qualifier(self, address_space_qualifier):
+        """Set the address space qualifier.
+
+        Args:
+            address_space_qualifier (str): the new address space qualifier
+
+        Returns:
+            self: for chaining
+        """
+        self.address_space_qualifier = address_space_qualifier
+        return self
+
+    def set_pre_data_type_type_qualifiers(self, pre_data_type_type_qualifiers):
+        """Set the pre data type type qualifier.
+
+        Args:
+            pre_data_type_type_qualifiers (list of str): the pre data type type qualifiers
+
+        Returns:
+            self: for chaining
+        """
+        self.pre_data_type_type_qualifiers = pre_data_type_type_qualifiers
+        return self
+
+    def set_post_data_type_type_qualifier(self, post_data_type_type_qualifier):
+        """Set the post data type type qualifier.
+
+        Args:
+            post_data_type_type_qualifier (str): the post data type type qualifier
+
+        Returns:
+            self: for chaining
+        """
+        self.post_data_type_type_qualifier = post_data_type_type_qualifier
+        return self
 
 
 class AbstractProblemData(object):
@@ -250,10 +307,9 @@ class ModelFunction(DependentCLFunction):
 
         Args:
             name (str): The name of the model
-            return_type (str): Return type of the CL function.
-            function_name (string): The name of the CL function
-            parameter_list (list of CLFunctionParameter): The list of parameters required for this function
-            dependency_list (list of CLFunction): The list of CLFunctions this function is dependent on
+            cl_function_name (string): The name of the CL function
+            parameter_list (list or tuple of CLFunctionParameter): The list of parameters required for this function
+            dependency_list (list or tuple of CLFunction): The list of CLFunctions this function is dependent on
         """
         super(ModelFunction, self).__init__('double', cl_function_name, parameter_list, dependency_list)
         self._name = name
@@ -441,8 +497,8 @@ class LibraryFunction(DependentCLFunction):
             cl_code_file (str): The location of the code file .c or .pcl
             var_replace_dict (dict): In the cl_header and cl_code file these replacements will be made
                 (using the % format function of Python)
-            parameter_list (list of CLFunctionParameter): The list of parameters required for this function
-            dependency_list (list of CLFunction): The list of CLFunctions this function is dependent on
+            parameter_list (list or tuple of CLFunctionParameter): The list of parameters required for this function
+            dependency_list (list or tuple of CLFunction): The list of CLFunctions this function is dependent on
         """
         super(LibraryFunction, self).__init__(return_type, function_name, parameter_list, dependency_list)
         self._cl_header_file = cl_header_file
@@ -529,8 +585,7 @@ class FreeParameter(CLFunctionParameter):
             value (double or ndarray): A single value for all voxels or a list of values for each voxel
             lower_bound (double): The lower bound of this parameter
             upper_bound (double): The upper bound of this parameter
-            parameter_handling_info (ParamHandlingInfo): The object containing information on how to handle this
-                parameter
+            parameter_transform (AbstractTransformation): The parameter transformation function
             sampling_proposal (AbstractParameterProposal): The proposal function for use in model sampling
             sampling_prior (AbstractParameterPrior): The prior function for use in model sampling
             sampling_statistics (ParameterSampleStatistics): The statistic functions used to get

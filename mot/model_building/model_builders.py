@@ -102,6 +102,34 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         p.value = value
         return self
 
+    def set_lower_bound(self, model_param_name, value):
+        """Set the lower bound for the given parameter to the given value.
+
+        Args:
+            model_param_name (string): A model.param name like 'Ball.d'
+            value (scalar or vector): The value to set the lower bounds to
+
+        Returns:
+            Returns self for chainability
+        """
+        m, p = self._get_model_parameter_matching(model_param_name)
+        p.lower_bound = value
+        return self
+
+    def set_upper_bound(self, model_param_name, value):
+        """Set the upper bound for the given parameter to the given value.
+
+        Args:
+            model_param_name (string): A model.param name like 'Ball.d'
+            value (scalar or vector): The value to set the upper bounds to
+
+        Returns:
+            Returns self for chainability
+        """
+        m, p = self._get_model_parameter_matching(model_param_name)
+        p.upper_bound = value
+        return self
+
     def unfix(self, model_param_name):
         """Unfix the given model.param
 
@@ -381,7 +409,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         param_lists = self._get_parameter_type_lists()
         depend_param_listing = self._get_dependent_parameters_listing(param_lists['dependent'])
 
-        for m, p in param_lists['fixed'] + param_lists['constant']:
+        for m, p in param_lists['fixed'] + param_lists['protocol']:
             if (m.name + '_' + p.name) not in depend_param_listing:
                 param_exclude_list.append(m.name + '_' + p.name)
 
@@ -596,7 +624,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         """
         func = ''
         param_lists = self._get_parameter_type_lists()
-        func += self._get_constant_parameters_listing(param_lists['constant'], exclude_list=exclude_list)
+        func += self._get_protocol_parameters_listing(param_lists['protocol'], exclude_list=exclude_list)
         func += self._get_fixed_parameters_listing(param_lists['fixed'], exclude_list=exclude_list)
         func += self._get_estimable_parameters_listing(param_lists['estimable'], exclude_list=exclude_list)
         func += self._get_dependent_parameters_listing(param_lists['dependent'], exclude_list=exclude_list)
@@ -627,19 +655,19 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 estimable_param_counter += 1
         return func
 
-    def _get_constant_parameters_listing(self, param_list=None, exclude_list=()):
-        """Get the parameter listing for the constant parameters.
+    def _get_protocol_parameters_listing(self, param_list=None, exclude_list=()):
+        """Get the parameter listing for the protocol parameters.
 
         For performance reasons, the parameter list should already be given.
             If not given it is calculated using:
-                self._get_parameter_type_lists()['constant']
+                self._get_parameter_type_lists()['protocol']
 
         Args:
-            param_list: the list with the constant parameters
+            param_list: the list with the protocol parameters
             exclude_list: a list of parameters to exclude from this listing
         """
         if param_list is None:
-            param_list = self._get_parameter_type_lists()['constant']
+            param_list = self._get_parameter_type_lists()['protocol']
 
         const_params_seen = []
         func = ''
@@ -781,18 +809,18 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         return data_type + ' ' + name + ' = ' + assignment + ';' + "\n"
 
     def _get_parameter_type_lists(self):
-        """Returns a dictionary with the parameters sorted in the types constant, fixed, estimable and dependent.
+        """Returns a dictionary with the parameters sorted in the types protocol, fixed, estimable and dependent.
 
         Parameters may occur in different lists (estimable and dependent for example).
         """
-        constant_parameters = []
+        protocol_parameters = []
         fixed_parameters = []
         estimable_parameters = []
         depended_parameters = []
 
         for m, p in self._get_model_parameter_list():
             if isinstance(p, ProtocolParameter):
-                constant_parameters.append((m, p))
+                protocol_parameters.append((m, p))
             elif isinstance(p, FreeParameter):
                 if p.fixed and not self._parameter_has_dependency(m, p):
                     fixed_parameters.append((m, p))
@@ -804,7 +832,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                     ind = self._dependency_store.get_index(m.name + '.' + p.name)
                     depended_parameters.insert(ind, (m, p))
 
-        return {'constant': constant_parameters, 'fixed': fixed_parameters,
+        return {'protocol': protocol_parameters, 'fixed': fixed_parameters,
                 'estimable': estimable_parameters, 'dependent': depended_parameters}
 
     def _get_parameter_by_name(self, parameter_name):
