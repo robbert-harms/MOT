@@ -18,12 +18,12 @@ class ResidualCalculator(AbstractCLRoutine):
         """Calculate the residuals, that is the errors, per problem instance per data point."""
         super(ResidualCalculator, self).__init__(cl_environments, load_balancer)
 
-    def calculate(self, model, parameters):
+    def calculate(self, model, parameters_dict):
         """Calculate and return the residuals.
 
         Args:
             model (AbstractModel): The model to calculate the residuals of.
-            parameters (ndarray): The parameters to use in the evaluation of the model
+            parameters_dict (dict): The parameters to use in the evaluation of the model
 
         Returns:
             Return per voxel the errors (eval - data) per scheme line
@@ -37,7 +37,7 @@ class ResidualCalculator(AbstractCLRoutine):
 
         residuals = np.asmatrix(np.zeros((nmr_problems, nmr_inst_per_problem), dtype=np_dtype, order='C'))
 
-        parameters = model.get_initial_parameters(parameters)
+        parameters = model.get_initial_parameters(parameters_dict)
 
         workers = self._create_workers(_ResidualCalculatorWorker, [model, parameters, residuals])
         self.load_balancer.process(workers, model.get_nmr_problems())

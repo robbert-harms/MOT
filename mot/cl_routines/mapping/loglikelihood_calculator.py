@@ -18,12 +18,12 @@ class LogLikelihoodCalculator(AbstractCLRoutine):
         """Calculate the residuals, that is the errors, per problem instance per data point."""
         super(LogLikelihoodCalculator, self).__init__(cl_environments, load_balancer)
 
-    def calculate(self, model, parameters):
+    def calculate(self, model, parameters_dict):
         """Calculate and return the residuals.
 
         Args:
             model (AbstractModel): The model to calculate the residuals of.
-            parameters (ndarray): The parameters to use in the evaluation of the model
+            parameters_dict (dict): The parameters to use in the evaluation of the model
 
         Returns:
             Return per voxel the log likelihood.
@@ -34,7 +34,7 @@ class LogLikelihoodCalculator(AbstractCLRoutine):
 
         nmr_problems = model.get_nmr_problems()
         log_likelihoods = np.zeros((nmr_problems, 1), dtype=np_dtype, order='C')
-        parameters = model.get_initial_parameters(parameters)
+        parameters = model.get_initial_parameters(parameters_dict)
 
         workers = self._create_workers(_LogLikelihoodCalculatorWorker, [model, parameters, log_likelihoods])
         self.load_balancer.process(workers, model.get_nmr_problems())
