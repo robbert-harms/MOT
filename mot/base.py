@@ -207,6 +207,7 @@ class CLFunction(object):
             function_name (string): The name of the CL function
             parameter_list (list of CLFunctionParameter): The list of parameters required for this function
         """
+        super(CLFunction, self).__init__()
         self._return_type = return_type
         self._function_name = function_name
         self._parameter_list = parameter_list
