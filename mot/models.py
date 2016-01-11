@@ -20,8 +20,8 @@ class OptimizeModelInterface(object):
     def double_precision(self):
         """Flag to signal if we should use the double float type during calculations.
 
-        By default we ask the cl routines to use the single precision float type, you can overwrite this
-        of course by your own flags.
+        By default we ask the cl routines to use the single precision float type, you can overwrite this with
+        your own flags.
 
         Returns:
             boolean: if we would like to use double precision floating point during the calculations

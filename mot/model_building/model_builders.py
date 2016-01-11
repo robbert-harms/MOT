@@ -1,8 +1,7 @@
 import numbers
 import numpy as np
-
 from mot.adapters import SimpleDataAdapter
-from mot.base import ProtocolParameter, ModelDataParameter, FreeParameter, DataType
+from mot.base import ProtocolParameter, ModelDataParameter, FreeParameter, CLDataType
 from mot import runtime_configuration
 from mot.cl_routines.mapping.calc_dependent_params import CalculateDependentParameters
 from mot.utils import TopologicalSort
@@ -31,8 +30,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         Attributes;
             problems_to_analyze (list): the list with problems we want to analyze. Suppose we have a few thousands
-                problems defined in this model, but we want to run the optimization on a few problems first. By setting
-                this attribute to a list of problems you wish to analyze, only those problems are analyzed.
+                problems defined in this model, but we want to run the optimization only on a few problems. By setting
+                this attribute to a list of problems indices only those problems will be analyzed.
         """
         super(OptimizeModelBuilder, self).__init__()
         self._name = name
@@ -277,7 +276,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         if self.problems_to_analyze is not None:
             observations = observations[self.problems_to_analyze, ...]
 
-        var_data_dict = {'observations': SimpleDataAdapter(observations, DataType.from_string('MOT_FLOAT_TYPE*'),
+        var_data_dict = {'observations': SimpleDataAdapter(observations, CLDataType.from_string('MOT_FLOAT_TYPE*'),
                                                            self._get_mot_float_type())}
         var_data_dict.update(self._get_fixed_parameters_as_var_data())
         return var_data_dict
@@ -331,7 +330,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         starting_points = np.concatenate([np.transpose(np.array([s]))
                                           if len(s.shape) < 2 else s for s in starting_points], axis=1)
 
-        data_adapter = SimpleDataAdapter(starting_points, DataType.from_string('MOT_FLOAT_TYPE'),
+        data_adapter = SimpleDataAdapter(starting_points, CLDataType.from_string('MOT_FLOAT_TYPE'),
                                          self._get_mot_float_type())
         return data_adapter.get_opencl_data()
 
@@ -458,7 +457,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         if pre_model_code:
             func += self._get_pre_model_expression_eval_code()
 
-        func += "\n" + "\t"*4 + 'return ' + self._construct_model_expression(noise_func_name)
+        func += "\n" + "\t"*4 + 'return ' + str(self._construct_model_expression(noise_func_name))
         func += "\n\t\t\t}"
         return func
 
@@ -628,7 +627,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         func += self._get_fixed_parameters_listing(param_lists['fixed'], exclude_list=exclude_list)
         func += self._get_estimable_parameters_listing(param_lists['estimable'], exclude_list=exclude_list)
         func += self._get_dependent_parameters_listing(param_lists['dependent'], exclude_list=exclude_list)
-        return func
+        return str(func)
 
     def _get_estimable_parameters_listing(self, param_list=None, exclude_list=()):
         """Get the parameter listing for the free parameters.
@@ -1005,8 +1004,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
     def _get_mot_float_type(self):
         """Get the data type for the MOT_FLOAT_TYPE"""
         if self.double_precision:
-            return DataType.from_string('double')
-        return DataType.from_string('float')
+            return CLDataType.from_string('double')
+        return CLDataType.from_string('float')
 
 
 class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):

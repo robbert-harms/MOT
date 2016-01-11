@@ -1,7 +1,7 @@
 import os
 import numpy as np
 from pkg_resources import resource_filename
-from .base import LibraryFunction, LibraryParameter, FreeParameter, DataType, ModelFunction
+from .base import LibraryFunction, LibraryParameter, FreeParameter, CLDataType, ModelFunction
 from .model_building.parameter_functions.proposals import GaussianProposal
 from .model_building.parameter_functions.transformations import ClampTransform, CosSqrTransform
 
@@ -24,8 +24,8 @@ class EuclidianNormFunction(LibraryFunction):
         super(EuclidianNormFunction, self).__init__(
             memtype,
             'euclidian_norm_' + memspace + '_' + memtype,
-            (LibraryParameter(DataType.from_string(memtype + '*'), 'x'),
-             LibraryParameter(DataType.from_string('int'), 'n')),
+            (LibraryParameter(CLDataType.from_string(memtype + '*'), 'x'),
+             LibraryParameter(CLDataType.from_string('int'), 'n')),
             resource_filename('mot', 'data/opencl/euclidian_norm.ph'),
             resource_filename('mot', 'data/opencl/euclidian_norm.pcl'),
             {'MEMSPACE': memspace, 'MEMTYPE': memtype},
@@ -52,8 +52,8 @@ class LMMin(LibraryFunction):
         super(LMMin, self).__init__(
             'void',
             'lmmin',
-            (LibraryParameter(DataType.from_string('MOT_FLOAT_TYPE*'), 'x'),
-             LibraryParameter(DataType.from_string('void*'), 'data')),
+            (LibraryParameter(CLDataType.from_string('MOT_FLOAT_TYPE*'), 'x'),
+             LibraryParameter(CLDataType.from_string('void*'), 'data')),
             resource_filename('mot', 'data/opencl/lmmin.h'),
             resource_filename('mot', 'data/opencl/lmmin.pcl'),
             params,
@@ -95,8 +95,8 @@ class PrAxisFunc(LibraryFunction):
         super(PrAxisFunc, self).__init__(
             'void',
             'praxis',
-            (LibraryParameter(DataType.from_string('MOT_FLOAT_TYPE*'), 'model_parameters'),
-             LibraryParameter(DataType.from_string('void*'), 'data')),
+            (LibraryParameter(CLDataType.from_string('MOT_FLOAT_TYPE*'), 'model_parameters'),
+             LibraryParameter(CLDataType.from_string('void*'), 'data')),
             resource_filename('mot', 'data/opencl/praxis.h'),
             resource_filename('mot', 'data/opencl/praxis.pcl'),
             params,
@@ -124,8 +124,8 @@ class NMSimplexFunc(LibraryFunction):
         super(NMSimplexFunc, self).__init__(
             'void',
             'nmsimplex',
-            (LibraryParameter(DataType.from_string('MOT_FLOAT_TYPE*'), 'model_parameters'),
-             LibraryParameter(DataType.from_string('void*'), 'data')),
+            (LibraryParameter(CLDataType.from_string('MOT_FLOAT_TYPE*'), 'model_parameters'),
+             LibraryParameter(CLDataType.from_string('void*'), 'data')),
             resource_filename('mot', 'data/opencl/nmsimplex.h'),
             resource_filename('mot', 'data/opencl/nmsimplex.pcl'),
             params,
@@ -156,8 +156,8 @@ class PowellFunc(LibraryFunction):
         super(PowellFunc, self).__init__(
             'void',
             'powell',
-            (LibraryParameter(DataType.from_string('MOT_FLOAT_TYPE*'), 'model_parameters'),
-             LibraryParameter(DataType.from_string('void*'), 'data')),
+            (LibraryParameter(CLDataType.from_string('MOT_FLOAT_TYPE*'), 'model_parameters'),
+             LibraryParameter(CLDataType.from_string('void*'), 'data')),
             resource_filename('mot', 'data/opencl/powell.h'),
             resource_filename('mot', 'data/opencl/powell.pcl'),
             params,
@@ -172,8 +172,8 @@ class FirstLegendreTerm(LibraryFunction):
         super(FirstLegendreTerm, self).__init__(
             'MOT_FLOAT_TYPE',
             'getFirstLegendreTerm',
-            (LibraryParameter(DataType.from_string('MOT_FLOAT_TYPE'), 'x'),
-             LibraryParameter(DataType.from_string('int'), 'n')),
+            (LibraryParameter(CLDataType.from_string('MOT_FLOAT_TYPE'), 'x'),
+             LibraryParameter(CLDataType.from_string('int'), 'n')),
             resource_filename('mot', 'data/opencl/firstLegendreTerm.h'),
             resource_filename('mot', 'data/opencl/firstLegendreTerm.cl'),
             {},
@@ -188,7 +188,7 @@ class RanluxCL(LibraryFunction):
         super(RanluxCL, self).__init__(
             'float4',
             'ranluxcl',
-            (LibraryParameter(DataType.from_string('ranluxcl_state_t*'), 'ranluxclstate'),),
+            (LibraryParameter(CLDataType.from_string('ranluxcl_state_t*'), 'ranluxclstate'),),
             resource_filename('mot', 'data/opencl/ranluxcl.h'),
             resource_filename('mot', 'data/opencl/ranluxcl.cl'),
             {},
@@ -203,7 +203,7 @@ class CerfImWOfX(LibraryFunction):
         super(CerfImWOfX, self).__init__(
             'MOT_FLOAT_TYPE',
             'im_w_of_x',
-            (LibraryParameter(DataType.from_string('MOT_FLOAT_TYPE'), 'x'),),
+            (LibraryParameter(CLDataType.from_string('MOT_FLOAT_TYPE'), 'x'),),
             resource_filename('mot', 'data/opencl/cerf/im_w_of_x.h'),
             resource_filename('mot', 'data/opencl/cerf/im_w_of_x.cl'),
             {},
@@ -218,7 +218,7 @@ class CerfDawson(LibraryFunction):
         super(CerfDawson, self).__init__(
             'MOT_FLOAT_TYPE',
             'dawson',
-            (LibraryParameter(DataType.from_string('MOT_FLOAT_TYPE'), 'x'),),
+            (LibraryParameter(CLDataType.from_string('MOT_FLOAT_TYPE'), 'x'),),
             resource_filename('mot', 'data/opencl/cerf/dawson.h'),
             resource_filename('mot', 'data/opencl/cerf/dawson.cl'),
             {},
@@ -233,7 +233,7 @@ class CerfErfi(LibraryFunction):
         super(CerfErfi, self).__init__(
             'MOT_FLOAT_TYPE',
             'erfi',
-            (LibraryParameter(DataType.from_string('MOT_FLOAT_TYPE'), 'x'),),
+            (LibraryParameter(CLDataType.from_string('MOT_FLOAT_TYPE'), 'x'),),
             resource_filename('mot', 'data/opencl/cerf/erfi.h'),
             resource_filename('mot', 'data/opencl/cerf/erfi.cl'),
             {},
@@ -254,7 +254,7 @@ class Scalar(ModelFunction):
         super(Scalar, self).__init__(
             name,
             'cmScalar',
-            (FreeParameter(DataType.from_string('MOT_FLOAT_TYPE'), 's', False, value, lower_bound, upper_bound,
+            (FreeParameter(CLDataType.from_string('MOT_FLOAT_TYPE'), 's', False, value, lower_bound, upper_bound,
                            parameter_transform=ClampTransform(),
                            sampling_proposal=GaussianProposal(1.0)),))
 

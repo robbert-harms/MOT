@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import six
 from .model_building.parameter_functions.priors import UniformWithinBoundsPrior
 from .model_building.parameter_functions.proposals import GaussianProposal
 from .model_building.parameter_functions.sample_statistics import GaussianPSS
@@ -13,6 +14,21 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
 class DataType(object):
+    """Base class for the data types.
+
+    On the moment we only support the CL data type. In the future we may extend MOT to also support CUDA. On that
+    moment we may need to subclass this class to support specifics of CUDA.
+    """
+
+    def get_declaration(self):
+        """Get the complete declaration for this data type.
+
+        Returns:
+            str: the parameter declaration
+        """
+
+
+class CLDataType(DataType):
 
     def __init__(self, raw_data_type, is_pointer_type=False, vector_length=None,
                  address_space_qualifier=None, pre_data_type_type_qualifiers=None, post_data_type_type_qualifier=None):
@@ -22,51 +38,50 @@ class DataType(object):
 
         Args:
             raw_data_type (str): the specific data type without the vector number and asterisks
-            numpy_type (numpy data type): the corresponding numpy data type, used in conversions
             is_pointer_type (boolean): If this parameter is a pointer type (appened by a *)
             vector_length (int or None): If None this data type is not a CL vector type.
                 If it is an integer it is the vector length of this data type (2, 3, 4, ...)
-            address_space_qualifier (str or None): the address space qualifier or None if not used
-            pre_data_type_type_qualifiers (list of str or None): the type qualifiers to use before the data type
-            post_data_type_type_qualifier (str or None): the type qualifier to use before the data type
+            address_space_qualifier (str or None): the address space qualifier or None if not used. One of:
+                {__local, local, __global, global, __constant, constant, __private, private} or None.
+            pre_data_type_type_qualifiers (list of str or None): the type qualifiers to use before the data type.
+                One of {const, restrict, volatile}
+            post_data_type_type_qualifier (str or None): the type qualifier to use after the data type.
+                Can only be 'const'
         """
-        self._raw_data_type = raw_data_type
-        self._is_pointer_type = is_pointer_type
-        self._vector_length = vector_length
+        self.raw_data_type = raw_data_type
+        self.is_pointer_type = is_pointer_type
+        self.vector_length = vector_length
         self.address_space_qualifier = address_space_qualifier
         self.pre_data_type_type_qualifiers = pre_data_type_type_qualifiers
+
+        if isinstance(self.pre_data_type_type_qualifiers, six.string_types):
+            self.pre_data_type_type_qualifiers = [self.pre_data_type_type_qualifiers]
+
         self.post_data_type_type_qualifier = post_data_type_type_qualifier
 
-    @classmethod
-    def from_string(cls, cl_type_str):
-        """Generate a datatype from a CL type.
+    def get_declaration(self):
+        declaration = ''
+        if self.address_space_qualifier:
+            declaration += self.address_space_qualifier + ' '
+        if self.pre_data_type_type_qualifiers:
+            declaration += ' '.join(self.pre_data_type_type_qualifiers) + ' '
+        declaration += self.cl_type
+        if self.post_data_type_type_qualifier:
+            declaration += ' ' + self.post_data_type_type_qualifier
+        return declaration
 
-        This only accepts data types as input. If you need to add other qualifiers, please use the functions to do so.
+    @classmethod
+    def from_string(cls, parameter_declaration):
+        """Parse the parameter declaration into a CLDataType
 
         Args:
-            cl_type_str (str): the type qualifier
-        """
-        address_space_qualifier = None
-        pre_data_type_type_qualifier = None
-        post_data_type_type_qualifier = None
-
-        raw_type = cl_type_str.replace('*', '')
-        raw_type = raw_type.replace(' ', '')
-        raw_type = ''.join([i for i in raw_type if not i.isdigit()])
-        vector_length = ''.join([i for i in cl_type_str if i.isdigit()])
-        if vector_length == '':
-            vector_length = None
-        is_pointer = ('*' in cl_type_str)
-        return DataType(raw_type, is_pointer_type=is_pointer, vector_length=vector_length)
-
-    @property
-    def raw_data_type(self):
-        """Get the data type defined in this object
+            parameter_declaration (str): the CL parameter declaration. Example: global const float4* const
 
         Returns:
-            str: The scalar type of this data type.
+            CLDataType: the CL data type for this parameter declaration
         """
-        return self._raw_data_type
+        from mot.parsers.cl.CLDataTypeParser import parse
+        return parse(parameter_declaration)
 
     @property
     def cl_type(self):
@@ -78,12 +93,12 @@ class DataType(object):
         Returns:
             str: The name of this data type
         """
-        s = self._raw_data_type
+        s = self.raw_data_type
 
-        if self._vector_length is not None:
-            s += str(self._vector_length)
+        if self.vector_length is not None:
+            s += str(self.vector_length)
 
-        if self._is_pointer_type:
+        if self.is_pointer_type:
             s += '*'
 
         return s
@@ -95,22 +110,33 @@ class DataType(object):
         Returns:
             boolean: True if it is a vector type, false otherwise
         """
-        return self._vector_length is not None
+        return self.vector_length is not None
 
-    @property
-    def is_pointer_type(self):
-        """Check if this data type is a pointer type
+    def set_vector_length(self, vector_length):
+        """Set the vector length of this data type.
 
-        Returns:
-            boolean: True if it is a pointer type, false otherwise
+        Args:
+            vector_length (int or None): If None this data type is not a CL vector type.
+                If it is an integer it is the vector length of this data type (2, 3, 4, ...)
         """
-        return self._is_pointer_type
+        self.vector_length = vector_length
 
-    @property
-    def vector_length(self):
-        if self._vector_length is None:
-            return 0
-        return self._vector_length
+    def set_is_pointer_type(self, is_pointer_type):
+        """Set if this parameter should be treated a being a pointer type
+
+        Args:
+            is_pointer_type (boolean): If this parameter is a pointer type (appened by a *)
+        """
+        self.is_pointer_type = is_pointer_type
+
+    def set_raw_data_type(self, raw_data_type):
+        """Set the raw data type
+
+        Args:
+            raw_data_type (str): the specific data type without the vector number and asterisks
+        """
+        self.raw_data_type = raw_data_type
+        return self
 
     def set_address_space_qualifier(self, address_space_qualifier):
         """Set the address space qualifier.
@@ -134,6 +160,10 @@ class DataType(object):
             self: for chaining
         """
         self.pre_data_type_type_qualifiers = pre_data_type_type_qualifiers
+
+        if isinstance(self.pre_data_type_type_qualifiers, six.string_types):
+            self.pre_data_type_type_qualifiers = [self.pre_data_type_type_qualifiers]
+
         return self
 
     def set_post_data_type_type_qualifier(self, post_data_type_type_qualifier):
@@ -147,6 +177,9 @@ class DataType(object):
         """
         self.post_data_type_type_qualifier = post_data_type_type_qualifier
         return self
+
+    def __str__(self):
+        return self.get_declaration()
 
 
 class AbstractProblemData(object):
