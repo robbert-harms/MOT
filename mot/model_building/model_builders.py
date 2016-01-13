@@ -262,7 +262,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         return len(self.problems_to_analyze)
 
     def get_nmr_inst_per_problem(self):
-        return self._problem_data.observations.shape[1]
+        return np.array(self._problem_data.prtcl_data_dict[list(self._problem_data.prtcl_data_dict.keys())[0]]).shape[0]
 
     def get_nmr_estimable_parameters(self):
         return len(self.get_optimized_param_names())
@@ -273,12 +273,18 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         When overriding this function, please note that it should adhere to the attribute problems_to_analyze.
         """
         observations = self._problem_data.observations
-        if self.problems_to_analyze is not None:
-            observations = observations[self.problems_to_analyze, ...]
+        var_data_dict = {}
 
-        var_data_dict = {'observations': SimpleDataAdapter(observations, CLDataType.from_string('MOT_FLOAT_TYPE*'),
-                                                           self._get_mot_float_type())}
+        if observations is not None:
+            if self.problems_to_analyze is not None:
+                observations = observations[self.problems_to_analyze, ...]
+
+            data_adapter = SimpleDataAdapter(observations, CLDataType.from_string('MOT_FLOAT_TYPE*'),
+                                             self._get_mot_float_type())
+            var_data_dict.update({'observations': data_adapter})
+
         var_data_dict.update(self._get_fixed_parameters_as_var_data())
+
         return var_data_dict
 
     def get_problems_prtcl_data(self):
@@ -306,7 +312,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         """When overriding this function, please note that it should adhere to the attribute problems_to_analyze.
 
         Args:
-            results_dict (dict): the initialization settings for the specfisic parameters.
+            results_dict (dict): the initialization settings for the specific parameters.
         """
         starting_points = []
         for m, p in self._get_estimable_parameters_list():

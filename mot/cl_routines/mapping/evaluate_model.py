@@ -33,11 +33,10 @@ class EvaluateModelPerProtocol(AbstractCLRoutine):
         if model.double_precision:
             np_dtype = np.float64
 
-        parameters = model.get_initial_parameters(parameters)
-        nmr_problems = model.get_nmr_problems()
+        nmr_problems = parameters.shape[0]
         nmr_inst_per_problem = model.get_nmr_inst_per_problem()
 
-        evaluations = np.asmatrix(np.zeros((nmr_problems, nmr_inst_per_problem), dtype=np_dtype, order='C'))
+        evaluations = np.zeros((nmr_problems, nmr_inst_per_problem), dtype=np_dtype, order='C')
         parameters = parameters.astype(np_dtype, order='C', copy=False)
 
         var_data_dict = model.get_problems_var_data()
