@@ -8,6 +8,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
 class AbstractTransformation(object):
+
     def __init__(self, dependencies=()):
         """The transformations define the encode and decode operations needed to build a codec.
 

@@ -129,6 +129,20 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         p.upper_bound = value
         return self
 
+    def set_parameter_transform(self, model_param_name, value):
+        """Set the parameter transform for the given parameter to the given transformation.
+
+        Args:
+            model_param_name (string): A model.param name like 'Ball.d'
+            value (AbstractTransformation): The parameter transform to use
+
+        Returns:
+            Returns self for chainability
+        """
+        m, p = self._get_model_parameter_matching(model_param_name)
+        p.parameter_transform = value
+        return self
+
     def unfix(self, model_param_name):
         """Unfix the given model.param
 
