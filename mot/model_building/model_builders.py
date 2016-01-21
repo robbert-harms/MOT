@@ -327,6 +327,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         Args:
             results_dict (dict): the initialization settings for the specific parameters.
+                The number of items per dictionary item should match the number of problems to analyze.
         """
         starting_points = []
         for m, p in self._get_estimable_parameters_list():
@@ -361,8 +362,9 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         return np.array([p.upper_bound for m, p in self._get_estimable_parameters_list()])
 
     def set_initial_parameters(self, initial_params):
-        """Update the initial parameters for this model by the given values. This only affects free
-        and non fixed parameters.
+        """Update the initial parameters for this model by the given values.
+
+        This only affects free non fixed parameters.
 
         Args:
             initial_params (dict): a dictionary containing as keys full parameter names (<model>_<param>) and as values

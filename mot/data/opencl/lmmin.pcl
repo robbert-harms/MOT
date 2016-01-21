@@ -10,6 +10,19 @@
  *            Robbert Harms (2013)
  * License:   see ../COPYING (FreeBSD)
  * Homepage:  apps.jcns.fz-juelich.de/lmfit
+
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
  */
 
 /**
@@ -72,7 +85,7 @@ MOT_FLOAT_TYPE lm_euclidian_norm(const MOT_FLOAT_TYPE* const x, const int n);
 #define LM_ENORM_SQRT_GIANT sqrt(MOT_MAX) /* square should not overflow */
 #define LM_ENORM_SQRT_DWARF sqrt(MOT_MIN) /* square should not underflow */
 
-/** 
+/**
  * The function furthermore requires you to define:
  * #define NMR_INST_PER_PROBLEM         | as the number of instances per problem (m)
  */
@@ -102,7 +115,7 @@ MOT_FLOAT_TYPE lm_euclidian_norm(const MOT_FLOAT_TYPE* const x, const int n);
  */
 
 void lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
-	
+
 	int j, i;
     MOT_FLOAT_TYPE actred, dirder, fnorm, fnorm1, gnorm, pnorm, prered, ratio, step, sum, temp, temp1, temp2, temp3;
 
@@ -128,7 +141,7 @@ void lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
         for (j = 0; j < %(NMR_PARAMS)s; j++)
             diag[j] = 1.;
     }
-	
+
 	/***  Evaluate function at starting point and calculate norm.  ***/
     evaluate(data, x, fvec);
     ++nfev;
@@ -136,7 +149,7 @@ void lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
     if( fnorm <= LM_DWARF ){
         return;
     }
-    
+
     ///***  The outer loop: compute gradient, then descend.  ***/
     while(true){
 		/***  [outer]  Calculate the Jacobian.  ***/
@@ -151,10 +164,10 @@ void lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
             }
             x[j] = temp; /* restore */
         }
-        
+
 		/***  [outer]  Compute the QR factorization of the Jacobian.  ***/
 
-		/*      fjac is an m by n array. The upper n by n submatrix of fjac 
+		/*      fjac is an m by n array. The upper n by n submatrix of fjac
 		 *        is made to contain an upper triangular matrix r with diagonal
 		 *        elements of nonincreasing magnitude such that
 		 *
@@ -223,7 +236,7 @@ void lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
                         diag[j] = wa2[j];
                     }
                     else{
-                        diag[j] = 1;   
+                        diag[j] = 1;
                     }
                 }
                 /* xnorm := || D x || */
@@ -277,7 +290,7 @@ void lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
 			for (j = 0; j < %(NMR_PARAMS)s; j++){
                 wa2[j] = x[j] - wa1[j];
 			}
-            
+
             evaluate(data, wa2, wf);
             ++nfev;
             fnorm1 = lm_euclidian_norm(wf, NMR_INST_PER_PROBLEM);
@@ -293,7 +306,7 @@ void lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
             else{
                 ratio = 0;
             }
-            
+
             /* update the step bound */
             if( ratio <= 0.25 ) {
                 if( actred >= 0 ){
@@ -337,11 +350,11 @@ void lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
                 fnorm = fnorm1;
             }
 
-            /* convergence tests */ 
+            /* convergence tests */
             if( fnorm<=LM_DWARF ){
                 return; /* success: sum of squares almost zero */
             }
-            
+
             /* test two criteria (both may be fulfilled) */
             if (fabs(actred) <= FTOL && prered <= FTOL && ratio <= 2){
 				return; /* success: x almost stable */
@@ -363,12 +376,12 @@ void lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
             if ( gnorm <= LM_MACHEP ){
                 return;
             }
-			
+
 			/***  [inner]  End of the loop. Repeat if iteration unsuccessful.  ***/
         } while ( !inner_success );
 
         done_first = true;
-    };/***  [outer]  End of the loop. ***/ 
+    };/***  [outer]  End of the loop. ***/
 } /*** lmmin. ***/
 
 
@@ -466,7 +479,7 @@ void lm_lmpar(int n, MOT_FLOAT_TYPE * const r, int ldr, int * const ipvt, MOT_FL
     // used as nsing
     iter_nsing = n;
     for (j = 0; j < n; j++) {
-        aux[j] = qtb[j];        
+        aux[j] = qtb[j];
         if (r[j * ldr + j] == 0 && iter_nsing == n){
             iter_nsing = j;
         }
@@ -568,7 +581,7 @@ void lm_lmpar(int n, MOT_FLOAT_TYPE * const r, int ldr, int * const ipvt, MOT_FL
         dxnorm = lm_euclidian_norm(xdi, n);
         fp_old = fp;
         fp = dxnorm - delta;
-        
+
         /** if the function is small enough, accept the current value
             of par. Also test for the exceptional cases where parl
             is zero or the number of iterations has reached 10. **/
@@ -578,7 +591,7 @@ void lm_lmpar(int n, MOT_FLOAT_TYPE * const r, int ldr, int * const ipvt, MOT_FL
             || iter_nsing == 10) {
             break; /* the only exit from the iteration. */
         }
-        
+
         /** compute the Newton correction. **/
         for (j = 0; j < n; j++){
             aux[j] = diag[ipvt[j]] * xdi[ipvt[j]] / dxnorm;
@@ -603,11 +616,11 @@ void lm_lmpar(int n, MOT_FLOAT_TYPE * const r, int ldr, int * const ipvt, MOT_FL
             paru = min(paru, *par);
         }
         /* the case fp==0 is precluded by the break condition  */
-        
+
         /** compute an improved estimate for par. **/
-        
+
         *par = max(parl, *par + gnorm_parc);
-        
+
     }
 
 } /*** lm_lmpar. ***/
@@ -687,7 +700,7 @@ void lm_qrfac(int m, int n, MOT_FLOAT_TYPE * const a, int * const ipvt,
         for (k = j + 1; k < n; k++)
             if (rdiag[k] > rdiag[kmax])
                 kmax = k;
-        
+
         if (kmax != j){
             for (i = 0; i < m; i++) {
                 temp = a[j*m+i];
@@ -699,7 +712,7 @@ void lm_qrfac(int m, int n, MOT_FLOAT_TYPE * const a, int * const ipvt,
             k = ipvt[j];
             ipvt[j] = ipvt[kmax];
             ipvt[kmax] = k;
-        }       
+        }
 
 
         /** compute the Householder transformation to reduce the
@@ -842,13 +855,13 @@ void lm_qrsolv(int n, MOT_FLOAT_TYPE * const r, int ldr, int * const ipvt, MOT_F
             for (k = j; k < n; k++)
                 sdiag[k] = 0.;
             sdiag[j] = diag[ipvt[j]];
-    
-    /*** qrsolv: the transformations to eliminate the row of d modify only 
+
+    /*** qrsolv: the transformations to eliminate the row of d modify only
          a single element of qT*b beyond the first n, which is initially 0. ***/
-    
+
             qtbpj = 0.;
             for (k = j; k < n; k++) {
-    
+
                 /** determine a Givens rotation which eliminates the
                     appropriate element in the current row of d. **/
                 if (sdiag[k] != 0.){

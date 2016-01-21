@@ -26,8 +26,8 @@ class MetropolisHastings(AbstractSampler):
             nmr_samples (int): The length of the (returned) chain per voxel
             burn_length (int): The length of the burn in (per voxel), these are extra samples,
                 jump is set to 1 (no thinning)
-            sample_intervales (int): how many samples we wait before we take,
-                this requires extra samples (chain_length * sample_intervals)
+            sample_intervals (int): how many samples we wait before we take,
+                this will draw extra samples (chain_length * sample_intervals)
             proposal_update_intervals (int): after how many samples we would like to update the proposals
                 This is during burning and sampling. A value of 1 means update after every jump.
 
@@ -35,8 +35,8 @@ class MetropolisHastings(AbstractSampler):
             nmr_samples (int): The length of the (returned) chain per voxel
             burn_length (int): The length of the burn in (per voxel), these are extra samples,
                 jump is set to 1 (no thinning)
-            sample_intervales (int): how many samples we wait before we take,
-                this requires extra samples (chain_length * sample_intervals)
+            sample_intervals (int): how many samples we wait before we take,
+                this will draw extra samples (chain_length * sample_intervals)
             proposal_update_intervals (int): after how many samples we would like to update the proposals
                 This is during burning and sampling. A value of 1 means update after every jump.
         """
@@ -86,7 +86,7 @@ class MetropolisHastings(AbstractSampler):
             self._logger.info('Starting post-sampling transformations')
             volume_maps = model.finalize_optimization_results(model.samples_to_statistics(samples_dict))
             self._logger.info('Finished post-sampling transformations')
-            return samples_dict, {'volume_maps': volume_maps}
+            return samples_dict, volume_maps
         return samples_dict
 
     def _do_initial_logging(self, model):
