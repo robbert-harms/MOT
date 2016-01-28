@@ -168,7 +168,7 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
                                     sqrt(pown(''' + eval_fname + '''(data, x, i), 2) +
                                                 pown(OffsetGaussianNoise_sigma, 2)), 2);
                 }
-                return (MOT_FLOAT_TYPE) (sum / (pown(OffsetGaussianNoise_sigma, 2)));
+                return (MOT_FLOAT_TYPE) (sum / (2 * pown(OffsetGaussianNoise_sigma, 2)));
             }
         '''
 
@@ -182,7 +182,7 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
                                     sqrt(pown(''' + eval_fname + '''(data, x, i), 2) +
                                                 pown(OffsetGaussianNoise_sigma, 2)), 2);
                 }
-                return - sum / (pown(OffsetGaussianNoise_sigma, 2));
+                return - sum / (2 * pown(OffsetGaussianNoise_sigma, 2));
             }
         '''
 
