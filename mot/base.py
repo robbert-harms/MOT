@@ -48,9 +48,13 @@ class CLDataType(DataType):
             post_data_type_type_qualifier (str or None): the type qualifier to use after the data type.
                 Can only be 'const'
         """
-        self.raw_data_type = raw_data_type
+        self.raw_data_type = str(raw_data_type)
         self.is_pointer_type = is_pointer_type
         self.vector_length = vector_length
+
+        if self.vector_length:
+            self.vector_length = int(self.vector_length)
+
         self.address_space_qualifier = address_space_qualifier
         self.pre_data_type_type_qualifiers = pre_data_type_type_qualifiers
 
@@ -62,12 +66,12 @@ class CLDataType(DataType):
     def get_declaration(self):
         declaration = ''
         if self.address_space_qualifier:
-            declaration += self.address_space_qualifier + ' '
+            declaration += str(self.address_space_qualifier) + ' '
         if self.pre_data_type_type_qualifiers:
-            declaration += ' '.join(self.pre_data_type_type_qualifiers) + ' '
-        declaration += self.cl_type
+            declaration += str(' '.join(self.pre_data_type_type_qualifiers)) + ' '
+        declaration += str(self.cl_type)
         if self.post_data_type_type_qualifier:
-            declaration += ' ' + self.post_data_type_type_qualifier
+            declaration += ' ' + str(self.post_data_type_type_qualifier)
         return declaration
 
     @classmethod
@@ -101,7 +105,7 @@ class CLDataType(DataType):
         if self.is_pointer_type:
             s += '*'
 
-        return s
+        return str(s)
 
     @property
     def is_vector_type(self):

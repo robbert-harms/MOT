@@ -238,7 +238,7 @@ class ParameterCLCodeGenerator(object):
             data_type = data_adapter.get_data_type().raw_data_type
 
             if data_adapter.get_data_type().is_vector_type:
-                data_type += data_adapter.get_data_type().vector_length
+                data_type += str(data_adapter.get_data_type().vector_length)
 
             kernel_param_names.append(clmemtype + ' ' + data_type + '* ' + param_name)
             data_struct_init.append(param_name)

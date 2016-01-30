@@ -228,7 +228,7 @@ class AbstractParallelOptimizerWorker(Worker):
 
         kernel_source = ''
         kernel_source += get_float_type_def(self._double_precision)
-        kernel_source += param_code_gen.get_data_struct()
+        kernel_source += str(param_code_gen.get_data_struct())
 
         if self._use_param_codec:
             param_codec = self._model.get_parameter_codec()

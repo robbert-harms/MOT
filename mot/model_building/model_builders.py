@@ -494,8 +494,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         func = self.get_model_eval_function(eval_func_name)
         func += self.get_observation_return_function(obs_func_name)
-        func += self._evaluation_model.get_objective_function(func_name, inst_per_problem, eval_func_name,
-                                                              obs_func_name, param_listing)
+        func += str(self._evaluation_model.get_objective_function(func_name, inst_per_problem, eval_func_name,
+                                                              obs_func_name, param_listing))
         return func
 
     def finalize_optimization_results(self, results_dict):
