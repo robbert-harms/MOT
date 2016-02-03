@@ -269,7 +269,7 @@ class LoadBalanceStrategy(object):
         try:
             return worker.calculate(int(range_start), int(range_end))
         except cl.MemoryError:
-            self._logger.debug('We ran out of memory, halving the dataset and trying again.')
+            self._logger.info('We ran out of memory, halving the input and trying again.')
             half_range_length = int(math.ceil((range_end - range_start) / 2.0))
             event = self._try_processing(worker, range_start, range_start + half_range_length)
             event.wait()
@@ -285,6 +285,7 @@ class LoadBalanceStrategy(object):
             str: the pretty name of this routine.
         """
         return cls.__name__
+
 
 class MetaLoadBalanceStrategy(LoadBalanceStrategy):
 

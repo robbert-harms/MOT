@@ -75,10 +75,11 @@ class SimpleAssignment(AbstractParameterDependency):
 
 
 class WeightSumToOneRule(AbstractParameterDependency):
+
     def __init__(self, parameter_names):
         """Adds the unity sum (parameter) dependency for the weights indicated by the given parameters.
 
-        Parameters indicated by (by <model>.<param> name). This makes sure that the given parameters sum to one before
+        Parameters are given by (by <model>.<param> name). This makes sure that the given parameters sum to one before
         they are used in the model functions. Note that if you have 3 weights, you make a dependency for one of them
         with as argument the name of the other two.
 

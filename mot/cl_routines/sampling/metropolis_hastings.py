@@ -1,5 +1,8 @@
 import pyopencl as cl
 import numpy as np
+
+from mot.cl_routines.mapping.error_measures import ErrorMeasures
+from mot.cl_routines.mapping.residual_calculator import ResidualCalculator
 from ...cl_functions import RanluxCL
 from ...utils import results_to_dict, \
     ParameterCLCodeGenerator, initialize_ranlux, get_float_type_def
@@ -66,7 +69,7 @@ class MetropolisHastings(AbstractSampler):
         prtcl_data_dict = model.get_problems_prtcl_data()
         fixed_data_dict = model.get_problems_fixed_data()
 
-        samples = np.zeros((model.get_nmr_problems(), parameters.shape[1] * self.nmr_samples),
+        samples = np.zeros((model.get_nmr_problems(), parameters.shape[1], self.nmr_samples),
                            dtype=np_dtype, order='C')
 
         self._logger.info('Starting sampling with method {0}'.format(self.get_pretty_name()))
@@ -77,7 +80,6 @@ class MetropolisHastings(AbstractSampler):
                                        self.proposal_update_intervals])
         self.load_balancer.process(workers, model.get_nmr_problems())
 
-        samples = np.reshape(samples, (model.get_nmr_problems(), parameters.shape[1], self.nmr_samples))
         samples_dict = results_to_dict(samples, model.get_optimized_param_names())
 
         self._logger.info('Finished sampling')
@@ -86,7 +88,16 @@ class MetropolisHastings(AbstractSampler):
             self._logger.info('Starting post-sampling transformations')
             volume_maps = model.finalize_optimization_results(model.samples_to_statistics(samples_dict))
             self._logger.info('Finished post-sampling transformations')
+
+            self._logger.info('Calculating errors measures')
+            errors = ResidualCalculator(cl_environments=self.cl_environments,
+                                        load_balancer=self.load_balancer).calculate(model, volume_maps)
+            error_measures = ErrorMeasures(self.cl_environments, self.load_balancer,
+                                           model.double_precision).calculate(errors)
+            volume_maps.update(error_measures)
+            self._logger.info('Done calculating errors measures')
             return samples_dict, volume_maps
+
         return samples_dict
 
     def _do_initial_logging(self, model):
@@ -145,7 +156,7 @@ class _MHWorker(Worker):
         data_buffers = [cl.Buffer(self._cl_run_context.context, read_only_flags,
                                   hostbuf=self._parameters[range_start:range_end, :])]
         samples_buf = cl.Buffer(self._cl_run_context.context, write_only_flags,
-                                hostbuf=self._samples[range_start:range_end, :])
+                                hostbuf=self._samples[range_start:range_end, ...])
         data_buffers.append(samples_buf)
 
         data_buffers.append(ranluxcltab_buffer)
@@ -167,7 +178,7 @@ class _MHWorker(Worker):
         local_range = None
 
         event = self._kernel.sample(self._cl_run_context.queue, global_range, local_range, *data_buffers)
-        event = cl.enqueue_copy(self._cl_run_context.queue, self._samples[range_start:range_end, :],
+        event = cl.enqueue_copy(self._cl_run_context.queue, self._samples[range_start:range_end, ...],
                                 samples_buf, wait_for=(event,), is_blocking=False)
         return event
 
