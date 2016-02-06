@@ -951,7 +951,7 @@ MOT_FLOAT_TYPE lm_euclidian_norm(const MOT_FLOAT_TYPE* const x, const int n){
  *      x is an INPUT array of length n.
  */
     int i;
-    double agiant, s1, s2, s3, xabs, x1max, x3max;
+    MOT_FLOAT_TYPE agiant, s1, s2, s3, xabs, x1max, x3max;
 
     s1 = 0;
     s2 = 0;
