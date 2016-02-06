@@ -100,9 +100,9 @@ MOT_FLOAT_TYPE lm_euclidian_norm(const MOT_FLOAT_TYPE* const x, const int n);
  * SCALE_DIAG == 0 || SCALE_DIAG == 1
  */
 
-/*****************************************************************************/
-/*  lmmin (main minimization routine)                                        */
-/*****************************************************************************/
+/******************************************************************************/
+/*  lmmin (main minimization routine)                                         */
+/******************************************************************************/
 
 /**
  * x: starting parameters
@@ -119,7 +119,6 @@ void lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
 	int j, i;
     MOT_FLOAT_TYPE actred, dirder, fnorm, fnorm1, gnorm, pnorm, prered, ratio, step, sum, temp, temp1, temp2, temp3;
 
-    bool   done_first = false;  /* loop counters, for monitoring */
     bool   inner_success; /* flag for loop control */
     MOT_FLOAT_TYPE lmpar = 0;     /* Levenberg-Marquardt parameter */
     MOT_FLOAT_TYPE delta = 0;
@@ -135,24 +134,30 @@ void lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
     MOT_FLOAT_TYPE wa2[%(NMR_PARAMS)s];
     MOT_FLOAT_TYPE wa3[%(NMR_PARAMS)s];
     MOT_FLOAT_TYPE wf[NMR_INST_PER_PROBLEM];
-    int ipvt[%(NMR_PARAMS)s];
+    int Pivot[%(NMR_PARAMS)s];
 
+    /* Initialize diag. */
     if (!SCALE_DIAG) {
         for (j = 0; j < %(NMR_PARAMS)s; j++)
-            diag[j] = 1.;
+            diag[j] = 1;
     }
 
-	/***  Evaluate function at starting point and calculate norm.  ***/
+    /***  Evaluate function at starting point and calculate norm.  ***/
+
     evaluate(data, x, fvec);
-    ++nfev;
+    nfev = 1;
     fnorm = lm_euclidian_norm(fvec, NMR_INST_PER_PROBLEM);
-    if( fnorm <= LM_DWARF ){
+    if (!isfinite(fnorm)) {
+	return;
+    } else if (fnorm <= LM_DWARF) {
         return;
     }
 
-    ///***  The outer loop: compute gradient, then descend.  ***/
-    while(true){
-		/***  [outer]  Calculate the Jacobian.  ***/
+    /***  The outer loop: compute gradient, then descend.  ***/
+
+    for (int outer = 0;; ++outer) {
+
+        /** Calculate the Jacobian. **/
         for (j = 0; j < %(NMR_PARAMS)s; j++) {
             temp = x[j];
             step = max(EPS*EPS, EPS * fabs(temp));
@@ -165,60 +170,63 @@ void lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
             x[j] = temp; /* restore */
         }
 
-		/***  [outer]  Compute the QR factorization of the Jacobian.  ***/
+        /** Compute the QR factorization of the Jacobian. **/
 
-		/*      fjac is an m by n array. The upper n by n submatrix of fjac
-		 *        is made to contain an upper triangular matrix r with diagonal
-		 *        elements of nonincreasing magnitude such that
-		 *
-		 *              p^T*(jac^T*jac)*p = r^T*r
-		 *
-		 *              (NOTE: ^T stands for matrix transposition),
-		 *
-		 *        where p is a permutation matrix and jac is the final calculated
-		 *        Jacobian. Column j of p is column ipvt(j) of the identity matrix.
-		 *        The lower trapezoidal part of fjac contains information generated
-		 *        during the computation of r.
-		 *
-		 *      ipvt is an integer array of length n. It defines a permutation
-		 *        matrix p such that jac*p = q*r, where jac is the final calculated
-		 *        Jacobian, q is orthogonal (not stored), and r is upper triangular
-		 *        with diagonal elements of nonincreasing magnitude. Column j of p
-		 *        is column ipvt(j) of the identity matrix.
-		 */
-		lm_qrfac(NMR_INST_PER_PROBLEM, %(NMR_PARAMS)s, fjac, ipvt, wa1, wa2, wa3);
-        /* return values are ipvt, wa1=rdiag, wa2=acnorm */
+        /* fjac is an m by n array. The upper n by n submatrix of fjac is made
+         *   to contain an upper triangular matrix R with diagonal elements of
+         *   nonincreasing magnitude such that
+         *
+         *         P^T*(J^T*J)*P = R^T*R
+         *
+         *         (NOTE: ^T stands for matrix transposition),
+         *
+         *   where P is a permutation matrix and J is the final calculated
+         *   Jacobian. Column j of P is column Pivot(j) of the identity matrix.
+         *   The lower trapezoidal part of fjac contains information generated
+         *   during the computation of R.
+         *
+         * Pivot is an integer array of length n. It defines a permutation
+         *   matrix P such that jac*P = Q*R, where jac is the final calculated
+         *   Jacobian, Q is orthogonal (not stored), and R is upper triangular
+         *   with diagonal elements of nonincreasing magnitude. Column j of P
+         *   is column Pivot(j) of the identity matrix.
+         */
 
-		/***  [outer]  Form q^T * fvec and store first n components in qtf.  ***/
+        lm_qrfac(NMR_INST_PER_PROBLEM, %(NMR_PARAMS)s, fjac, Pivot, wa1, wa2, wa3);
+        /* return values are Pivot, wa1=rdiag, wa2=acnorm */
+
+        /** Form Q^T * fvec, and store first n components in qtf. **/
         for (i = 0; i < NMR_INST_PER_PROBLEM; i++){
             wf[i] = fvec[i];
-		}
+        }
 
         for(j = 0; j < %(NMR_PARAMS)s; j++){
             temp3 = fjac[j*NMR_INST_PER_PROBLEM+j];
-            if (temp3 != 0.) {
+            if (temp3 != 0) {
                 sum = 0;
                 for (i = j; i < NMR_INST_PER_PROBLEM; i++){
                     sum += fjac[j*NMR_INST_PER_PROBLEM+i] * wf[i];
-				}
+                }
                 temp = -sum / temp3;
                 for (i = j; i < NMR_INST_PER_PROBLEM; i++){
                     wf[i] += fjac[j*NMR_INST_PER_PROBLEM+i] * temp;
-				}
+                }
             }
             fjac[j*NMR_INST_PER_PROBLEM+j] = wa1[j];
             qtf[j] = wf[j];
         }
 
-		/***  [outer]  Compute norm of scaled gradient and detect degeneracy.  ***/
+        /**  Compute norm of scaled gradient and detect degeneracy. **/
         gnorm = 0;
         for (j = 0; j < %(NMR_PARAMS)s; j++) {
-            if(wa2[ipvt[j]] != 0){
-                sum = 0.0;
+            if(wa2[Pivot[j]] == 0){
+            }
+            else{
+                sum = 0;
                 for (i = 0; i <= j; i++){
                     sum += fjac[j*NMR_INST_PER_PROBLEM+i] * qtf[i];
                 }
-                gnorm = max( gnorm, fabs( sum / wa2[ipvt[j]] / fnorm ) );
+                gnorm = max(gnorm, fabs(sum / wa2[Pivot[j]] / fnorm));
             }
         }
 
@@ -226,18 +234,12 @@ void lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
             return;
         }
 
-		/***  [outer]  Initialize / update diag and delta. ***/
-		if(!done_first){
-            /* first iteration only */
+        /** Initialize or update diag and delta. **/
+        if(!outer){ /* first iteration only */
             if (SCALE_DIAG) {
                 /* diag := norms of the columns of the initial Jacobian */
                 for (j = 0; j < %(NMR_PARAMS)s; j++){
-                    if(wa2[j]){
-                        diag[j] = wa2[j];
-                    }
-                    else{
-                        diag[j] = 1;
-                    }
+                    diag[j] = wa2[j] ? wa2[j] : 1;
                 }
                 /* xnorm := || D x || */
                 for (j = 0; j < %(NMR_PARAMS)s; j++){
@@ -247,6 +249,10 @@ void lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
             } else {
                 xnorm = lm_euclidian_norm(x, %(NMR_PARAMS)s);
             }
+            if(!isfinite(xnorm)){
+                return;
+            }
+
             /* initialize the step bound delta. */
             if(xnorm){
                 delta = STEP_BOUND * xnorm;
@@ -262,31 +268,38 @@ void lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
             }
         }
 
-		/***  The inner loop. ***/
+        /** The inner loop. **/
+        int inner = 0;
         do {
-			/***  [inner]  Determine the Levenberg-Marquardt parameter.  ***/
-			lm_lmpar(%(NMR_PARAMS)s, fjac, NMR_INST_PER_PROBLEM, ipvt, diag, qtf, delta, &lmpar, wa1, wa2, wf, wa3 );
+            /** Determine the Levenberg-Marquardt parameter. **/
+            lm_lmpar(%(NMR_PARAMS)s, fjac, NMR_INST_PER_PROBLEM, Pivot, diag, qtf, delta, &lmpar, wa1, wa2, wf, wa3 );
             /* used return values are fjac (partly), lmpar, wa1=x, wa3=diag*x */
 
-            /* predict scaled reduction */
+            /* Predict scaled reduction */
             pnorm = lm_euclidian_norm(wa3, %(NMR_PARAMS)s);
+			if(!isfinite(pnorm)) {
+				return;
+			}
             temp2 = lmpar * pown( pnorm / fnorm, 2);
             for (j = 0; j < %(NMR_PARAMS)s; j++) {
                 wa3[j] = 0;
                 for (i = 0; i <= j; i++){
-                    wa3[i] -= fjac[j*NMR_INST_PER_PROBLEM+i] * wa1[ipvt[j]];
+                    wa3[i] -= fjac[j*NMR_INST_PER_PROBLEM+i] * wa1[Pivot[j]];
 				}
             }
             temp1 = pown( lm_euclidian_norm(wa3, %(NMR_PARAMS)s) / fnorm , 2);
+            if (!isfinite(temp1)){
+                return;
+            }
             prered = temp1 + 2 * temp2;
             dirder = -temp1 + temp2; /* scaled directional derivative */
 
-            /* at first call, adjust the initial step bound. */
-            if ( !done_first && pnorm < delta ){
+            /* At first call, adjust the initial step bound. */
+            if (!outer && pnorm < delta ){
                 delta = pnorm;
 			}
 
-			/***  [inner]  Evaluate the function at x + p.  ***/
+            /** Evaluate the function at x + p. **/
 			for (j = 0; j < %(NMR_PARAMS)s; j++){
                 wa2[j] = x[j] - wa1[j];
 			}
@@ -294,20 +307,19 @@ void lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
             evaluate(data, wa2, wf);
             ++nfev;
             fnorm1 = lm_euclidian_norm(wf, NMR_INST_PER_PROBLEM);
+            if(!isfinite(fnorm1)){
+                return;
+            }
 
-			/***  [inner]  Evaluate the scaled reduction.  ***/
-			/* actual scaled reduction */
+			/** Evaluate the scaled reduction. **/
+
+			/* Actual scaled reduction */
             actred = 1 - pown(fnorm1/fnorm, 2);
 
-            /* ratio of actual to predicted reduction */
-            if(prered){
-                ratio = actred/prered;
-            }
-            else{
-                ratio = 0;
-            }
+            /* Ratio of actual to predicted reduction */
+            ratio = prered ? actred / prered : 0;
 
-            /* update the step bound */
+            /* Update the step bound */
             if( ratio <= 0.25 ) {
                 if( actred >= 0 ){
                     temp = 0.5;
@@ -329,10 +341,11 @@ void lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
                 delta = 2*pnorm;
             }
 
-			/***  [inner]  On success, update solution, and test for convergence.  ***/
-			inner_success = ratio >= 1.0e-4;
+            /**  On success, update solution, and test for convergence. **/
+			inner_success = ratio >= 1e-4;
             if ( inner_success ) {
-				/* update x, fvec, and their norms */
+
+				/* Update x, fvec, and their norms */
                 if (SCALE_DIAG) {
                     for (j = 0; j < %(NMR_PARAMS)s; j++) {
                         x[j] = wa2[j];
@@ -347,14 +360,16 @@ void lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
                     fvec[i] = wf[i];
                 }
                 xnorm = lm_euclidian_norm(wa2, %(NMR_PARAMS)s);
+                if (!isfinite(xnorm)){
+                    return;
+                }
                 fnorm = fnorm1;
             }
 
             /* convergence tests */
-            if( fnorm<=LM_DWARF ){
+            if (fnorm <= LM_DWARF){
                 return; /* success: sum of squares almost zero */
             }
-
             /* test two criteria (both may be fulfilled) */
             if (fabs(actred) <= FTOL && prered <= FTOL && ratio <= 2){
 				return; /* success: x almost stable */
@@ -363,25 +378,25 @@ void lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
 				return; /* success: sum of squares almost stable */
 			}
 
-			/***  [inner]  Tests for termination and stringent tolerances.  ***/
+			/** Tests for termination and stringent tolerances. **/
 			if ( nfev >= MAXFEV ){
                 return;
             }
             if ( fabs(actred) <= LM_MACHEP && prered <= LM_MACHEP && ratio <= 2 ){
                 return;
             }
-            if ( delta <= LM_MACHEP*xnorm ){
+            if ( delta <= LM_MACHEP * xnorm ){
                 return;
             }
-            if ( gnorm <= LM_MACHEP ){
+            if ( gnorm <= LM_MACHEP){
                 return;
             }
 
-			/***  [inner]  End of the loop. Repeat if iteration unsuccessful.  ***/
+			/** End of the inner loop. Repeat if iteration unsuccessful. **/
+            ++inner;
         } while ( !inner_success );
 
-        done_first = true;
-    };/***  [outer]  End of the loop. ***/
+    };/***  End of the loop. ***/
 } /*** lmmin. ***/
 
 
@@ -951,7 +966,7 @@ MOT_FLOAT_TYPE lm_euclidian_norm(const MOT_FLOAT_TYPE* const x, const int n){
  *      x is an INPUT array of length n.
  */
     int i;
-    MOT_FLOAT_TYPE agiant, s1, s2, s3, xabs, x1max, x3max;
+    double agiant, s1, s2, s3, xabs, x1max, x3max;
 
     s1 = 0;
     s2 = 0;
