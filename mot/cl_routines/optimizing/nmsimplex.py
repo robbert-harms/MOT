@@ -31,8 +31,8 @@ class NMSimplex(AbstractParallelOptimizer):
         super(NMSimplex, self).__init__(cl_environments, load_balancer, use_param_codec, patience=patience,
                                         optimizer_options=optimizer_options, **kwargs)
 
-    def _get_worker_class(self):
-        return NMSimplexWorker
+    def _get_worker_generator(self, *args):
+        return lambda cl_environment: NMSimplexWorker(cl_environment, *args)
 
 
 class NMSimplexWorker(AbstractParallelOptimizerWorker):

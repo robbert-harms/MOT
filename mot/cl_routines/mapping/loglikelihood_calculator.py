@@ -36,7 +36,9 @@ class LogLikelihoodCalculator(AbstractCLRoutine):
         log_likelihoods = np.zeros((nmr_problems, 1), dtype=np_dtype, order='C')
         parameters = model.get_initial_parameters(parameters_dict)
 
-        workers = self._create_workers(_LogLikelihoodCalculatorWorker, [model, parameters, log_likelihoods])
+        workers = self._create_workers(lambda cl_environment: _LogLikelihoodCalculatorWorker(cl_environment, model,
+                                                                                             parameters,
+                                                                                             log_likelihoods))
         self.load_balancer.process(workers, model.get_nmr_problems())
 
         return log_likelihoods

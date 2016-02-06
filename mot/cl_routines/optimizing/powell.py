@@ -29,8 +29,8 @@ class Powell(AbstractParallelOptimizer):
         super(Powell, self).__init__(cl_environments, load_balancer, use_param_codec, patience=patience,
                                      optimizer_options=optimizer_options, **kwargs)
 
-    def _get_worker_class(self):
-        return PowellWorker
+    def _get_worker_generator(self, *args):
+        return lambda cl_environment: PowellWorker(cl_environment, *args)
 
 
 class PowellWorker(AbstractParallelOptimizerWorker):

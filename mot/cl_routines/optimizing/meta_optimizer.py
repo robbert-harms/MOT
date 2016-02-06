@@ -65,7 +65,7 @@ class MetaOptimizer(AbstractOptimizer):
     def minimize(self, model, init_params=None, full_output=False):
         results = init_params
 
-        results = self.optimizer.minimize(model, init_params=results)
+        results, extra_maps = self.optimizer.minimize(model, init_params=results, full_output=True)
 
         if self.extra_optim_runs:
             for i in range(self.extra_optim_runs):
@@ -79,13 +79,13 @@ class MetaOptimizer(AbstractOptimizer):
                     if self.extra_optim_runs_smoothers and i < len(self.extra_optim_runs_smoothers):
                         smoother = self.extra_optim_runs_smoothers[i]
                     smoothed_maps = model.smooth(results, smoother)
-                    results = optimizer.minimize(model, init_params=smoothed_maps)
+                    results, extra_maps = optimizer.minimize(model, init_params=smoothed_maps, full_output=True)
 
                 elif self.extra_optim_runs_use_perturbation:
                     perturbed_params = model.perturbate(results)
-                    results = optimizer.minimize(model, init_params=perturbed_params)
+                    results, extra_maps = optimizer.minimize(model, init_params=perturbed_params, full_output=True)
                 else:
-                    results = optimizer.minimize(model, init_params=results)
+                    results, extra_maps = optimizer.minimize(model, init_params=results, full_output=True)
 
         if full_output:
             self._logger.info('Calculating errors measures')
@@ -94,6 +94,7 @@ class MetaOptimizer(AbstractOptimizer):
             error_measures = ErrorMeasures(self.cl_environments, self.load_balancer,
                                            model.double_precision).calculate(errors)
             self._logger.info('Done calculating errors measures')
+            error_measures.update(extra_maps)
             return results, error_measures
 
         return results

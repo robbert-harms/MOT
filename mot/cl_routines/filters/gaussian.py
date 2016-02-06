@@ -40,15 +40,8 @@ class GaussianFilter(AbstractFilter):
         super(GaussianFilter, self).__init__(size, cl_environments=cl_environments, load_balancer=load_balancer)
         self.sigma = sigma
 
-    def _get_worker(self, *args):
-        """Create the worker that we will use in the computations.
-
-        This is supposed to be overwritten by the implementing filterer.
-
-        Returns:
-            the worker object
-        """
-        return _GaussianFilterWorker(self, *args)
+    def _get_worker_generator(self, *args):
+        return lambda cl_environment: _GaussianFilterWorker(cl_environment, *args)
 
 
 class _GaussianFilterWorker(AbstractFilterWorker):

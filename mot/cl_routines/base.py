@@ -34,18 +34,16 @@ class AbstractCLRoutine(object):
     def load_balancer(self, load_balancer):
         self._load_balancer = load_balancer
 
-    def _create_workers(self, worker_class, arg_list=None, kwarg_dict=None):
+    def _create_workers(self, worker_generating_cb):
         """Create workers for all the CL environments in current use.
 
         Args:
-            worker_class (class): The class to construct
-            args_list (list): the arguments to pass to the constructor
-            kwargs_dict (dict): the arguments to pass to the constructor
+            worker_generating_cb (python function): the callback function that we use to generate the
+                worker for a specific CL environment. This should accept as single argument a CL environment and
+                should return a Worker instance for use in CL computations.
         """
-        arg_list = arg_list or []
-        kwarg_dict = kwarg_dict or {}
         cl_environments = self.load_balancer.get_used_cl_environments(self.cl_environments)
-        return [worker_class(env, *arg_list, **kwarg_dict) for env in cl_environments]
+        return [worker_generating_cb(env) for env in cl_environments]
 
     @classmethod
     def get_pretty_name(cls):

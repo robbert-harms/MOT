@@ -58,7 +58,8 @@ class GenerateRandom(AbstractCLRoutine):
         nmr_samples += padding
         samples = np.zeros((nmr_samples + padding,), dtype=np.float32)
 
-        workers = self._create_workers(_GenerateRandomWorker, [samples, nmr_samples, kernel_source, seed])
+        workers = self._create_workers(lambda cl_environment: _GenerateRandomWorker(cl_environment, samples,
+                                                                                    nmr_samples, kernel_source, seed))
         self.load_balancer.process(workers, nmr_samples / 4)
 
         if padding:

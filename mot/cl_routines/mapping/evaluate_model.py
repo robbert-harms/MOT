@@ -43,8 +43,9 @@ class EvaluateModelPerProtocol(AbstractCLRoutine):
         prtcl_data_dict = model.get_problems_prtcl_data()
         fixed_data_dict = model.get_problems_fixed_data()
 
-        workers = self._create_workers(_EvaluateModelWorker, [model, parameters, evaluations,
-                                       var_data_dict, prtcl_data_dict, fixed_data_dict])
+        workers = self._create_workers(lambda cl_environment: _EvaluateModelWorker(cl_environment, model, parameters,
+                                                                                   evaluations, var_data_dict,
+                                                                                   prtcl_data_dict, fixed_data_dict))
         self.load_balancer.process(workers, nmr_problems)
 
         return evaluations

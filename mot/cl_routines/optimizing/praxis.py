@@ -27,8 +27,8 @@ class PrAxis(AbstractParallelOptimizer):
         super(PrAxis, self).__init__(cl_environments, load_balancer, use_param_codec, patience=patience,
                                      optimizer_options=optimizer_options, **kwargs)
 
-    def _get_worker_class(self):
-        return PrAxisWorker
+    def _get_worker_generator(self, *args):
+        return lambda cl_environment: PrAxisWorker(cl_environment, *args)
 
 
 class PrAxisWorker(AbstractParallelOptimizerWorker):

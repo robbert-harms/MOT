@@ -1,4 +1,6 @@
 import logging
+
+import numpy as np
 import pyopencl as cl
 from mot.cl_functions import RanluxCL
 from ...utils import results_to_dict, ParameterCLCodeGenerator, \
@@ -101,6 +103,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         var_data_dict = model.get_problems_var_data()
         prtcl_data_dict = model.get_problems_prtcl_data()
         fixed_data_dict = model.get_problems_fixed_data()
+        return_codes = np.zeros((starting_points.shape[0],), dtype=np.int32, order='C')
 
         space_transformer = CodecRunner(self.cl_environments, self.load_balancer, model.double_precision)
         param_codec = model.get_parameter_codec()
@@ -110,9 +113,9 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         self._logger.info('Finished optimization preliminaries')
         self._logger.info('Starting optimization')
 
-        workers = self._create_workers(self._get_worker_class(), [self, model, starting_points, full_output,
-                                       var_data_dict, prtcl_data_dict, fixed_data_dict, nmr_params,
-                                                                  self._optimizer_options])
+        workers = self._create_workers(self._get_worker_generator(self, model, starting_points, full_output,
+                                                                  var_data_dict, prtcl_data_dict, fixed_data_dict,
+                                                                  nmr_params, self._optimizer_options))
         self.load_balancer.process(workers, model.get_nmr_problems())
 
         self._logger.info('Finished optimization')
@@ -125,19 +128,18 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         self._logger.info('Finished post-optimization transformations')
 
         if full_output:
-            return results, {}
+            return results, {'ReturnCodes': return_codes}
         return results
 
-    def _get_worker_class(self):
-        """Get the worker class we will use for the calculations.
+    def _get_worker_generator(self, *args):
+        """Generate the worker generator callback for the function _create_workers()
 
-        This should return a class or a callback function capable of generating an object. It should accept
-
-        This function is supposed to be implemented by the implementing optimizer.
+        This is supposed to be overwritten by the implementing optimizer.
 
         Returns:
-            the worker class
+            the python callback for generating the worker
         """
+        return lambda cl_environment: AbstractParallelOptimizerWorker(cl_environment, *args)
 
 
 class AbstractParallelOptimizerWorker(Worker):

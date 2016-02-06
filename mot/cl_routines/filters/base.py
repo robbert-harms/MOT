@@ -73,26 +73,26 @@ class AbstractFilter(AbstractCLRoutine):
             results_dict[key] = np.zeros_like(volumes_dict[key], dtype=np_dtype, order='C')
 
         volumes_list = list(volumes_dict.items())
-
-        workers = self._create_workers(self._get_worker, [results_dict, volumes_list, mask, double_precision])
+        workers = self._create_workers(self._get_worker_generator(self, results_dict, volumes_list, mask,
+                                                                  double_precision))
         self._load_balancer.process(workers, len(volumes_list))
 
         return results_dict
 
-    def _get_worker(self, *args):
-        """Create the worker that we will use in the computations.
+    def _get_worker_generator(self, *args):
+        """Generate the worker generator callback for the function _create_workers()
 
         This is supposed to be overwritten by the implementing filterer.
 
         Returns:
-            the worker object
+            the python callback for generating the worker
         """
-        return AbstractFilterWorker(self, *args)
+        return lambda cl_environment: AbstractFilterWorker(cl_environment, *args)
 
 
 class AbstractFilterWorker(Worker):
 
-    def __init__(self, parent_filter, cl_environment, results_dict, volumes_list, mask, double_precision):
+    def __init__(self, cl_environment, parent_filter, results_dict, volumes_list, mask, double_precision):
         super(AbstractFilterWorker, self).__init__(cl_environment)
         self._parent_filter = parent_filter
         self._size = self._parent_filter.size

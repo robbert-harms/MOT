@@ -77,7 +77,8 @@ class CodecRunner(AbstractCLRoutine):
             np_dtype = np.float64
         data = np.copy(data).astype(np_dtype, order='C', copy=False)
         rows = data.shape[0]
-        workers = self._create_workers(_CodecWorker, [cl_func, cl_func_name, data, nmr_params, self._double_precision])
+        workers = self._create_workers(lambda cl_environment: _CodecWorker(cl_environment, cl_func, cl_func_name, data,
+                                                                           nmr_params, self._double_precision))
         self.load_balancer.process(workers, rows)
         return data
 

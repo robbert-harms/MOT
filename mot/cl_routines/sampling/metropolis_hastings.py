@@ -74,10 +74,10 @@ class MetropolisHastings(AbstractSampler):
 
         self._logger.info('Starting sampling with method {0}'.format(self.get_pretty_name()))
 
-        workers = self._create_workers(_MHWorker, [model, parameters, samples,
+        workers = self._create_workers(lambda cl_environment: _MHWorker(cl_environment, model, parameters, samples,
                                        var_data_dict, prtcl_data_dict, fixed_data_dict,
                                        self.nmr_samples, self.burn_length, self.sample_intervals,
-                                       self.proposal_update_intervals])
+                                       self.proposal_update_intervals))
         self.load_balancer.process(workers, model.get_nmr_problems())
 
         samples_dict = results_to_dict(samples, model.get_optimized_param_names())

@@ -10,15 +10,8 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class MeanFilter(AbstractFilter):
 
-    def _get_worker(self, *args):
-        """Create the worker that we will use in the computations.
-
-        This is supposed to be overwritten by the implementing filterer.
-
-        Returns:
-            the worker object
-        """
-        return _MeanFilterWorker(self, *args)
+    def _get_worker_generator(self, *args):
+        return lambda cl_environment: _MeanFilterWorker(cl_environment, *args)
 
 
 class _MeanFilterWorker(AbstractFilterWorker):

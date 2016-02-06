@@ -47,8 +47,9 @@ class FinalParametersTransformer(AbstractCLRoutine):
         fixed_data_dict = model.get_problems_fixed_data()
 
         if model.get_final_parameter_transformations():
-            workers = self._create_workers(_FPTWorker, [model, parameters, var_data_dict,
-                                           prtcl_data_dict, fixed_data_dict])
+            workers = self._create_workers(lambda cl_environment: _FPTWorker(cl_environment, model, parameters,
+                                                                             var_data_dict, prtcl_data_dict,
+                                                                             fixed_data_dict))
             self.load_balancer.process(workers, model.get_nmr_problems())
 
         return parameters

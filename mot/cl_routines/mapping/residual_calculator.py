@@ -39,7 +39,8 @@ class ResidualCalculator(AbstractCLRoutine):
 
         parameters = model.get_initial_parameters(parameters_dict)
 
-        workers = self._create_workers(_ResidualCalculatorWorker, [model, parameters, residuals])
+        workers = self._create_workers(lambda cl_environment: _ResidualCalculatorWorker(cl_environment, model,
+                                                                                        parameters, residuals))
         self.load_balancer.process(workers, model.get_nmr_problems())
 
         return residuals
