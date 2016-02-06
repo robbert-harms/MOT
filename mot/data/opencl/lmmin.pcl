@@ -119,6 +119,7 @@ void lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
 	int j, i;
     MOT_FLOAT_TYPE actred, dirder, fnorm, fnorm1, gnorm, pnorm, prered, ratio, step, sum, temp, temp1, temp2, temp3;
 
+    bool   done_first = false;  /* loop counters, for monitoring */
     bool   inner_success; /* flag for loop control */
     MOT_FLOAT_TYPE lmpar = 0;     /* Levenberg-Marquardt parameter */
     MOT_FLOAT_TYPE delta = 0;
@@ -148,15 +149,14 @@ void lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
     nfev = 1;
     fnorm = lm_euclidian_norm(fvec, NMR_INST_PER_PROBLEM);
     if (!isfinite(fnorm)) {
-	return;
+	    return;
     } else if (fnorm <= LM_DWARF) {
         return;
     }
 
     /***  The outer loop: compute gradient, then descend.  ***/
 
-    for (int outer = 0;; ++outer) {
-
+    while(true){
         /** Calculate the Jacobian. **/
         for (j = 0; j < %(NMR_PARAMS)s; j++) {
             temp = x[j];
@@ -235,7 +235,7 @@ void lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
         }
 
         /** Initialize or update diag and delta. **/
-        if(!outer){ /* first iteration only */
+        if(!done_first){ /* first iteration only */
             if (SCALE_DIAG) {
                 /* diag := norms of the columns of the initial Jacobian */
                 for (j = 0; j < %(NMR_PARAMS)s; j++){
@@ -269,7 +269,6 @@ void lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
         }
 
         /** The inner loop. **/
-        int inner = 0;
         do {
             /** Determine the Levenberg-Marquardt parameter. **/
             lm_lmpar(%(NMR_PARAMS)s, fjac, NMR_INST_PER_PROBLEM, Pivot, diag, qtf, delta, &lmpar, wa1, wa2, wf, wa3 );
@@ -295,7 +294,7 @@ void lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
             dirder = -temp1 + temp2; /* scaled directional derivative */
 
             /* At first call, adjust the initial step bound. */
-            if (!outer && pnorm < delta ){
+            if (!done_first && pnorm < delta ){
                 delta = pnorm;
 			}
 
@@ -393,9 +392,9 @@ void lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
             }
 
 			/** End of the inner loop. Repeat if iteration unsuccessful. **/
-            ++inner;
         } while ( !inner_success );
 
+        done_first = true;
     };/***  End of the loop. ***/
 } /*** lmmin. ***/
 
@@ -947,65 +946,20 @@ void lm_qrsolv(const int n,
 /*  euclidian_norm (Euclidean norm)                                          */
 /*****************************************************************************/
 MOT_FLOAT_TYPE lm_euclidian_norm(const MOT_FLOAT_TYPE* const x, const int n){
-/*     This function calculates the Euclidean norm of an n-vector x.
+/*     Given an n-vector x, this function calculates the
+ *     euclidean norm of x.
  *
- *     The Euclidean norm is computed by accumulating the sum of squares
- *     in three different sums. The sums of squares for the small and large
- *     components are scaled so that no overflows occur. Non-destructive
- *     underflows are permitted. Underflows and overflows do not occur in
- *     the computation of the unscaled sum of squares for the intermediate
- *     components. The definitions of small, intermediate and large components
- *     depend on two constants, LM_SQRT_DWARF and LM_SQRT_GIANT. The main
- *     restrictions on these constants are that LM_SQRT_DWARF**2 not underflow
- *     and LM_SQRT_GIANT**2 not overflow.
+ *     Parameters
  *
- *     Parameters:
+ *      n is a positive integer input variable.
  *
- *      n is a positive integer INPUT variable.
- *
- *      x is an INPUT array of length n.
+ *      x is an input array of length n.
  */
-    int i;
-    double agiant, s1, s2, s3, xabs, x1max, x3max;
-
-    s1 = 0;
-    s2 = 0;
-    s3 = 0;
-    x1max = 0;
-    x3max = 0;
-    agiant = LM_ENORM_SQRT_GIANT / n;
-
-    /** Sum squares. **/
-    for (i = 0; i < n; i++) {
-        xabs = fabs(x[i]);
-        if (xabs > LM_ENORM_SQRT_DWARF) {
-            if (xabs < agiant) {
-                s2 += pown(xabs, 2);
-            } else if (xabs > x1max) {
-                s1 = 1 + s1 * pown(x1max / xabs, 2);
-                x1max = xabs;
-            } else {
-                s1 += pown(xabs / x1max, 2);
-            }
-        } else if (xabs > x3max) {
-            s3 = 1 + s3 * pown(x3max / xabs, 2);
-            x3max = xabs;
-        } else if (xabs != 0) {
-            s3 += pown(xabs / x3max, 2);
-        }
+    double sum = 0.0;
+    for(int i = 0; i < n; i++){
+        sum += pown(x[i], 2);
     }
-
-    /** Calculate the norm. **/
-    if (s1 != 0)
-        return x1max * sqrt(s1 + (s2 / x1max) / x1max);
-    else if (s2 != 0)
-        if (s2 >= x3max)
-            return sqrt(s2 * (1 + (x3max / s2) * (x3max * s3)));
-        else
-            return sqrt(x3max * ((s2 / x3max) + (x3max * s3)));
-    else
-        return x3max * sqrt(s3);
-
+    return (MOT_FLOAT_TYPE) sqrt(sum);
 
 } /*** euclidian_norm. ***/
 
