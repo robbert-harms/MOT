@@ -39,8 +39,10 @@ void lm_lmpar( int n, MOT_FLOAT_TYPE * const r, int ldr, int * const ipvt, MOT_F
                MOT_FLOAT_TYPE * const sdiag, MOT_FLOAT_TYPE * const aux, MOT_FLOAT_TYPE * const xdi );
 void lm_qrfac( int m, int n, MOT_FLOAT_TYPE * const a, int * const ipvt,
                MOT_FLOAT_TYPE * const rdiag, MOT_FLOAT_TYPE * const acnorm, MOT_FLOAT_TYPE * const wa );
-void lm_qrsolv( int n, MOT_FLOAT_TYPE * const r, int ldr, int * const ipvt, MOT_FLOAT_TYPE * const diag,
-                MOT_FLOAT_TYPE * const qtb, MOT_FLOAT_TYPE * const x, MOT_FLOAT_TYPE * const sdiag, MOT_FLOAT_TYPE * const wa );
+void lm_qrsolv( const int n, MOT_FLOAT_TYPE * const r, const int ldr, const int * const Pivot, const MOT_FLOAT_TYPE * const diag,
+                const MOT_FLOAT_TYPE * const qtb, MOT_FLOAT_TYPE * const x, MOT_FLOAT_TYPE * const Sdiag, MOT_FLOAT_TYPE * const W );
+
+
 MOT_FLOAT_TYPE lm_euclidian_norm(const MOT_FLOAT_TYPE* const x, const int n);
 
 /*****************************************************************************/
@@ -767,166 +769,173 @@ void lm_qrfac(int m, int n, MOT_FLOAT_TYPE * const a, int * const ipvt,
 /*  lm_qrsolv (linear least-squares)                                         */
 /*****************************************************************************/
 
-void lm_qrsolv(int n, MOT_FLOAT_TYPE * const r, int ldr, int * const ipvt, MOT_FLOAT_TYPE * const diag,
-               MOT_FLOAT_TYPE * const qtb, MOT_FLOAT_TYPE * const x, MOT_FLOAT_TYPE * const sdiag, MOT_FLOAT_TYPE * const wa)
+void lm_qrsolv(const int n,
+               MOT_FLOAT_TYPE* const r,
+               const int ldr,
+               const int* const Pivot,
+               const MOT_FLOAT_TYPE* const diag,
+               const MOT_FLOAT_TYPE* const qtb,
+	           MOT_FLOAT_TYPE* const x,
+	           MOT_FLOAT_TYPE* const Sdiag,
+               MOT_FLOAT_TYPE* const W)
 {
 /*
- *     Given an m by n matrix a, an n by n diagonal matrix d,
- *     and an m-vector b, the problem is to determine an x which
- *     solves the system
+ *     Given an m by n matrix A, an n by n diagonal matrix D, and an
+ *     m-vector b, the problem is to determine an x which solves the
+ *     system
  *
- *          a*x = b  and  d*x = 0
+ *          A*x = b  and  D*x = 0
  *
  *     in the least squares sense.
  *
- *     This subroutine completes the solution of the problem
- *     if it is provided with the necessary information from the
- *     qr factorization, with column pivoting, of a. That is, if
- *     a*p = q*r, where p is a permutation matrix, q has orthogonal
- *     columns, and r is an upper triangular matrix with diagonal
- *     elements of nonincreasing magnitude, then qrsolv expects
- *     the full upper triangle of r, the permutation matrix p,
- *     and the first n components of (q transpose)*b. The system
- *     a*x = b, d*x = 0, is then equivalent to
+ *     This subroutine completes the solution of the problem if it is
+ *     provided with the necessary information from the QR factorization,
+ *     with column pivoting, of A. That is, if A*P = Q*R, where P is a
+ *     permutation matrix, Q has orthogonal columns, and R is an upper
+ *     triangular matrix with diagonal elements of nonincreasing magnitude,
+ *     then qrsolv expects the full upper triangle of R, the permutation
+ *     matrix P, and the first n components of Q^T*b. The system
+ *     A*x = b, D*x = 0, is then equivalent to
  *
- *          r*z = q^T*b,  p^T*d*p*z = 0,
+ *          R*z = Q^T*b,  P^T*D*P*z = 0,
  *
- *     where x = p*z. If this system does not have full rank,
- *     then a least squares solution is obtained. On output qrsolv
- *     also provides an upper triangular matrix s such that
+ *     where x = P*z. If this system does not have full rank, then a least
+ *     squares solution is obtained. On output qrsolv also provides an upper
+ *     triangular matrix S such that
  *
- *          p^T *(a^T *a + d*d)*p = s^T *s.
+ *          P^T*(A^T*A + D*D)*P = S^T*S.
  *
- *     s is computed within qrsolv and may be of separate interest.
+ *     S is computed within qrsolv and may be of separate interest.
  *
- *     Parameters
+ *     Parameters:
  *
- *      n is a positive integer input variable set to the order of r.
+ *      n is a positive integer INPUT variable set to the order of R.
  *
- *      r is an n by n array. On input the full upper triangle
- *        must contain the full upper triangle of the matrix r.
- *        On OUTPUT the full upper triangle is unaltered, and the
- *        strict lower triangle contains the strict upper triangle
- *        (transposed) of the upper triangular matrix s.
+ *      r is an n by n array. On INPUT the full upper triangle must contain
+ *        the full upper triangle of the matrix R. On OUTPUT the full upper
+ *        triangle is unaltered, and the strict lower triangle contains the
+ *        strict upper triangle (transposed) of the upper triangular matrix S.
  *
- *      ldr is a positive integer input variable not less than n
- *        which specifies the leading dimension of the array r.
+ *      ldr is a positive integer INPUT variable not less than n which
+ *        specifies the leading dimension of the array R.
  *
- *      ipvt is an integer input array of length n which defines the
- *        permutation matrix p such that a*p = q*r. Column j of p
- *        is column ipvt(j) of the identity matrix.
+ *      Pivot is an integer INPUT array of length n which defines the
+ *        permutation matrix P such that A*P = Q*R. Column j of P is column
+ *        Pivot(j) of the identity matrix.
  *
- *      diag is an input array of length n which must contain the
- *        diagonal elements of the matrix d.
+ *      diag is an INPUT array of length n which must contain the diagonal
+ *        elements of the matrix D.
  *
- *      qtb is an input array of length n which must contain the first
- *        n elements of the vector (q transpose)*b.
+ *      qtb is an INPUT array of length n which must contain the first
+ *        n elements of the vector Q^T*b.
  *
- *      x is an OUTPUT array of length n which contains the least
- *        squares solution of the system a*x = b, d*x = 0.
+ *      x is an OUTPUT array of length n which contains the least-squares
+ *        solution of the system A*x = b, D*x = 0.
  *
- *      sdiag is an OUTPUT array of length n which contains the
- *        diagonal elements of the upper triangular matrix s.
+ *      Sdiag is an OUTPUT array of length n which contains the diagonal
+ *        elements of the upper triangular matrix S.
  *
- *      wa is a work array of length n.
+ *      W is a work array of length n.
  *
  */
     int i, kk, j, k;
     MOT_FLOAT_TYPE qtbpj, temp;
     MOT_FLOAT_TYPE _sin, _cos, _tan, _cot; /* local variables, not functions */
 
-/*** qrsolv: copy r and q^T*b to preserve input and initialize s.
-     in particular, save the diagonal elements of r in x. ***/
+    /*** Copy R and Q^T*b to preserve input and initialize S.
+         In particular, save the diagonal elements of R in x. ***/
 
     for (j = 0; j < n; j++) {
         for (i = j; i < n; i++)
-            r[j * ldr + i] = r[i * ldr + j];
-        x[j] = r[j * ldr + j];
-        wa[j] = qtb[j];
+            r[j*ldr+i] = r[i*ldr+j];
+        x[j] = r[j*ldr+j];
+        W[j] = qtb[j];
     }
-/*** qrsolv: eliminate the diagonal matrix d using a Givens rotation. ***/
+
+    /*** Eliminate the diagonal matrix D using a Givens rotation. ***/
 
     for (j = 0; j < n; j++) {
 
-/*** qrsolv: prepare the row of d to be eliminated, locating the
-     diagonal element using p from the qr factorization. ***/
+        /*** Prepare the row of D to be eliminated, locating the diagonal
+             element using P from the QR factorization. ***/
 
-        if (diag[ipvt[j]] != 0.){
+        if (diag[Pivot[j]] != 0) {
             for (k = j; k < n; k++)
-                sdiag[k] = 0.;
-            sdiag[j] = diag[ipvt[j]];
+                Sdiag[k] = 0;
+            Sdiag[j] = diag[Pivot[j]];
 
-    /*** qrsolv: the transformations to eliminate the row of d modify only
-         a single element of qT*b beyond the first n, which is initially 0. ***/
+            /*** The transformations to eliminate the row of D modify only
+                 a single element of Q^T*b beyond the first n, which is
+                 initially 0. ***/
 
-            qtbpj = 0.;
+            qtbpj = 0;
             for (k = j; k < n; k++) {
 
-                /** determine a Givens rotation which eliminates the
-                    appropriate element in the current row of d. **/
-                if (sdiag[k] != 0.){
+                /** Determine a Givens rotation which eliminates the
+                    appropriate element in the current row of D. **/
+                if (Sdiag[k] == 0){
+                }
+                else{
                     kk = k + ldr * k;
-                    if (fabs(r[kk]) < fabs(sdiag[k])) {
-                        _cot = r[kk] / sdiag[k];
-                        _sin = 1 / sqrt(1 + pown(_cot, 2));
+                    if (fabs(r[kk]) < fabs(Sdiag[k])) {
+                        _cot = r[kk] / Sdiag[k];
+                        _sin = 1 / hypot(1, _cot);
                         _cos = _sin * _cot;
                     } else {
-                        _tan = sdiag[k] / r[kk];
-                        _cos = 1 / sqrt(1 + pown(_tan, 2));
+                        _tan = Sdiag[k] / r[kk];
+                        _cos = 1 / hypot(1, _tan);
                         _sin = _cos * _tan;
                     }
 
-                    /** compute the modified diagonal element of r and
-                        the modified element of ((q^T)*b,0). **/
+                    /** Compute the modified diagonal element of R and
+                    	the modified element of (Q^T*b,0). **/
+                    r[kk] = _cos * r[kk] + _sin * Sdiag[k];
+                    temp = _cos * W[k] + _sin * qtbpj;
+                    qtbpj = -_sin * W[k] + _cos * qtbpj;
+                    W[k] = temp;
 
-                    r[kk] = _cos * r[kk] + _sin * sdiag[k];
-                    temp = _cos * wa[k] + _sin * qtbpj;
-                    qtbpj = -_sin * wa[k] + _cos * qtbpj;
-                    wa[k] = temp;
-
-                    /** accumulate the tranformation in the row of s. **/
-                    for (i = k + 1; i < n; i++) {
-                        temp = _cos * r[k * ldr + i] + _sin * sdiag[i];
-                        sdiag[i] = -_sin * r[k * ldr + i] + _cos * sdiag[i];
+                    /** Accumulate the tranformation in the row of S. **/
+                    for (i = k+1; i < n; i++) {
+                        temp = _cos * r[k * ldr + i] + _sin * Sdiag[i];
+                        Sdiag[i] = -_sin * r[k * ldr + i] + _cos * Sdiag[i];
                         r[k * ldr + i] = temp;
                     }
                 }
             }
         }
-        /** store the diagonal element of s and restore
-            the corresponding diagonal element of r. **/
+        /** Store the diagonal element of S and restore
+            the corresponding diagonal element of R. **/
 
-        sdiag[j] = r[j * ldr + j];
+        Sdiag[j] = r[j * ldr + j];
         r[j * ldr + j] = x[j];
     }
 
-/*** qrsolv: solve the triangular system for z. if the system is
-     singular, then obtain a least squares solution. ***/
+    /*** Solve the triangular system for z. If the system is singular, then
+        obtain a least-squares solution. ***/
 
     // use k below as nsing
     k = n;
     for (j = 0; j < n; j++) {
-        if (sdiag[j] == 0. && k == n){
+        if (Sdiag[j] == 0 && k == n){
             k = j;
         }
         if (k < n){
-            wa[j] = 0;
+            W[j] = 0;
         }
     }
 
     for (j = k - 1; j >= 0; j--) {
-        temp = 0.;
+        temp = 0;
         for (i = j + 1; i < k; i++){
-            temp += r[j * ldr + i] * wa[i];
+            temp += r[j * ldr + i] * W[i];
         }
-        wa[j] = (wa[j] - temp) / sdiag[j];
+        W[j] = (W[j] - temp) / Sdiag[j];
     }
 
-/*** qrsolv: permute the components of z back to components of x. ***/
+    /*** Permute the components of z back to components of x. ***/
 
-    for (j = 0; j < n; j++){
-        x[ipvt[j]] = wa[j];
-    }
+    for (j = 0; j < n; j++)
+        x[Pivot[j]] = W[j];
 
 } /*** lm_qrsolv. ***/
 
