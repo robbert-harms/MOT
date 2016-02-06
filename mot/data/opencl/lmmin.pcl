@@ -475,10 +475,9 @@ void lm_lmpar(const int n, MOT_FLOAT_TYPE* const r, int ldr, const int* const Pi
  *
  */
     // used as both iter and nsing
-    int iter_nsing;
+    int iter, nsing;
     int i, j;
-    // used as both gnorm and parc
-    MOT_FLOAT_TYPE gnorm_parc;
+    MOT_FLOAT_TYPE gnorm, parc;
     MOT_FLOAT_TYPE dxnorm, fp, fp_old, parl, paru;
     MOT_FLOAT_TYPE temp;
     MOT_FLOAT_TYPE p1 = 0.1;
@@ -486,18 +485,17 @@ void lm_lmpar(const int n, MOT_FLOAT_TYPE* const r, int ldr, const int* const Pi
     /*** Compute and store in x the Gauss-Newton direction. If the Jacobian
          is rank-deficient, obtain a least-squares solution. ***/
 
-    // used as nsing
-    iter_nsing = n;
+    nsing = n;
     for (j = 0; j < n; j++) {
         aux[j] = qtb[j];
-        if (r[j * ldr + j] == 0 && iter_nsing == n){
-            iter_nsing = j;
+        if (r[j * ldr + j] == 0 && nsing == n){
+            nsing = j;
         }
-        if (iter_nsing < n){
+        if (nsing < n){
             aux[j] = 0;
         }
     }
-    for (j = iter_nsing - 1; j >= 0; j--) {
+    for (j = nsing - 1; j >= 0; j--) {
         aux[j] = aux[j] / r[j + ldr * j];
         temp = aux[j];
         for (i = 0; i < j; i++){
@@ -527,7 +525,7 @@ void lm_lmpar(const int n, MOT_FLOAT_TYPE* const r, int ldr, const int* const Pi
          bound to zero. ***/
 
     parl = 0;
-    if (iter_nsing >= n) {
+    if (nsing >= n) {
         for (j = 0; j < n; j++){
             aux[j] = diag[Pivot[j]] * xdi[Pivot[j]] / dxnorm;
         }
@@ -552,9 +550,9 @@ void lm_lmpar(const int n, MOT_FLOAT_TYPE* const r, int ldr, const int* const Pi
         }
         aux[j] = temp / diag[Pivot[j]];
     }
-    //used as gnorm
-    gnorm_parc = lm_euclidian_norm(aux, n);
-    paru = gnorm_parc / delta;
+
+    gnorm = lm_euclidian_norm(aux, n);
+    paru = gnorm / delta;
     if (paru == 0){
         paru = LM_DWARF / min(delta, p1);
     }
@@ -565,12 +563,11 @@ void lm_lmpar(const int n, MOT_FLOAT_TYPE* const r, int ldr, const int* const Pi
     *par = max(*par, parl);
     *par = min(*par, paru);
     if (*par == 0){
-        *par = gnorm_parc / dxnorm;
+        *par = gnorm / dxnorm;
     }
 
     /*** Iterate. ***/
-    // used as iter
-    for (iter_nsing=0; ; iter_nsing++) {
+    for (iter=0; ; iter++) {
 
         /** Evaluate the function at the current value of par. **/
 
@@ -596,7 +593,7 @@ void lm_lmpar(const int n, MOT_FLOAT_TYPE* const r, int ldr, const int* const Pi
             of par. Also test for the exceptional cases where parl
             is zero or the number of iterations has reached 10. **/
         if (fabs(fp) <= p1 * delta ||
-            (parl == 0 && fp <= fp_old && fp_old < 0) || iter_nsing == 10){
+            (parl == 0 && fp <= fp_old && fp_old < 0) || iter == 10){
             break; /* the only exit from the iteration. */
         }
 
@@ -612,8 +609,7 @@ void lm_lmpar(const int n, MOT_FLOAT_TYPE* const r, int ldr, const int* const Pi
             }
         }
         temp = lm_euclidian_norm(aux, n);
-        // used as parc
-        gnorm_parc = fp / delta / temp / temp;
+        parc = fp / delta / temp / temp;
 
         /** Depending on the sign of the function, update parl or paru. **/
         if (fp > 0){
@@ -624,7 +620,7 @@ void lm_lmpar(const int n, MOT_FLOAT_TYPE* const r, int ldr, const int* const Pi
         }
 
         /** Compute an improved estimate for par. **/
-        *par = max(parl, *par + gnorm_parc);
+        *par = max(parl, *par + parc);
 
     }
 
@@ -840,7 +836,7 @@ void lm_qrsolv(const int n,
  *      W is a work array of length n.
  *
  */
-    int i, kk, j, k;
+    int i, kk, j, k, nsing;
     MOT_FLOAT_TYPE qtbpj, temp;
     MOT_FLOAT_TYPE _sin, _cos, _tan, _cot; /* local variables, not functions */
 
@@ -914,21 +910,19 @@ void lm_qrsolv(const int n,
 
     /*** Solve the triangular system for z. If the system is singular, then
         obtain a least-squares solution. ***/
-
-    // use k below as nsing
-    k = n;
+    nsing = n;
     for (j = 0; j < n; j++) {
-        if (Sdiag[j] == 0 && k == n){
-            k = j;
+        if (Sdiag[j] == 0 && nsing == n){
+            nsing = j;
         }
-        if (k < n){
+        if (nsing < n){
             W[j] = 0;
         }
     }
 
-    for (j = k - 1; j >= 0; j--) {
+    for (j = nsing - 1; j >= 0; j--) {
         temp = 0;
-        for (i = j + 1; i < k; i++){
+        for (i = j + 1; i < nsing; i++){
             temp += r[j * ldr + i] * W[i];
         }
         W[j] = (W[j] - temp) / Sdiag[j];
@@ -941,27 +935,72 @@ void lm_qrsolv(const int n,
 
 } /*** lm_qrsolv. ***/
 
-
-/*****************************************************************************/
-/*  euclidian_norm (Euclidean norm)                                          */
-/*****************************************************************************/
+/******************************************************************************/
+/*  lm_enorm (Euclidean norm)                                                 */
+/******************************************************************************/
 MOT_FLOAT_TYPE lm_euclidian_norm(const MOT_FLOAT_TYPE* const x, const int n){
-/*     Given an n-vector x, this function calculates the
- *     euclidean norm of x.
+/*     This function calculates the Euclidean norm of an n-vector x.
  *
- *     Parameters
+ *     The Euclidean norm is computed by accumulating the sum of squares
+ *     in three different sums. The sums of squares for the small and large
+ *     components are scaled so that no overflows occur. Non-destructive
+ *     underflows are permitted. Underflows and overflows do not occur in
+ *     the computation of the unscaled sum of squares for the intermediate
+ *     components. The definitions of small, intermediate and large components
+ *     depend on two constants, LM_SQRT_DWARF and LM_SQRT_GIANT. The main
+ *     restrictions on these constants are that LM_SQRT_DWARF**2 not underflow
+ *     and LM_SQRT_GIANT**2 not overflow.
  *
- *      n is a positive integer input variable.
+ *     Parameters:
  *
- *      x is an input array of length n.
+ *      n is a positive integer INPUT variable.
+ *
+ *      x is an INPUT array of length n.
  */
-    double sum = 0.0;
-    for(int i = 0; i < n; i++){
-        sum += pown(x[i], 2);
+    int i;
+    double agiant, s1, s2, s3, xabs, x1max, x3max;
+
+    s1 = 0;
+    s2 = 0;
+    s3 = 0;
+    x1max = 0;
+    x3max = 0;
+    agiant = LM_ENORM_SQRT_GIANT / n;
+
+    /** Sum squares. **/
+    for (i = 0; i < n; i++) {
+        xabs = fabs(x[i]);
+        if (xabs > LM_ENORM_SQRT_DWARF) {
+            if (xabs < agiant) {
+                s2 += pown(xabs, 2);
+            } else if (xabs > x1max) {
+                s1 = 1 + s1 * pown(x1max / xabs, 2);
+                x1max = xabs;
+            } else {
+                s1 += pown(xabs / x1max, 2);
+            }
+        } else if (xabs > x3max) {
+            s3 = 1 + s3 * pown(x3max / xabs, 2);
+            x3max = xabs;
+        } else if (xabs != 0) {
+            s3 += pown(xabs / x3max, 2);
+        }
     }
-    return (MOT_FLOAT_TYPE) sqrt(sum);
+
+    /** Calculate the norm. **/
+    if (s1 != 0)
+        return x1max * sqrt(s1 + (s2 / x1max) / x1max);
+    else if (s2 != 0)
+        if (s2 >= x3max)
+            return sqrt(s2 * (1 + (x3max / s2) * (x3max * s3)));
+        else
+            return sqrt(x3max * ((s2 / x3max) + (x3max * s3)));
+    else
+        return x3max * sqrt(s3);
+
 
 } /*** euclidian_norm. ***/
+
 
 #undef LM_MACHEP
 #undef LM_DWARF
