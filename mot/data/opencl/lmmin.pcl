@@ -77,7 +77,7 @@ MOT_FLOAT_TYPE lm_euclidian_norm(const MOT_FLOAT_TYPE* const x, const int n);
                              100.0 is recommended. */
 #define PATIENCE %(PATIENCE)r /* Used to set the maximum number of function evaluations
                              to patience*(number_of_parameters+1). */
-#define SCALE_DIAG 0        /* If 1, the variables will be rescaled internally.
+#define SCALE_DIAG %(SCALE_DIAG)r  /* If 1, the variables will be rescaled internally.
                              Recommended value is 1. */
 #define MAXFEV (PATIENCE * (%(NMR_PARAMS)s+1)) /** the maximum number of evaluations */
 #define EPS sqrt(max(EPSILON, LM_MACHEP)) /* for forward differences */
@@ -114,7 +114,7 @@ MOT_FLOAT_TYPE lm_euclidian_norm(const MOT_FLOAT_TYPE* const x, const int n);
  *
  */
 
-void lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
+int lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
 
 	int j, i;
     MOT_FLOAT_TYPE actred, dirder, fnorm, fnorm1, gnorm, pnorm, prered, ratio, step, sum, temp, temp1, temp2, temp3;
@@ -149,9 +149,9 @@ void lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
     nfev = 1;
     fnorm = lm_euclidian_norm(fvec, NMR_INST_PER_PROBLEM);
     if (!isfinite(fnorm)) {
-	    return;
+	    return 10; /* nan */
     } else if (fnorm <= LM_DWARF) {
-        return;
+        return 1;
     }
 
     /***  The outer loop: compute gradient, then descend.  ***/
@@ -231,7 +231,7 @@ void lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
         }
 
         if (gnorm <= GTOL) {
-            return;
+            return 5;
         }
 
         /** Initialize or update diag and delta. **/
@@ -250,7 +250,7 @@ void lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
                 xnorm = lm_euclidian_norm(x, %(NMR_PARAMS)s);
             }
             if(!isfinite(xnorm)){
-                return;
+                return 10;
             }
 
             /* initialize the step bound delta. */
@@ -277,7 +277,7 @@ void lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
             /* Predict scaled reduction */
             pnorm = lm_euclidian_norm(wa3, %(NMR_PARAMS)s);
 			if(!isfinite(pnorm)) {
-				return;
+				return 10;
 			}
             temp2 = lmpar * pown( pnorm / fnorm, 2);
             for (j = 0; j < %(NMR_PARAMS)s; j++) {
@@ -288,7 +288,7 @@ void lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
             }
             temp1 = pown( lm_euclidian_norm(wa3, %(NMR_PARAMS)s) / fnorm , 2);
             if (!isfinite(temp1)){
-                return;
+                return 10;
             }
             prered = temp1 + 2 * temp2;
             dirder = -temp1 + temp2; /* scaled directional derivative */
@@ -307,7 +307,7 @@ void lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
             ++nfev;
             fnorm1 = lm_euclidian_norm(wf, NMR_INST_PER_PROBLEM);
             if(!isfinite(fnorm1)){
-                return;
+                return 10;
             }
 
 			/** Evaluate the scaled reduction. **/
@@ -360,35 +360,35 @@ void lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
                 }
                 xnorm = lm_euclidian_norm(wa2, %(NMR_PARAMS)s);
                 if (!isfinite(xnorm)){
-                    return;
+                    return 10; /* nan */
                 }
                 fnorm = fnorm1;
             }
 
             /* convergence tests */
             if (fnorm <= LM_DWARF){
-                return; /* success: sum of squares almost zero */
+                return 1; /* success: sum of squares almost zero */
             }
             /* test two criteria (both may be fulfilled) */
             if (fabs(actred) <= FTOL && prered <= FTOL && ratio <= 2){
-				return; /* success: x almost stable */
-			}
-            if (delta <= XTOL * xnorm){
-				return; /* success: sum of squares almost stable */
+				if (delta <= XTOL * xnorm){
+				    return 4; /* success: sum of squares almost stable */
+				}
+				return 2; /* success: x almost stable */
 			}
 
 			/** Tests for termination and stringent tolerances. **/
 			if ( nfev >= MAXFEV ){
-                return;
+                return 6;
             }
             if ( fabs(actred) <= LM_MACHEP && prered <= LM_MACHEP && ratio <= 2 ){
-                return;
+                return 7;
             }
             if ( delta <= LM_MACHEP * xnorm ){
-                return;
+                return 8;
             }
             if ( gnorm <= LM_MACHEP){
-                return;
+                return 9;
             }
 
 			/** End of the inner loop. Repeat if iteration unsuccessful. **/

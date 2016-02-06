@@ -18,6 +18,21 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
+return_code_labels = {
+    0: ['default', 'no return code specified'],
+    1: ['found zero', 'sum of squares below underflow limit'],
+    2: ['converged', 'the relative error in the sum of squares is at most tol'],
+    3: ['converged', 'the relative error of the parameter vector is at most tol'],
+    4: ['converged', 'both errors are at most tol'],
+    5: ['trapped', 'by degeneracy; increasing epsilon might help'],
+    6: ['exhausted', 'number of function calls exceeding preset patience'],
+    7: ['failed', 'ftol<tol: cannot reduce sum of squares any further'],
+    8: ['failed', 'xtol<tol: cannot improve approximate solution any further'],
+    9: ['failed', 'gtol<tol: cannot improve approximate solution any further'],
+    10: ['NaN', 'Function value is not-a-number or infinite']
+}
+
+
 class AbstractOptimizer(AbstractCLRoutine):
 
     def __init__(self, cl_environments, load_balancer, use_param_codec=True, patience=1,
@@ -115,7 +130,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
 
         workers = self._create_workers(self._get_worker_generator(self, model, starting_points, full_output,
                                                                   var_data_dict, prtcl_data_dict, fixed_data_dict,
-                                                                  nmr_params, self._optimizer_options))
+                                                                  nmr_params, return_codes, self._optimizer_options))
         self.load_balancer.process(workers, model.get_nmr_problems())
 
         self._logger.info('Finished optimization')
@@ -145,7 +160,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
 class AbstractParallelOptimizerWorker(Worker):
 
     def __init__(self, cl_environment, parent_optimizer, model, starting_points, full_output,
-                 var_data_dict, prtcl_data_dict, fixed_data_dict, nmr_params, optimizer_options=None):
+                 var_data_dict, prtcl_data_dict, fixed_data_dict, nmr_params, return_codes, optimizer_options=None):
         super(AbstractParallelOptimizerWorker, self).__init__(cl_environment)
 
         self._optimizer_options = optimizer_options
@@ -158,6 +173,7 @@ class AbstractParallelOptimizerWorker(Worker):
         self._var_data_dict = var_data_dict
         self._prtcl_data_dict = prtcl_data_dict
         self._fixed_data_dict = fixed_data_dict
+        self._return_codes = return_codes
 
         self._constant_buffers = self._generate_constant_buffers(self._prtcl_data_dict, self._fixed_data_dict)
 
@@ -169,12 +185,14 @@ class AbstractParallelOptimizerWorker(Worker):
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
-        all_buffers, parameters_buffer = self._create_buffers(range_start, range_end)
+        all_buffers, parameters_buffer, return_code_buffer = self._create_buffers(range_start, range_end)
 
         self._kernel.minimize(self._cl_run_context.queue, (nmr_problems, ), None, *all_buffers)
 
         event = cl.enqueue_copy(self._cl_run_context.queue, self._starting_points[range_start:range_end, :],
                                 parameters_buffer, is_blocking=False)
+        event = cl.enqueue_copy(self._cl_run_context.queue, self._return_codes[range_start:range_end],
+                                return_code_buffer, is_blocking=False, wait_for=[event])
         return event
 
     def _create_buffers(self, range_start, range_end):
@@ -182,11 +200,18 @@ class AbstractParallelOptimizerWorker(Worker):
 
         read_only_flags = self._cl_environment.get_read_only_cl_mem_flags()
         read_write_flags = self._cl_environment.get_read_write_cl_mem_flags()
+        write_only_flags = self._cl_environment.get_write_only_cl_mem_flags()
 
         all_buffers = []
+
         parameters_buffer = cl.Buffer(self._cl_run_context.context, read_write_flags,
                                       hostbuf=self._starting_points[range_start:range_end, :])
         all_buffers.append(parameters_buffer)
+
+        return_code_buffer = cl.Buffer(self._cl_run_context.context, write_only_flags,
+                                       hostbuf=self._return_codes[range_start:range_end])
+        all_buffers.append(return_code_buffer)
+
         for data in self._var_data_dict.values():
             all_buffers.append(cl.Buffer(self._cl_run_context.context, read_only_flags,
                                          hostbuf=data.get_opencl_data()[range_start:range_end, ...]))
@@ -195,7 +220,7 @@ class AbstractParallelOptimizerWorker(Worker):
         if self._uses_random_numbers():
             all_buffers.append(initialize_ranlux(self._cl_environment, self._cl_run_context, nmr_problems))
 
-        return all_buffers, parameters_buffer
+        return all_buffers, parameters_buffer, return_code_buffer
 
     def _get_kernel_source(self):
         """Generate the kernel source for this optimization routine.
@@ -220,7 +245,7 @@ class AbstractParallelOptimizerWorker(Worker):
                                                   self._prtcl_data_dict,
                                                   self._fixed_data_dict)
 
-        kernel_param_names = ['global MOT_FLOAT_TYPE* params']
+        kernel_param_names = ['global MOT_FLOAT_TYPE* params', 'global int* return_codes']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
         if self._uses_random_numbers():
@@ -260,7 +285,7 @@ class AbstractParallelOptimizerWorker(Worker):
                     }
 
                     ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
-                    ''' + self._get_optimizer_call_name() + '''(''' + optimizer_call_args + ''');
+                    return_codes[gid] = ''' + self._get_optimizer_call_name() + '''(''' + optimizer_call_args + ''');
 
                     ''' + ('decodeParameters(x);' if self._use_param_codec else '') + '''
 

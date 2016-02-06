@@ -34,7 +34,7 @@
 MOT_FLOAT_TYPE bracket_and_brent(const MOT_FLOAT_TYPE* const pcom, const MOT_FLOAT_TYPE* const x_tmp_min,
                                   MOT_FLOAT_TYPE* xt, const void* const data, MOT_FLOAT_TYPE *xmin);
 
-MOT_FLOAT_TYPE powell(MOT_FLOAT_TYPE* model_parameters, const void* const data){
+int powell(MOT_FLOAT_TYPE* model_parameters, const void* const data){
     int i, j, i_greatest;
     int iteration = 0;
     MOT_FLOAT_TYPE fval = evaluate(model_parameters, data);
@@ -78,7 +78,7 @@ MOT_FLOAT_TYPE powell(MOT_FLOAT_TYPE* model_parameters, const void* const data){
         }
 
         if(2.0*(fval_tmp1-fval) <= PWLL_FTOL * (fabs(fval_tmp1) + fabs(fval)) + EPSILON){
-            return fval;
+            return 0;
         }
 
         for(j=0; j < %(NMR_PARAMS)r; j++){
@@ -106,7 +106,7 @@ MOT_FLOAT_TYPE powell(MOT_FLOAT_TYPE* model_parameters, const void* const data){
             }
         }
     }
-    return fval;
+    return 0;
 }
 
 MOT_FLOAT_TYPE bracket_and_brent(const MOT_FLOAT_TYPE* const pcom, const MOT_FLOAT_TYPE* const x_tmp_min, MOT_FLOAT_TYPE* xt,

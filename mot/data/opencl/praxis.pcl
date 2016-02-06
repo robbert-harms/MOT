@@ -125,7 +125,7 @@ int pow_ii(int x, int n){
 
 return_code praxis_(int n, MOT_FLOAT_TYPE *x, const void * const data, MOT_FLOAT_TYPE *minf, void* rand_settings);
 
-void praxis(MOT_FLOAT_TYPE* model_parameters, const void* const data, void* rand_settings){
+int praxis(MOT_FLOAT_TYPE* model_parameters, const void* const data, void* rand_settings){
     MOT_FLOAT_TYPE minf = 0;
     praxis_(%(NMR_PARAMS)r, model_parameters, data, &minf, rand_settings);
 }

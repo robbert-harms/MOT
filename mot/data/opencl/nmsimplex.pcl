@@ -59,7 +59,7 @@
 #define EPSILON     30*MOT_EPSILON  /** the precision we break at*/
 #define SCALE       %(SCALE)r                   /** the scale for the initial simplex */
 
-void nmsimplex(MOT_FLOAT_TYPE* const model_parameters, const void* const data){
+int nmsimplex(MOT_FLOAT_TYPE* const model_parameters, const void* const data){
 
 	int vs;         /* vertex with smallest value */
 	int vh;         /* vertex with next smallest value */
