@@ -50,25 +50,57 @@
  * Added constraints. (Which were removed by Robbert in 2014, since we already have parameter transforms.)
  */
 
-#define PATIENCE %(PATIENCE)r         /* Used to set the maximum number of iterations
-                                         to patience*(number_of_parameters+1). */
+#define PATIENCE %(PATIENCE)r                  /* Used to set the maximum number of iterations
+                                                   to patience * (number_of_parameters + 1). */
 #define MAX_IT (PATIENCE * (%(NMR_PARAMS)r+1))
 #define ALPHA       %(ALPHA)r                   /* reflection coefficient, default 1 */
 #define BETA        %(BETA)r                    /* contraction coefficient, default 0.5 */
 #define GAMMA       %(GAMMA)r                   /* expansion coefficient default 2 */
-#define EPSILON     30*MOT_EPSILON  /** the precision we break at*/
-#define SCALE       %(SCALE)r                   /** the scale for the initial simplex */
+#define DELTA       %(DELTA)r                   /* reduction coefficient default 0.5 */
+#define EPSILON     30*MOT_EPSILON              /** the precision we break at*/
+
+int _nmsimplex(MOT_FLOAT_TYPE* const model_parameters, const void* const data, MOT_FLOAT_TYPE* const minf,
+               MOT_FLOAT_TYPE* const simplex_scale, MOT_FLOAT_TYPE* const f_diff);
 
 int nmsimplex(MOT_FLOAT_TYPE* const model_parameters, const void* const data){
+    /** the minimum value at the initial simplex */
+    MOT_FLOAT_TYPE minf = evaluate(model_parameters, data);
 
+    /** the scale of the initial simplex, should be set by python code as a string: {v1, v2, ...} */
+    MOT_FLOAT_TYPE simplex_scale[%(NMR_PARAMS)r] = %(INITIAL_SIMPLEX_SCALES)s;
+
+    /** the difference between the high and low function values of the vertices */
+    MOT_FLOAT_TYPE f_diff;
+
+    return _nmsimplex(model_parameters, data, &minf, &simplex_scale, &f_diff);
+}
+
+/**
+ * Internal routine for the Nelder Mead Simplex optimization routine.
+ *
+ * Args:
+ *  model_parameters (array): On input the initial array of model parameters.
+ *                            On output the location of the optimum found
+ *  data (struct): the data struct we pass to the optimizer
+ *  minf (double pointer): the minimum value of the initial model parameters.
+ *      This saves evaluations when this function is used in SubPlex.
+ *  simplex_scale (array): per parameter the scale (initial step size)
+ *  f_diff (double): On output, this will contain the difference between the high and low function values
+ *      of the last simplex.
+ */
+int _nmsimplex(MOT_FLOAT_TYPE* const model_parameters, const void* const data, MOT_FLOAT_TYPE* const minf,
+               MOT_FLOAT_TYPE* const simplex_scale, MOT_FLOAT_TYPE* const f_diff){
+
+    int return_code = 6; /** the default return code is that we exhausted our patience */
 	int vs;         /* vertex with smallest value */
 	int vh;         /* vertex with next smallest value */
 	int vg;         /* vertex with largest value */
-    int i,j;        /** helper variables */
+    int i, j;        /** helper variables */
 	int itr;	      /* track the number of iterations */
 	double tmp;
 	MOT_FLOAT_TYPE fr;      /* value of function at reflection point */
-	MOT_FLOAT_TYPE fe_fc;      /* value of function at expansion point & value of function at contraction point*/
+	MOT_FLOAT_TYPE fe;   /* value of function at expansion point */
+	MOT_FLOAT_TYPE fc;      /* value of function at contraction point */
 	MOT_FLOAT_TYPE vertices[%(NMR_PARAMS)r + 1][%(NMR_PARAMS)r];     /* holds vertices of simplex */
     MOT_FLOAT_TYPE func_vals[%(NMR_PARAMS)r + 1]; /* value of function at each vertex */
     MOT_FLOAT_TYPE vr[%(NMR_PARAMS)r]; /* reflection - coordinates */
@@ -76,27 +108,31 @@ int nmsimplex(MOT_FLOAT_TYPE* const model_parameters, const void* const data){
      										 that is, we use this variable at two points for different purposes.*/
     MOT_FLOAT_TYPE vm[%(NMR_PARAMS)r]; /* centroid - coordinates */
 
+    /*
+     * Create the initial simplex.
+	 * We assume one of the vertices is 0,0
+	 * Furthermore we set x_0 = x_input to allow for proper restarts.
+	 */
 	for (i=0;i<%(NMR_PARAMS)r;i++) {
 		vertices[0][i] = model_parameters[i];
 	}
-
-    /* create the initial simplex */
-	/* assume one of the vertices is 0,0 */
 	for (i=1;i<=%(NMR_PARAMS)r;i++) {
 		for (j=0;j<%(NMR_PARAMS)r;j++) {
-			if (i-1 == j) {
-				vertices[i][j] = (SCALE * (sqrt((MOT_FLOAT_TYPE) %(NMR_PARAMS)r + 1) - 1 + %(NMR_PARAMS)r)
-				                / (%(NMR_PARAMS)r * sqrt(2.0))) + model_parameters[j];
+			vertices[i][j] = sqrt(%(NMR_PARAMS)r + 1.0) - 1;
+			if (i-1 == j){
+			    vertices[i][j] += %(NMR_PARAMS)r;
 			}
-			else {
-				vertices[i][j] = (SCALE * (sqrt((MOT_FLOAT_TYPE) %(NMR_PARAMS)r + 1) - 1)
-				                / (%(NMR_PARAMS)r * sqrt(2.0))) + model_parameters[j];
-			}
+            vertices[i][j] /= (%(NMR_PARAMS)r * sqrt(2.0));
+            /** vertices now contains the unit vector e_j in R^n. */
+
+            /** set x_j = x_input + h_j * e_j */
+            vertices[i][j] = model_parameters[j] + simplex_scale[i-1] * vertices[i][j];
 		}
 	}
 
 	/* find the initial function values */
-	for (j=0;j<=%(NMR_PARAMS)r;j++) {
+	func_vals[0] = *minf;
+	for (j=1;j<=%(NMR_PARAMS)r;j++) {
 		func_vals[j] = evaluate(vertices[j], data);
 	}
 
@@ -116,6 +152,9 @@ int nmsimplex(MOT_FLOAT_TYPE* const model_parameters, const void* const data){
 				vs = j;
 			}
 		}
+
+        /** store the difference between the largest and smallest function values */
+        *f_diff = func_vals[vg] - func_vals[vs];
 
 		/* find the index of the second largest value */
 		vh=vs;
@@ -155,14 +194,13 @@ int nmsimplex(MOT_FLOAT_TYPE* const model_parameters, const void* const data){
 				/** ve_vc here used as ve */
 				ve_vc[j] = vm[j] + GAMMA * (vr[j] - vm[j]);
 			}
-            /** use fe_fc as fe (function value of expansion) */
-			fe_fc = evaluate(ve_vc, data);
 
-			if (fe_fc < fr){
+			fe = evaluate(ve_vc, data);
+			if (fe < fr){
 				for (j=0;j<=%(NMR_PARAMS)r-1;j++) {
 					vertices[vg][j] = ve_vc[j];
 				}
-				func_vals[vg] = fe_fc;
+				func_vals[vg] = fe;
 			}
 			else {
 				for (j=0;j<=%(NMR_PARAMS)r-1;j++) {
@@ -188,25 +226,22 @@ int nmsimplex(MOT_FLOAT_TYPE* const model_parameters, const void* const data){
 				}
 			}
 
-			/** use fe_fc as fc */
-			fe_fc = evaluate(ve_vc, data);
-
-			if (fe_fc < func_vals[vg]) {
+			fc = evaluate(ve_vc, data);
+			if (fc < func_vals[vg]) {
 				for (j=0;j<=%(NMR_PARAMS)r-1;j++) {
 					vertices[vg][j] = ve_vc[j];
 				}
-				func_vals[vg] = fe_fc;
+				func_vals[vg] = fc;
 			}
 			else {
                 /* at this point the contraction is not successful,
-                   we must halve the distance from vs to all the
+                   we must reduce (by default halve) the distance from vs to all the
                    vertices of the simplex and then continue.
-                   10/31/97 - modified to account for ALL vertices.
                 */
 				for (i=0;i<=%(NMR_PARAMS)r;i++) {
 					if (i != vs) {
 						for (j=0;j<=%(NMR_PARAMS)r-1;j++) {
-							vertices[i][j] = vertices[vs][j]+(vertices[i][j]-vertices[vs][j])/2.0;
+							vertices[i][j] = vertices[vs][j] + (vertices[i][j]-vertices[vs][j]) * DELTA;
 						}
 					}
 				}
@@ -223,13 +258,15 @@ int nmsimplex(MOT_FLOAT_TYPE* const model_parameters, const void* const data){
 		}
 		/** fr here used as tmp dummy */
 		fr = tmp/(%(NMR_PARAMS)r+1);
+
 		tmp = 0.0;
 		for (j=0;j<=%(NMR_PARAMS)r;j++) {
 			tmp += pown((func_vals[j]-fr), 2) / (%(NMR_PARAMS)r);
 		}
-		tmp = (MOT_FLOAT_TYPE)sqrt(tmp);
+		tmp = sqrt(tmp);
 
 		if (tmp < EPSILON){
+		    return_code = 1;
 		    break;
 		}
 	}
@@ -237,22 +274,18 @@ int nmsimplex(MOT_FLOAT_TYPE* const model_parameters, const void* const data){
 
 	/* find the index of the largest and smallest value */
 	vs = 0;
-	vg = 0;
 	for (j=0;j<=%(NMR_PARAMS)r;j++) {
 		/* find smallest */
         if (func_vals[j] < func_vals[vs]) {
             vs = j;
-        }
-
-		/* find largest */
-        if (func_vals[j] > func_vals[vg]) {
-            vg = j;
         }
 	}
 
     for (j=0;j<%(NMR_PARAMS)r;j++) {
 		model_parameters[j] = vertices[vs][j];
 	}
+
+	return return_code;
 }
 
 #undef PATIENCE
@@ -261,6 +294,5 @@ int nmsimplex(MOT_FLOAT_TYPE* const model_parameters, const void* const data){
 #undef BETA
 #undef GAMMA
 #undef EPSILON
-#undef SCALE
 
 #endif // NMSIMPLEX_CL

@@ -20,8 +20,8 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 return_code_labels = {
     0: ['default', 'no return code specified'],
-    1: ['found zero', 'sum of squares below underflow limit'],
-    2: ['converged', 'the relative error in the sum of squares is at most tol'],
+    1: ['found zero', 'sum of squares/evaluation below underflow limit'],
+    2: ['converged', 'the relative error in the sum of squares/evaluation is at most tol'],
     3: ['converged', 'the relative error of the parameter vector is at most tol'],
     4: ['converged', 'both errors are at most tol'],
     5: ['trapped', 'by degeneracy; increasing epsilon might help'],

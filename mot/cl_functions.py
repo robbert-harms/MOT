@@ -116,14 +116,22 @@ class NMSimplexFunc(LibraryFunction):
             nmr_parameters (int): The number of parameters we are going to optimize, this is compiled into the code.
             patience (int): The patience before stopping the iterations.
             optimizer_options (dict): specific optimizer options
+                alpha: reflection coefficient, default 1
+                beta: contraction coefficient, default 0.5
+                gamma: expansion coefficient default 2
+                delta: reduction coefficient default 0.5
+                scale: the scale for the initial simplex default 1
         """
         params = {'NMR_PARAMS': nmr_parameters, 'PATIENCE': patience}
 
         optimizer_options = optimizer_options or {}
-        option_defaults = {'alpha': 1.0, 'beta': 0.5, 'gamma': 2.0, 'scale': 1.0}
+        option_defaults = {'alpha': 1.0, 'beta': 0.5, 'gamma': 2.0, 'delta': 0.5, 'scale': 1.0}
 
         for option, default in option_defaults.items():
-            params.update({option.upper(): optimizer_options.get(option, default)})
+            if option == 'scale':
+                params['INITIAL_SIMPLEX_SCALES'] = '{' + ', '.join([str(default)] * nmr_parameters) + '}'
+            else:
+                params.update({option.upper(): optimizer_options.get(option, default)})
 
         super(NMSimplexFunc, self).__init__(
             'void',
