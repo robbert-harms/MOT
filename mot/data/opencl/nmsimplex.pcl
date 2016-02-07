@@ -98,6 +98,7 @@ int _nmsimplex(MOT_FLOAT_TYPE* const model_parameters, const void* const data, M
     int i, j;        /** helper variables */
 	int itr;	      /* track the number of iterations */
 	double tmp;
+	MOT_FLOAT_TYPE initial_diameter = 0; /* initial diameter used in psi convergence test */
 	MOT_FLOAT_TYPE fr;      /* value of function at reflection point */
 	MOT_FLOAT_TYPE fe;   /* value of function at expansion point */
 	MOT_FLOAT_TYPE fc;      /* value of function at contraction point */
@@ -153,15 +154,24 @@ int _nmsimplex(MOT_FLOAT_TYPE* const model_parameters, const void* const data, M
 			}
 		}
 
-        /** store the difference between the largest and smallest function values */
-        *f_diff = func_vals[vg] - func_vals[vs];
-
 		/* find the index of the second largest value */
 		vh=vs;
 		for (j=0;j<=%(NMR_PARAMS)r;j++) {
 			if (func_vals[j] > func_vals[vh] && func_vals[j] < func_vals[vg]) {
 				vh = j;
 			}
+		}
+
+        /** store the difference between the largest and smallest function values */
+        *f_diff = func_vals[vg] - func_vals[vs];
+
+		/**
+		 *  Additional test for convergence, see:
+		 *  P. E. Gill, W. Murray, and M. H. Wright. Practical Optimization. Academic Press, New York, 1981.
+		 */
+		if((func_vals[vg] - func_vals[vs])/(1 + fabs(func_vals[vs])) < EPSILON){
+		    return_code = 1;
+		    break;
 		}
 
 		/* calculate the centroid */
