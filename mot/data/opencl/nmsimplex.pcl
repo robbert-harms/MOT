@@ -57,39 +57,9 @@
 #define BETA        %(BETA)r                    /* contraction coefficient, default 0.5 */
 #define GAMMA       %(GAMMA)r                   /* expansion coefficient default 2 */
 #define DELTA       %(DELTA)r                   /* reduction coefficient default 0.5 */
-#define EPSILON     30*MOT_EPSILON              /** the precision we break at*/
-
-int _nmsimplex(MOT_FLOAT_TYPE* const model_parameters, const void* const data, MOT_FLOAT_TYPE* const minf,
-               MOT_FLOAT_TYPE* const simplex_scale, MOT_FLOAT_TYPE* const f_diff);
+#define USER_TOL_X     30*MOT_EPSILON              /** the precision we break at*/
 
 int nmsimplex(MOT_FLOAT_TYPE* const model_parameters, const void* const data){
-    /** the minimum value at the initial simplex */
-    MOT_FLOAT_TYPE minf = evaluate(model_parameters, data);
-
-    /** the scale of the initial simplex, should be set by python code as a string: {v1, v2, ...} */
-    MOT_FLOAT_TYPE simplex_scale[%(NMR_PARAMS)r] = %(INITIAL_SIMPLEX_SCALES)s;
-
-    /** the difference between the high and low function values of the vertices */
-    MOT_FLOAT_TYPE f_diff;
-
-    return _nmsimplex(model_parameters, data, &minf, &simplex_scale, &f_diff);
-}
-
-/**
- * Internal routine for the Nelder Mead Simplex optimization routine.
- *
- * Args:
- *  model_parameters (array): On input the initial array of model parameters.
- *                            On output the location of the optimum found
- *  data (struct): the data struct we pass to the optimizer
- *  minf (double pointer): the minimum value of the initial model parameters.
- *      This saves evaluations when this function is used in SubPlex.
- *  simplex_scale (array): per parameter the scale (initial step size)
- *  f_diff (double): On output, this will contain the difference between the high and low function values
- *      of the last simplex.
- */
-int _nmsimplex(MOT_FLOAT_TYPE* const model_parameters, const void* const data, MOT_FLOAT_TYPE* const minf,
-               MOT_FLOAT_TYPE* const simplex_scale, MOT_FLOAT_TYPE* const f_diff){
 
     int return_code = 6; /** the default return code is that we exhausted our patience */
 	int vs;         /* vertex with smallest value */
@@ -98,16 +68,21 @@ int _nmsimplex(MOT_FLOAT_TYPE* const model_parameters, const void* const data, M
     int i, j;        /** helper variables */
 	int itr;	      /* track the number of iterations */
 	double tmp;
-	MOT_FLOAT_TYPE initial_diameter = 0; /* initial diameter used in psi convergence test */
+
 	MOT_FLOAT_TYPE fr;      /* value of function at reflection point */
 	MOT_FLOAT_TYPE fe;   /* value of function at expansion point */
 	MOT_FLOAT_TYPE fc;      /* value of function at contraction point */
-	MOT_FLOAT_TYPE vertices[%(NMR_PARAMS)r + 1][%(NMR_PARAMS)r];     /* holds vertices of simplex */
-    MOT_FLOAT_TYPE func_vals[%(NMR_PARAMS)r + 1]; /* value of function at each vertex */
-    MOT_FLOAT_TYPE vr[%(NMR_PARAMS)r]; /* reflection - coordinates */
+
+	MOT_FLOAT_TYPE vm[%(NMR_PARAMS)r]; /* centroid - coordinates */
+	MOT_FLOAT_TYPE vr[%(NMR_PARAMS)r]; /* reflection - coordinates */
     MOT_FLOAT_TYPE ve_vc[%(NMR_PARAMS)r]; /* expansion - coordinates, & contraction - coordinates,
      										 that is, we use this variable at two points for different purposes.*/
-    MOT_FLOAT_TYPE vm[%(NMR_PARAMS)r]; /* centroid - coordinates */
+
+    MOT_FLOAT_TYPE vertices[%(NMR_PARAMS)r + 1][%(NMR_PARAMS)r];     /* holds vertices of simplex */
+    MOT_FLOAT_TYPE func_vals[%(NMR_PARAMS)r + 1]; /* value of function at each vertex */
+
+    /** the scale of the initial simplex, should be set by python code as a string: {v1, v2, ...} */
+    MOT_FLOAT_TYPE simplex_scale[%(NMR_PARAMS)r] = %(INITIAL_SIMPLEX_SCALES)s;
 
     /*
      * Create the initial simplex.
@@ -132,13 +107,12 @@ int _nmsimplex(MOT_FLOAT_TYPE* const model_parameters, const void* const data, M
 	}
 
 	/* find the initial function values */
-	func_vals[0] = *minf;
-	for (j=1;j<=%(NMR_PARAMS)r;j++) {
+	for (j=0;j<=%(NMR_PARAMS)r;j++) {
 		func_vals[j] = evaluate(vertices[j], data);
 	}
 
 	/* begin the main loop of the minimization */
-	for (itr=1;itr<=MAX_IT;itr++) {
+	for (itr=0; itr <= MAX_IT; itr++) {
 		/* find the index of the largest and smallest value */
 		vg=0;
 		vs=0;
@@ -162,14 +136,11 @@ int _nmsimplex(MOT_FLOAT_TYPE* const model_parameters, const void* const data, M
 			}
 		}
 
-        /** store the difference between the largest and smallest function values */
-        *f_diff = func_vals[vg] - func_vals[vs];
-
 		/**
 		 *  Additional test for convergence, see:
 		 *  P. E. Gill, W. Murray, and M. H. Wright. Practical Optimization. Academic Press, New York, 1981.
 		 */
-		if((func_vals[vg] - func_vals[vs])/(1 + fabs(func_vals[vs])) < EPSILON){
+		if((func_vals[vg] - func_vals[vs])/(1 + fabs(func_vals[vs])) < USER_TOL_X){
 		    return_code = 1;
 		    break;
 		}
@@ -275,7 +246,7 @@ int _nmsimplex(MOT_FLOAT_TYPE* const model_parameters, const void* const data, M
 		}
 		tmp = sqrt(tmp);
 
-		if (tmp < EPSILON){
+		if (tmp < USER_TOL_X){
 		    return_code = 1;
 		    break;
 		}
@@ -303,6 +274,6 @@ int _nmsimplex(MOT_FLOAT_TYPE* const model_parameters, const void* const data, M
 #undef ALPHA
 #undef BETA
 #undef GAMMA
-#undef EPSILON
+#undef USER_TOL_X
 
 #endif // NMSIMPLEX_CL

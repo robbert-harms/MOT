@@ -118,9 +118,9 @@ class NMSimplexFunc(LibraryFunction):
             optimizer_options (dict): specific optimizer options
                 alpha: reflection coefficient, default 1
                 beta: contraction coefficient, default 0.5
-                gamma: expansion coefficient default 2
-                delta: reduction coefficient default 0.5
-                scale: the scale for the initial simplex default 1
+                gamma: expansion coefficient, default 2
+                delta: shrink coefficient, default 0.5
+                scale: the scale for the initial simplex, default 1
         """
         params = {'NMR_PARAMS': nmr_parameters, 'PATIENCE': patience}
 
