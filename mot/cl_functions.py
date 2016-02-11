@@ -192,6 +192,23 @@ class FirstLegendreTerm(LibraryFunction):
             ())
 
 
+class Bessel(LibraryFunction):
+
+    def __init__(self):
+        """Function library for the bessel functions.
+
+        See the CL code for more details.
+        """
+        super(Bessel, self).__init__(
+            'MOT_FLOAT_TYPE',
+            '',
+            (),
+            resource_filename('mot', 'data/opencl/bessel.h'),
+            resource_filename('mot', 'data/opencl/bessel.cl'),
+            {},
+            ())
+
+
 class RanluxCL(LibraryFunction):
 
     def __init__(self):

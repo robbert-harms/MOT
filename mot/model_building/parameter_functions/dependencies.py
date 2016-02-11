@@ -94,12 +94,19 @@ class WeightSumToOneRule(AbstractParameterDependency):
         else:
             divisors = ''
             for p in parameter_names:
-                divisors += p + ' /= weight_div;' + "\n" + "\t" * 4
+                divisors += p + ' /= _weight_sum;' + "\n" + "\t" * 4
             self._pre_transform_code += '''
-                MOT_FLOAT_TYPE weight_dependency_sum = ''' + ' + '.join(parameter_names) + ''';
-                MOT_FLOAT_TYPE weight_div = max((MOT_FLOAT_TYPE)1.0, weight_dependency_sum);
-                ''' + divisors + '''weight_dependency_sum = 1 - min((MOT_FLOAT_TYPE)1.0, weight_dependency_sum);''' + "\n"
-            self._assignment = 'weight_dependency_sum'
+                MOT_FLOAT_TYPE _weight_sum = ''' + ' + '.join(parameter_names) + ''';
+                if(_weight_sum < 1.0){
+                    _weight_sum = 1 - _weight_sum;
+                }
+                else{
+                    ''' + divisors + '''
+                    _weight_sum = 0;
+                }
+
+            '''
+            self._assignment = '_weight_sum'
             self._has_side_effects = True
 
     @property

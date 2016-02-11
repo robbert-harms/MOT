@@ -519,6 +519,22 @@ class ModelFunction(DependentCLFunction):
         """
         return {}
 
+    def get_cl_dependency_headers(self):
+        """Get the CL code for all the headers for all the dependencies.
+
+        Returns:
+            str: The CL code with the headers.
+        """
+        return self._get_cl_dependency_headers()
+
+    def get_cl_dependency_code(self):
+        """Get the CL code for all the CL code for all the dependencies.
+
+        Returns:
+            str: The CL code with the actual code.
+        """
+        return self._get_cl_dependency_code()
+
 
 class LibraryFunction(DependentCLFunction):
 

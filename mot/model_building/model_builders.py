@@ -329,12 +329,16 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             results_dict (dict): the initialization settings for the specific parameters.
                 The number of items per dictionary item should match the number of problems to analyze.
         """
+        np_dtype = np.float32
+        if self.double_precision:
+            np_dtype = np.float64
+
         starting_points = []
         for m, p in self._get_estimable_parameters_list():
             if results_dict and (m.name + '.' + p.name) in results_dict:
                 starting_points.append(results_dict[m.name + '.' + p.name])
             elif isinstance(p.value, numbers.Number):
-                starting_points.append(np.full((self.get_nmr_problems(), 1), p.value))
+                starting_points.append(np.full((self.get_nmr_problems(), 1), p.value, dtype=np_dtype))
             else:
                 if len(p.value.shape) < 2:
                     value = np.transpose(np.asarray([p.value]))
@@ -492,10 +496,14 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         for p in self._evaluation_model.get_free_parameters():
             param_listing += self._get_param_listing_for_param(self._evaluation_model, p)
 
-        func = self.get_model_eval_function(eval_func_name)
+        func = ''
+        func += self._evaluation_model.get_cl_dependency_headers()
+        func += self._evaluation_model.get_cl_dependency_code()
+
+        func += self.get_model_eval_function(eval_func_name)
         func += self.get_observation_return_function(obs_func_name)
         func += str(self._evaluation_model.get_objective_function(func_name, inst_per_problem, eval_func_name,
-                                                              obs_func_name, param_listing))
+                                                                  obs_func_name, param_listing))
         return func
 
     def finalize_optimization_results(self, results_dict):
@@ -1154,7 +1162,11 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         for p in self._evaluation_model.get_free_parameters():
             param_listing += self._get_param_listing_for_param(self._evaluation_model, p)
 
-        func = self.get_model_eval_function(eval_func_name)
+        func = ''
+        func += self._evaluation_model.get_cl_dependency_headers()
+        func += self._evaluation_model.get_cl_dependency_code()
+
+        func += self.get_model_eval_function(eval_func_name)
         func += self.get_observation_return_function(obs_func_name)
         func += self._evaluation_model.get_log_likelihood_function(func_name, inst_per_problem, eval_func_name,
                                                                    obs_func_name, param_listing)

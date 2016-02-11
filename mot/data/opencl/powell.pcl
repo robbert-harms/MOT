@@ -25,11 +25,11 @@
 #define ZEPS 30*MOT_EPSILON
 
 /** helpers to save memory and keep code clean */
-#define A fa
-#define B fb
-#define D fc
-#define FV ulim
-#define FW maxarg
+#define _A_ fa
+#define _B_ fb
+#define _D_ fc
+#define _FV_ ulim
+#define _FW_ maxarg
 
 MOT_FLOAT_TYPE bracket_and_brent(const MOT_FLOAT_TYPE* const pcom, const MOT_FLOAT_TYPE* const x_tmp_min,
                                   MOT_FLOAT_TYPE* xt, const void* const data, MOT_FLOAT_TYPE *xmin);
@@ -78,7 +78,7 @@ int powell(MOT_FLOAT_TYPE* model_parameters, const void* const data){
         }
 
         if(2.0*(fval_tmp1-fval) <= PWLL_FTOL * (fabs(fval_tmp1) + fabs(fval)) + EPSILON){
-            return 0;
+            return 1;
         }
 
         for(j=0; j < %(NMR_PARAMS)r; j++){
@@ -106,7 +106,7 @@ int powell(MOT_FLOAT_TYPE* model_parameters, const void* const data){
             }
         }
     }
-    return 0;
+    return 6;
 }
 
 MOT_FLOAT_TYPE bracket_and_brent(const MOT_FLOAT_TYPE* const pcom, const MOT_FLOAT_TYPE* const x_tmp_min, MOT_FLOAT_TYPE* xt,
@@ -229,30 +229,30 @@ MOT_FLOAT_TYPE bracket_and_brent(const MOT_FLOAT_TYPE* const pcom, const MOT_FLO
     }
 
     /** from here starts brent */
-    A=(ax < cx ? ax : cx);
-    B=(ax > cx ? ax : cx);
+    _A_=(ax < cx ? ax : cx);
+    _B_=(ax > cx ? ax : cx);
 
     x=w=v=bx;
 
     for(j=0; j < %(NMR_PARAMS)r; j++){
         xt[j] = pcom[j] + x * x_tmp_min[j];
     }
-    FW=FV=fx=evaluate(xt, data);
+    _FW_=_FV_=fx=evaluate(xt, data);
 
     #pragma unroll 1
     for(iter=0; iter < MAX_IT; iter++){
-        xm = 0.5 * (A + B);
+        xm = 0.5 * (_A_ + _B_);
         tol1 = BRENT_TOL * fabs(x) + ZEPS;
         tol2 = 2.0 * tol1;
 
-        if(fabs(x - xm) <= (tol2 - 0.5 * (B - A))){
+        if(fabs(x - xm) <= (tol2 - 0.5 * (_B_ - _A_))){
             *xmin = x;
             return fx;
         }
 
         if(fabs(e) > tol1){
-            r = (x - w) * (fx - FV);
-            q = (x - v) * (fx - FW);
+            r = (x - w) * (fx - _FV_);
+            q = (x - v) * (fx - _FW_);
             p = (x - v) * q - (x - w) * r;
             q = 2.0 * (q - r);
 
@@ -262,26 +262,26 @@ MOT_FLOAT_TYPE bracket_and_brent(const MOT_FLOAT_TYPE* const pcom, const MOT_FLO
 
             q = fabs(q);
             tmp = e;
-            e = D;
+            e = _D_;
 
-            if(fabs(p) >= fabs(0.5 * q * tmp) || p <= q * (A - x) || p >= q * (B - x)){
-                e = (x >= xm ? A : B) - x;
-                D = CGOLD * e;
+            if(fabs(p) >= fabs(0.5 * q * tmp) || p <= q * (_A_ - x) || p >= q * (_B_ - x)){
+                e = (x >= xm ? _A_ : _B_) - x;
+                _D_ = CGOLD * e;
             }
             else {
-                D = p / q;
-                u = x + D;
-                if(u - A < tol2 || B - u < tol2){
-                    D = copysign(tol1, xm - x);
+                _D_ = p / q;
+                u = x + _D_;
+                if(u - _A_ < tol2 || _B_ - u < tol2){
+                    _D_ = copysign(tol1, xm - x);
                 }
             }
         }
         else{
-            e = (x >= xm ? A : B) - x;
-            D = CGOLD * e;
+            e = (x >= xm ? _A_ : _B_) - x;
+            _D_ = CGOLD * e;
         }
 
-        u = (fabs(D) >= tol1 ? x + D : x + copysign(tol1, D));
+        u = (fabs(_D_) >= tol1 ? x + _D_ : x + copysign(tol1, _D_));
 
         for(j=0; j < %(NMR_PARAMS)r; j++){
            xt[j] = pcom[j] + u * x_tmp_min[j];
@@ -290,34 +290,34 @@ MOT_FLOAT_TYPE bracket_and_brent(const MOT_FLOAT_TYPE* const pcom, const MOT_FLO
 
         if(fu <= fx){
             if(u >= x){
-                A=x;
+                _A_=x;
             }
             else{
-                B=x;
+                _B_=x;
             }
             v = w;
             w = x;
             x = u;
 
-            FV = FW;
-            FW = fx;
+            _FV_ = _FW_;
+            _FW_ = fx;
             fx = fu;
         } else {
             if(u < x){
-                A=u;
+                _A_=u;
             }
             else{
-                B=u;
+                _B_=u;
             }
-            if (fu <= FW || w == x) {
+            if (fu <= _FW_ || w == x) {
                 v=w;
                 w=u;
-                FV=FW;
-                FW=fu;
+                _FV_=_FW_;
+                _FW_=fu;
             }
-            else if(fu <= FV || v == x || v == w){
+            else if(fu <= _FV_ || v == x || v == w){
                 v=u;
-                FV=fu;
+                _FV_=fu;
             }
         }
     }
@@ -334,5 +334,11 @@ MOT_FLOAT_TYPE bracket_and_brent(const MOT_FLOAT_TYPE* const pcom, const MOT_FLO
 #undef EPSILON
 #undef CGOLD
 #undef ZEPS
+
+#undef _A_
+#undef _B_
+#undef _D_
+#undef _FV_
+#undef _FW_
 
 #endif // POWELL_CL
