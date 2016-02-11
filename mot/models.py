@@ -239,11 +239,13 @@ class SampleModelInterface(OptimizeModelInterface):
             list: list of double values with the proposal parameter values that are adaptable.
         """
 
-    def get_log_likelihood_function(self, func_name="getLogLikelihood"):
+    def get_log_likelihood_function(self, func_name="getLogLikelihood", evaluation_model=None):
         """Get the Log Likelihood function that evaluates the entire problem instance under a noise model
 
         Args:
             func_name (string): specifies the name of the function.
+            evaluation_model (EvaluationModel): the evaluation model to use for the log likelihood. If not given
+                we use the one defined in the model.
 
         Returns:
             str: A function of the kind:

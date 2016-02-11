@@ -71,10 +71,10 @@ Updates:      Jun 29, 1998: VOG, Document created.
 /*------------------------------------------------------------*/
 /* Zeroth-order Bessel function of the first kind.            */
 /*------------------------------------------------------------*/
-MOT_FLOAT_TYPE bessel_j0(MOT_FLOAT_TYPE x){
-   MOT_FLOAT_TYPE ax = fabs(x);
-   MOT_FLOAT_TYPE z;
-   MOT_FLOAT_TYPE xx,y,ans,ans1,ans2;
+double bessel_j0(double x){
+   double ax = fabs(x);
+   double z;
+   double xx,y,ans,ans1,ans2;
 
    if(ax < 8.0){
       y=x*x;
@@ -97,9 +97,9 @@ MOT_FLOAT_TYPE bessel_j0(MOT_FLOAT_TYPE x){
 /*------------------------------------------------------------*/
 /* Zeroth-order modified Bessel function of the first kind.   */
 /*------------------------------------------------------------*/
-MOT_FLOAT_TYPE bessel_i0(MOT_FLOAT_TYPE x){
-    MOT_FLOAT_TYPE ax = fabs(x);
-    MOT_FLOAT_TYPE y;
+double bessel_i0(double x){
+    double ax = fabs(x);
+    double y;
 
     if(ax < 3.75){
       y = pown(x/3.75, 2);
@@ -117,9 +117,9 @@ MOT_FLOAT_TYPE bessel_i0(MOT_FLOAT_TYPE x){
 /**
  * Return the log of the zeroth-order modified Bessel function of the first kind.
  */
-MOT_FLOAT_TYPE log_bessel_i0(MOT_FLOAT_TYPE x){
+double log_bessel_i0(double x){
     if(x < 700){
-        return log((MOT_FLOAT_TYPE)bessel_i0(x));
+        return log((double)bessel_i0(x));
     }
     return x - log(2.0 * M_PI * x)/2.0;
 }

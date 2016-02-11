@@ -55,7 +55,7 @@ class EvaluationModel(ModelFunction):
             That is, it always returns a double since the summations may get large.
         """
 
-    def set_noise_level_std(self, noise_std):
+    def set_noise_level_std(self, noise_std, fix=False):
         """Set the estimate of the noise level standard deviation.
 
         We put this here as a method to make the method work with object oriented polymorphism. That is, not
@@ -66,7 +66,21 @@ class EvaluationModel(ModelFunction):
 
         Args:
             noise_std (double): the noise standard deviation
+            fix (boolean): if we also fix the parameter. This fixes the parameter to the given value.
+                On False this does nothing and does not set fixed to False if it was already set to True.
+
+        Returns:
+            self: for chaining
         """
+        return self
+
+    def get_noise_level_std(self):
+        """Get the estimate of the noise level standard deviation.
+
+        Returns:
+            noise_std (double): the noise standard deviation
+        """
+        return 1
 
 
 class SumOfSquares(EvaluationModel):
@@ -144,8 +158,16 @@ class GaussianEvaluationModel(EvaluationModel):
             }
         '''
 
-    def set_noise_level_std(self, noise_std):
+    def set_noise_level_std(self, noise_std, fix=False):
         self.parameter_list[0].value = noise_std
+
+        if fix:
+            self.parameter_list[0].fixed = True
+
+        return self
+
+    def get_noise_level_std(self):
+        return self.parameter_list[0].value
 
 
 class OffsetGaussianEvaluationModel(EvaluationModel):
@@ -191,8 +213,16 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
             }
         '''
 
-    def set_noise_level_std(self, noise_std):
+    def set_noise_level_std(self, noise_std, fix=False):
         self.parameter_list[0].value = noise_std
+
+        if fix:
+            self.parameter_list[0].fixed = True
+
+        return self
+
+    def get_noise_level_std(self):
+        return self.parameter_list[0].value
 
 
 class RicianEvaluationModel(EvaluationModel):
@@ -200,15 +230,24 @@ class RicianEvaluationModel(EvaluationModel):
     def __init__(self):
         """Evaluates the distance between the estimated signal and the data using the Rican log likelihood evaluation.
 
-        The rician log likelihood model is implemented as:
+        The rician log likelihood model is defined as:
 
-        L = sum(-a + b + log(observation) - 2*log(evaluation))
+        L = sum( - (observation^2 + evaluation^2) / (2 * sigma^2)
+                 + log(bessel_i0((observation * evaluation) / sigma^2))
+                 + log(observation)
+                 - 2*log(evaluation)
+            )
 
-        where:
-            a = (observation^2 + evaluation^2) / (2 * sigma^2)
-            b = log(bessel_i0((observation * evaluation) / sigma^2))
+        We implemented it as:
+            L = sum( - evaluation^2 / (2 * sigma^2)
+                     + log(bessel_i0((observation * evaluation) / sigma^2))
+                     - 2*log(evaluation)
+            )
 
-        As objective function we return -r (the 'minimum likelihood estimator'), as log likelihood function we return r.
+        that is, with the default factors dropped from the equation.
+
+        As objective function we return -r (the inverse of the maximum likelihood estimator),
+        as log likelihood function we return r.
         """
         super(RicianEvaluationModel, self).__init__(
             'RicianNoise',
@@ -221,7 +260,7 @@ class RicianEvaluationModel(EvaluationModel):
         return '''
             double ''' + fname + '''(const optimize_data* const data, MOT_FLOAT_TYPE* const x){
                 ''' + param_listing + '''
-                ''' + self._get_log_likelihood_body(inst_per_problem, eval_fname, obs_fname) + '''
+                ''' + self._get_log_likelihood_body(fname, inst_per_problem, eval_fname, obs_fname) + '''
                 return -sum;
             }
         '''
@@ -230,27 +269,32 @@ class RicianEvaluationModel(EvaluationModel):
         return '''
             double ''' + fname + '''(const optimize_data* const data, const MOT_FLOAT_TYPE* const x){
                 ''' + param_listing + '''
-                ''' + self._get_log_likelihood_body(inst_per_problem, eval_fname, obs_fname) + '''
+                ''' + self._get_log_likelihood_body(fname, inst_per_problem, eval_fname, obs_fname) + '''
                 return sum;
             }
         '''
 
-    def _get_log_likelihood_body(self, inst_per_problem, eval_fname, obs_fname):
+    def _get_log_likelihood_body(self, fname, inst_per_problem, eval_fname, obs_fname):
         return '''
             double sum = 0.0;
-            MOT_FLOAT_TYPE observation;
-            MOT_FLOAT_TYPE evaluation;
+            double observation;
+            double evaluation;
             for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
-                observation = ''' + obs_fname + '''(data, i);
-                evaluation = ''' + eval_fname + '''(data, x, i);
+                observation = (double)''' + obs_fname + '''(data, i);
+                evaluation = (double)''' + eval_fname + '''(data, x, i);
 
-                sum -= ((pown(observation, 2) + pown(evaluation, 2)) / (2 * pown(RicianNoise_sigma, 2)));
-                sum += log_bessel_i0((observation * evaluation)/pown(RicianNoise_sigma, 2));
-                sum += log(observation);
+                sum -= pown(evaluation / (M_SQRT2 * RicianNoise_sigma), 2);
+                sum += log_bessel_i0((observation / RicianNoise_sigma) * (evaluation / RicianNoise_sigma));
             }
-            sum -= 2 * log(RicianNoise_sigma) * ''' + str(inst_per_problem) + ''';
         '''
 
-    def set_noise_level_std(self, noise_std):
+    def set_noise_level_std(self, noise_std, fix=False):
         self.parameter_list[0].value = noise_std
 
+        if fix:
+            self.parameter_list[0].fixed = True
+
+        return self
+
+    def get_noise_level_std(self):
+        return self.parameter_list[0].value

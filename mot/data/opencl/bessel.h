@@ -6,6 +6,6 @@
  * Email = robbert.harms@maastrichtuniversity.nl
  */
 
-MOT_FLOAT_TYPE bessel_j0(MOT_FLOAT_TYPE x);
-MOT_FLOAT_TYPE bessel_i0(MOT_FLOAT_TYPE x);
-MOT_FLOAT_TYPE log_bessel_i0(MOT_FLOAT_TYPE x);
+double bessel_j0(double x);
+double bessel_i0(double x);
+double log_bessel_i0(double x);

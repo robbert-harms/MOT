@@ -18,12 +18,14 @@ class LogLikelihoodCalculator(AbstractCLRoutine):
         """Calculate the residuals, that is the errors, per problem instance per data point."""
         super(LogLikelihoodCalculator, self).__init__(cl_environments, load_balancer)
 
-    def calculate(self, model, parameters_dict):
+    def calculate(self, model, parameters_dict, evaluation_model=None):
         """Calculate and return the residuals.
 
         Args:
             model (AbstractModel): The model to calculate the residuals of.
             parameters_dict (dict): The parameters to use in the evaluation of the model
+            evaluation_model (EvaluationModel): the evaluation model to use for the log likelihood. If not given
+                we use the one defined in the model.
 
         Returns:
             Return per voxel the log likelihood.
@@ -36,9 +38,9 @@ class LogLikelihoodCalculator(AbstractCLRoutine):
         log_likelihoods = np.zeros((nmr_problems, 1), dtype=np_dtype, order='C')
         parameters = model.get_initial_parameters(parameters_dict)
 
-        workers = self._create_workers(lambda cl_environment: _LogLikelihoodCalculatorWorker(cl_environment, model,
-                                                                                             parameters,
-                                                                                             log_likelihoods))
+        workers = self._create_workers(
+            lambda cl_environment: _LogLikelihoodCalculatorWorker(cl_environment, model, parameters,
+                                                                  log_likelihoods, evaluation_model))
         self.load_balancer.process(workers, model.get_nmr_problems())
 
         return log_likelihoods
@@ -46,13 +48,14 @@ class LogLikelihoodCalculator(AbstractCLRoutine):
 
 class _LogLikelihoodCalculatorWorker(Worker):
 
-    def __init__(self, cl_environment, model, parameters, log_likelihoods):
+    def __init__(self, cl_environment, model, parameters, log_likelihoods, evaluation_model):
         super(_LogLikelihoodCalculatorWorker, self).__init__(cl_environment)
 
         self._model = model
         self._double_precision = model.double_precision
         self._log_likelihoods = log_likelihoods
         self._parameters = parameters
+        self._evaluation_model = evaluation_model
 
         self._var_data_dict = model.get_problems_var_data()
         self._prtcl_data_dict = model.get_problems_prtcl_data()
@@ -92,7 +95,7 @@ class _LogLikelihoodCalculatorWorker(Worker):
         return all_buffers, likelihoods_buffer
 
     def _get_kernel_source(self):
-        cl_func = self._model.get_log_likelihood_function('getLogLikelihood')
+        cl_func = self._model.get_log_likelihood_function('getLogLikelihood', evaluation_model=self._evaluation_model)
         nmr_params = self._parameters.shape[1]
         observation_func = self._model.get_observation_return_function('getObservation')
         param_code_gen = ParameterCLCodeGenerator(self._cl_environment.device, self._var_data_dict,
