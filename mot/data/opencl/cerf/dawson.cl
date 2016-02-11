@@ -18,11 +18,11 @@
  * Calculate the Dawson's integral for a real argument.
  */
 double dawson(double x){
-    return M_SQRTPI_2 * im_w_of_x(x);
+    return M_SQRTPI_2 * im_w_of_x((double)x);
 }
 
 float fdawson(float x){
-    return M_SQRTPI_2 * fim_w_of_x(x);
+    return M_SQRTPI_2 * fim_w_of_x((float)x);
 }
 
 #endif // CERF_DAWSON_CL

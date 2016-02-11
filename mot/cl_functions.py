@@ -182,9 +182,9 @@ class FirstLegendreTerm(LibraryFunction):
         """A function for finding the first legendre term. (see the CL code for more details)
         """
         super(FirstLegendreTerm, self).__init__(
-            'MOT_FLOAT_TYPE',
+            'double',
             'getFirstLegendreTerm',
-            (LibraryParameter(CLDataType.from_string('MOT_FLOAT_TYPE'), 'x'),
+            (LibraryParameter(CLDataType.from_string('double'), 'x'),
              LibraryParameter(CLDataType.from_string('int'), 'n')),
             resource_filename('mot', 'data/opencl/firstLegendreTerm.h'),
             resource_filename('mot', 'data/opencl/firstLegendreTerm.cl'),

@@ -10,7 +10,7 @@
  */
 
 ////////////////////////////////////////////////////////////////////////////////
-// MOT_FLOAT_TYPE getFirstLegendreTerm(MOT_FLOAT_TYPE x, int n)                     //
+// double getFirstLegendreTerm(double x, int n)                               //
 //                                                                            //
 //  Description:                                                              //
 //     The Legendre polynomials, Pn(x), are orthogonal on the interval [-1,1] //
@@ -23,7 +23,7 @@
 //              P[0](x) = 1, P[1](x) = x.                                     //
 //                                                                            //
 //  Arguments:                                                                //
-//     MOT_FLOAT_TYPE x                                                          //
+//     double x                                                               //
 //        The argument of the Legendre polynomial Pn.                         //
 //     int    n                                                               //
 //        The degree of the Legendre polynomial Pn.                           //
@@ -32,8 +32,8 @@
 //     Pn(x) if n is a nonnegative integer.  If n is negative, 0 is returned. //
 //                                                                            //
 //  Example:                                                                  //
-//     MOT_FLOAT_TYPE Pn;                                                        //
-//     MOT_FLOAT_TYPE x;                                                         //
+//     double Pn;                                                             //
+//     double x;                                                              //
 //     int    n;                                                              //
 //                                                                            //
 //     (user code to set x and n)                                             //
@@ -53,7 +53,7 @@
 /**
 * Compute the first term of the legendre polynome for the given value x and the polynomial degree n
 */
-MOT_FLOAT_TYPE getFirstLegendreTerm(const MOT_FLOAT_TYPE x, const int n){
+double getFirstLegendreTerm(const double x, const int n){
     if (n < 0){
         return 0.0;
     }
@@ -77,14 +77,14 @@ MOT_FLOAT_TYPE getFirstLegendreTerm(const MOT_FLOAT_TYPE x, const int n){
         return x;
     }
 
-    MOT_FLOAT_TYPE P0, P1, Pn;
+    double P0, P1, Pn;
     int k;
 
     P0 = 1.0;
     P1 = x;
 
     for (k = 1; k < n; k++, P0 = P1, P1 = Pn){
-        Pn = ( (MOT_FLOAT_TYPE)( k + k + 1 ) * x * P1 - (MOT_FLOAT_TYPE)k * P0) / (MOT_FLOAT_TYPE)(k + 1);
+        Pn = ( (double)( k + k + 1 ) * x * P1 - (double)k * P0) / (double)(k + 1);
     }
 
     return Pn;
