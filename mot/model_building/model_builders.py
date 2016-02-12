@@ -714,7 +714,11 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                         else:
                             assignment = str(float(self._problem_data.prtcl_data_dict[p.name][0]))
                     else:
-                        assignment = 'data->prtcl_data_' + p.name + '[observation_index]'
+                        if p.data_type.is_pointer_type:
+                            #todo: this will only work from the moment we support generic address spaces in OpenCL.
+                            assignment = '&data->prtcl_data_' + p.name + '[observation_index]'
+                        else:
+                            assignment = 'data->prtcl_data_' + p.name + '[observation_index]'
                     func += "\t"*4 + data_type + ' ' + p.name + ' = ' + assignment + ';' + "\n"
                     const_params_seen.append(p.name)
         return func

@@ -48,7 +48,7 @@ class SimpleDataAdapter(DataAdapter):
         Args:
             value (ndarray): The value to adapt to different run environments
             data_type (DataType): the data type we need to convert it to
-            mot_float_type (DataType): the datatype of MOT_FLOAT_TYPE
+            mot_float_type (DataType): the data type of the MOT_FLOAT_TYPE
         """
         self._data = data
         self._data_type = data_type
@@ -86,7 +86,7 @@ class SimpleDataAdapter(DataAdapter):
         """Get the numpy data type for non-vector types in CL.
 
         This function is not part of the DataType class since the numpy datatype may differ depending
-        for which use case we are adapting.
+        on the final use case.
 
         Args:
             data_type (DataType): the data type to convert to an numpy type

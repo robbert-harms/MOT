@@ -277,11 +277,11 @@ class RicianEvaluationModel(EvaluationModel):
     def _get_log_likelihood_body(self, fname, inst_per_problem, eval_fname, obs_fname):
         return '''
             double sum = 0.0;
-            double observation;
-            double evaluation;
+            MOT_FLOAT_TYPE observation;
+            MOT_FLOAT_TYPE evaluation;
             for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
-                observation = (double)''' + obs_fname + '''(data, i);
-                evaluation = (double)''' + eval_fname + '''(data, x, i);
+                observation = ''' + obs_fname + '''(data, i);
+                evaluation = ''' + eval_fname + '''(data, x, i);
 
                 sum -= pown(evaluation / (M_SQRT2 * RicianNoise_sigma), 2);
                 sum += log_bessel_i0((observation / RicianNoise_sigma) * (evaluation / RicianNoise_sigma));
