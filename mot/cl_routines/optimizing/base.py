@@ -117,7 +117,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
 
         var_data_dict = model.get_problems_var_data()
         prtcl_data_dict = model.get_problems_prtcl_data()
-        fixed_data_dict = model.get_problems_fixed_data()
+        model_data_dict = model.get_model_data()
         return_codes = np.zeros((starting_points.shape[0],), dtype=np.int32, order='C')
 
         space_transformer = CodecRunner(self.cl_environments, self.load_balancer, model.double_precision)
@@ -129,7 +129,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         self._logger.info('Starting optimization')
 
         workers = self._create_workers(self._get_worker_generator(self, model, starting_points, full_output,
-                                                                  var_data_dict, prtcl_data_dict, fixed_data_dict,
+                                                                  var_data_dict, prtcl_data_dict, model_data_dict,
                                                                   nmr_params, return_codes, self._optimizer_options))
         self.load_balancer.process(workers, model.get_nmr_problems())
 
@@ -160,7 +160,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
 class AbstractParallelOptimizerWorker(Worker):
 
     def __init__(self, cl_environment, parent_optimizer, model, starting_points, full_output,
-                 var_data_dict, prtcl_data_dict, fixed_data_dict, nmr_params, return_codes, optimizer_options=None):
+                 var_data_dict, prtcl_data_dict, model_data_dict, nmr_params, return_codes, optimizer_options=None):
         super(AbstractParallelOptimizerWorker, self).__init__(cl_environment)
 
         self._optimizer_options = optimizer_options
@@ -172,10 +172,10 @@ class AbstractParallelOptimizerWorker(Worker):
         self._nmr_params = nmr_params
         self._var_data_dict = var_data_dict
         self._prtcl_data_dict = prtcl_data_dict
-        self._fixed_data_dict = fixed_data_dict
+        self._model_data_dict = model_data_dict
         self._return_codes = return_codes
 
-        self._constant_buffers = self._generate_constant_buffers(self._prtcl_data_dict, self._fixed_data_dict)
+        self._constant_buffers = self._generate_constant_buffers(self._prtcl_data_dict, self._model_data_dict)
 
         param_codec = model.get_parameter_codec()
         self._use_param_codec = self._parent_optimizer.use_param_codec and param_codec
@@ -243,7 +243,7 @@ class AbstractParallelOptimizerWorker(Worker):
         param_code_gen = ParameterCLCodeGenerator(self._cl_environment.device,
                                                   self._var_data_dict,
                                                   self._prtcl_data_dict,
-                                                  self._fixed_data_dict)
+                                                  self._model_data_dict)
 
         kernel_param_names = ['global MOT_FLOAT_TYPE* params', 'global int* return_codes']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())

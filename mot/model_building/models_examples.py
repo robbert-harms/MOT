@@ -31,7 +31,7 @@ class Rosenbrock(OptimizeModelInterface):
     def get_problems_prtcl_data(self):
         return {}
 
-    def get_problems_fixed_data(self):
+    def get_model_data(self):
         return {}
 
     def get_nmr_problems(self):
@@ -124,7 +124,7 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
     def get_problems_prtcl_data(self):
         return {}
 
-    def get_problems_fixed_data(self):
+    def get_model_data(self):
         return {}
 
     def get_nmr_problems(self):

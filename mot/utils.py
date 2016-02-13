@@ -156,7 +156,7 @@ class TopologicalSort(object):
 
 class ParameterCLCodeGenerator(object):
 
-    def __init__(self, device, var_data_dict, prtcl_data_dict, fixed_data_dict):
+    def __init__(self, device, var_data_dict, prtcl_data_dict, model_data_dict):
         """Generate the CL code for all the parameters in the given dictionaries.
 
         The dictionaries are supposed to contain DataAdapters.
@@ -167,7 +167,7 @@ class ParameterCLCodeGenerator(object):
                 that is different for every problem
             prtcl_data_dict (dict of DataAdapter): the dictionary with the protocol data. That is, the data
                 that is the same for every problem, but differs for every measurement.
-            fixed_data_dict (dict of DataAdapter): the dictionary with the protocol data. That is, the data
+            model_data_dict (dict of DataAdapter): the dictionary with the model data. That is, the data
                 that is the same for every problem and every measurement.
         """
         self._device = device
@@ -175,7 +175,7 @@ class ParameterCLCodeGenerator(object):
         self._max_constant_args = device.get_info(cl.device_info.MAX_CONSTANT_ARGS)
         self._var_data_dict = var_data_dict
         self._prtcl_data_dict = prtcl_data_dict
-        self._fixed_data_dict = fixed_data_dict
+        self._model_data_dict = model_data_dict
         self._kernel_items = self._get_all_kernel_source_items()
 
     def get_data_struct(self):
@@ -244,9 +244,9 @@ class ParameterCLCodeGenerator(object):
             data_struct_init.append(param_name)
             data_struct_names.append(clmemtype + ' ' + data_type + '* ' + param_name)
 
-        for key, data_adapter in self._fixed_data_dict.items():
+        for key, data_adapter in self._model_data_dict.items():
             clmemtype = 'global'
-            param_name = 'fixed_data_' + str(key)
+            param_name = 'model_data_' + str(key)
             data_type = data_adapter.get_data_type().raw_data_type
 
             if data_adapter.get_data_type().is_vector_type:

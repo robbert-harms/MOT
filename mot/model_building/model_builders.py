@@ -147,8 +147,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         """Unfix the given model.param
 
         Args:
-            model_param_name (string):
-                A model.param name like 'Ball.d'
+            model_param_name (string): A model.param name like 'Ball.d'
 
         Returns:
             Returns self for chainability
@@ -156,6 +155,20 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         m, p = self._get_model_parameter_matching(model_param_name)
         p.fixed = False
         return self
+
+    def has_parameter(self, model_param_name):
+        """Check to see if the given parameter is defined in this model.
+
+        Args:
+            model_param_name (string): A model.param name like 'Ball.d'
+
+        Returns:
+            boolean: true if the parameter is defined in this model, false otherwise.
+        """
+        for m, p in self._get_model_parameter_list():
+            if m.name + '.' + p.name == model_param_name:
+                return True
+        return False
 
     def set_problem_data(self, problem_data):
         """Set the data this model will deal with. This overwrites those optionally set in the constructor.
@@ -315,12 +328,12 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                     raise ParameterResolutionException(exception)
         return prtcl_data_dict
 
-    def get_problems_fixed_data(self):
-        fixed_data_dict = {}
+    def get_model_data(self):
+        model_data_dict = {}
         for m, p in self._get_model_parameter_list():
             if isinstance(p, ModelDataParameter):
-                fixed_data_dict.update({p.name: SimpleDataAdapter(p.value, p.data_type, self._get_mot_float_type())})
-        return fixed_data_dict
+                model_data_dict.update({p.name: SimpleDataAdapter(p.value, p.data_type, self._get_mot_float_type())})
+        return model_data_dict
 
     def get_initial_parameters(self, results_dict=None):
         """When overriding this function, please note that it should adhere to the attribute problems_to_analyze.
@@ -625,7 +638,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             if isinstance(param, ProtocolParameter):
                 param_list.append(param.name)
             elif isinstance(param, ModelDataParameter):
-                param_list.append('data->fixed_data_' + param.name)
+                param_list.append('data->model_data_' + param.name)
             else:
                 param_list.append(model.name + '_' + param.name)
         return model.cl_function_name + '(' + ', '.join(param_list) + ')'
@@ -992,7 +1005,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         for m, p in self._get_model_parameter_list():
             if m.name + '.' + p.name == model_param_name:
                 return m, p
-        return None
+        raise ValueError('The parameter with the given name ({}) could not be found.'.format(model_param_name))
 
     def _get_pre_model_expression_eval_code(self):
         """The code called in the evaluation function.

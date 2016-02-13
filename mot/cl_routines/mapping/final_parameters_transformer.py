@@ -44,12 +44,12 @@ class FinalParametersTransformer(AbstractCLRoutine):
         parameters = parameters.astype(np_dtype, order='C', copy=False)
         var_data_dict = model.get_problems_var_data()
         prtcl_data_dict = model.get_problems_prtcl_data()
-        fixed_data_dict = model.get_problems_fixed_data()
+        model_data_dict = model.get_model_data()
 
         if model.get_final_parameter_transformations():
             workers = self._create_workers(lambda cl_environment: _FPTWorker(cl_environment, model, parameters,
                                                                              var_data_dict, prtcl_data_dict,
-                                                                             fixed_data_dict))
+                                                                             model_data_dict))
             self.load_balancer.process(workers, model.get_nmr_problems())
 
         return parameters
@@ -57,7 +57,7 @@ class FinalParametersTransformer(AbstractCLRoutine):
 
 class _FPTWorker(Worker):
 
-    def __init__(self, cl_environment, model, parameters, var_data_dict, prtcl_data_dict, fixed_data_dict):
+    def __init__(self, cl_environment, model, parameters, var_data_dict, prtcl_data_dict, model_data_dict):
         super(_FPTWorker, self).__init__(cl_environment)
 
         self._parameters = parameters
@@ -65,9 +65,9 @@ class _FPTWorker(Worker):
         self._model = model
         self._var_data_dict = var_data_dict
         self._prtcl_data_dict = prtcl_data_dict
-        self._fixed_data_dict = fixed_data_dict
+        self._model_data_dict = model_data_dict
         self._double_precision = model.double_precision
-        self._constant_buffers = self._generate_constant_buffers(self._prtcl_data_dict, self._fixed_data_dict)
+        self._constant_buffers = self._generate_constant_buffers(self._prtcl_data_dict, self._model_data_dict)
         self._kernel = self._build_kernel()
 
     def calculate(self, range_start, range_end):
@@ -96,7 +96,7 @@ class _FPTWorker(Worker):
 
     def _get_kernel_source(self):
         param_code_gen = ParameterCLCodeGenerator(self._cl_environment.device,
-                                                  self._var_data_dict, self._prtcl_data_dict, self._fixed_data_dict)
+                                                  self._var_data_dict, self._prtcl_data_dict, self._model_data_dict)
 
         kernel_param_names = ['global MOT_FLOAT_TYPE* params']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())

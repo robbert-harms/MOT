@@ -50,11 +50,13 @@ class OptimizeModelInterface(object):
                 Each key is used as name in the cl data struct.
         """
 
-    def get_problems_fixed_data(self):
-        """Get a dict with all the fixed data. These are fixed for all voxels, for all measurement points.
+    def get_model_data(self):
+        """Get a dict with all the model data. This is model data necessary for computations in the model.
+
+        For data that is to large to inline in the kernel this data type may be useful.
 
         Returns:
-            dict: The dict with all the fixed data in DataAdapters.
+            dict: The dict with all the model data in DataAdapters.
                 The names of the keys are used in the CL cl data structs.
         """
 

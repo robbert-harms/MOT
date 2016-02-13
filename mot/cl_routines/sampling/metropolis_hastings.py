@@ -67,7 +67,7 @@ class MetropolisHastings(AbstractSampler):
         parameters = model.get_initial_parameters(init_params)
         var_data_dict = model.get_problems_var_data()
         prtcl_data_dict = model.get_problems_prtcl_data()
-        fixed_data_dict = model.get_problems_fixed_data()
+        model_data_dict = model.get_model_data()
 
         samples = np.zeros((model.get_nmr_problems(), parameters.shape[1], self.nmr_samples),
                            dtype=np_dtype, order='C')
@@ -75,7 +75,7 @@ class MetropolisHastings(AbstractSampler):
         self._logger.info('Starting sampling with method {0}'.format(self.get_pretty_name()))
 
         workers = self._create_workers(lambda cl_environment: _MHWorker(cl_environment, model, parameters, samples,
-                                       var_data_dict, prtcl_data_dict, fixed_data_dict,
+                                       var_data_dict, prtcl_data_dict, model_data_dict,
                                        self.nmr_samples, self.burn_length, self.sample_intervals,
                                        self.proposal_update_intervals))
         self.load_balancer.process(workers, model.get_nmr_problems())
@@ -125,7 +125,7 @@ class MetropolisHastings(AbstractSampler):
 class _MHWorker(Worker):
 
     def __init__(self, cl_environment, model, parameters, samples,
-                 var_data_dict, prtcl_data_dict, fixed_data_dict, nmr_samples, burn_length, sample_intervals,
+                 var_data_dict, prtcl_data_dict, model_data_dict, nmr_samples, burn_length, sample_intervals,
                  proposal_update_intervals):
         super(_MHWorker, self).__init__(cl_environment)
 
@@ -136,14 +136,14 @@ class _MHWorker(Worker):
 
         self._var_data_dict = var_data_dict
         self._prtcl_data_dict = prtcl_data_dict
-        self._fixed_data_dict = fixed_data_dict
+        self._model_data_dict = model_data_dict
 
         self._nmr_samples = nmr_samples
         self._burn_length = burn_length
         self._sample_intervals = sample_intervals
         self.proposal_update_intervals = proposal_update_intervals
 
-        self._constant_buffers = self._generate_constant_buffers(self._prtcl_data_dict, self._fixed_data_dict)
+        self._constant_buffers = self._generate_constant_buffers(self._prtcl_data_dict, self._model_data_dict)
         self._kernel = self._build_kernel()
 
     def calculate(self, range_start, range_end):
@@ -186,7 +186,7 @@ class _MHWorker(Worker):
         cl_final_param_transform = self._model.get_final_parameter_transformations('applyFinalParamTransforms')
 
         param_code_gen = ParameterCLCodeGenerator(self._cl_environment.device, self._var_data_dict,
-                                                  self._prtcl_data_dict, self._fixed_data_dict)
+                                                  self._prtcl_data_dict, self._model_data_dict)
 
         kernel_param_names = ['global MOT_FLOAT_TYPE* params',
                               'global MOT_FLOAT_TYPE* samples',
