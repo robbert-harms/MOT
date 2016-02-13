@@ -111,7 +111,7 @@ class LoadBalanceStrategy(object):
 
         Args:
             run_in_batches (boolean): If we want to run the load per worker in batches or in one large run.
-            single_batch_length (int): The length of a single batch, only used if run_in_batches is set to True.
+            single_batch_length (float): The length of a single batch, only used if run_in_batches is set to True.
                 This will create batches this size and run each of them one after the other.
 
         Attributes:
@@ -181,7 +181,7 @@ class LoadBalanceStrategy(object):
         Args:
             range_start (int): the start of the range to create batches for
             range_end (int): the end of the range to create batches for
-            run_with_batches (boolean): if other than None, use this as run_with_batches
+            run_in_batches (boolean): if other than None, use this as run_with_batches
             single_batch_length (int): if other than None, use this as single_batch_length
 
         Returns:
@@ -361,7 +361,7 @@ class RuntimeLoadBalancing(LoadBalanceStrategy):
         durations = []
         start = 0
         for worker in workers:
-            end = start + int(math.floor(nmr_items * (self.test_percentage/len(workers)) / 100))
+            end = start + int(math.floor(nmr_items * (self.test_percentage / len(workers)) / 100))
             durations.append(self._test_duration(worker, start, end))
             start = end
 
