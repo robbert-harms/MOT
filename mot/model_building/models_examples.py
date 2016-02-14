@@ -73,7 +73,8 @@ class Rosenbrock(OptimizeModelInterface):
             for i in range(self.n):
                 if i in results_dict:
                     params[0, i] = results_dict[i]
-        return SimpleDataAdapter(params, CLDataType.from_string('double'), CLDataType.from_string('double'))
+        return SimpleDataAdapter(params, CLDataType.from_string('double'),
+                                 CLDataType.from_string('double')).get_opencl_data()
 
     def get_lower_bounds(self):
         return ['-inf'] * self.n
@@ -166,7 +167,8 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
             for i in range(2):
                 if i in results_dict:
                     params[0, i] = results_dict[i]
-        return SimpleDataAdapter(params, CLDataType.from_string('double'), CLDataType.from_string('double'))
+        return SimpleDataAdapter(params, CLDataType.from_string('double'),
+                                 CLDataType.from_string('double')).get_opencl_data()
 
     def get_lower_bounds(self):
         return [0, 0]

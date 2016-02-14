@@ -164,9 +164,9 @@ class ParameterCLCodeGenerator(object):
         Args:
             device: the CL device we want to compile the code for
             var_data_dict (dict of DataAdapter): the dictionary with the variable data. That is, the data
-                that is different for every problem
+                that is different for every problem (but constant over the measurements).
             prtcl_data_dict (dict of DataAdapter): the dictionary with the protocol data. That is, the data
-                that is the same for every problem, but differs for every measurement.
+                that is the same for every problem, but differs per measurement.
             model_data_dict (dict of DataAdapter): the dictionary with the model data. That is, the data
                 that is the same for every problem and every measurement.
         """

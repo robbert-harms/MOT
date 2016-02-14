@@ -97,7 +97,7 @@ class _LogLikelihoodCalculatorWorker(Worker):
     def _get_kernel_source(self):
         cl_func = self._model.get_log_likelihood_function('getLogLikelihood', evaluation_model=self._evaluation_model)
         nmr_params = self._parameters.shape[1]
-        observation_func = self._model.get_observation_return_function('getObservation')
+
         param_code_gen = ParameterCLCodeGenerator(self._cl_environment.device, self._var_data_dict,
                                                   self._prtcl_data_dict, self._model_data_dict)
 
@@ -106,7 +106,6 @@ class _LogLikelihoodCalculatorWorker(Worker):
         kernel_source = ''
         kernel_source += get_float_type_def(self._double_precision)
         kernel_source += param_code_gen.get_data_struct()
-        kernel_source += observation_func
         kernel_source += cl_func
         kernel_source += '''
             __kernel void run_kernel(
