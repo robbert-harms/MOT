@@ -190,7 +190,7 @@ class AbstractProblemData(object):
     """A simple data container for the data for optimization/sampling models."""
 
     @property
-    def prtcl_data_dict(self):
+    def protocol_data_dict(self):
         """Return the protocol data stored in this problem data container.
 
         The protocol data contains information about the experimental setup. In MRI this is the scanner protocol.
@@ -213,19 +213,19 @@ class AbstractProblemData(object):
 
 class SimpleProblemData(AbstractProblemData):
 
-    def __init__(self, prtcl_data_dict, observations_list):
+    def __init__(self, protocol_data_dict, observations_list):
         """A simple data container for the data for optimization/sampling models.
 
         Args:
-            prtcl_data_dict (dict): The protocol data dictionary
+            protocol_data_dict (dict): The protocol data dictionary
             observations_list (ndarray): The array with the observations
         """
-        self._prtcl_data_dict = prtcl_data_dict
+        self._protocol_data_dict = protocol_data_dict
         self._observation_list = observations_list
 
     @property
-    def prtcl_data_dict(self):
-        return self._prtcl_data_dict
+    def protocol_data_dict(self):
+        return self._protocol_data_dict
 
     @property
     def observations(self):

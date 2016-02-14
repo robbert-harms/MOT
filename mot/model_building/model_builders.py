@@ -289,7 +289,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         return len(self.problems_to_analyze)
 
     def get_nmr_inst_per_problem(self):
-        return np.array(self._problem_data.prtcl_data_dict[list(self._problem_data.prtcl_data_dict.keys())[0]]).shape[0]
+        return np.array(self._problem_data.protocol_data_dict[
+                            list(self._problem_data.protocol_data_dict.keys())[0]]).shape[0]
 
     def get_nmr_estimable_parameters(self):
         return len(self.get_optimized_param_names())
@@ -314,19 +315,19 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         return var_data_dict
 
-    def get_problems_prtcl_data(self):
-        prtcl_data_dict = {}
+    def get_problems_protocol_data(self):
+        protocol_data_dict = {}
         for m, p in self._get_model_parameter_list():
             if isinstance(p, ProtocolParameter):
-                if p.name in self._problem_data.prtcl_data_dict:
-                    if not self._all_elements_equal(self._problem_data.prtcl_data_dict[p.name]):
-                        const_d = {p.name: SimpleDataAdapter(self._problem_data.prtcl_data_dict[p.name],
+                if p.name in self._problem_data.protocol_data_dict:
+                    if not self._all_elements_equal(self._problem_data.protocol_data_dict[p.name]):
+                        const_d = {p.name: SimpleDataAdapter(self._problem_data.protocol_data_dict[p.name],
                                                              p.data_type, self._get_mot_float_type())}
-                        prtcl_data_dict.update(const_d)
+                        protocol_data_dict.update(const_d)
                 else:
                     exception = 'Constant parameter "{}" could not be resolved'.format(m.name + '.' + p.name)
                     raise ParameterResolutionException(exception)
-        return prtcl_data_dict
+        return protocol_data_dict
 
     def get_model_data(self):
         model_data_dict = {}
@@ -717,21 +718,21 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             if (m.name + '_' + p.name) not in exclude_list:
                 data_type = p.data_type.cl_type
                 if p.name not in const_params_seen:
-                    if self._all_elements_equal(self._problem_data.prtcl_data_dict[p.name]):
+                    if self._all_elements_equal(self._problem_data.protocol_data_dict[p.name]):
                         if p.data_type.is_vector_type:
                             vector_length = p.data_type.vector_length
-                            values = [str(val) for val in self._problem_data.prtcl_data_dict[p.name][0]]
+                            values = [str(val) for val in self._problem_data.protocol_data_dict[p.name][0]]
                             if len(values) < vector_length:
                                 values.append(str(0))
                             assignment = '(' + data_type + ')(' + ', '.join(values) + ')'
                         else:
-                            assignment = str(float(self._problem_data.prtcl_data_dict[p.name][0]))
+                            assignment = str(float(self._problem_data.protocol_data_dict[p.name][0]))
                     else:
                         if p.data_type.is_pointer_type:
                             #todo: this will only work from the moment we support generic address spaces in OpenCL.
-                            assignment = '&data->prtcl_data_' + p.name + '[observation_index]'
+                            assignment = '&data->protocol_data_' + p.name + '[observation_index]'
                         else:
-                            assignment = 'data->prtcl_data_' + p.name + '[observation_index]'
+                            assignment = 'data->protocol_data_' + p.name + '[observation_index]'
                     func += "\t"*4 + data_type + ' ' + p.name + ' = ' + assignment + ';' + "\n"
                     const_params_seen.append(p.name)
         return func
@@ -835,7 +836,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         assignment = ''
 
         if isinstance(p, ProtocolParameter):
-            assignment = 'data->prtcl_data_' + p.name + '[observation_index]'
+            assignment = 'data->protocol_data_' + p.name + '[observation_index]'
         elif isinstance(p, FreeParameter):
             if p.fixed and not self._parameter_has_dependency(m, p):
                 if isinstance(p.value, numbers.Number):

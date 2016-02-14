@@ -41,7 +41,7 @@ class OptimizeModelInterface(object):
                 number of items (second dimension / columns) that is used in the evaluation function.
         """
 
-    def get_problems_prtcl_data(self):
+    def get_problems_protocol_data(self):
         """Get a dict with the data that is constant for each problem (in Diffusion MRI the protocol/scheme), but
         differs per measurement.
 

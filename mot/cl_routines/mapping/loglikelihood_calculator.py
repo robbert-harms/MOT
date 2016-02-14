@@ -58,10 +58,10 @@ class _LogLikelihoodCalculatorWorker(Worker):
         self._evaluation_model = evaluation_model
 
         self._var_data_dict = model.get_problems_var_data()
-        self._prtcl_data_dict = model.get_problems_prtcl_data()
+        self._protocol_data_dict = model.get_problems_protocol_data()
         self._model_data_dict = model.get_model_data()
 
-        self._constant_buffers = self._generate_constant_buffers(self._prtcl_data_dict, self._model_data_dict)
+        self._constant_buffers = self._generate_constant_buffers(self._protocol_data_dict, self._model_data_dict)
 
         self._kernel = self._build_kernel()
 
@@ -99,7 +99,7 @@ class _LogLikelihoodCalculatorWorker(Worker):
         nmr_params = self._parameters.shape[1]
 
         param_code_gen = ParameterCLCodeGenerator(self._cl_environment.device, self._var_data_dict,
-                                                  self._prtcl_data_dict, self._model_data_dict)
+                                                  self._protocol_data_dict, self._model_data_dict)
 
         kernel_param_names = ['global MOT_FLOAT_TYPE* params', 'global MOT_FLOAT_TYPE* log_likelihoods']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())

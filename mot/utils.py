@@ -156,7 +156,7 @@ class TopologicalSort(object):
 
 class ParameterCLCodeGenerator(object):
 
-    def __init__(self, device, var_data_dict, prtcl_data_dict, model_data_dict):
+    def __init__(self, device, var_data_dict, protocol_data_dict, model_data_dict):
         """Generate the CL code for all the parameters in the given dictionaries.
 
         The dictionaries are supposed to contain DataAdapters.
@@ -165,7 +165,7 @@ class ParameterCLCodeGenerator(object):
             device: the CL device we want to compile the code for
             var_data_dict (dict of DataAdapter): the dictionary with the variable data. That is, the data
                 that is different for every problem (but constant over the measurements).
-            prtcl_data_dict (dict of DataAdapter): the dictionary with the protocol data. That is, the data
+            protocol_data_dict (dict of DataAdapter): the dictionary with the protocol data. That is, the data
                 that is the same for every problem, but differs per measurement.
             model_data_dict (dict of DataAdapter): the dictionary with the model data. That is, the data
                 that is the same for every problem and every measurement.
@@ -174,7 +174,7 @@ class ParameterCLCodeGenerator(object):
         self._max_constant_buffer_size = device.get_info(cl.device_info.MAX_CONSTANT_BUFFER_SIZE)
         self._max_constant_args = device.get_info(cl.device_info.MAX_CONSTANT_ARGS)
         self._var_data_dict = var_data_dict
-        self._prtcl_data_dict = prtcl_data_dict
+        self._protocol_data_dict = protocol_data_dict
         self._model_data_dict = model_data_dict
         self._kernel_items = self._get_all_kernel_source_items()
 
@@ -224,7 +224,7 @@ class ParameterCLCodeGenerator(object):
                 data_struct_names.append(clmemtype + ' ' + data_type + '* ' + param_name)
                 data_struct_init.append(param_name + ' + gid * ' + str(mult))
 
-        for key, data_adapter in self._prtcl_data_dict.items():
+        for key, data_adapter in self._protocol_data_dict.items():
             clmemtype = 'global'
 
             cl_data = data_adapter.get_opencl_data()
@@ -234,7 +234,7 @@ class ParameterCLCodeGenerator(object):
                     clmemtype = 'constant'
                     constant_args_counter += 1
 
-            param_name = 'prtcl_data_' + str(key)
+            param_name = 'protocol_data_' + str(key)
             data_type = data_adapter.get_data_type().raw_data_type
 
             if data_adapter.get_data_type().is_vector_type:
