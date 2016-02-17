@@ -8,6 +8,7 @@ import pyopencl as cl
 from six import string_types
 from mot.adapters import DataAdapter
 from .utils import device_type_from_string
+import pyopencl.cffi_cl
 
 
 __author__ = 'Robbert Harms'
@@ -251,7 +252,7 @@ class LoadBalanceStrategy(object):
 
         self._logger.debug('Ran all batches.')
 
-    def _try_processing(self, worker, range_start, range_end):
+    def _try_processing(self, worker, range_start, range_end, current_depth=0):
         """Try to process the given worker on the given range.
 
         If processing fails due to memory problems we try to run the worker again with a smaller range.
@@ -261,6 +262,7 @@ class LoadBalanceStrategy(object):
             worker (Worker): The worker to use for the work
             range_start (int): the start of the range to process
             range_end (int): the end of the range to process
+            current_depth (int): the current recursive depth, do not set this externally.
 
         Returns:
             a cl event for the last event to happen. Unfortunately this function blocks if the worker
@@ -269,11 +271,17 @@ class LoadBalanceStrategy(object):
         try:
             return worker.calculate(int(range_start), int(range_end))
         except cl.MemoryError:
-            self._logger.info('We ran out of memory, halving the input and trying again.')
-            half_range_length = int(math.ceil((range_end - range_start) / 2.0))
-            event = self._try_processing(worker, range_start, range_start + half_range_length)
-            event.wait()
-            return self._try_processing(worker, range_start + half_range_length, range_end)
+            max_depth = 3
+            if current_depth < max_depth:
+                self._logger.info('We ran out of memory, halving the input and trying again.')
+                half_range_length = int(math.ceil((range_end - range_start) / 2.0))
+                event = self._try_processing(worker, range_start, range_start + half_range_length,
+                                             current_depth=current_depth+1)
+                event.wait()
+                return self._try_processing(worker, range_start + half_range_length, range_end,
+                                            current_depth=current_depth+1)
+            else:
+                raise
 
     @classmethod
     def get_pretty_name(cls):
