@@ -8,7 +8,6 @@ import pyopencl as cl
 from six import string_types
 from mot.adapters import DataAdapter
 from .utils import device_type_from_string
-import pyopencl.cffi_cl
 
 
 __author__ = 'Robbert Harms'
