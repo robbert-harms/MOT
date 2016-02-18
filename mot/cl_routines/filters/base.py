@@ -127,8 +127,13 @@ class AbstractFilterWorker(Worker):
                 buffers.append(self._mask_buf)
             buffers.append(results_buf)
 
-            self._kernel.filter(self._cl_run_context.queue, self._volume_shape, None, *buffers)
-            event = cl.enqueue_copy(self._cl_run_context.queue, self._results_dict[key], results_buf, is_blocking=False)
+            if event is None:
+                event = self._kernel.filter(self._cl_run_context.queue, self._volume_shape, None, *buffers)
+            else:
+                event = self._kernel.filter(self._cl_run_context.queue, self._volume_shape, None, *buffers,
+                                            wait_for=[event])
+            event = cl.enqueue_copy(self._cl_run_context.queue, self._results_dict[key], results_buf, is_blocking=False,
+                                    wait_for=[event])
 
         return event
 
