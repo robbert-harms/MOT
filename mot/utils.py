@@ -70,6 +70,8 @@ def results_to_dict(results, param_names):
 def get_float_type_def(double_precision):
     """Get the model floating point type definition.
 
+    The MOT_INT_CMP_TYPE is meant for the select() function where you need a long in the case of double precision.
+
     Args:
         double_precision (boolean): if True we will use the double type for the MOT_FLOAT_TYPE type.
             Else, we will use the single precision float type for the MOT_FLOAT_TYPE type.
@@ -87,6 +89,7 @@ def get_float_type_def(double_precision):
             #define MOT_EPSILON DBL_EPSILON
             #define MOT_MIN DBL_MIN
             #define MOT_MAX DBL_MAX
+            #define MOT_INT_CMP_TYPE long
         '''
     else:
         return '''
@@ -98,6 +101,7 @@ def get_float_type_def(double_precision):
             #define MOT_EPSILON FLT_EPSILON
             #define MOT_MIN FLT_MIN
             #define MOT_MAX FLT_MAX
+            #define MOT_INT_CMP_TYPE int
         '''
 
 

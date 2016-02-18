@@ -98,7 +98,7 @@ int nmsimplex(MOT_FLOAT_TYPE* const model_parameters, const void* const data){
 			if (i-1 == j){
 			    vertices[i][j] += %(NMR_PARAMS)r;
 			}
-            vertices[i][j] /= (%(NMR_PARAMS)r * sqrt(2.0));
+            vertices[i][j] /= (%(NMR_PARAMS)r * M_SQRT2);
             /** vertices now contains the unit vector e_j in R^n. */
 
             /** set x_j = x_input + h_j * e_j */

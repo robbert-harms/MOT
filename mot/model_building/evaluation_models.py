@@ -121,11 +121,26 @@ class SumOfSquares(EvaluationModel):
 class GaussianEvaluationModel(EvaluationModel):
 
     def __init__(self):
-        """Evaluates the distance between the estimated signal and the data using the Gaussian evaluation.
+        """This uses the log of the Gaussian PDF for the maximum likelihood estimator and for the log likelihood.
 
-        The offset gaussian noise is implemented as:
+        The PDF is defined as:
 
-        sum((observation - evaluation)^2) / 2 * sigma^2
+            PDF = 1/(sigma * sqrt(2*pi)) * exp(-(observation - evaluation)^2 / (2 * sigma^2))
+
+        To have the joined probability over all instances one would have to take the product over all n instances:
+
+            prod_n(PDF)
+
+        Instead of taking the product of this PDF we take the sum of the log of the PDF:
+
+            sum_n(log(PDF))
+
+        Where the log of the PDF is given by:
+
+            log(PDF) = - ((observation - evaluation)^2 / (2 * sigma^2)) - log(sigma * sqrt(2*pi))
+
+
+        For the maximum likelihood estimator we use the negative of this sum: -sum_n(log(PDF)).
         """
         super(GaussianEvaluationModel, self).__init__(
             'GaussianNoise',
@@ -138,10 +153,8 @@ class GaussianEvaluationModel(EvaluationModel):
             double ''' + fname + '''(const optimize_data* const data, MOT_FLOAT_TYPE* const x){
                 ''' + param_listing + '''
                 double sum = 0.0;
-                for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
-                    sum += pown(''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i), 2);
-                }
-                return sum / (2 * pown(GaussianNoise_sigma, 2));
+                ''' + self._get_log_likelihood_body(inst_per_problem, eval_fname, obs_fname) + '''
+                return sum;
             }
         '''
 
@@ -150,12 +163,18 @@ class GaussianEvaluationModel(EvaluationModel):
             double ''' + fname + '''(const optimize_data* const data, const MOT_FLOAT_TYPE* const x){
                 ''' + param_listing + '''
                 double sum = 0.0;
-                for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
-                    sum += pown(''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i), 2);
-                }
-
-                return - sum / (2 * pown(GaussianNoise_sigma, 2));
+                ''' + self._get_log_likelihood_body(inst_per_problem, eval_fname, obs_fname) + '''
+                return - sum;
             }
+        '''
+
+    def _get_log_likelihood_body(self, inst_per_problem, eval_fname, obs_fname):
+        return '''
+                for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
+                    sum += pown(''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i), 2)
+                                    / (2 * pown(GaussianNoise_sigma, 2))
+                            + log(GaussianNoise_sigma * sqrt(2 * M_PI));
+                }
         '''
 
     def set_noise_level_std(self, noise_std, fix=False):
@@ -173,11 +192,26 @@ class GaussianEvaluationModel(EvaluationModel):
 class OffsetGaussianEvaluationModel(EvaluationModel):
 
     def __init__(self):
-        """Evaluates the distance between the estimated signal and the data using the Offset Gaussian evaluation.
+        """This uses the log of the Gaussian PDF for the maximum likelihood estimator and for the log likelihood.
 
-        The offset gaussian noise is implemented as:
+        The PDF is defined as:
 
-        sum((observation - sqrt(evaluation^2 + sigma^2))^2) / sigma^2
+            PDF = 1/(sigma * sqrt(2*pi)) * exp(-(observation - sqrt(evaluation^2 + sigma^2))^2 / (2 * sigma^2))
+
+        To have the joined probability over all instances one would have to take the product over all n instances:
+
+            prod_n(PDF)
+
+        Instead of taking the product of this PDF we take the sum of the log of the PDF:
+
+            sum_n(log(PDF))
+
+        Where the log of the PDF is given by:
+
+            log(PDF) = - ((observation - sqrt(evaluation^2 + sigma^2))^2 / (2 * sigma^2)) - log(sigma * sqrt(2*pi))
+
+
+        For the maximum likelihood estimator we use the negative of this sum: -sum_n(log(PDF)).
         """
         super(OffsetGaussianEvaluationModel, self).__init__(
             'OffsetGaussianNoise',
@@ -190,27 +224,30 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
             double ''' + fname + '''(const optimize_data* const data, MOT_FLOAT_TYPE* const x){
                 ''' + param_listing + '''
                 double sum = 0.0;
-                for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
-                    sum += pown(''' + obs_fname + '''(data, i) -
-                                    sqrt(pown(''' + eval_fname + '''(data, x, i), 2) +
-                                                pown(OffsetGaussianNoise_sigma, 2)), 2);
-                }
-                return sum / (2 * pown(OffsetGaussianNoise_sigma, 2));
+                ''' + self._get_log_likelihood_body(inst_per_problem, eval_fname, obs_fname) + '''
+                return sum;
             }
         '''
 
     def get_log_likelihood_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
         return '''
-            double ''' + fname + '''(const optimize_data* const data, const MOT_FLOAT_TYPE* const x){
+            double ''' + fname + '''(const optimize_data* const data, MOT_FLOAT_TYPE* const x){
                 ''' + param_listing + '''
                 double sum = 0.0;
+                ''' + self._get_log_likelihood_body(inst_per_problem, eval_fname, obs_fname) + '''
+                return -sum;
+            }
+        '''
+
+    def _get_log_likelihood_body(self, inst_per_problem, eval_fname, obs_fname):
+        return '''
                 for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     sum += pown(''' + obs_fname + '''(data, i) -
-                                    sqrt(pown(''' + eval_fname + '''(data, x, i), 2) +
-                                                pown(OffsetGaussianNoise_sigma, 2)), 2);
+                                sqrt(pown(''' + eval_fname + '''(data, x, i), 2) +
+                                    pown(OffsetGaussianNoise_sigma, 2)), 2)
+                                            / (2 * pown(OffsetGaussianNoise_sigma, 2))
+                            + log(OffsetGaussianNoise_sigma * sqrt(2 * M_PI));
                 }
-                return -sum / (2 * pown(OffsetGaussianNoise_sigma, 2));
-            }
         '''
 
     def set_noise_level_std(self, noise_std, fix=False):
@@ -228,26 +265,30 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
 class RicianEvaluationModel(EvaluationModel):
 
     def __init__(self):
-        """Evaluates the distance between the estimated signal and the data using the Rican log likelihood evaluation.
+        """This uses the log of the Rice PDF for the maximum likelihood estimator and for the log likelihood.
 
-        The rician log likelihood model is defined as:
+        The PDF is defined as:
 
-        L = sum( - (observation^2 + evaluation^2) / (2 * sigma^2)
-                 + log(bessel_i0((observation * evaluation) / sigma^2))
-                 + log(observation)
-                 - 2*log(evaluation)
-            )
+            PDF = (observation/sigma^2)
+                    * exp(-(observation^2 + evaluation^2) / (2 * sigma^2))
+                    * bessel_i0((observation * evaluation) / sigma^2)
 
-        We implemented it as:
-            L = sum( - evaluation^2 / (2 * sigma^2)
-                     + log(bessel_i0((observation * evaluation) / sigma^2))
-                     - 2*log(evaluation)
-            )
+        Where where bessel_i0(z) is the modified Bessel function of the first kind with order zero. To have the
+        joined probability over all instances one would have to take the product over all n instances:
 
-        that is, with the default factors dropped from the equation.
+            prod_n(PDF)
 
-        As objective function we return -r (the inverse of the maximum likelihood estimator),
-        as log likelihood function we return r.
+        Instead of taking the product of this PDF over all instances we take the sum of the log of the PDF:
+
+            sum_n(log(PDF))
+
+        Where the log of the PDF is given by:
+
+            log(PDF) = log(observation/sigma^2)
+                        - (observation^2 + evaluation^2) / (2 * sigma^2)
+                        + log(bessel_i0((observation * evaluation) / sigma^2))
+
+        For the maximum likelihood estimator we use the negative of this sum: -sum_n(log(PDF)).
         """
         super(RicianEvaluationModel, self).__init__(
             'RicianNoise',
@@ -260,7 +301,8 @@ class RicianEvaluationModel(EvaluationModel):
         return '''
             double ''' + fname + '''(const optimize_data* const data, MOT_FLOAT_TYPE* const x){
                 ''' + param_listing + '''
-                ''' + self._get_log_likelihood_body(fname, inst_per_problem, eval_fname, obs_fname) + '''
+                double sum = 0.0;
+                ''' + self._get_log_likelihood_body(inst_per_problem, eval_fname, obs_fname) + '''
                 return -sum;
             }
         '''
@@ -269,23 +311,25 @@ class RicianEvaluationModel(EvaluationModel):
         return '''
             double ''' + fname + '''(const optimize_data* const data, const MOT_FLOAT_TYPE* const x){
                 ''' + param_listing + '''
-                ''' + self._get_log_likelihood_body(fname, inst_per_problem, eval_fname, obs_fname) + '''
+                double sum = 0.0;
+                ''' + self._get_log_likelihood_body(inst_per_problem, eval_fname, obs_fname) + '''
                 return sum;
             }
         '''
 
-    def _get_log_likelihood_body(self, fname, inst_per_problem, eval_fname, obs_fname):
+    def _get_log_likelihood_body(self, inst_per_problem, eval_fname, obs_fname):
         return '''
-            double sum = 0.0;
-            MOT_FLOAT_TYPE observation;
-            MOT_FLOAT_TYPE evaluation;
-            for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
-                observation = ''' + obs_fname + '''(data, i);
-                evaluation = ''' + eval_fname + '''(data, x, i);
+                double observation;
+                double evaluation;
+                for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
+                    observation = (double)''' + obs_fname + '''(data, i);
+                    evaluation = (double)''' + eval_fname + '''(data, x, i);
 
-                sum -= pown(evaluation / (M_SQRT2 * RicianNoise_sigma), 2);
-                sum += log_bessel_i0((observation / RicianNoise_sigma) * (evaluation / RicianNoise_sigma));
-            }
+                    sum += log(observation / pown(RicianNoise_sigma, 2))
+                            - (pown(observation, 2) / (2 * pown(RicianNoise_sigma, 2)))
+                            - (pown(evaluation, 2) / (2 * pown(RicianNoise_sigma, 2)))
+                            + log_bessel_i0((observation * evaluation) / pown(RicianNoise_sigma, 2));
+                }
         '''
 
     def set_noise_level_std(self, noise_std, fix=False):

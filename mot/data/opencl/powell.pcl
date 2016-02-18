@@ -48,7 +48,7 @@ int powell(MOT_FLOAT_TYPE* model_parameters, const void* const data){
 
     for(i=0; i < %(NMR_PARAMS)r; i++){
         for(j=0; j < %(NMR_PARAMS)r; j++){
-            starting_vectors[i][j] = (i == j ? 1.0 : 0.0);
+            starting_vectors[i][j] = select(0.0, 1.0, (long)(i==j));
         }
 
         x_tmp1[i] = model_parameters[i];
@@ -229,8 +229,8 @@ MOT_FLOAT_TYPE bracket_and_brent(const MOT_FLOAT_TYPE* const pcom, const MOT_FLO
     }
 
     /** from here starts brent */
-    _A_=(ax < cx ? ax : cx);
-    _B_=(ax > cx ? ax : cx);
+    _A_= select(cx, ax, (MOT_INT_CMP_TYPE)isless(ax, cx));
+    _B_= select(cx, ax, (MOT_INT_CMP_TYPE)isgreater(ax, cx));
 
     x=w=v=bx;
 
@@ -265,7 +265,7 @@ MOT_FLOAT_TYPE bracket_and_brent(const MOT_FLOAT_TYPE* const pcom, const MOT_FLO
             e = _D_;
 
             if(fabs(p) >= fabs(0.5 * q * tmp) || p <= q * (_A_ - x) || p >= q * (_B_ - x)){
-                e = (x >= xm ? _A_ : _B_) - x;
+                e = select(_B_, _A_, (MOT_INT_CMP_TYPE)isgreaterequal(x, xm)) - x;
                 _D_ = CGOLD * e;
             }
             else {
@@ -277,11 +277,11 @@ MOT_FLOAT_TYPE bracket_and_brent(const MOT_FLOAT_TYPE* const pcom, const MOT_FLO
             }
         }
         else{
-            e = (x >= xm ? _A_ : _B_) - x;
+            e = select(_B_, _A_, (MOT_INT_CMP_TYPE)isgreaterequal(x, xm)) - x;
             _D_ = CGOLD * e;
         }
 
-        u = (fabs(_D_) >= tol1 ? x + _D_ : x + copysign(tol1, _D_));
+        u = select(x + copysign(tol1, _D_), x + _D_, (MOT_INT_CMP_TYPE)isgreaterequal(fabs(_D_), tol1));
 
         for(j=0; j < %(NMR_PARAMS)r; j++){
            xt[j] = pcom[j] + u * x_tmp_min[j];
