@@ -37,56 +37,28 @@ double im_w_of_x(double x){
     // a lookup table of Chebyshev polynomials for smaller |x|,
     // and finally a Taylor expansion for |x|<0.01.
 
+    if (x > 5e7){ // 1-term expansion, important to avoid overflow
+        return M_1_SQRTPI / x;
+    }
+    if (x > 45) { // continued-fraction expansion is faster
+        /* 5-term expansion (rely on compiler for CSE), simplified from:
+           ispi / (x-0.5/(x-1/(x-1.5/(x-2/x))))  */
+        return M_1_SQRTPI * fma(pown(x, 2), (pown(x, 2)-4.5), 2) / (x * fma(pown(x, 2), (pown(x, 2)-5), 3.75));
+    }
     if (x >= 0) {
-        if (x > 45) { // continued-fraction expansion is faster
-            if (x > 5e7) // 1-term expansion, important to avoid overflow
-                return M_1_SQRTPI / x;
-            /* 5-term expansion (rely on compiler for CSE), simplified from:
-               ispi / (x-0.5/(x-1/(x-1.5/(x-2/x))))  */
-            return M_1_SQRTPI*((x*x) * (x*x-4.5) + 2) / (x * ((x*x) * (x*x-5) + 3.75));
-        }
-        return w_im_y100(100/(1+x), x);
+        return w_im_y100(100.0/(1+x), x);
     }
-    else { // = -im_w_of_x(-x)
-        if (x < -45) { // continued-fraction expansion is faster
-            if (x < -5e7) // 1-term expansion, important to avoid overflow
-                return M_1_SQRTPI / x;
-            /* 5-term expansion (rely on compiler for CSE), simplified from:
-               ispi / (x-0.5/(x-1/(x-1.5/(x-2/x))))  */
-            return M_1_SQRTPI*((x*x) * (x*x-4.5) + 2) / (x * ((x*x) * (x*x-5) + 3.75));
-        }
-        return -w_im_y100(100.0/(1-x), -x);
+    if (x < -5e7){ // 1-term expansion, important to avoid overflow
+        return M_1_SQRTPI / x;
     }
-}
+    if (x < -45) { // continued-fraction expansion is faster
+        /* 5-term expansion (rely on compiler for CSE), simplified from:
+           ispi / (x-0.5/(x-1/(x-1.5/(x-2/x))))  */
+        return M_1_SQRTPI * fma(pown(x, 2), (pown(x, 2)-4.5), 2) / (x * fma(pown(x, 2), (pown(x, 2)-5), 3.75));
+    }
 
-float fim_w_of_x(float x){
-    // Steven G. Johnson, October 2012.
-
-    // Uses methods similar to the erfcx calculation:
-    // continued fractions for large |x|,
-    // a lookup table of Chebyshev polynomials for smaller |x|,
-    // and finally a Taylor expansion for |x|<0.01.
-
-    if (x >= 0) {
-        if (x > 45) { // continued-fraction expansion is faster
-            if (x > 5e7) // 1-term expansion, important to avoid overflow
-                return M_1_SQRTPI / x;
-            /* 5-term expansion (rely on compiler for CSE), simplified from:
-               ispi / (x-0.5/(x-1/(x-1.5/(x-2/x))))  */
-            return M_1_SQRTPI*((x*x) * (x*x-4.5) + 2) / (x * ((x*x) * (x*x-5) + 3.75));
-        }
-        return w_im_y100(100/(1+x), x);
-    }
-    else { // = -im_w_of_x(-x)
-        if (x < -45) { // continued-fraction expansion is faster
-            if (x < -5e7) // 1-term expansion, important to avoid overflow
-                return M_1_SQRTPI / x;
-            /* 5-term expansion (rely on compiler for CSE), simplified from:
-               ispi / (x-0.5/(x-1/(x-1.5/(x-2/x))))  */
-            return M_1_SQRTPI*((x*x) * (x*x-4.5) + 2) / (x * ((x*x) * (x*x-5) + 3.75));
-        }
-        return -w_im_y100(100.0/(1-x), -x);
-    }
+    // = -im_w_of_x(-x)
+    return -w_im_y100(100.0/(1-x), -x);
 }
 
 
@@ -107,32 +79,36 @@ double w_im_y100(double y100, double x)
     // degree (about 1/30) compared to fitting the whole [0,1] interval
     // with a single polynomial.
 
+    // Robbert Harms:
+    // I changed the first few to a fma() statement for accuracy. I only changed the first few since they are mainly used in Diffusion MRI analysis.
+    // If you have time, please consider changing all the others to.
+
     double t;
 
     switch ((int) y100) {
     case 0: {
         t = 2*y100 - 1;
-        return 0.28351593328822191546e-2 + (0.28494783221378400759e-2 + (0.14427470563276734183e-4 + (0.10939723080231588129e-6 + (0.92474307943275042045e-9 + (0.89128907666450075245e-11 + 0.92974121935111111110e-13 * t) * t) * t) * t) * t) * t;
+        return fma(t, fma(t, fma(t, fma(t, fma(t, fma(t, 0.92974121935111111110e-13, 0.89128907666450075245e-11), 0.92474307943275042045e-9), 0.10939723080231588129e-6), 0.14427470563276734183e-4), 0.28494783221378400759e-2), 0.28351593328822191546e-2);
     }
     case 1: {
         t = 2*y100 - 3;
-        return 0.85927161243940350562e-2 + (0.29085312941641339862e-2 + (0.15106783707725582090e-4 + (0.11716709978531327367e-6 + (0.10197387816021040024e-8 + (0.10122678863073360769e-10 + 0.10917479678400000000e-12 * t) * t) * t) * t) * t) * t;
+        return fma(t, fma(t, fma(t, fma(t, fma(t, fma(t, 0.10917479678400000000e-12, 0.10122678863073360769e-10), 0.10197387816021040024e-8), 0.11716709978531327367e-6), 0.15106783707725582090e-4), 0.29085312941641339862e-2), 0.85927161243940350562e-2);
     }
     case 2: {
         t = 2*y100 - 5;
-        return 0.14471159831187703054e-1 + (0.29703978970263836210e-2 + (0.15835096760173030976e-4 + (0.12574803383199211596e-6 + (0.11278672159518415848e-8 + (0.11547462300333495797e-10 + 0.12894535335111111111e-12 * t) * t) * t) * t) * t) * t;
+        return fma(t, fma(t, fma(t, fma(t, fma(t, fma(t, 0.12894535335111111111e-12, 0.11547462300333495797e-10), 0.11278672159518415848e-8), 0.12574803383199211596e-6), 0.15835096760173030976e-4), 0.29703978970263836210e-2), 0.14471159831187703054e-1);
     }
     case 3: {
         t = 2*y100 - 7;
-        return 0.20476320420324610618e-1 + (0.30352843012898665856e-2 + (0.16617609387003727409e-4 + (0.13525429711163116103e-6 + (0.12515095552507169013e-8 + (0.13235687543603382345e-10 + 0.15326595042666666667e-12 * t) * t) * t) * t) * t) * t;
+        return fma(t, fma(t, fma(t, fma(t, fma(t, fma(t, 0.15326595042666666667e-12, 0.13235687543603382345e-10), 0.12515095552507169013e-8), 0.13525429711163116103e-6), 0.16617609387003727409e-4), 0.30352843012898665856e-2), 0.20476320420324610618e-1);
     }
     case 4: {
         t = 2*y100 - 9;
-        return 0.26614461952489004566e-1 + (0.31034189276234947088e-2 + (0.17460268109986214274e-4 + (0.14582130824485709573e-6 + (0.13935959083809746345e-8 + (0.15249438072998932900e-10 + 0.18344741882133333333e-12 * t) * t) * t) * t) * t) * t;
+        return fma(t, fma(t, fma(t, fma(t, fma(t, fma(t, 0.18344741882133333333e-12, 0.15249438072998932900e-10), 0.13935959083809746345e-8), 0.14582130824485709573e-6), 0.17460268109986214274e-4), 0.31034189276234947088e-2), 0.26614461952489004566e-1);
     }
     case 5: {
         t = 2*y100 - 11;
-        return 0.32892330248093586215e-1 + (0.31750557067975068584e-2 + (0.18369907582308672632e-4 + (0.15761063702089457882e-6 + (0.15577638230480894382e-8 + (0.17663868462699097951e-10 + (0.22126732680711111111e-12 + 0.30273474177737853668e-14 * t) * t) * t) * t) * t) * t) * t;
+        return fma(t, fma(t, fma(t, fma(t, fma(t, fma(t, fma(t, 0.30273474177737853668e-14, 0.22126732680711111111e-12), 0.17663868462699097951e-10), 0.15577638230480894382e-8), 0.15761063702089457882e-6), 0.18369907582308672632e-4), 0.31750557067975068584e-2), 0.32892330248093586215e-1);
     }
     case 6: {
         t = 2*y100 - 13;
@@ -501,12 +477,8 @@ double w_im_y100(double y100, double x)
     case 97: case 98:
     case 99: case 100: { // use Taylor expansion for small x (|x| <= 0.0309...)
         //  (2/sqrt(pi)) * (x - 2/3 x^3  + 4/15 x^5  - 8/105 x^7 + 16/945 x^9)
-        t = x*x;
-        return x * (1.1283791670955125739
-                    - t * (0.75225277806367504925
-                            - t * (0.30090111122547001970
-                                    - t * (0.085971746064420005629
-                                            - t * 0.016931216931216931217))));
+        t = pown(x, 2);
+        return x * fma(t, -fma(t, -fma(t, -fma(t, -0.016931216931216931217, 0.085971746064420005629), 0.30090111122547001970), 0.75225277806367504925), 1.1283791670955125739);
     }
     }
     /* Since 0 <= y100 < 101, this is only reached if x is NaN,

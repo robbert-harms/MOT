@@ -171,9 +171,9 @@ class GaussianEvaluationModel(EvaluationModel):
     def _get_log_likelihood_body(self, inst_per_problem, eval_fname, obs_fname):
         return '''
                 for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
-                    sum += pown(''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i), 2)
-                                    / (2 * pown(GaussianNoise_sigma, 2))
-                            + log(GaussianNoise_sigma * sqrt(2 * M_PI));
+                    sum += (pown(''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i), 2)
+                                    / (2 * pown(GaussianNoise_sigma, 2)))
+                             + log(GaussianNoise_sigma * sqrt(2 * M_PI));
                 }
         '''
 
