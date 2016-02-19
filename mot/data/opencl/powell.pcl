@@ -77,7 +77,7 @@ int powell(MOT_FLOAT_TYPE* model_parameters, const void* const data){
 
     for(i=0; i < %(NMR_PARAMS)r; i++){
         for(j=0; j < %(NMR_PARAMS)r; j++){
-            starting_vectors[i][j] = (MOT_FLOAT_TYPE)(i==j);
+            starting_vectors[i][j] = (i==j ? 1 : 0);
         }
 
         x_tmp1[i] = model_parameters[i];
@@ -144,8 +144,9 @@ MOT_FLOAT_TYPE linmin(MOT_FLOAT_TYPE* const model_parameters,
 MOT_FLOAT_TYPE linmin2(MOT_FLOAT_TYPE* const model_parameters,
                       MOT_FLOAT_TYPE* const x_tmp_min,
                       const void* const data){
-    // for some reason, the optimization routine does not work if we use
-    // linmin twice. For that reason, I copied the function linmin to linmin2 and it works.
+    // for some reason the AMD kernel optimizer can not handle having linmin twice in the
+    // flow of the program. Therefore, I copied it linmin to linmin2 and added it for the second call.
+    // delete this function in the future if it works...
     MOT_FLOAT_TYPE xmin;
     MOT_FLOAT_TYPE fval = bracket_and_brent(model_parameters, x_tmp_min, data, &xmin);
     for(int j=0; j < %(NMR_PARAMS)r; j++){
@@ -161,11 +162,11 @@ MOT_FLOAT_TYPE bracket_and_brent(const MOT_FLOAT_TYPE* const model_parameters, c
     MOT_FLOAT_TYPE ax = 0.0;
     MOT_FLOAT_TYPE bx = 1.0;
     MOT_FLOAT_TYPE cx;
-
-    MOT_FLOAT_TYPE ulim, u, r, q, fu, tmp;
     MOT_FLOAT_TYPE fa = 0.0;
     MOT_FLOAT_TYPE fb = 0.0;
     MOT_FLOAT_TYPE fc = 0.0;
+
+    MOT_FLOAT_TYPE ulim, u, r, q, fu, tmp;
 
     fa = f1dim(ax, data, model_parameters, x_tmp_min);
     fb = f1dim(bx, data, model_parameters, x_tmp_min);
@@ -197,12 +198,14 @@ MOT_FLOAT_TYPE bracket_and_brent(const MOT_FLOAT_TYPE* const model_parameters, c
                 bx = u;
                 fa = fb;
                 fb = fu;
-                break;
+
+                return brent(ax, bx, cx, xmin, model_parameters, x_tmp_min, data);
             }
             else if(fu > fb){
                 cx = u;
                 fc = fu;
-                break;
+
+                return brent(ax, bx, cx, xmin, model_parameters, x_tmp_min, data);
             }
             u = (cx) + BRACKET_GOLD * (cx - bx);
             fu = f1dim(u, data, model_parameters, x_tmp_min);
