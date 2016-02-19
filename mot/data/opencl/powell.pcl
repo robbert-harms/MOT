@@ -343,7 +343,7 @@ MOT_FLOAT_TYPE f1dim(MOT_FLOAT_TYPE x, const void* data,
 
     MOT_FLOAT_TYPE xt[%(NMR_PARAMS)r];
     for(int j=0; j < %(NMR_PARAMS)r; j++){
-        xt[j] = fma(xicom[j], x, model_parameters[j]);
+        xt[j] = x * xicom[j] + model_parameters[j];
     }
 
     return evaluate(xt, data);

@@ -110,28 +110,28 @@ class CosSqrClampTransform(AbstractTransformation):
     """The clamp transformation limits the parameter between its lower and upper bound using a cos(sqr()) transform."""
 
     def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):
-        return 'acos(sqrt(fabs((' + parameter_name + ' - (MOT_FLOAT_TYPE)' + \
-               str(parameter.lower_bound) + ') / (MOT_FLOAT_TYPE)' + \
+        return 'acos(sqrt(fabs((' + parameter_name + ' - ' + \
+               str(parameter.lower_bound) + ') / ' + \
                str(parameter.upper_bound - parameter.lower_bound) + ')));'
 
     def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
-        return 'fma((MOT_FLOAT_TYPE)pown(cos(' + parameter_name + '), 2), (MOT_FLOAT_TYPE)' + \
+        return 'pown(cos(' + parameter_name + '), 2) * ' + \
                str(parameter.upper_bound - parameter.lower_bound) + \
-               ', (MOT_FLOAT_TYPE)' + str(parameter.lower_bound) + ');'
+               ' + ' + str(parameter.lower_bound) + ';'
 
 
 class SinSqrClampTransform(AbstractTransformation):
     """The clamp transformation limits the parameter between its lower and upper bound using a sin(sqr()) transform."""
 
     def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):
-        return 'asin(sqrt(fabs((' + parameter_name + ' - (MOT_FLOAT_TYPE)' + \
-               str(parameter.lower_bound) + ') / (MOT_FLOAT_TYPE)' + \
+        return 'asin(sqrt(fabs((' + parameter_name + ' - ' + \
+               str(parameter.lower_bound) + ') / ' + \
                str(parameter.upper_bound - parameter.lower_bound) + ')));'
 
     def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
-        return 'fma((MOT_FLOAT_TYPE) pown(sin(' + parameter_name + '), 2), (MOT_FLOAT_TYPE)' + \
+        return 'pown(sin(' + parameter_name + '), 2) * ' + \
                str(parameter.upper_bound - parameter.lower_bound) + \
-               ', (MOT_FLOAT_TYPE)' + str(parameter.lower_bound) + ');'
+               ' + ' + str(parameter.lower_bound) + ';'
 
 
 class SqrClampTransform(AbstractTransformation):
@@ -149,15 +149,14 @@ class SinSqrClampDependentTransform(AbstractTransformation):
     """The clamp transformation limits the parameter between 0 and the given parameter with the sin(sqr()) transform."""
 
     def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):
-        return 'asin(sqrt(fabs((' + parameter_name + ' - (MOT_FLOAT_TYPE)' + \
-               str(parameter.lower_bound) + ') / ((MOT_FLOAT_TYPE)' + \
+        return 'asin(sqrt(fabs((' + parameter_name + ' - ' + \
+               str(parameter.lower_bound) + ') / (' + \
                dependencies_names[0] + ' - ' + \
                str(parameter.lower_bound) + '))));'
 
     def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
-        return 'fma(pown((MOT_FLOAT_TYPE)sin(' + parameter_name + '), 2), ' \
-                '(MOT_FLOAT_TYPE)' + dependencies_names[0] + ', ' \
-                '(MOT_FLOAT_TYPE)' + str(parameter.lower_bound) + ');'
+        return 'pown(sin(' + parameter_name + '), 2) * ' + dependencies_names[0] + ' + ' \
+                    + str(parameter.lower_bound) + ';'
 
 
 class AbsModXTransform(AbstractTransformation):
