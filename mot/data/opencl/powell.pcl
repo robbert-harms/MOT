@@ -242,17 +242,9 @@ MOT_FLOAT_TYPE bracket_and_brent(const MOT_FLOAT_TYPE* const model_parameters, c
 MOT_FLOAT_TYPE brent(MOT_FLOAT_TYPE ax, MOT_FLOAT_TYPE bx, MOT_FLOAT_TYPE cx, MOT_FLOAT_TYPE *xmin,
                      const MOT_FLOAT_TYPE* const model_parameters,
                      const MOT_FLOAT_TYPE* const x_tmp_min, const void* data){
-    MOT_FLOAT_TYPE a;
-    MOT_FLOAT_TYPE b;
-    MOT_FLOAT_TYPE d;
-    MOT_FLOAT_TYPE fw;
-    MOT_FLOAT_TYPE fv;
     int iter = 0;
-
-    MOT_FLOAT_TYPE fx, p, tol1, tol2, v, w, x, xm;
+    MOT_FLOAT_TYPE a, b, d, etmp, fu, fv, fw, fx, p, q, r, tol1, tol2, u, v, w, x, xm;
     MOT_FLOAT_TYPE e = 0.0;
-
-    MOT_FLOAT_TYPE r, q, tmp, u, fu;
 
     a = select(cx, ax, (MOT_INT_CMP_TYPE)isless(ax, cx));
     b = select(cx, ax, (MOT_INT_CMP_TYPE)isgreater(ax, cx));
@@ -275,13 +267,12 @@ MOT_FLOAT_TYPE brent(MOT_FLOAT_TYPE ax, MOT_FLOAT_TYPE bx, MOT_FLOAT_TYPE cx, MO
             q = (x - v) * (fx - fw);
             p = (x - v) * q - (x - w) * r;
             q = 2.0 * (q - r);
-
-            p = select(p, -p, (MOT_INT_CMP_TYPE)isgreater(q, (MOT_FLOAT_TYPE)0.0));
+            if (q > 0.0) p = -p;
             q = fabs(q);
-            tmp = e;
+            etmp = e;
             e = d;
 
-            if(fabs(p) >= fabs(0.5 * q * tmp) || p <= q * (a - x) || p >= q * (b - x)){
+            if(fabs(p) >= fabs(0.5 * q * etmp) || p <= q * (a - x) || p >= q * (b - x)){
                 e = select(b, a, (MOT_INT_CMP_TYPE)isgreaterequal(x, xm)) - x;
                 d = CGOLD * e;
             }
