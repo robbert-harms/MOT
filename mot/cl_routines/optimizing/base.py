@@ -185,42 +185,31 @@ class AbstractParallelOptimizerWorker(Worker):
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
-        all_buffers, parameters_buffer, return_code_buffer = self._create_buffers(range_start, range_end)
-
-        self._kernel.minimize(self._cl_run_context.queue, (nmr_problems, ), None, *all_buffers)
-
-        event = cl.enqueue_copy(self._cl_run_context.queue, self._starting_points[range_start:range_end, :],
-                                parameters_buffer, is_blocking=False)
-        event = cl.enqueue_copy(self._cl_run_context.queue, self._return_codes[range_start:range_end],
-                                return_code_buffer, is_blocking=False, wait_for=[event])
+        all_buffers = self._create_buffers(range_start, range_end)
+        event = self._kernel.minimize(self._cl_run_context.queue, (nmr_problems, ), None, *all_buffers)
         return event
 
     def _create_buffers(self, range_start, range_end):
         nmr_problems = range_end - range_start
 
-        read_only_flags = self._cl_environment.get_read_only_cl_mem_flags()
-        read_write_flags = self._cl_environment.get_read_write_cl_mem_flags()
-        write_only_flags = self._cl_environment.get_write_only_cl_mem_flags()
-
-        all_buffers = []
-
-        parameters_buffer = cl.Buffer(self._cl_run_context.context, read_write_flags,
-                                      hostbuf=self._starting_points[range_start:range_end, :])
-        all_buffers.append(parameters_buffer)
-
-        return_code_buffer = cl.Buffer(self._cl_run_context.context, write_only_flags,
-                                       hostbuf=self._return_codes[range_start:range_end])
-        all_buffers.append(return_code_buffer)
+        all_buffers = [cl.Buffer(self._cl_run_context.context,
+                                 cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR,
+                                 hostbuf=self._starting_points[range_start:range_end, :]),
+                       cl.Buffer(self._cl_run_context.context,
+                                 cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
+                                 hostbuf=self._return_codes[range_start:range_end])
+                       ]
 
         for data in self._var_data_dict.values():
-            all_buffers.append(cl.Buffer(self._cl_run_context.context, read_only_flags,
+            all_buffers.append(cl.Buffer(self._cl_run_context.context,
+                                         cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
                                          hostbuf=data.get_opencl_data()[range_start:range_end, ...]))
         all_buffers.extend(self._constant_buffers)
 
         if self._uses_random_numbers():
             all_buffers.append(initialize_ranlux(self._cl_environment, self._cl_run_context, nmr_problems))
 
-        return all_buffers, parameters_buffer, return_code_buffer
+        return all_buffers
 
     def _get_kernel_source(self):
         """Generate the kernel source for this optimization routine.

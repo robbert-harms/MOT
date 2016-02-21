@@ -96,14 +96,11 @@ class _CodecWorker(Worker):
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
-        read_write_flags = self._cl_environment.get_read_write_cl_mem_flags()
-
-        param_buf = cl.Buffer(self._cl_run_context.context, read_write_flags,
+        param_buf = cl.Buffer(self._cl_run_context.context,
+                              cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR,
                               hostbuf=self._data[range_start:range_end, :])
 
-        self._kernel.transformParameterSpace(self._cl_run_context.queue, (int(nmr_problems), ), None, param_buf)
-        event = cl.enqueue_copy(self._cl_run_context.queue, self._data[range_start:range_end, :], param_buf, is_blocking=False)
-        return event
+        return self._kernel.transformParameterSpace(self._cl_run_context.queue, (int(nmr_problems), ), None, param_buf)
 
     def _get_kernel_source(self):
         kernel_source = ''

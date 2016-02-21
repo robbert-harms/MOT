@@ -88,22 +88,19 @@ class _CDPWorker(Worker):
         ep_start = range_start * self._nmr_estimated_params
         ep_end = range_end * self._nmr_estimated_params
 
-        estimated_parameters_buf = cl.Buffer(
-            self._cl_run_context.context, read_only_flags,
-            hostbuf=self._estimated_parameters[ep_start:ep_end])
+        data_buffers = [cl.Buffer(self._cl_run_context.context,
+                                  cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR,
+                                  hostbuf=self._estimated_parameters[ep_start:ep_end]),
+                        cl.Buffer(self._cl_run_context.context,
+                                  cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
+                                  hostbuf=self._results_list[range_start:range_end, :])]
 
-        results_buffer = cl.Buffer(self._cl_run_context.context, write_only_flags,
-                                hostbuf=self._results_list[range_start:range_end, :])
-
-        data_buffers = [estimated_parameters_buf, results_buffer]
         for data in self._var_data_dict.values():
-            data_buffers.append(cl.Buffer(self._cl_run_context.context, read_only_flags,
+            data_buffers.append(cl.Buffer(self._cl_run_context.context,
+                                          cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR,
                                           hostbuf=data.get_opencl_data()[range_start:range_end, ...]))
 
-        self._kernel.transform(self._cl_run_context.queue, (nmr_problems, ), None, *data_buffers)
-        event = cl.enqueue_copy(self._cl_run_context.queue, self._results_list[range_start:range_end, :],
-                                results_buffer, is_blocking=False)
-        return event
+        return self._kernel.transform(self._cl_run_context.queue, (nmr_problems, ), None, *data_buffers)
 
     def _get_kernel_source(self):
         dependent_parameter_names = [n[0] for n in self._dependent_parameter_names]
