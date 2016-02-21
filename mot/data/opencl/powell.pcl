@@ -134,7 +134,7 @@ MOT_FLOAT_TYPE linmin(MOT_FLOAT_TYPE* const model_parameters,
 
     MOT_FLOAT_TYPE ax = 0.0;
     MOT_FLOAT_TYPE bx = 1.0;
-    MOT_FLOAT_TYPE cx;
+    MOT_FLOAT_TYPE cx = 0.0;
 
     mnbrak(&ax, &bx, &cx, model_parameters, x_tmp_min, data);
 
