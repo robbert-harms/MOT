@@ -55,9 +55,9 @@
 #define ZEPS 30*MOT_EPSILON
 
 MOT_FLOAT_TYPE linmin(MOT_FLOAT_TYPE* const model_parameters, MOT_FLOAT_TYPE* const x_tmp_min, const void* const data);
-void mnbrak(MOT_FLOAT_TYPE* const ax, MOT_FLOAT_TYPE* const bx, MOT_FLOAT_TYPE* const cx,
-            const MOT_FLOAT_TYPE* const model_parameters, const MOT_FLOAT_TYPE* const x_tmp_min,
-            const void* const data);
+MOT_FLOAT_TYPE linmin2(MOT_FLOAT_TYPE* const model_parameters, MOT_FLOAT_TYPE* const x_tmp_min, const void* const data);
+MOT_FLOAT_TYPE bracket_and_brent(const MOT_FLOAT_TYPE* const model_parameters, const MOT_FLOAT_TYPE* const x_tmp_min,
+                                 const void* const data, MOT_FLOAT_TYPE *xmin);
 MOT_FLOAT_TYPE brent(MOT_FLOAT_TYPE ax, MOT_FLOAT_TYPE bx, MOT_FLOAT_TYPE cx, MOT_FLOAT_TYPE *xmin,
                      const MOT_FLOAT_TYPE* const model_parameters,
                      const MOT_FLOAT_TYPE* const x_tmp_min, const void* data);
@@ -117,7 +117,7 @@ int powell(MOT_FLOAT_TYPE* model_parameters, const void* const data){
             2.0 * (fval_tmp1 - 2.0 * fval + fval_tmp2) * pown(fval_tmp1 - fval - del, 2)
                 - del * pown(fval_tmp1 - fval_tmp2, 2) < 0.0){
 
-            fval = linmin(model_parameters, x_tmp_min, data);
+            fval = linmin2(model_parameters, x_tmp_min, data);
 
             for(j=0; j < %(NMR_PARAMS)r; j++){
                 starting_vectors[j][i_greatest] = starting_vectors[j][%(NMR_PARAMS)r-1];
@@ -132,15 +132,8 @@ MOT_FLOAT_TYPE linmin(MOT_FLOAT_TYPE* const model_parameters,
                       MOT_FLOAT_TYPE* const x_tmp_min,
                       const void* const data){
 
-    MOT_FLOAT_TYPE ax = 0.0;
-    MOT_FLOAT_TYPE bx = 1.0;
-    MOT_FLOAT_TYPE cx;
-
-    mnbrak(&ax, &bx, &cx, model_parameters, x_tmp_min, data);
-
     MOT_FLOAT_TYPE xmin;
-    MOT_FLOAT_TYPE fval = brent(ax, bx, cx, &xmin, model_parameters, x_tmp_min, data);
-
+    MOT_FLOAT_TYPE fval = bracket_and_brent(model_parameters, x_tmp_min, data, &xmin);
     for(int j=0; j < %(NMR_PARAMS)r; j++){
         x_tmp_min[j] *= xmin;
         model_parameters[j] += x_tmp_min[j];
@@ -148,84 +141,105 @@ MOT_FLOAT_TYPE linmin(MOT_FLOAT_TYPE* const model_parameters,
     return fval;
 }
 
-void mnbrak(MOT_FLOAT_TYPE* const ax, MOT_FLOAT_TYPE* const bx, MOT_FLOAT_TYPE* const cx,
-            const MOT_FLOAT_TYPE* const model_parameters, const MOT_FLOAT_TYPE* const x_tmp_min,
-            const void* const data){
+MOT_FLOAT_TYPE linmin2(MOT_FLOAT_TYPE* const model_parameters,
+                      MOT_FLOAT_TYPE* const x_tmp_min,
+                      const void* const data){
+    // for some reason the AMD kernel optimizer can not handle having linmin twice in the
+    // flow of the program. Therefore, I copied it linmin to linmin2 and added it for the second call.
+    // delete this function in the future if it works...
+    MOT_FLOAT_TYPE xmin;
+    MOT_FLOAT_TYPE fval = bracket_and_brent(model_parameters, x_tmp_min, data, &xmin);
+    for(int j=0; j < %(NMR_PARAMS)r; j++){
+        x_tmp_min[j] *= xmin;
+        model_parameters[j] += x_tmp_min[j];
+    }
+    return fval;
+}
 
+MOT_FLOAT_TYPE bracket_and_brent(const MOT_FLOAT_TYPE* const model_parameters, const MOT_FLOAT_TYPE* const x_tmp_min,
+                                 const void* const data, MOT_FLOAT_TYPE *xmin){
+
+    MOT_FLOAT_TYPE ax = 0.0;
+    MOT_FLOAT_TYPE bx = 1.0;
+    MOT_FLOAT_TYPE cx;
     MOT_FLOAT_TYPE fa = 0.0;
     MOT_FLOAT_TYPE fb = 0.0;
     MOT_FLOAT_TYPE fc = 0.0;
 
-    MOT_FLOAT_TYPE ulim, u, r, q, fu, dum;
+    MOT_FLOAT_TYPE ulim, u, r, q, fu, tmp;
 
-    fa = f1dim(*ax, data, model_parameters, x_tmp_min);
-    fb = f1dim(*bx, data, model_parameters, x_tmp_min);
+    fa = f1dim(ax, data, model_parameters, x_tmp_min);
+    fb = f1dim(bx, data, model_parameters, x_tmp_min);
 
     if(fb > fa){
-        dum = *ax;
-        *ax = *bx;
-        *bx = dum;
+        tmp = ax;
+        ax = bx;
+        bx = tmp;
 
-        dum = fb;
+        tmp = fb;
         fb = fa;
-        fa = dum;
+        fa = tmp;
     }
 
-    *cx = (*bx) + BRACKET_GOLD * (*bx - *ax);
-    fc = f1dim(*cx, data, model_parameters, x_tmp_min);
+    cx = (bx) + BRACKET_GOLD * (bx - ax);
+    fc = f1dim(cx, data, model_parameters, x_tmp_min);
 
     while(fb > fc){
-        r = (*bx - *ax) * (fb - fc);
-        q = (*bx - *cx) * (fb - fa);
-        u = (*bx) - ((*bx - *cx) * q - (*bx - *ax) * r) / (2.0 * copysign(fmax(fabs(q-r), EPSILON), q-r));
-        ulim = (*bx) + GLIMIT * (*cx - *bx);
+        r = (bx - ax) * (fb - fc);
+        q = (bx - cx) * (fb - fa);
+        u = (bx) - ((bx - cx) * q - (bx - ax) * r) / (2.0 * copysign(fmax(fabs(q-r), EPSILON), q-r));
+        ulim = (bx) + GLIMIT * (cx - bx);
 
-        if((*bx - u) * (u - *cx) > 0.0){
+        if((bx - u) * (u - cx) > 0.0){
             fu = f1dim(u, data, model_parameters, x_tmp_min);
 
             if(fu < fc){
-                *ax = *bx;
-                *bx = u;
+                ax = bx;
+                bx = u;
                 fa = fb;
                 fb = fu;
-                return;
+
+                return brent(ax, bx, cx, xmin, model_parameters, x_tmp_min, data);
             }
             else if(fu > fb){
-                *cx = u;
+                cx = u;
                 fc = fu;
-                return;
+
+                return brent(ax, bx, cx, xmin, model_parameters, x_tmp_min, data);
             }
-            u = (*cx) + BRACKET_GOLD * (*cx - *bx);
+            u = (cx) + BRACKET_GOLD * (cx - bx);
             fu = f1dim(u, data, model_parameters, x_tmp_min);
         }
-        else if((*cx - u) * (u - ulim) > 0.0){
+        else if((cx - u) * (u - ulim) > 0.0){
             fu = f1dim(u, data, model_parameters, x_tmp_min);
             if(fu < fc){
-                *bx = *cx;
-                *cx = u;
-                u = *cx+BRACKET_GOLD*(*cx-*bx);
+                bx = cx;
+                cx = u;
+                u = cx+BRACKET_GOLD*(cx-bx);
 
                 fb = fc;
                 fc = fu;
                 fu = f1dim(u, data, model_parameters, x_tmp_min);
             }
         }
-        else if((u - ulim) * (ulim - *cx) >= 0.0){
+        else if((u - ulim) * (ulim - cx) >= 0.0){
             u = ulim;
             fu = f1dim(u, data, model_parameters, x_tmp_min);
         }
         else{
-            u = (*cx) + BRACKET_GOLD * (*cx - *bx);
+            u = (cx) + BRACKET_GOLD * (cx - bx);
             fu = f1dim(u, data, model_parameters, x_tmp_min);
         }
-        *ax = *bx;
-        *bx = *cx;
-        *cx = u;
+        ax = bx;
+        bx = cx;
+        cx = u;
 
         fa = fb;
         fb = fc;
         fc = fu;
     }
+
+    return brent(ax, bx, cx, xmin, model_parameters, x_tmp_min, data);
 }
 
 MOT_FLOAT_TYPE brent(MOT_FLOAT_TYPE ax, MOT_FLOAT_TYPE bx, MOT_FLOAT_TYPE cx, MOT_FLOAT_TYPE *xmin,

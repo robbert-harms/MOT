@@ -106,8 +106,7 @@ class AbstractFilterWorker(Worker):
         else:
             self._use_mask = True
             self._mask = mask.astype(np.int8, order='C')
-            self._mask_buf = cl.Buffer(self._cl_run_context.context,
-                                       cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR,
+            self._mask_buf = cl.Buffer(self._cl_run_context.context, self._cl_environment.get_read_only_cl_mem_flags(),
                                        hostbuf=self._mask)
 
         self._kernel = self._build_kernel()
@@ -115,14 +114,13 @@ class AbstractFilterWorker(Worker):
     def calculate(self, range_start, range_end):
         volumes_to_run = [self._volumes_list[i] for i in range(len(self._volumes_list)) if range_start <= i < range_end]
 
+        write_only_flags = self._cl_environment.get_write_only_cl_mem_flags()
+        read_only_flags = self._cl_environment.get_read_only_cl_mem_flags()
+
         event = None
         for key, value in volumes_to_run:
-            volume_buf = cl.Buffer(self._cl_run_context.context,
-                                   cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
-                                   hostbuf=value)
-            results_buf = cl.Buffer(self._cl_run_context.context,
-                                    cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
-                                    hostbuf=self._results_dict[key])
+            volume_buf = cl.Buffer(self._cl_run_context.context, read_only_flags, hostbuf=value)
+            results_buf = cl.Buffer(self._cl_run_context.context, write_only_flags, hostbuf=self._results_dict[key])
 
             buffers = [volume_buf]
             if self._use_mask:
@@ -134,6 +132,8 @@ class AbstractFilterWorker(Worker):
             else:
                 event = self._kernel.filter(self._cl_run_context.queue, self._volume_shape, None, *buffers,
                                             wait_for=[event])
+            event = cl.enqueue_copy(self._cl_run_context.queue, self._results_dict[key], results_buf, is_blocking=False,
+                                    wait_for=[event])
 
         return event
 
