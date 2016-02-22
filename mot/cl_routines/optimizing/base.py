@@ -134,13 +134,16 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         self.load_balancer.process(workers, model.get_nmr_problems())
 
         self._logger.info('Finished optimization')
-        self._logger.info('Starting post-optimization transformations')
 
+        self._logger.info('Starting post-optimization transformations')
         optimized = FinalParametersTransformer(cl_environments=self._cl_environments,
                                                load_balancer=self.load_balancer).transform(model, starting_points)
+        self._logger.info('Finished post-optimization transformations')
+
+        self._logger.info('Calling finalize optimization results in the model')
         results = model.finalize_optimization_results(results_to_dict(optimized, model.get_optimized_param_names()))
 
-        self._logger.info('Finished post-optimization transformations')
+        self._logger.info('Optimization finished.')
 
         if full_output:
             return results, {'ReturnCodes': return_codes}

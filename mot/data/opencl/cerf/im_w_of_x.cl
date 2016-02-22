@@ -37,24 +37,18 @@ double im_w_of_x(double x){
     // a lookup table of Chebyshev polynomials for smaller |x|,
     // and finally a Taylor expansion for |x|<0.01.
 
-    if (x > 5e7){ // 1-term expansion, important to avoid overflow
+    if (x > 5e7 || x < -5e7){ // 1-term expansion, important to avoid overflow
         return M_1_SQRTPI / x;
     }
-    if (x > 45) { // continued-fraction expansion is faster
+
+    if (x > 45 || x < -45) { // continued-fraction expansion is faster
         /* 5-term expansion (rely on compiler for CSE), simplified from:
            ispi / (x-0.5/(x-1/(x-1.5/(x-2/x))))  */
         return M_1_SQRTPI * fma(pown(x, 2), (pown(x, 2)-4.5), 2) / (x * fma(pown(x, 2), (pown(x, 2)-5), 3.75));
     }
+
     if (x >= 0) {
         return w_im_y100(100.0/(1+x), x);
-    }
-    if (x < -5e7){ // 1-term expansion, important to avoid overflow
-        return M_1_SQRTPI / x;
-    }
-    if (x < -45) { // continued-fraction expansion is faster
-        /* 5-term expansion (rely on compiler for CSE), simplified from:
-           ispi / (x-0.5/(x-1/(x-1.5/(x-2/x))))  */
-        return M_1_SQRTPI * fma(pown(x, 2), (pown(x, 2)-4.5), 2) / (x * fma(pown(x, 2), (pown(x, 2)-5), 3.75));
     }
 
     // = -im_w_of_x(-x)
@@ -120,7 +114,7 @@ double w_im_y100(double y100, double x)
     }
     case 8: {
         t = 2*y100 - 17;
-        return 0.52640192524848962855e-1 + (0.34139883358846720806e-2 + (0.21586390240603337337e-4 + (0.20247136501568904646e-6 + (0.22348696948197102935e-8 + (0.28597516301950162548e-10 + (0.41045502119111111110e-12 + 0.65151614515238361946e-14 * t) * t) * t) * t) * t) * t) * t;
+        return fma(t, fma(t, fma(t, fma(t, fma(t, fma(t, fma(t, 0.65151614515238361946e-14, 0.41045502119111111110e-12), 0.28597516301950162548e-10), 0.22348696948197102935e-8), 0.20247136501568904646e-6), 0.21586390240603337337e-4), 0.34139883358846720806e-2), 0.52640192524848962855e-1);
     }
     case 9: {
         t = 2*y100 - 19;

@@ -1,7 +1,7 @@
 import numbers
 import numpy as np
 from mot.adapters import SimpleDataAdapter
-from mot.base import ProtocolParameter, ModelDataParameter, FreeParameter, CLDataType
+from mot.base import ProtocolParameter, ModelDataParameter, FreeParameter, CLDataType, StaticMapParameter
 from mot import runtime_configuration
 from mot.cl_routines.mapping.calc_dependent_params import CalculateDependentParameters
 from mot.utils import TopologicalSort
@@ -312,6 +312,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             var_data_dict.update({'observations': data_adapter})
 
         var_data_dict.update(self._get_fixed_parameters_as_var_data())
+        var_data_dict.update(self._get_static_parameters_as_var_data())
 
         return var_data_dict
 
@@ -332,7 +333,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
     def get_model_data(self):
         model_data_dict = {}
         for m, p in self._get_model_parameter_list():
-            if isinstance(p, ModelDataParameter):
+            if isinstance(p, ModelDataParameter) and not self._all_elements_equal(p.value):
                 model_data_dict.update({p.name: SimpleDataAdapter(p.value, p.data_type, self._get_mot_float_type())})
         return model_data_dict
 
@@ -639,9 +640,19 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             if isinstance(param, ProtocolParameter):
                 param_list.append(param.name)
             elif isinstance(param, ModelDataParameter):
-                param_list.append('data->model_data_' + param.name)
+                if self._all_elements_equal(param.value):
+                    param_list.append(str(self._get_single_value(param.value)))
+                else:
+                    param_list.append('data->model_data_' + param.name)
+            elif isinstance(param, StaticMapParameter):
+                static_map_value = self._get_static_map_value(param)
+                if self._all_elements_equal(static_map_value):
+                    param_list.append(str(self._get_single_value(static_map_value)))
+                else:
+                    param_list.append('data->var_data_' + model.name + '_' + param.name)
             else:
                 param_list.append(model.name + '_' + param.name)
+
         return model.cl_function_name + '(' + ', '.join(param_list) + ')'
 
     def _get_model_functions_cl_code(self, noise_func_name):
@@ -729,7 +740,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                             assignment = str(float(self._problem_data.protocol_data_dict[p.name][0]))
                     else:
                         if p.data_type.is_pointer_type:
-                            #todo: this will only work from the moment we support generic address spaces in OpenCL.
+                            # this requires generic address spaces available in OpenCL >= 2.0.
                             assignment = '&data->protocol_data_' + p.name + '[observation_index]'
                         else:
                             assignment = 'data->protocol_data_' + p.name + '[observation_index]'
@@ -800,8 +811,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
     def _get_fixed_parameters_as_var_data(self):
         var_data_dict = {}
         for m, p in self._get_free_parameters_list():
-            inlined_in_cl_code = isinstance(p.value, numbers.Number) or p.value.max() == p.value.min()
-            if p.fixed and not inlined_in_cl_code and not self._parameter_fixed_to_dependency(m, p):
+            if p.fixed and not self._all_elements_equal(p.value) and not self._parameter_fixed_to_dependency(m, p):
                 value = p.value
                 if self.problems_to_analyze is not None:
                     value = value[self.problems_to_analyze, ...]
@@ -809,6 +819,41 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 var_data_dict.update({m.name + '_' + p.name: SimpleDataAdapter(value, p.data_type,
                                                                                self._get_mot_float_type())})
         return var_data_dict
+
+    def _get_static_parameters_as_var_data(self):
+        static_data_dict = {}
+
+        for m, p in self._get_static_parameters_list():
+            static_map_value = self._get_static_map_value(p)
+
+            if not self._all_elements_equal(static_map_value):
+                if self.problems_to_analyze is not None:
+                    static_map_value = static_map_value[self.problems_to_analyze, ...]
+
+                data_adapter = SimpleDataAdapter(static_map_value, p.data_type, self._get_mot_float_type())
+                static_data_dict.update({m.name + '_' + p.name: data_adapter})
+
+        return static_data_dict
+
+    def _get_static_map_value(self, parameter):
+        """Get the map value for the given parameter of the given model.
+
+        This first checks if the parameter is defined in the static maps data in the problem data. If not, we try
+        to get it from the value stored in the parameter itself. If that fails as well we raise an error.
+
+        Args:
+            parameter (CLParameter): the parameter for which we want to get the value
+
+        Returns:
+            ndarray or number: the value for the given parameter.
+        """
+        if parameter.name in self._problem_data.static_maps:
+            return self._problem_data.static_maps[parameter.name]
+
+        if parameter.value is not None:
+            return parameter.value
+
+        raise ValueError('No suitable data could be found for the static parameter {}.'.format(parameter.name))
 
     def _get_non_model_tree_param_listing(self):
         listing = []
@@ -895,7 +940,9 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                     return p
 
     def _get_parameter_estimable_index(self, parameter_name):
-        """Get the index of this parameter in the parameters list (in CL x vector) of the given full parameter name.
+        """Get the index of this parameter in the parameters list
+
+        This returns the position of this parameter in the 'x' vector in the CL kernel.
 
         Args:
             parameter_name: the parameter name in dot format. <model>.<param>
@@ -906,8 +953,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 if (m.name + '.' + p.name) == parameter_name:
                     return estimable_param_counter
 
-                if not isinstance(p, ProtocolParameter) \
-                        and not isinstance(p, ModelDataParameter) \
+                if isinstance(p, FreeParameter) \
                         and not self._parameter_fixed_to_dependency(m, p) \
                         and not p.fixed:
                     estimable_param_counter += 1
@@ -929,6 +975,10 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         This does not incorporate checking for fixed parameters.
         """
         return list((m, p) for m in self._get_model_list() for p in m.get_free_parameters())
+
+    def _get_static_parameters_list(self):
+        """Gets the static parameters (as model, parameter tuples) from the model listing."""
+        return list((m, p) for m in self._get_model_list() for p in m.get_parameters_of_type(StaticMapParameter))
 
     def _get_estimable_parameters_list(self):
         """Gets a list (as model, parameter tuples) of all parameters that are estimable. """
@@ -1038,16 +1088,37 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         """
         self._init_fixed_duplicates_dependencies()
 
-    def _all_elements_equal(self, col):
-        """Checks if all elements of a given numpy column are equal to each other.
+    def _all_elements_equal(self, value):
+        """Checks if all elements in the given value are equal to each other.
+
+        If the input is a single value the result is trivial. Else we compare all the values to see
+        if they are exactly the same.
 
         Args:
-            col (array): a numpy array
+            value (ndarray or number): a numpy array or a single number.
 
         Returns:
             bool: true if all elements are equal to each other, false otherwise
         """
-        return (col == col[0]).all()
+        if isinstance(value, numbers.Number):
+            return True
+        return (value == value[0]).all()
+
+    def _get_single_value(self, value):
+        """Get a single value out of the given value.
+
+        This is meant to be used after a call to _all_elements_equal that returned True. With this
+        function we return a single number from the input value.
+
+        Args:
+            value (ndarray or number): a numpy array or a single number.
+
+        Returns:
+            number: a single number from the input
+        """
+        if isinstance(value, numbers.Number):
+            return value
+        return value.item(0)
 
     def _get_mot_float_type(self):
         """Get the data type for the MOT_FLOAT_TYPE"""

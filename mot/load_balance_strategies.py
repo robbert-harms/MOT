@@ -102,7 +102,7 @@ class Worker(object):
 
 class LoadBalanceStrategy(object):
 
-    def __init__(self, run_in_batches=True, single_batch_length=1e5):
+    def __init__(self, run_in_batches=True, single_batch_length=2e5):
         """ The base load balancer.
 
         Every load balancer has the option to run the calculations in batches. The advantage of batches is that it is

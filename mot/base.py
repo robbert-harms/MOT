@@ -210,10 +210,23 @@ class AbstractProblemData(object):
         """
         return np.array([])
 
+    @property
+    def static_maps(self):
+        """Get a dictionary with the static maps.
+
+        These maps will be loaded by the model builder as the values for the static parameters.
+
+        Returns:
+            Dict[str, value]: per static map the value for the static map. This can either be an one or two dimensional
+                matrix containing the values for each problem instance or it can be a single value we will use
+                for all p
+        """
+        return {}
+
 
 class SimpleProblemData(AbstractProblemData):
 
-    def __init__(self, protocol_data_dict, observations_list):
+    def __init__(self, protocol_data_dict, observations_list, static_maps=None):
         """A simple data container for the data for optimization/sampling models.
 
         Args:
@@ -222,6 +235,7 @@ class SimpleProblemData(AbstractProblemData):
         """
         self._protocol_data_dict = protocol_data_dict
         self._observation_list = observations_list
+        self._static_maps = static_maps or {}
 
     @property
     def protocol_data_dict(self):
@@ -230,6 +244,10 @@ class SimpleProblemData(AbstractProblemData):
     @property
     def observations(self):
         return self._observation_list
+
+    @property
+    def static_maps(self):
+        return self._static_maps
 
 
 class CLFunction(object):
@@ -726,4 +744,28 @@ class ModelDataParameter(CLFunctionParameter):
             value (double or ndarray): A single value for all voxels or a list of values for each voxel
         """
         super(ModelDataParameter, self).__init__(data_type, name)
+        self.value = value
+
+
+class StaticMapParameter(CLFunctionParameter):
+
+    def __init__(self, data_type, name, value):
+        """This parameter is meant for static data that is different per problem.
+
+        These parameters are in usage similar to fixed free parameters. They are defined as static data parameters to
+        make clear that they are meant to provide additional observational data.
+
+        They differ from the model data parameters in that those are meant for data that define a model, irrespective
+        of the data that is trying to be optimized. The static data parameters are supportive data about the problems
+        and differ per problem instance. This makes them differ slightly in semantics.
+
+        Args:
+            data_type (DataType): the data type expected by this parameter
+            name (str): The name of this parameter
+            value (double or ndarray): A single value for all voxels or a list of values for each voxel
+
+        Attributes:
+            value (double or ndarray): A single value for all voxels or a list of values for each voxel
+        """
+        super(StaticMapParameter, self).__init__(data_type, name)
         self.value = value

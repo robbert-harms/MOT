@@ -316,7 +316,7 @@ class _MHWorker(Worker):
 
                     new_prior = _get_log_prior(x_proposal);
 
-                    if(exp(new_prior) > 0){
+                    if(!isinf(new_prior) && exp(new_prior) > 0){
                         new_likelihood = _get_log_likelihood(data, x_proposal);
 
         '''
