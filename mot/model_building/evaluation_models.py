@@ -149,12 +149,16 @@ class GaussianEvaluationModel(EvaluationModel):
                            parameter_transform=CosSqrClampTransform()),), ())
 
     def get_objective_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
+        # omitted constant term for speed
+        # + log(GaussianNoise_sigma * sqrt(2 * M_PI));
         return '''
             double ''' + fname + '''(const optimize_data* const data, MOT_FLOAT_TYPE* const x){
                 ''' + param_listing + '''
                 double sum = 0.0;
-                ''' + self._get_log_likelihood_body(inst_per_problem, eval_fname, obs_fname) + '''
-                return sum;
+                for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
+                    sum += pown(''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i), 2);
+                }
+                return sum / (2 * pown(GaussianNoise_sigma, 2));
             }
         '''
 
@@ -163,18 +167,13 @@ class GaussianEvaluationModel(EvaluationModel):
             double ''' + fname + '''(const optimize_data* const data, const MOT_FLOAT_TYPE* const x){
                 ''' + param_listing + '''
                 double sum = 0.0;
-                ''' + self._get_log_likelihood_body(inst_per_problem, eval_fname, obs_fname) + '''
-                return - sum;
-            }
-        '''
-
-    def _get_log_likelihood_body(self, inst_per_problem, eval_fname, obs_fname):
-        return '''
                 for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     sum += (pown(''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i), 2)
                                     / (2 * pown(GaussianNoise_sigma, 2)))
                              + log(GaussianNoise_sigma * sqrt(2 * M_PI));
                 }
+                return - sum;
+            }
         '''
 
     def set_noise_level_std(self, noise_std, fix=False):
@@ -220,12 +219,18 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
                            parameter_transform=CosSqrClampTransform()),), ())
 
     def get_objective_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
+        # omitted constant terms for speed
+        # + log(OffsetGaussianNoise_sigma * sqrt(2 * M_PI));
         return '''
             double ''' + fname + '''(const optimize_data* const data, MOT_FLOAT_TYPE* const x){
                 ''' + param_listing + '''
                 double sum = 0.0;
-                ''' + self._get_log_likelihood_body(inst_per_problem, eval_fname, obs_fname) + '''
-                return sum;
+                for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
+                    sum += pown(''' + obs_fname + '''(data, i) -
+                                sqrt(pown(''' + eval_fname + '''(data, x, i), 2) +
+                                    pown(OffsetGaussianNoise_sigma, 2)), 2);
+                }
+                return sum / (2 * pown(OffsetGaussianNoise_sigma, 2));
             }
         '''
 
@@ -234,13 +239,6 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
             double ''' + fname + '''(const optimize_data* const data, MOT_FLOAT_TYPE* const x){
                 ''' + param_listing + '''
                 double sum = 0.0;
-                ''' + self._get_log_likelihood_body(inst_per_problem, eval_fname, obs_fname) + '''
-                return -sum;
-            }
-        '''
-
-    def _get_log_likelihood_body(self, inst_per_problem, eval_fname, obs_fname):
-        return '''
                 for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     sum += pown(''' + obs_fname + '''(data, i) -
                                 sqrt(pown(''' + eval_fname + '''(data, x, i), 2) +
@@ -248,6 +246,8 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
                                             / (2 * pown(OffsetGaussianNoise_sigma, 2))
                             + log(OffsetGaussianNoise_sigma * sqrt(2 * M_PI));
                 }
+                return -sum;
+            }
         '''
 
     def set_noise_level_std(self, noise_std, fix=False):
@@ -298,11 +298,22 @@ class RicianEvaluationModel(EvaluationModel):
             (Bessel(),))
 
     def get_objective_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
+        # omitted the constant terms for speed
+        # + log(observation / pown(RicianNoise_sigma, 2))
+        # - (pown(observation, 2) / (2 * pown(RicianNoise_sigma, 2)))
         return '''
             double ''' + fname + '''(const optimize_data* const data, MOT_FLOAT_TYPE* const x){
                 ''' + param_listing + '''
                 double sum = 0.0;
-                ''' + self._get_log_likelihood_body(inst_per_problem, eval_fname, obs_fname) + '''
+                double observation;
+                double evaluation;
+                for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
+                    observation = (double)''' + obs_fname + '''(data, i);
+                    evaluation = (double)''' + eval_fname + '''(data, x, i);
+
+                    sum +=  - (pown(evaluation, 2) / (2 * pown(RicianNoise_sigma, 2)))
+                            + log_bessel_i0((observation * evaluation) / pown(RicianNoise_sigma, 2));
+                }
                 return -sum;
             }
         '''
@@ -312,13 +323,6 @@ class RicianEvaluationModel(EvaluationModel):
             double ''' + fname + '''(const optimize_data* const data, const MOT_FLOAT_TYPE* const x){
                 ''' + param_listing + '''
                 double sum = 0.0;
-                ''' + self._get_log_likelihood_body(inst_per_problem, eval_fname, obs_fname) + '''
-                return sum;
-            }
-        '''
-
-    def _get_log_likelihood_body(self, inst_per_problem, eval_fname, obs_fname):
-        return '''
                 double observation;
                 double evaluation;
                 for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
@@ -330,6 +334,8 @@ class RicianEvaluationModel(EvaluationModel):
                             - (pown(evaluation, 2) / (2 * pown(RicianNoise_sigma, 2)))
                             + log_bessel_i0((observation * evaluation) / pown(RicianNoise_sigma, 2));
                 }
+                return sum;
+            }
         '''
 
     def set_noise_level_std(self, noise_std, fix=False):

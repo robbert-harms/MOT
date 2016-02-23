@@ -10,19 +10,11 @@
  */
 
 // sqrt(pi)/2
-#ifndef M_SQRTPI_2
 #define M_SQRTPI_2 0.8862269254527580
-#endif
-
 // 1 / sqrt(pi)
-#ifndef M_1_SQRTPI
 #define M_1_SQRTPI 0.5641895835477562
-#endif
-
 // sqrt(pi)
-#ifndef M_SQRTPI
 #define M_SQRTPI 1.7724538509055160
-#endif
 
 double w_im_y100(double y100, double x);
 
@@ -480,4 +472,7 @@ double w_im_y100(double y100, double x)
     return NAN;
 } // w_im_y100
 
- #endif // CERF_IM_W_OF_X_CL
+#undef M_SQRTPI_2
+#undef M_1_SQRTPI
+#undef M_SQRTPI
+#endif // CERF_IM_W_OF_X_CL

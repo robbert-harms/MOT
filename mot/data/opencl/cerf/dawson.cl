@@ -10,9 +10,7 @@
  */
 
 // sqrt(pi)/2
-#ifndef M_SQRTPI_2
 #define M_SQRTPI_2 0.8862269254527580
-#endif
 
  /**
  * Calculate the Dawson's integral for a real argument.
@@ -21,4 +19,5 @@ double dawson(double x){
     return M_SQRTPI_2 * im_w_of_x(x);
 }
 
+#undef M_SQRTPI_2
 #endif // CERF_DAWSON_CL
