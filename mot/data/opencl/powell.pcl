@@ -90,8 +90,8 @@ int powell(MOT_FLOAT_TYPE* model_parameters, const void* const data){
         fval_tmp2 = evaluate(x_tmp2, data);
 
         if(fval_tmp2 < fval_tmp1){
-            if(2.0 * (fval_tmp1 - 2.0 * fval + fval_tmp2) * pown(fval_tmp1 - fval - del, 2)
-                        - del * pown(fval_tmp1 - fval_tmp2, 2) < 0.0){
+            if(2.0 * (fval_tmp1 - 2.0 * fval + fval_tmp2) * ((fval_tmp1 - fval - del) * (fval_tmp1 - fval - del))
+                        - del * ((fval_tmp1 - fval_tmp2) * (fval_tmp1 - fval_tmp2)) < 0.0){
 
                 fval = bracket_and_brent(model_parameters, x_tmp_min, x_tmp2, data, &xmin);
                 for(j=0; j < %(NMR_PARAMS)r; j++){

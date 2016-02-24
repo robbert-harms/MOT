@@ -158,7 +158,7 @@ class GaussianEvaluationModel(EvaluationModel):
                 for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     sum += pown(''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i), 2);
                 }
-                return sum / (2 * pown(GaussianNoise_sigma, 2));
+                return sum / (2 * GaussianNoise_sigma * GaussianNoise_sigma);
             }
         '''
 
@@ -169,7 +169,7 @@ class GaussianEvaluationModel(EvaluationModel):
                 double sum = 0.0;
                 for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     sum += (pown(''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i), 2)
-                                    / (2 * pown(GaussianNoise_sigma, 2)))
+                                    / (2 * GaussianNoise_sigma * GaussianNoise_sigma))
                              + log(GaussianNoise_sigma * sqrt(2 * M_PI));
                 }
                 return - sum;
@@ -228,7 +228,7 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
                 for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     sum += pown(''' + obs_fname + '''(data, i) -
                                 sqrt(pown(''' + eval_fname + '''(data, x, i), 2) +
-                                    pown(OffsetGaussianNoise_sigma, 2)), 2);
+                                    (OffsetGaussianNoise_sigma * OffsetGaussianNoise_sigma)), 2);
                 }
                 return sum / (2 * pown(OffsetGaussianNoise_sigma, 2));
             }
@@ -242,7 +242,7 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
                 for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     sum += pown(''' + obs_fname + '''(data, i) -
                                 sqrt(pown(''' + eval_fname + '''(data, x, i), 2) +
-                                    pown(OffsetGaussianNoise_sigma, 2)), 2)
+                                    (OffsetGaussianNoise_sigma * OffsetGaussianNoise_sigma)), 2)
                                             / (2 * pown(OffsetGaussianNoise_sigma, 2))
                             + log(OffsetGaussianNoise_sigma * sqrt(2 * M_PI));
                 }
@@ -299,8 +299,8 @@ class RicianEvaluationModel(EvaluationModel):
 
     def get_objective_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
         # omitted the constant terms for speed
-        # + log(observation / pown(RicianNoise_sigma, 2))
-        # - (pown(observation, 2) / (2 * pown(RicianNoise_sigma, 2)))
+        # + log(observation / (RicianNoise_sigma * RicianNoise_sigma))
+        # - ((observation * observation) / (2 * (RicianNoise_sigma * RicianNoise_sigma)))
         return '''
             double ''' + fname + '''(const optimize_data* const data, MOT_FLOAT_TYPE* const x){
                 ''' + param_listing + '''
@@ -311,8 +311,8 @@ class RicianEvaluationModel(EvaluationModel):
                     observation = (double)''' + obs_fname + '''(data, i);
                     evaluation = (double)''' + eval_fname + '''(data, x, i);
 
-                    sum +=  - (pown(evaluation, 2) / (2 * pown(RicianNoise_sigma, 2)))
-                            + log_bessel_i0((observation * evaluation) / pown(RicianNoise_sigma, 2));
+                    sum +=  - ((evaluation * evaluation) / (2 * RicianNoise_sigma * RicianNoise_sigma))
+                            + log_bessel_i0((observation * evaluation) / (RicianNoise_sigma * RicianNoise_sigma));
                 }
                 return -sum;
             }
@@ -329,10 +329,10 @@ class RicianEvaluationModel(EvaluationModel):
                     observation = (double)''' + obs_fname + '''(data, i);
                     evaluation = (double)''' + eval_fname + '''(data, x, i);
 
-                    sum += log(observation / pown(RicianNoise_sigma, 2))
-                            - (pown(observation, 2) / (2 * pown(RicianNoise_sigma, 2)))
-                            - (pown(evaluation, 2) / (2 * pown(RicianNoise_sigma, 2)))
-                            + log_bessel_i0((observation * evaluation) / pown(RicianNoise_sigma, 2));
+                    sum += log(observation / (RicianNoise_sigma * RicianNoise_sigma))
+                            - ((observation * observation) / (2 * RicianNoise_sigma * RicianNoise_sigma))
+                            - ((evaluation * evaluation) / (2 * RicianNoise_sigma * RicianNoise_sigma))
+                            + log_bessel_i0((observation * evaluation) / (RicianNoise_sigma * RicianNoise_sigma));
                 }
                 return sum;
             }

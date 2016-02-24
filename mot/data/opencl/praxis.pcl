@@ -321,7 +321,7 @@ return_code praxis_(int n, MOT_FLOAT_TYPE *x, const void * const data, MOT_FLOAT
 					}
 
 					if (illc) {
-						s = d__[i__ - 1] * pown(s + z__[i__ - 1], 2);
+						s = d__[i__ - 1] * ((s + z__[i__ - 1]) * (s + z__[i__ - 1]));
 					}
 					else{
 						s = sl - global_1.fx;
@@ -416,7 +416,7 @@ return_code praxis_(int n, MOT_FLOAT_TYPE *x, const void * const data, MOT_FLOAT
 
 			t2_old = 0.;
 			for (i__ = 1; i__ <= n; ++i__) {
-				t2_old += pown(x[i__], 2);
+				t2_old += (x[i__] * x[i__]);
 			}
 			t2_old = PRAXIS_M2 * sqrt(t2_old) + t_old;
 
@@ -532,7 +532,7 @@ return_code praxis_(int n, MOT_FLOAT_TYPE *x, const void * const data, MOT_FLOAT
 			for (i__ = 1; i__ <= n; ++i__) {
 				s = 0.;
 				for (j = 1; j <= n; ++j) {
-					s += pown(q_1.v[j + i__ * n - (n+1)], 2);
+					s += (q_1.v[j + i__ * n - (n+1)] * q_1.v[j + i__ * n - (n+1)]);
 				}
 
 				s = sqrt(s);
@@ -607,7 +607,7 @@ void minfit_(const int m, const int n, MOT_FLOAT_TYPE tol, MOT_FLOAT_TYPE *ab, M
 			l = i__ + 1;
 
 			for (j = i__; j <= n; ++j) {
-				s += pown(ab[j + i__ * m], 2);
+				s += (ab[j + i__ * m] * ab[j + i__ * m]);
 			}
 			g = 0.;
 
@@ -752,11 +752,11 @@ void minfit_(const int m, const int n, MOT_FLOAT_TYPE tol, MOT_FLOAT_TYPE *ab, M
 							/* ...Q(I) = H = DSQRT(G*G + F*F)... */
 							if (fabs(f) < fabs(g)) {
 								/* Computing 2nd power */
-								h__ = fabs(g) * sqrt(pown(f / g, 2) + 1);
+								h__ = fabs(g) * sqrt(((f / g) * (f / g)) + 1);
 							}
 							else if (f != 0.) {
 								/* Computing 2nd power */
-								h__ = fabs(f) * sqrt(pown(g / f, 2) + 1);
+								h__ = fabs(f) * sqrt(((g / f) * (g / f)) + 1);
 							}
 							else {
 								h__ = 0.;
@@ -817,11 +817,11 @@ void minfit_(const int m, const int n, MOT_FLOAT_TYPE tol, MOT_FLOAT_TYPE *ab, M
 
 							if (fabs(f) < fabs(h__)) {
 								/* Computing 2nd power */
-								z__ = fabs(h__) * sqrt(pown(f / h__, 2) + 1);
+								z__ = fabs(h__) * sqrt(((f / h__) * (f / h__)) + 1);
 							}
 							else if (f != 0.) {
 								/* Computing 2nd power */
-								z__ = fabs(f) * sqrt(pown(h__ / f, 2) + 1);
+								z__ = fabs(f) * sqrt(((h__ / f) * (h__ / f)) + 1);
 							}
 							else {
 								z__ = 0.;
@@ -849,11 +849,11 @@ void minfit_(const int m, const int n, MOT_FLOAT_TYPE tol, MOT_FLOAT_TYPE *ab, M
 
 							if (fabs(f) < fabs(h__)) {
 								/* Computing 2nd power */
-								z__ = fabs(h__) * sqrt(pown(f / h__, 2) + 1);
+								z__ = fabs(h__) * sqrt(((f / h__)*(f / h__)) + 1);
 							}
 							else if (f != 0.) {
 								/* Computing 2nd power */
-								z__ = fabs(f) * sqrt(pown(h__ / f, 2) + 1);
+								z__ = fabs(f) * sqrt(((h__ / f)*(h__ / f)) + 1);
 							}
 							else {
 								z__ = 0.;
@@ -925,7 +925,7 @@ return_code min_(const int n, const int j, int nits, MOT_FLOAT_TYPE * d2,
     /* using s_and_d1 and s here */
     s_and_d1 = 0.;
     for (i__ = 1; i__ <= n; ++i__) {
-        s_and_d1 += pown(x[i__], 2);
+        s_and_d1 += (x[i__] * x[i__]);
     }
 
     s_and_d1 = sqrt(s_and_d1);
@@ -1188,7 +1188,7 @@ void quad_(const int n, const void * const data, MOT_FLOAT_TYPE *x, MOT_FLOAT_TY
         l = q_1->q1[i__ - 1];
         x[i__] = l;
         q_1->q1[i__ - 1] = s;
-        q_1->qd1 += pown(s - l, 2);
+        q_1->qd1 += ((s - l)*(s - l));
     }
 
     q_1->qd1 = sqrt(q_1->qd1);

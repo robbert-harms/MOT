@@ -242,7 +242,7 @@ int nmsimplex(MOT_FLOAT_TYPE* const model_parameters, const void* const data){
 
 		tmp = 0.0;
 		for (j=0;j<=%(NMR_PARAMS)r;j++) {
-			tmp += pown((func_vals[j]-fr), 2) / (%(NMR_PARAMS)r);
+			tmp += ((func_vals[j]-fr) * (func_vals[j]-fr)) / (%(NMR_PARAMS)r);
 		}
 		tmp = sqrt(tmp);
 

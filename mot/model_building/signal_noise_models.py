@@ -50,6 +50,6 @@ class JohnsonSignalNoise(SignalNoiseModel):
     def get_signal_function(self, fname='signalNoiseModel'):
         return '''
             MOT_FLOAT_TYPE ''' + fname + '''(const MOT_FLOAT_TYPE signal, const MOT_FLOAT_TYPE eta){
-                return sqrt(pown(signal, 2) + pown(eta, 2));
+                return sqrt((signal * signal) + (eta * eta));
             }
         '''

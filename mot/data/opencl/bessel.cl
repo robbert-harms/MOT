@@ -69,7 +69,7 @@ double bessel_i0(double x){
     double y;
 
     if(fabs(x) < 3.75f){
-      y = pown(x/3.75, 2);
+      y = (x/3.75) * (x/3.75);
       return fma(y, fma(y, fma(y,
                 fma(y, fma(y, fma(y, 0.45813e-2, 0.360768e-1), 0.2659732), 1.2067492), 3.0899424), 3.5156229), 1.0);
     }

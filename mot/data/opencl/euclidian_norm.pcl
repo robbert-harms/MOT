@@ -57,22 +57,22 @@
 
         if (xabs > ENORM_SQRT_DWARF) {
             if ( xabs < sqrt_n_tmp ) {
-                s2 += pown(xabs, 2);
+                s2 += xabs * xabs;
             }
             else if ( xabs > x1max ) {
-                s1 = fma(s1, pown(x1max / xabs, 2), 1);
+                s1 = fma(s1, ((x1max / xabs) * (x1max / xabs)), 1);
                 x1max = xabs;
             }
             else {
-                s1 += pown(xabs / x1max, 2);
+                s1 += ((xabs / x1max) * (xabs / x1max));
             }
         }
         else if ( xabs > x3max ) {
-            s3 = fma(s3, pown(x3max / xabs, 2), 1);
+            s3 = fma(s3, ((x3max / xabs) * (x3max / xabs)), 1);
             x3max = xabs;
         }
         else if (xabs != 0.) {
-            s3 += pown(xabs / x3max, 2);
+            s3 += ((xabs / x3max) * (xabs / x3max));
         }
     }
 

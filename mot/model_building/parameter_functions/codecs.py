@@ -95,8 +95,8 @@ class CodecBuilder(AbstractCodec):
 
             enc_trans_list (tuple): a listing of the decoding transformations, which are called in the given order.
                 Each format should be a string with the format option {0} which is meant for the name of the array.
-                Example: {0}[0] = pown({0}[0], 2);
-                         {0}[1] = pown({0}[1], 2);
+                Example: {0}[0] = {0}[0] * {0}[0];
+                         {0}[1] = {0}[1] * {0}[1];
         """
         super(CodecBuilder, self).__init__()
         self._nmr_parameters = len(enc_trans_list)

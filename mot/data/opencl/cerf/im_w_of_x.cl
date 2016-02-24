@@ -36,7 +36,7 @@ double im_w_of_x(double x){
     if (x > 45 || x < -45) { // continued-fraction expansion is faster
         /* 5-term expansion (rely on compiler for CSE), simplified from:
            ispi / (x-0.5/(x-1/(x-1.5/(x-2/x))))  */
-        return M_1_SQRTPI * fma(pown(x, 2), (pown(x, 2)-4.5), 2) / (x * fma(pown(x, 2), (pown(x, 2)-5), 3.75));
+        return M_1_SQRTPI * fma(x*x, (x*x-4.5), 2) / (x * fma(x*x, (x*x-5), 3.75));
     }
 
     if (x >= 0) {
@@ -463,7 +463,7 @@ double w_im_y100(double y100, double x)
     case 97: case 98:
     case 99: case 100: { // use Taylor expansion for small x (|x| <= 0.0309...)
         //  (2/sqrt(pi)) * (x - 2/3 x^3  + 4/15 x^5  - 8/105 x^7 + 16/945 x^9)
-        t = pown(x, 2);
+        t = x * x;
         return x * fma(t, -fma(t, -fma(t, -fma(t, -0.016931216931216931217, 0.085971746064420005629), 0.30090111122547001970), 0.75225277806367504925), 1.1283791670955125739);
     }
     }

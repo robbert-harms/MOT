@@ -141,7 +141,7 @@ class SqrClampTransform(AbstractTransformation):
         return 'sqrt(' + parameter_name + ');'
 
     def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
-        return 'clamp((MOT_FLOAT_TYPE) pown(' + parameter_name + ', 2), (MOT_FLOAT_TYPE)' + \
+        return 'clamp((MOT_FLOAT_TYPE)(' + parameter_name + ' * ' + parameter_name + '), (MOT_FLOAT_TYPE)' + \
                str(parameter.lower_bound) + ', (MOT_FLOAT_TYPE)' + str(parameter.upper_bound) + ');'
 
 
