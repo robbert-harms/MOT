@@ -48,11 +48,22 @@ class Worker(object):
         The results of the computations must be stored internally.
 
         Args:
-            range_start (int): The start of the range
-            range_end (int): The end of the range
+            range_start (int): The start of the processing range
+            range_end (int): The end of the processing range
 
         Returns:
             cl_event: The last CL event, so the load balancer can wait for completion on it.
+        """
+
+    def post_process(self, range_start, range_end):
+        """Apply post processing at the end of the calculation.
+
+        This is called after event.wait() has finished for every worker working per batch. One can use this function
+        to post-process data after kernel execution.
+
+        Args:
+            range_start (int): The start of the processing range
+            range_end (int): The end of the processing range
         """
 
     def _build_kernel(self):
@@ -234,11 +245,18 @@ class LoadBalanceStrategy(object):
                 if batch_nmr < len(batches[worker_ind]):
                     self._logger.debug('Going to run batch {0} on device {1} with range ({2}, {3})'.format(
                         batch_nmr, worker_ind, *batches[worker_ind][batch_nmr]))
-
-                    events.append(self._try_processing(worker, *batches[worker_ind][batch_nmr]))
+                    events.append(worker.calculate(int(batches[worker_ind][batch_nmr][0]),
+                                                   int(batches[worker_ind][batch_nmr][1])))
                     problems_seen += batches[worker_ind][batch_nmr][1] - batches[worker_ind][batch_nmr][0]
+
             for event in events:
                 event.wait()
+
+            for worker_ind, worker in enumerate(workers):
+                if batch_nmr < len(batches[worker_ind]):
+                    self._logger.debug('Post processing batch {0} on device {1} with range ({2}, {3})'.format(
+                            batch_nmr, worker_ind, *batches[worker_ind][batch_nmr]))
+                    worker.post_process(int(batches[worker_ind][batch_nmr][0]), int(batches[worker_ind][batch_nmr][1]))
 
             run_time = timeit.default_timer() - start_time
             current_percentage = problems_seen / float(total_nmr_problems)
@@ -250,37 +268,6 @@ class LoadBalanceStrategy(object):
                 time.strftime('%H:%M:%S', time.gmtime(remaining_time))))
 
         self._logger.debug('Ran all batches.')
-
-    def _try_processing(self, worker, range_start, range_end, current_depth=0):
-        """Try to process the given worker on the given range.
-
-        If processing fails due to memory problems we try to run the worker again with a smaller range.
-        This function blocks if we run into a memory exception.
-
-        Args:
-            worker (Worker): The worker to use for the work
-            range_start (int): the start of the range to process
-            range_end (int): the end of the range to process
-            current_depth (int): the current recursive depth, do not set this externally.
-
-        Returns:
-            a cl event for the last event to happen. Unfortunately this function blocks if the worker
-            raises a memory error.
-        """
-        try:
-            return worker.calculate(int(range_start), int(range_end))
-        except cl.MemoryError:
-            max_depth = 3
-            if current_depth < max_depth:
-                self._logger.info('We ran out of memory, halving the input and trying again.')
-                half_range_length = int(math.ceil((range_end - range_start) / 2.0))
-                event = self._try_processing(worker, range_start, range_start + half_range_length,
-                                             current_depth=current_depth+1)
-                event.wait()
-                return self._try_processing(worker, range_start + half_range_length, range_end,
-                                            current_depth=current_depth+1)
-            else:
-                raise
 
     @classmethod
     def get_pretty_name(cls):

@@ -49,21 +49,27 @@ class _GaussianFilterWorker(AbstractFilterWorker):
     def calculate(self, range_start, range_end):
         volumes_to_run = [self._volumes_list[i] for i in range(len(self._volumes_list)) if range_start <= i < range_end]
 
-        read_write_flags = self._cl_environment.get_read_write_cl_mem_flags()
-        read_only_flags = self._cl_environment.get_read_only_cl_mem_flags()
+        volume_buf = cl.Buffer(self._cl_run_context.context,
+                               cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
+                               hostbuf=volumes_to_run[0][1])
+
+        results_buf = cl.Buffer(self._cl_run_context.context,
+                                cl.mem_flags.WRITE_ONLY | cl.mem_flags.COPY_HOST_PTR,
+                                hostbuf=self._results_dict[volumes_to_run[0][0]])
 
         return_event = None
         for volume_name, volume in volumes_to_run:
-            volume_buf = cl.Buffer(self._cl_run_context.context, read_write_flags, hostbuf=volume)
-            results_buf = cl.Buffer(self._cl_run_context.context, read_write_flags,
-                                    hostbuf=self._results_dict[volume_name])
+            cl.enqueue_copy(self._cl_run_context.queue, volume_buf, volume, is_blocking=False)
+            cl.enqueue_copy(self._cl_run_context.queue, results_buf, self._results_dict[volume_name], is_blocking=False)
 
             for dimension in range(len(self._volume_shape)):
                 kernel_length = self._calculate_kernel_size_in_dimension(dimension)
                 kernel_sigma = self._get_sigma_in_dimension(dimension)
 
                 filter_kernel = self._get_1d_gaussian_kernel_array(kernel_length, kernel_sigma)
-                filter_kernel_buf = cl.Buffer(self._cl_run_context.context, read_only_flags, hostbuf=filter_kernel)
+                filter_kernel_buf = cl.Buffer(self._cl_run_context.context,
+                                              cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
+                                              hostbuf=filter_kernel)
 
                 kernel_source = self._get_gaussian_kernel_source(dimension)
 
@@ -72,16 +78,10 @@ class _GaussianFilterWorker(AbstractFilterWorker):
                                     kernel_source).build(' '.join(self._cl_environment.compile_flags))
 
                 if dimension % 2 == 0:
-                    buffers_list = [volume_buf]
-                    if self._use_mask:
-                        buffers_list.append(self._mask_buf)
-                    buffers_list.extend([filter_kernel_buf, results_buf])
+                    buffers_list = self._list_all_buffers(volume_buf, filter_kernel_buf, results_buf)
                     results_buf_ptr = results_buf
                 else:
-                    buffers_list = [results_buf]
-                    if self._use_mask:
-                        buffers_list.append(self._mask_buf)
-                    buffers_list.extend([filter_kernel_buf, volume_buf])
+                    buffers_list = self._list_all_buffers(results_buf, filter_kernel_buf, volume_buf)
                     results_buf_ptr = volume_buf
 
                 kernel.filter(self._cl_run_context.queue, self._volume_shape, None, *buffers_list)
@@ -91,6 +91,17 @@ class _GaussianFilterWorker(AbstractFilterWorker):
                                                    results_buf_ptr, is_blocking=False)
 
         return return_event
+
+    def _list_all_buffers(self, input_buffer, filter_kernel_buffer, output_buffer):
+        """Helper function of calculate().
+
+        This creates a list with buffers and inserts the mask buffer if needed.
+        """
+        buffers_list = [input_buffer]
+        if self._use_mask:
+            buffers_list.append(self._mask_buf)
+        buffers_list.extend([filter_kernel_buffer, output_buffer])
+        return buffers_list
 
     def _build_kernel(self):
         pass

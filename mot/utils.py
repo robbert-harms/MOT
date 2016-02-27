@@ -81,6 +81,10 @@ def get_float_type_def(double_precision):
     """
     if double_precision:
         return '''
+            #if __OPENCL_VERSION__ <= CL_VERSION_1_1
+                #pragma OPENCL EXTENSION cl_khr_fp64 : enable
+            #endif
+
             #define MOT_FLOAT_TYPE double
             #define MOT_FLOAT_TYPE2 double2
             #define MOT_FLOAT_TYPE4 double4
@@ -93,6 +97,10 @@ def get_float_type_def(double_precision):
         '''
     else:
         return '''
+            #if __OPENCL_VERSION__ <= CL_VERSION_1_1
+                #pragma OPENCL EXTENSION cl_khr_fp64 : enable
+            #endif
+
             #define MOT_FLOAT_TYPE float
             #define MOT_FLOAT_TYPE2 float2
             #define MOT_FLOAT_TYPE4 float4

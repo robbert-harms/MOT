@@ -38,7 +38,7 @@ class AbstractFilter(AbstractCLRoutine):
         self.size = size
         self._logger = logging.getLogger(__name__)
 
-    def filter(self, value, mask=None, double_precision=False):
+    def filter(self, value, mask=None, double_precision=False, nmr_of_times=1):
         """Filter the given volumes in the given dictionary.
 
         If a dict is given as a value the filtering is applied to every value in the dictionary. This can be spread
@@ -51,15 +51,23 @@ class AbstractFilter(AbstractCLRoutine):
                 mask values from being used by the filtering routines. They are not used for filtering other values
                 and are not filtered themselves.
             double_precision (boolean): if we will use double or float
+            nmr_of_times (int): how many times we would like to repeat the filtering (per input volume).
 
         Returns:
             The same type as the input. A new set of volumes with the same keys, or a single array. All filtered.
         """
-        self._logger.info('Applying filtering with filter {0}'.format(self.get_pretty_name()))
-        if isinstance(value, dict):
-            return self._filter(value, mask, double_precision)
+        if nmr_of_times < 1:
+            nmr_of_times = 1
+
+        if nmr_of_times == 1:
+            self._logger.info('Applying filtering with filter {0}'.format(self.get_pretty_name()))
+            if isinstance(value, dict):
+                return self._filter(value, mask, double_precision)
+            else:
+                return self._filter({'value': value}, mask, double_precision)['value']
         else:
-            return self._filter({'value': value}, mask, double_precision)['value']
+            filtered = self.filter(value, mask, double_precision, 1)
+            return self.filter(filtered, mask, double_precision, nmr_of_times - 1)
 
     def _filter(self, volumes_dict, mask, double_precision):
         results_dict = {}
@@ -69,8 +77,14 @@ class AbstractFilter(AbstractCLRoutine):
             np_dtype = np.float64
 
         for key, value in volumes_dict.items():
-            volumes_dict[key] = np.array(value, dtype=np_dtype, copy=False, order='C')
+            if len(value.shape) > 3 and value.shape[3] > 1:
+                raise ValueError('The given volume {} is a 4d volume with a 4th dimension >1. We can not use this.')
+
+            volumes_dict[key] = value.astype(dtype=np_dtype, copy=False, order='C')
             results_dict[key] = np.zeros_like(volumes_dict[key], dtype=np_dtype, order='C')
+
+        if mask is not None:
+            mask = mask.astype(np.int8, order='C', copy=True)
 
         volumes_list = list(volumes_dict.items())
         workers = self._create_workers(self._get_worker_generator(self, results_dict, volumes_list, mask,
@@ -93,6 +107,12 @@ class AbstractFilter(AbstractCLRoutine):
 class AbstractFilterWorker(Worker):
 
     def __init__(self, cl_environment, parent_filter, results_dict, volumes_list, mask, double_precision):
+        """Create a filter worker.
+
+        Args:
+            nmr_of_times: the number of times we want to apply the filter per dataset.
+        """
+
         super(AbstractFilterWorker, self).__init__(cl_environment)
         self._parent_filter = parent_filter
         self._size = self._parent_filter.size
@@ -100,12 +120,13 @@ class AbstractFilterWorker(Worker):
         self._volumes_list = volumes_list
         self._volume_shape = volumes_list[0][1].shape[0:3]
         self._double_precision = double_precision
+        self._mask = mask
+        self._logger = logging.getLogger(__name__)
 
         if mask is None:
             self._use_mask = False
         else:
             self._use_mask = True
-            self._mask = mask.astype(np.int8, order='C')
             self._mask_buf = cl.Buffer(self._cl_run_context.context, self._cl_environment.get_read_only_cl_mem_flags(),
                                        hostbuf=self._mask)
 
@@ -114,26 +135,27 @@ class AbstractFilterWorker(Worker):
     def calculate(self, range_start, range_end):
         volumes_to_run = [self._volumes_list[i] for i in range(len(self._volumes_list)) if range_start <= i < range_end]
 
-        write_only_flags = self._cl_environment.get_write_only_cl_mem_flags()
-        read_only_flags = self._cl_environment.get_read_only_cl_mem_flags()
+        volume_buf = cl.Buffer(self._cl_run_context.context,
+                               cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
+                               hostbuf=volumes_to_run[0][1])
+
+        results_buf = cl.Buffer(self._cl_run_context.context,
+                                cl.mem_flags.WRITE_ONLY | cl.mem_flags.COPY_HOST_PTR,
+                                hostbuf=self._results_dict[volumes_to_run[0][0]])
 
         event = None
         for key, value in volumes_to_run:
-            volume_buf = cl.Buffer(self._cl_run_context.context, read_only_flags, hostbuf=value)
-            results_buf = cl.Buffer(self._cl_run_context.context, write_only_flags, hostbuf=self._results_dict[key])
+            cl.enqueue_copy(self._cl_run_context.queue, volume_buf, value, is_blocking=False)
+            cl.enqueue_copy(self._cl_run_context.queue, results_buf, self._results_dict[key], is_blocking=False)
 
             buffers = [volume_buf]
             if self._use_mask:
                 buffers.append(self._mask_buf)
             buffers.append(results_buf)
 
-            if event is None:
-                event = self._kernel.filter(self._cl_run_context.queue, self._volume_shape, None, *buffers)
-            else:
-                event = self._kernel.filter(self._cl_run_context.queue, self._volume_shape, None, *buffers,
-                                            wait_for=[event])
-            event = cl.enqueue_copy(self._cl_run_context.queue, self._results_dict[key], results_buf, is_blocking=False,
-                                    wait_for=[event])
+            event = self._kernel.filter(self._cl_run_context.queue, self._volume_shape, None, *buffers)
+            event = cl.enqueue_copy(self._cl_run_context.queue, self._results_dict[key], results_buf,
+                                    is_blocking=False, wait_for=[event])
 
         return event
 
