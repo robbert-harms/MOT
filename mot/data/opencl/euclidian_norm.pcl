@@ -60,7 +60,7 @@
                 s2 += xabs * xabs;
             }
             else if ( xabs > x1max ) {
-                s1 = fma(s1, ((x1max / xabs) * (x1max / xabs)), 1);
+                s1 = s1 * ((x1max / xabs) * (x1max / xabs)) + 1;
                 x1max = xabs;
             }
             else {
@@ -68,7 +68,7 @@
             }
         }
         else if ( xabs > x3max ) {
-            s3 = fma(s3, ((x3max / xabs) * (x3max / xabs)), 1);
+            s3 = s3 * ((x3max / xabs) * (x3max / xabs)) + 1;
             x3max = xabs;
         }
         else if (xabs != 0.) {
