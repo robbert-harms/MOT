@@ -177,12 +177,12 @@ class AbsModXTransform(AbstractTransformation):
 
 class CosSqrTransform(SimpleTransformation):
     def __init__(self):
-        super(CosSqrTransform, self).__init__('acos(sqrt({}));', 'pown(cos({}), 2);')
+        super(CosSqrTransform, self).__init__('acos(sqrt(fabs({})));', 'pown(cos({}), 2);')
 
 
 class SinSqrTransform(SimpleTransformation):
     def __init__(self):
-        super(SinSqrTransform, self).__init__('asin(sqrt({}));', 'pown(sin({}), 2);')
+        super(SinSqrTransform, self).__init__('asin(sqrt(fabs({})));', 'pown(sin({}), 2);')
 
 
 class AbsModPiTransform(AbsModXTransform):
@@ -192,4 +192,4 @@ class AbsModPiTransform(AbsModXTransform):
 
 class SqrTransform(SimpleTransformation):
     def __init__(self):
-        super(SqrTransform, self).__init__('sqrt({});', 'pown({}, 2);')
+        super(SqrTransform, self).__init__('sqrt(fabs({}));', 'pown({}, 2);')

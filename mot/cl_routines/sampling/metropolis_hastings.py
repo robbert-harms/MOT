@@ -158,15 +158,7 @@ class _MHWorker(Worker):
         samples_buf = cl.Buffer(self._cl_run_context.context, write_only_flags,
                                 hostbuf=self._samples[range_start:range_end, ...])
         data_buffers.append(samples_buf)
-
         data_buffers.append(ranluxcltab_buffer)
-        data_buffers.append(np.uint32(self._nmr_samples))
-        data_buffers.append(np.uint32(self._burn_length))
-        data_buffers.append(np.uint32(self._sample_intervals))
-        data_buffers.append(np.uint32(self._nmr_params))
-        # We add these parameters to the kernel call instead of inlining them for a good reason.
-        # At the time of writing, the CL kernel compiler crashes if these parameters are inlined in the source file.
-        # My guess is that the compiler tries to optimize the loops, fails and then crashes.
 
         for data in self._var_data_dict.values():
             data_buffers.append(cl.Buffer(self._cl_run_context.context,
@@ -190,11 +182,7 @@ class _MHWorker(Worker):
 
         kernel_param_names = ['global MOT_FLOAT_TYPE* params',
                               'global MOT_FLOAT_TYPE* samples',
-                              'global float4* ranluxcltab',
-                              'unsigned int nmr_samples',
-                              'unsigned int burn_length',
-                              'unsigned int sample_intervals',
-                              'unsigned int nmr_params']
+                              'global float4* ranluxcltab']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
         rng_code = RanluxCL()
@@ -223,7 +211,7 @@ class _MHWorker(Worker):
 
         if self._model.double_precision:
             kernel_source += '''
-                double _get_log_likelihood(const optimize_data* const data, const double* const x){
+                double _get_log_likelihood(const optimize_data* const data, double* const x){
                     return getLogLikelihood(data, x);
                 }
             '''
@@ -293,8 +281,7 @@ class _MHWorker(Worker):
                                double* const current_prior,
                                const optimize_data* const data,
                                double* const proposal_parameters,
-                               uint * const ac_between_proposal_updates,
-                               const uint nmr_params){
+                               uint * const ac_between_proposal_updates){
 
                 float4 randomnmr;
                 double new_prior;
@@ -306,7 +293,8 @@ class _MHWorker(Worker):
                 double x_to_prop, prop_to_x;
         '''
         kernel_source += '''
-                for(int k = 0; k < nmr_params; k++){
+                #pragma unroll 1
+                for(int k = 0; k < ''' + str(self._nmr_params) + '''; k++){
                     randomnmr = ranluxcl(ranluxclstate);
 
                     for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
@@ -316,7 +304,7 @@ class _MHWorker(Worker):
 
                     new_prior = _get_log_prior(x_proposal);
 
-                    if(!isinf(new_prior) && exp(new_prior) > 0){
+                    if(isnormal(new_prior) && exp(new_prior) > 0){
                         new_likelihood = _get_log_likelihood(data, x_proposal);
 
         '''
@@ -371,10 +359,10 @@ class _MHWorker(Worker):
                     double current_prior = _get_log_prior(x);
 
                     proposal_update_count = 0;
-                    for(i = 0; i < burn_length; i++){
+                    #pragma unroll 1
+                    for(i = 0; i < ''' + str(self._burn_length) + '''; i++){
                         _update_state(x, x_proposal, &ranluxclstate, &current_likelihood,
-                                     &current_prior, &data, proposal_parameters, ac_between_proposal_updates,
-                                     nmr_params);
+                                     &current_prior, &data, proposal_parameters, ac_between_proposal_updates);
 
                         proposal_update_count += 1;
                         if(proposal_update_count == ''' + str(self.proposal_update_intervals) + '''){
@@ -384,11 +372,12 @@ class _MHWorker(Worker):
                     }
 
                     proposal_update_count = 0;
-                    for(i = 0; i < nmr_samples; i++){
-                        for(j = 0; j < sample_intervals; j++){
+                    #pragma unroll 1
+                    for(i = 0; i < ''' + str(self._nmr_samples) + '''; i++){
+                        #pragma unroll 1
+                        for(j = 0; j < ''' + str(self._sample_intervals) + '''; j++){
                             _update_state(x, x_proposal, &ranluxclstate, &current_likelihood,
-                                         &current_prior, &data, proposal_parameters, ac_between_proposal_updates,
-                                         nmr_params);
+                                         &current_prior, &data, proposal_parameters, ac_between_proposal_updates);
 
                             proposal_update_count += 1;
                             if(proposal_update_count == ''' + str(self.proposal_update_intervals) + '''){
@@ -405,8 +394,9 @@ class _MHWorker(Worker):
                                if cl_final_param_transform else '') + '''
 
                         for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
-                            samples[i + j * nmr_samples + gid *
-                                    ''' + str(self._nmr_params) + ''' * nmr_samples] = x_proposal[j];
+                            samples[i + j * ''' + str(self._nmr_samples) + ''' + gid *
+                                    ''' + str(self._nmr_params) + ''' * ''' + str(self._nmr_samples) + '''] =
+                                        x_proposal[j];
                         }
                     }
 
