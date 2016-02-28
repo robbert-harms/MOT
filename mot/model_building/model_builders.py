@@ -1134,7 +1134,7 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
                                                  problem_data)
 
     def get_log_prior_function(self, func_name='getLogPrior'):
-        prior = 'MOT_FLOAT_TYPE ' + func_name + '(const double* const x){' + "\n"
+        prior = 'MOT_FLOAT_TYPE ' + func_name + '(const MOT_FLOAT_TYPE* const x){' + "\n"
         prior += "\t" + 'MOT_FLOAT_TYPE prior = 1.0;' + "\n"
         for i, (m, p) in enumerate(self._get_estimable_parameters_list()):
             prior += "\t" + 'prior *= ' + p.sampling_prior.get_cl_assignment(p, 'x[' + str(i) + ']') + "\n"

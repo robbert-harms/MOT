@@ -19,8 +19,8 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class MetropolisHastings(AbstractSampler):
 
-    def __init__(self, cl_environments, load_balancer, nmr_samples=500, burn_length=1500,
-                 sample_intervals=5, proposal_update_intervals=25):
+    def __init__(self, cl_environments, load_balancer, nmr_samples=300, burn_length=0,
+                 sample_intervals=5, proposal_update_intervals=50):
         """An CL implementation of Metropolis Hastings.
 
         Args:
@@ -209,25 +209,6 @@ class _MHWorker(Worker):
 
         kernel_source += self._model.get_log_likelihood_function('getLogLikelihood')
 
-        if self._model.double_precision:
-            kernel_source += '''
-                double _get_log_likelihood(const optimize_data* const data, double* const x){
-                    return getLogLikelihood(data, x);
-                }
-            '''
-        else:
-            kernel_source += '''
-                double _get_log_likelihood(const optimize_data* const data, const double* const x){
-
-                    MOT_FLOAT_TYPE x_float[''' + str(self._nmr_params) + '''];
-                    for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
-                        x_float[i] = (MOT_FLOAT_TYPE)x[i];
-                    }
-
-                    return getLogLikelihood(data, x_float);
-                }
-            '''
-
         kernel_source += '''
             void _update_proposals(MOT_FLOAT_TYPE* const proposal_parameters, uint* const ac_between_proposal_updates,
                                    uint* const proposal_update_count){
@@ -246,55 +227,32 @@ class _MHWorker(Worker):
                     *proposal_update_count = 0;
                 }
             }
-        '''
 
-        if cl_final_param_transform:
-            if self._model.double_precision:
-                kernel_source += '''
-                    void _apply_final_parameters_transform(const optimize_data* const data, double* const x){
-                        applyFinalParamTransforms(data, x);
-                    }
-                '''
-            else:
-                kernel_source += '''
-                    void _apply_final_parameters_transform(const optimize_data* const data, double* const x){
-                        MOT_FLOAT_TYPE x_float[''' + str(self._nmr_params) + '''];
-                        for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
-                            x_float[i] = (MOT_FLOAT_TYPE)x[i];
-                        }
-                        applyFinalParamTransforms(data, x_float);
-                    }
-                '''
-
-        kernel_source += '''
-            void _update_state(double* const x,
-                               double* const x_proposal,
+            void _update_state(MOT_FLOAT_TYPE* const x,
                                ranluxcl_state_t* ranluxclstate,
-                               double* const current_likelihood,
-                               double* const current_prior,
+                               MOT_FLOAT_TYPE* const current_likelihood,
+                               MOT_FLOAT_TYPE* const current_prior,
                                const optimize_data* const data,
                                MOT_FLOAT_TYPE* const proposal_parameters,
                                uint * const ac_between_proposal_updates){
 
                 float4 randomnmr;
-                double new_prior;
-                double new_likelihood;
-                double bayesian_f;
+                MOT_FLOAT_TYPE new_prior;
+                MOT_FLOAT_TYPE new_likelihood;
+                MOT_FLOAT_TYPE bayesian_f;
+                MOT_FLOAT_TYPE old_x;
 
                 #pragma unroll 1
                 for(int k = 0; k < ''' + str(self._nmr_params) + '''; k++){
                     randomnmr = ranluxcl(ranluxclstate);
 
-                    for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
-                        x_proposal[i] = x[i];
-                    }
-                    x_proposal[k] = getProposal(k, x[k], ranluxclstate, proposal_parameters);
+                    old_x = x[k];
+                    x[k] = getProposal(k, x[k], ranluxclstate, proposal_parameters);
 
-                    new_prior = getLogPrior(x_proposal);
+                    new_prior = getLogPrior(x);
 
                     if(exp(new_prior) > 0){
-                        new_likelihood = _get_log_likelihood(data, x_proposal);
-
+                        new_likelihood = getLogLikelihood(data, x);
         '''
         if self._model.is_proposal_symmetric():
             kernel_source += '''
@@ -302,31 +260,32 @@ class _MHWorker(Worker):
                 '''
         else:
             kernel_source += '''
-                        double x_to_prop = getProposalLogPDF(k, x[k], x_proposal[k], proposal_parameters);
-                        double prop_to_x = getProposalLogPDF(k, x_proposal[k], x[k], proposal_parameters);
+                        MOT_FLOAT_TYPE x_to_prop = getProposalLogPDF(k, old_x, x[k], proposal_parameters);
+                        MOT_FLOAT_TYPE prop_to_x = getProposalLogPDF(k, x[k], x[k], proposal_parameters);
 
                         bayesian_f = exp((new_likelihood + new_prior + x_to_prop) -
                             (*current_likelihood + *current_prior + prop_to_x));
                 '''
         kernel_source += '''
                         if(randomnmr.x < bayesian_f){
-                            for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
-                                x[i] = x_proposal[i];
-                            }
-
                             *current_likelihood = new_likelihood;
                             *current_prior = new_prior;
                             ac_between_proposal_updates[k]++;
                         }
+                        else{
+                            x[k] = old_x;
+                        }
+                    }
+                    else{
+                        x[k] = old_x;
                     }
                 }
             }
 
-            void _burnin(double* const x,
-                         double* const x_proposal,
+            void _burnin(MOT_FLOAT_TYPE* const x,
                          ranluxcl_state_t* ranluxclstate,
-                         double* const current_likelihood,
-                         double* const current_prior,
+                         MOT_FLOAT_TYPE* const current_likelihood,
+                         MOT_FLOAT_TYPE* const current_prior,
                          const optimize_data* const data,
                          MOT_FLOAT_TYPE* const proposal_parameters,
                          uint* const ac_between_proposal_updates,
@@ -334,9 +293,46 @@ class _MHWorker(Worker):
 
                 #pragma unroll 1
                 for(int i = 0; i < ''' + str(self._burn_length) + '''; i++){
-                    _update_state(x, x_proposal, ranluxclstate, current_likelihood,
+                    _update_state(x, ranluxclstate, current_likelihood,
                                   current_prior, data, proposal_parameters, ac_between_proposal_updates);
                     _update_proposals(proposal_parameters, ac_between_proposal_updates, proposal_update_count);
+                }
+            }
+
+            void _sample(MOT_FLOAT_TYPE* const x,
+                         ranluxcl_state_t* ranluxclstate,
+                         MOT_FLOAT_TYPE* const current_likelihood,
+                         MOT_FLOAT_TYPE* const current_prior,
+                         const optimize_data* const data,
+                         MOT_FLOAT_TYPE* const proposal_parameters,
+                         uint* const ac_between_proposal_updates,
+                         uint* const proposal_update_count,
+                         global MOT_FLOAT_TYPE* samples){
+
+                #pragma unroll 1
+                uint i, j;
+                int gid = get_global_id(0);
+                MOT_FLOAT_TYPE x_saved[''' + str(self._nmr_params) + '''];
+
+                for(i = 0; i < ''' + str(self._nmr_samples) + '''; i++){
+                    for(j = 0; j < ''' + str(self._sample_intervals) + '''; j++){
+                        _update_state(x, ranluxclstate, current_likelihood,
+                                  current_prior, data, proposal_parameters, ac_between_proposal_updates);
+                        _update_proposals(proposal_parameters, ac_between_proposal_updates, proposal_update_count);
+                    }
+
+                    for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
+                        x_saved[j] = x[j];
+                    }
+
+                    ''' + ('applyFinalParamTransforms(data, x_saved);'
+                           if cl_final_param_transform else '') + '''
+
+                    for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
+                        samples[i + j * ''' + str(self._nmr_samples) + ''' + gid *
+                                ''' + str(self._nmr_params) + ''' * ''' + str(self._nmr_samples) + '''] =
+                                    x_saved[j];
+                    }
                 }
             }
 
@@ -344,7 +340,6 @@ class _MHWorker(Worker):
                 ''' + ",\n".join(kernel_param_names) + '''
                 ){
                     int gid = get_global_id(0);
-                    uint i, j;
                     uint proposal_update_count = 0;
 
                     MOT_FLOAT_TYPE proposal_parameters[] = ''' + adaptable_proposal_parameters_str + ''';
@@ -355,42 +350,22 @@ class _MHWorker(Worker):
                     ranluxcl_state_t ranluxclstate;
                     ranluxcl_download_seed(&ranluxclstate, ranluxcltab);
 
-                    double x[''' + str(self._nmr_params) + '''];
-                    double x_proposal[''' + str(self._nmr_params) + '''];
+                    MOT_FLOAT_TYPE x[''' + str(self._nmr_params) + '''];
 
-                    for(i = 0; i < ''' + str(self._nmr_params) + '''; i++){
+                    for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                         x[i] = params[gid * ''' + str(self._nmr_params) + ''' + i];
                     }
 
-                    double current_likelihood = _get_log_likelihood(&data, x);
-                    double current_prior = getLogPrior(x);
+                    MOT_FLOAT_TYPE current_likelihood = getLogLikelihood(&data, x);
+                    MOT_FLOAT_TYPE current_prior = getLogPrior(x);
 
-                    _burnin(x, x_proposal, &ranluxclstate, &current_likelihood,
+                    _burnin(x, &ranluxclstate, &current_likelihood,
                             &current_prior, &data, proposal_parameters, ac_between_proposal_updates,
                             &proposal_update_count);
 
-                    #pragma unroll 1
-                    for(i = 0; i < ''' + str(self._nmr_samples) + '''; i++){
-                        #pragma unroll 1
-                        for(j = 0; j < ''' + str(self._sample_intervals) + '''; j++){
-                            _update_state(x, x_proposal, &ranluxclstate, &current_likelihood,
-                                         &current_prior, &data, proposal_parameters, ac_between_proposal_updates);
-                            _update_proposals(proposal_parameters, ac_between_proposal_updates, &proposal_update_count);
-                        }
-
-                        for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
-                            x_proposal[j] = x[j];
-                        }
-
-                        ''' + ('_apply_final_parameters_transform(&data, x_proposal);'
-                               if cl_final_param_transform else '') + '''
-
-                        for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
-                            samples[i + j * ''' + str(self._nmr_samples) + ''' + gid *
-                                    ''' + str(self._nmr_params) + ''' * ''' + str(self._nmr_samples) + '''] =
-                                        x_proposal[j];
-                        }
-                    }
+                    _sample(x, &ranluxclstate, &current_likelihood,
+                            &current_prior, &data, proposal_parameters, ac_between_proposal_updates,
+                            &proposal_update_count, samples);
 
                     ranluxcl_upload_seed(&ranluxclstate, ranluxcltab);
             }
