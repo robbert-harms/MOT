@@ -242,11 +242,10 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
                 for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     sum += pown(''' + obs_fname + '''(data, i) -
                                 sqrt(pown(''' + eval_fname + '''(data, x, i), 2) +
-                                    (OffsetGaussianNoise_sigma * OffsetGaussianNoise_sigma)), 2)
-                                            / (2 * pown(OffsetGaussianNoise_sigma, 2))
-                            + log(OffsetGaussianNoise_sigma * sqrt(2 * M_PI));
+                                    (OffsetGaussianNoise_sigma * OffsetGaussianNoise_sigma)), 2);
                 }
-                return -sum;
+                return - sum / (2 * pown(OffsetGaussianNoise_sigma, 2))
+                    + ''' + str(inst_per_problem) + ''' * log(OffsetGaussianNoise_sigma * sqrt(2 * M_PI));
             }
         '''
 

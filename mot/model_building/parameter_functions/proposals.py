@@ -88,31 +88,32 @@ class ProposalParameter(object):
 
         Returns:
             A function with the signature:
-                double <func_name>(const double current_value,
-                                        const uint acceptance_counter, const uint jump_counter)
+                MOT_FLOAT_TYPE <func_name>(const MOT_FLOAT_TYPE current_value,
+                                           const uint acceptance_counter,
+                                           const uint jump_counter)
 
             Where current value is the current value for this proposal parameter, acceptance counter is the
             number of accepted steps and jump counter the number of jumps.
         """
         return '''
-            #ifndef DMRIPROPOSAL_DEFAULT_PARAMETER_UPDATE
-            #define DMRIPROPOSAL_DEFAULT_PARAMETER_UPDATE
+            #ifndef PROPOSAL_DEFAULT_PARAMETER_UPDATE
+            #define PROPOSAL_DEFAULT_PARAMETER_UPDATE
 
-            double dmriproposal_default_parameter_update(const double current_value,
-                                                              const uint acceptance_counter,
-                                                              const uint jump_counter){
+            MOT_FLOAT_TYPE proposal_default_parameter_update(const MOT_FLOAT_TYPE current_value,
+                                                             const uint acceptance_counter,
+                                                             const uint jump_counter){
                 return min(current_value *
-                            sqrt( (double)(acceptance_counter+1) /
+                            sqrt( (MOT_FLOAT_TYPE)(acceptance_counter+1) /
                                   ((jump_counter - acceptance_counter) + 1)
                             ),
-                       (double)1e10);
+                           (MOT_FLOAT_TYPE)1e10);
             }
 
-            #endif //DMRIPROPOSAL_DEFAULT_PARAMETER_UPDATE
+            #endif //PROPOSAL_DEFAULT_PARAMETER_UPDATE
         '''
 
     def get_parameter_update_function_name(self):
-        return 'dmriproposal_default_parameter_update'
+        return 'proposal_default_parameter_update'
 
 
 class GaussianProposal(AbstractParameterProposal):
@@ -134,33 +135,35 @@ class GaussianProposal(AbstractParameterProposal):
 
     def get_proposal_function(self):
         return '''
-            #ifndef DMRIPROP_GAUSSIANPROPOSAL_CL
-            #define DMRIPROP_GAUSSIANPROPOSAL_CL
+            #ifndef PROP_GAUSSIANPROPOSAL_CL
+            #define PROP_GAUSSIANPROPOSAL_CL
 
-            double dmriproposal_gaussianProposal(const double current, ranluxcl_state_t* const ranluxclstate,
-                                                 const double std){
-                return current + std * ranluxcl_gaussian(ranluxclstate);
+            MOT_FLOAT_TYPE proposal_gaussianProposal(MOT_FLOAT_TYPE current,
+                                                     ranluxcl_state_t* const ranluxclstate,
+                                                     MOT_FLOAT_TYPE std){
+                return fma(std, (MOT_FLOAT_TYPE)ranluxcl_gaussian(ranluxclstate), current);
             }
 
-            #endif //DMRIPROP_GAUSSIANPROPOSAL_CL
+            #endif //PROP_GAUSSIANPROPOSAL_CL
         '''
 
     def get_proposal_function_name(self):
-        return 'dmriproposal_gaussianProposal'
+        return 'proposal_gaussianProposal'
 
     def get_proposal_logpdf_function(self):
         return '''
-            #ifndef DMRIPROP_GAUSSIANPROPOSALLOGPDF_CL
-            #define DMRIPROP_GAUSSIANPROPOSALLOGPDF_CL
+            #ifndef PROP_GAUSSIANPROPOSALLOGPDF_CL
+            #define PROP_GAUSSIANPROPOSALLOGPDF_CL
 
-            double dmriproposal_gaussianProposalLogPDF(const double x, const double mu,
-                                                       const double std){
-                return log(M_2_SQRTPI / std) + (-0.5 * pown((x - mu) / std, 2));
+            MOT_FLOAT_TYPE proposal_gaussianProposalLogPDF(MOT_FLOAT_TYPE x,
+                                                           MOT_FLOAT_TYPE mu,
+                                                           MOT_FLOAT_TYPE std){
+                return log(std * sqrt(2 * M_PI)) - (((x - mu) * (x - mu)) / (2 * std * std));
             }
 
-            #endif //DMRIPROP_GAUSSIANPROPOSALLOGPDF_CL
+            #endif //PROP_GAUSSIANPROPOSALLOGPDF_CL
         '''
 
     def get_proposal_logpdf_function_name(self):
-        return 'dmriproposal_gaussianProposalLogPDF'
+        return 'proposal_gaussianProposalLogPDF'
 
