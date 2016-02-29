@@ -19,8 +19,8 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class MetropolisHastings(AbstractSampler):
 
-    def __init__(self, cl_environments, load_balancer, nmr_samples=500, burn_length=100,
-                 sample_intervals=3, proposal_update_intervals=50):
+    def __init__(self, cl_environments, load_balancer, nmr_samples=500, burn_length=500,
+                 sample_intervals=5, proposal_update_intervals=50):
         """An CL implementation of Metropolis Hastings.
 
         Args:
@@ -211,7 +211,7 @@ class _MHWorker(Worker):
         if not self._model.is_proposal_symmetric():
             kernel_source += self._model.get_proposal_logpdf('getProposalLogPDF')
 
-        kernel_source += self._model.get_log_likelihood_function('getLogLikelihood')
+        kernel_source += self._model.get_log_likelihood_function('getLogLikelihood', full_likelihood=False)
 
         kernel_source += '''
             void _update_proposals(MOT_FLOAT_TYPE* const proposal_parameters, uint* const ac_between_proposal_updates,
@@ -297,7 +297,7 @@ class _MHWorker(Worker):
                          global MOT_FLOAT_TYPE* samples){
 
                 uint i, j;
-                uint gid0 = get_global_id(0);
+                uint gid = get_global_id(0);
                 MOT_FLOAT_TYPE x_saved[''' + str(self._nmr_params) + '''];
 
                 for(i = 0; i < ''' + str(self._nmr_samples * self._sample_intervals + self._burn_length) + '''; i++){
@@ -316,7 +316,7 @@ class _MHWorker(Worker):
                             samples[(uint)((i - ''' + str(self._burn_length) + ''')
                                             / ''' + str(self._sample_intervals) + ''')
                                     + j * ''' + str(self._nmr_samples) + '''
-                                    + gid0 * ''' + str(self._nmr_params) + ''' * ''' + str(self._nmr_samples) + ''']
+                                    + gid * ''' + str(self._nmr_params) + ''' * ''' + str(self._nmr_samples) + ''']
                                         = x_saved[j];
                         }
                     }

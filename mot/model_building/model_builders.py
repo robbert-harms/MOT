@@ -1242,7 +1242,7 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         return_str += '}'
         return return_str
 
-    def get_log_likelihood_function(self, func_name='getLogLikelihood', evaluation_model=None):
+    def get_log_likelihood_function(self, func_name='getLogLikelihood', evaluation_model=None, full_likelihood=True):
         evaluation_model = evaluation_model or self._evaluation_model
 
         inst_per_problem = self.get_nmr_inst_per_problem()
@@ -1260,7 +1260,8 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         func += self.get_model_eval_function(eval_func_name)
         func += self.get_observation_return_function(obs_func_name)
         func += evaluation_model.get_log_likelihood_function(func_name, inst_per_problem, eval_func_name,
-                                                             obs_func_name, param_listing)
+                                                             obs_func_name, param_listing,
+                                                             full_likelihood=full_likelihood)
         return func
 
     def samples_to_statistics(self, samples_dict):

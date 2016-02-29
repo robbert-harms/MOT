@@ -36,7 +36,8 @@ class EvaluationModel(ModelFunction):
             That is, it always returns a double since the summations may get large.
         """
 
-    def get_log_likelihood_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
+    def get_log_likelihood_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing,
+                                    full_likelihood=True):
         """Get the cl code for the log likelihood function under the given noise model.
 
         Args:
@@ -47,6 +48,8 @@ class EvaluationModel(ModelFunction):
             obs_fname (str): the name of the function that can be called for the observed data, its signature is:
                 MOT_FLOAT_TYPE <fname>(const optimize_data* data, const int observation_index);
             param_listing (str): the parameter listings for the parameters of the noise model
+            full_likelihood (boolean): if we want the complete likelihood, or if we can drop the constant terms.
+                The default is the complete likelihood. Disable for speed.
 
         Returns:
             the objective function under this noise model, its signature is:
@@ -105,7 +108,8 @@ class SumOfSquares(EvaluationModel):
             }
         '''
 
-    def get_log_likelihood_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
+    def get_log_likelihood_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing,
+                                    full_likelihood=True):
         return '''
             double ''' + fname + '''(const optimize_data* const data, const MOT_FLOAT_TYPE* const x){
                 ''' + param_listing + '''
@@ -162,17 +166,19 @@ class GaussianEvaluationModel(EvaluationModel):
             }
         '''
 
-    def get_log_likelihood_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
+    def get_log_likelihood_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing,
+                                    full_likelihood=True):
         return '''
             double ''' + fname + '''(const optimize_data* const data, const MOT_FLOAT_TYPE* const x){
                 ''' + param_listing + '''
                 double sum = 0.0;
                 for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
-                    sum += (pown(''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i), 2)
-                                    / (2 * GaussianNoise_sigma * GaussianNoise_sigma))
-                             + log(GaussianNoise_sigma * sqrt(2 * M_PI));
+                    sum += pown(''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i), 2);
                 }
-                return - sum;
+                return - sum / (2 * GaussianNoise_sigma * GaussianNoise_sigma)
+                    ''' + ('+' + str(inst_per_problem) + ' * log(GaussianNoise_sigma * sqrt(2 * M_PI))'
+                           if full_likelihood else '') + ''';
+
             }
         '''
 
@@ -234,7 +240,8 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
             }
         '''
 
-    def get_log_likelihood_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
+    def get_log_likelihood_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing,
+                                    full_likelihood=True):
         return '''
             double ''' + fname + '''(const optimize_data* const data, MOT_FLOAT_TYPE* const x){
                 ''' + param_listing + '''
@@ -245,7 +252,8 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
                                     (OffsetGaussianNoise_sigma * OffsetGaussianNoise_sigma)), 2);
                 }
                 return - sum / (2 * pown(OffsetGaussianNoise_sigma, 2))
-                    + ''' + str(inst_per_problem) + ''' * log(OffsetGaussianNoise_sigma * sqrt(2 * M_PI));
+                    ''' + ('+' + str(inst_per_problem) + ' * log(OffsetGaussianNoise_sigma * sqrt(2 * M_PI))'
+                           if full_likelihood else '') + ''';
             }
         '''
 
@@ -317,7 +325,8 @@ class RicianEvaluationModel(EvaluationModel):
             }
         '''
 
-    def get_log_likelihood_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
+    def get_log_likelihood_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing,
+                                    full_likelihood=True):
         return '''
             double ''' + fname + '''(const optimize_data* const data, const MOT_FLOAT_TYPE* const x){
                 ''' + param_listing + '''
