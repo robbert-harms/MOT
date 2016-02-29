@@ -19,8 +19,8 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class MetropolisHastings(AbstractSampler):
 
-    def __init__(self, cl_environments, load_balancer, nmr_samples=300, burn_length=0,
-                 sample_intervals=5, proposal_update_intervals=50):
+    def __init__(self, cl_environments, load_balancer, nmr_samples=500, burn_length=100,
+                 sample_intervals=3, proposal_update_intervals=50):
         """An CL implementation of Metropolis Hastings.
 
         Args:
@@ -104,22 +104,26 @@ class MetropolisHastings(AbstractSampler):
         self._logger.info('Entered sampling routine.')
         self._logger.info('We will use a {} precision float type for the calculations.'.format(
             'double' if model.double_precision else 'single'))
+
         if not model.double_precision:
             self._logger.warn('Please be warned that with single float precision the results may look truncated.')
         for env in self.load_balancer.get_used_cl_environments(self.cl_environments):
             self._logger.info('Using device \'{}\' with compile flags {}'.format(str(env), str(env.compile_flags)))
+
         self._logger.info('The parameters we will sample are: {0}'.format(model.get_optimized_param_names()))
+
+        sample_settings = dict(nmr_samples=self.nmr_samples,
+                               burn_length=self.burn_length,
+                               sample_intervals=self.sample_intervals,
+                               proposal_update_intervals=self.proposal_update_intervals)
         self._logger.info('Sample settings: nmr_samples: {nmr_samples}, burn_length: {burn_length}, '
                           'sample_intervals: {sample_intervals}, '
-                          'proposal_update_intervals: {proposal_update_intervals}. '.format(
-            nmr_samples=self.nmr_samples, burn_length=self.burn_length, sample_intervals=self.sample_intervals,
-            proposal_update_intervals=self.proposal_update_intervals
-        ))
+                          'proposal_update_intervals: {proposal_update_intervals}. '.format(**sample_settings))
+
+        samples_drawn = dict(samples_drawn=(self.burn_length + self.sample_intervals * self.nmr_samples),
+                             samples_returned=self.nmr_samples)
         self._logger.info('Total samples drawn: {samples_drawn}, total samples returned: '
-                          '{samples_returned} (per problem).'.format(
-            samples_drawn=(self.burn_length + self.sample_intervals * self.nmr_samples),
-            samples_returned=self.nmr_samples
-        ))
+                          '{samples_returned} (per problem).'.format(**samples_drawn))
 
 
 class _MHWorker(Worker):
@@ -282,23 +286,6 @@ class _MHWorker(Worker):
                 }
             }
 
-            void _burnin(MOT_FLOAT_TYPE* const x,
-                         ranluxcl_state_t* ranluxclstate,
-                         MOT_FLOAT_TYPE* const current_likelihood,
-                         MOT_FLOAT_TYPE* const current_prior,
-                         const optimize_data* const data,
-                         MOT_FLOAT_TYPE* const proposal_parameters,
-                         uint* const ac_between_proposal_updates,
-                         uint* const proposal_update_count){
-
-                #pragma unroll 1
-                for(int i = 0; i < ''' + str(self._burn_length) + '''; i++){
-                    _update_state(x, ranluxclstate, current_likelihood,
-                                  current_prior, data, proposal_parameters, ac_between_proposal_updates);
-                    _update_proposals(proposal_parameters, ac_between_proposal_updates, proposal_update_count);
-                }
-            }
-
             void _sample(MOT_FLOAT_TYPE* const x,
                          ranluxcl_state_t* ranluxclstate,
                          MOT_FLOAT_TYPE* const current_likelihood,
@@ -309,29 +296,29 @@ class _MHWorker(Worker):
                          uint* const proposal_update_count,
                          global MOT_FLOAT_TYPE* samples){
 
-                #pragma unroll 1
                 uint i, j;
-                int gid = get_global_id(0);
+                uint gid0 = get_global_id(0);
                 MOT_FLOAT_TYPE x_saved[''' + str(self._nmr_params) + '''];
 
-                for(i = 0; i < ''' + str(self._nmr_samples) + '''; i++){
-                    for(j = 0; j < ''' + str(self._sample_intervals) + '''; j++){
-                        _update_state(x, ranluxclstate, current_likelihood,
-                                  current_prior, data, proposal_parameters, ac_between_proposal_updates);
-                        _update_proposals(proposal_parameters, ac_between_proposal_updates, proposal_update_count);
-                    }
+                for(i = 0; i < ''' + str(self._nmr_samples * self._sample_intervals + self._burn_length) + '''; i++){
+                    _update_state(x, ranluxclstate, current_likelihood, current_prior,
+                                  data, proposal_parameters, ac_between_proposal_updates);
+                    _update_proposals(proposal_parameters, ac_between_proposal_updates, proposal_update_count);
 
-                    for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
-                        x_saved[j] = x[j];
-                    }
+                    if(i >= ''' + str(self._burn_length) + ''' && i % ''' + str(self._sample_intervals) + ''' == 0){
+                        for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
+                            x_saved[j] = x[j];
+                        }
+                        ''' + ('applyFinalParamTransforms(data, x_saved);'
+                               if cl_final_param_transform else '') + '''
 
-                    ''' + ('applyFinalParamTransforms(data, x_saved);'
-                           if cl_final_param_transform else '') + '''
-
-                    for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
-                        samples[i + j * ''' + str(self._nmr_samples) + ''' + gid *
-                                ''' + str(self._nmr_params) + ''' * ''' + str(self._nmr_samples) + '''] =
-                                    x_saved[j];
+                        for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
+                            samples[(uint)((i - ''' + str(self._burn_length) + ''')
+                                            / ''' + str(self._sample_intervals) + ''')
+                                    + j * ''' + str(self._nmr_samples) + '''
+                                    + gid0 * ''' + str(self._nmr_params) + ''' * ''' + str(self._nmr_samples) + ''']
+                                        = x_saved[j];
+                        }
                     }
                 }
             }
@@ -339,7 +326,7 @@ class _MHWorker(Worker):
             __kernel void sample(
                 ''' + ",\n".join(kernel_param_names) + '''
                 ){
-                    int gid = get_global_id(0);
+                    uint gid = get_global_id(0);
                     uint proposal_update_count = 0;
 
                     MOT_FLOAT_TYPE proposal_parameters[] = ''' + adaptable_proposal_parameters_str + ''';
@@ -358,10 +345,6 @@ class _MHWorker(Worker):
 
                     MOT_FLOAT_TYPE current_likelihood = getLogLikelihood(&data, x);
                     MOT_FLOAT_TYPE current_prior = getLogPrior(x);
-
-                    _burnin(x, &ranluxclstate, &current_likelihood,
-                            &current_prior, &data, proposal_parameters, ac_between_proposal_updates,
-                            &proposal_update_count);
 
                     _sample(x, &ranluxclstate, &current_likelihood,
                             &current_prior, &data, proposal_parameters, ac_between_proposal_updates,

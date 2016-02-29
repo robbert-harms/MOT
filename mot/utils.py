@@ -330,8 +330,8 @@ def initialize_ranlux(cl_environment, cl_context, nmr_instances, ranlux=RanluxCL
             ranluxcl_initialization(''' + str(seed) + ''', ranluxcltab);
         }
     '''
-    read_write_flags = cl_environment.get_read_write_cl_mem_flags()
-    ranluxcltab_buffer = cl.Buffer(cl_context.context, read_write_flags,
+    ranluxcltab_buffer = cl.Buffer(cl_context.context,
+                                   cl.mem_flags.READ_WRITE | cl.mem_flags.COPY_HOST_PTR,
                                    hostbuf=np.zeros((nmr_instances * 7, 1), dtype=cl_array.vec.float4, order='C'))
     kernel = cl.Program(cl_context.context, kernel_source).build(' '.join(cl_environment.compile_flags))
     kernel.init(cl_context.queue, (int(nmr_instances), ), None, ranluxcltab_buffer)
