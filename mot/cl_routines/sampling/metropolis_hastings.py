@@ -154,19 +154,19 @@ class _MHWorker(Worker):
         nmr_problems = range_end - range_start
         ranluxcltab_buffer = initialize_ranlux(self._cl_environment, self._cl_run_context, nmr_problems)
 
-        read_only_flags = self._cl_environment.get_read_only_cl_mem_flags()
-        write_only_flags = self._cl_environment.get_write_only_cl_mem_flags()
-
-        data_buffers = [cl.Buffer(self._cl_run_context.context, read_only_flags,
+        data_buffers = [cl.Buffer(self._cl_run_context.context,
+                                  cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
                                   hostbuf=self._parameters[range_start:range_end, :])]
-        samples_buf = cl.Buffer(self._cl_run_context.context, write_only_flags,
+        samples_buf = cl.Buffer(self._cl_run_context.context,
+                                cl.mem_flags.WRITE_ONLY | cl.mem_flags.COPY_HOST_PTR,
                                 hostbuf=self._samples[range_start:range_end, ...])
         data_buffers.append(samples_buf)
         data_buffers.append(ranluxcltab_buffer)
 
         for data in self._var_data_dict.values():
             data_buffers.append(cl.Buffer(self._cl_run_context.context,
-                                          read_only_flags, hostbuf=data.get_opencl_data()[range_start:range_end, ...]))
+                                          cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
+                                          hostbuf=data.get_opencl_data()[range_start:range_end, ...]))
 
         data_buffers.extend(self._constant_buffers)
 
@@ -234,7 +234,7 @@ class _MHWorker(Worker):
 
             void _update_state(MOT_FLOAT_TYPE* const x,
                                ranluxcl_state_t* ranluxclstate,
-                               MOT_FLOAT_TYPE* const current_likelihood,
+                               double* const current_likelihood,
                                MOT_FLOAT_TYPE* const current_prior,
                                const optimize_data* const data,
                                MOT_FLOAT_TYPE* const proposal_parameters,
@@ -242,8 +242,8 @@ class _MHWorker(Worker):
 
                 float4 randomnmr;
                 MOT_FLOAT_TYPE new_prior;
-                MOT_FLOAT_TYPE new_likelihood;
-                MOT_FLOAT_TYPE bayesian_f;
+                double new_likelihood;
+                double bayesian_f;
                 MOT_FLOAT_TYPE old_x;
 
                 #pragma unroll 1
@@ -288,7 +288,7 @@ class _MHWorker(Worker):
 
             void _sample(MOT_FLOAT_TYPE* const x,
                          ranluxcl_state_t* ranluxclstate,
-                         MOT_FLOAT_TYPE* const current_likelihood,
+                         double* const current_likelihood,
                          MOT_FLOAT_TYPE* const current_prior,
                          const optimize_data* const data,
                          MOT_FLOAT_TYPE* const proposal_parameters,
@@ -309,8 +309,8 @@ class _MHWorker(Worker):
                         for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
                             x_saved[j] = x[j];
                         }
-                        ''' + ('applyFinalParamTransforms(data, x_saved);'
-                               if cl_final_param_transform else '') + '''
+
+                        ''' + ('applyFinalParamTransforms(data, x_saved);' if cl_final_param_transform else '') + '''
 
                         for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
                             samples[(uint)((i - ''' + str(self._burn_length) + ''')
@@ -343,7 +343,7 @@ class _MHWorker(Worker):
                         x[i] = params[gid * ''' + str(self._nmr_params) + ''' + i];
                     }
 
-                    MOT_FLOAT_TYPE current_likelihood = getLogLikelihood(&data, x);
+                    double current_likelihood = getLogLikelihood(&data, x);
                     MOT_FLOAT_TYPE current_prior = getLogPrior(x);
 
                     _sample(x, &ranluxclstate, &current_likelihood,

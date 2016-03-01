@@ -136,15 +136,6 @@ int nmsimplex(MOT_FLOAT_TYPE* const model_parameters, const void* const data){
 			}
 		}
 
-		/**
-		 *  Additional test for convergence, see:
-		 *  P. E. Gill, W. Murray, and M. H. Wright. Practical Optimization. Academic Press, New York, 1981.
-		 */
-		if((func_vals[vg] - func_vals[vs])/(1 + fabs(func_vals[vs])) < USER_TOL_X){
-		    return_code = 1;
-		    break;
-		}
-
 		/* calculate the centroid */
 		for (j=0;j<=%(NMR_PARAMS)r-1;j++) {
 			tmp=0.0;

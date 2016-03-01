@@ -23,7 +23,7 @@ class GenerateRandom(AbstractCLRoutine):
         """
         super(GenerateRandom, self).__init__(cl_environments, load_balancer)
 
-    def generate_uniform(self, nmr_samples, minimum, maximum, seed=None):
+    def generate_uniform(self, nmr_samples, minimum=0, maximum=1, seed=None):
         """Draw random samples from the uniform distribution.
 
         Args:
@@ -38,7 +38,7 @@ class GenerateRandom(AbstractCLRoutine):
         seed = seed or nmr_samples / time.time()
         return self._generate_samples(nmr_samples, self._get_uniform_kernel(minimum, maximum), seed)
 
-    def generate_gaussian(self, nmr_samples, mean, std, seed=None):
+    def generate_gaussian(self, nmr_samples, mean=0, std=1, seed=None):
         """Draw random samples from the Gaussian distribution.
 
         Args:
@@ -123,19 +123,17 @@ class _GenerateRandomWorker(Worker):
         range_start *= 4
         range_end *= 4
 
-        write_only_flags = self._cl_environment.get_write_only_cl_mem_flags()
+        ranluxcltab_buffer = initialize_ranlux(self._cl_environment, self._cl_run_context, nmr_problems,
+                                               seed=self._seed)
 
-        ranluxcltab_buffer = initialize_ranlux(self._cl_environment, self._cl_run_context, nmr_problems, seed=self._seed)
-        samples_buf = cl.Buffer(self._cl_run_context.context, write_only_flags,
+        samples_buf = cl.Buffer(self._cl_run_context.context, cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
                                 hostbuf=self._samples[range_start:range_end])
 
         global_range = (int(nmr_problems), )
         local_range = None
 
-        self._kernel.sample(self._cl_run_context.queue, global_range, local_range, ranluxcltab_buffer, samples_buf)
-        event = cl.enqueue_copy(self._cl_run_context.queue, self._samples[range_start:range_end], samples_buf,
-                                is_blocking=False)
-        return event
+        return self._kernel.sample(self._cl_run_context.queue, global_range, local_range,
+                                   ranluxcltab_buffer, samples_buf)
 
     def _get_kernel_source(self):
         return self._kernel_source

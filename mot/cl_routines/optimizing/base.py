@@ -135,13 +135,9 @@ class AbstractParallelOptimizer(AbstractOptimizer):
 
         self._logger.info('Finished optimization')
 
-        self._logger.info('Starting post-optimization transformations')
-        optimized = FinalParametersTransformer(cl_environments=self._cl_environments,
-                                               load_balancer=self.load_balancer).transform(model, starting_points)
-        self._logger.info('Finished post-optimization transformations')
-
         self._logger.info('Calling finalize optimization results in the model')
-        results = model.finalize_optimization_results(results_to_dict(optimized, model.get_optimized_param_names()))
+        results = model.finalize_optimization_results(
+            results_to_dict(starting_points, model.get_optimized_param_names()))
 
         self._logger.info('Optimization finished.')
 
@@ -203,7 +199,6 @@ class AbstractParallelOptimizerWorker(Worker):
 
         read_only_flags = self._cl_environment.get_read_only_cl_mem_flags()
         read_write_flags = self._cl_environment.get_read_write_cl_mem_flags()
-        write_only_flags = self._cl_environment.get_write_only_cl_mem_flags()
 
         all_buffers = []
 
@@ -211,13 +206,15 @@ class AbstractParallelOptimizerWorker(Worker):
                                       hostbuf=self._starting_points[range_start:range_end, :])
         all_buffers.append(parameters_buffer)
 
-        return_code_buffer = cl.Buffer(self._cl_run_context.context, write_only_flags,
-                                       hostbuf=self._return_codes[range_start:range_end])
+        return_code_buffer = cl.Buffer(self._cl_run_context.context,
+                                       cl.mem_flags.WRITE_ONLY | cl.mem_flags.ALLOC_HOST_PTR,
+                                       size=nmr_problems * self._return_codes.dtype.itemsize)
         all_buffers.append(return_code_buffer)
 
         for data in self._var_data_dict.values():
             all_buffers.append(cl.Buffer(self._cl_run_context.context, read_only_flags,
                                          hostbuf=data.get_opencl_data()[range_start:range_end, ...]))
+
         all_buffers.extend(self._constant_buffers)
 
         if self._uses_random_numbers():
@@ -242,6 +239,8 @@ class AbstractParallelOptimizerWorker(Worker):
             str: The kernel source for this optimization routine.
         """
         cl_objective_function = self._model.get_objective_function('calculateObjective')
+        cl_final_param_transform = self._model.get_final_parameter_transformations('applyFinalParamTransforms')
+
         nmr_params = self._nmr_params
         param_code_gen = ParameterCLCodeGenerator(self._cl_environment.device,
                                                   self._var_data_dict,
@@ -264,6 +263,9 @@ class AbstractParallelOptimizerWorker(Worker):
             param_codec = self._model.get_parameter_codec()
             decode_func = param_codec.get_cl_decode_function('decodeParameters')
             kernel_source += decode_func + "\n"
+
+        if cl_final_param_transform:
+            kernel_source += cl_final_param_transform
 
         kernel_source += cl_objective_function
         kernel_source += self._get_optimizer_cl_code()
@@ -291,6 +293,7 @@ class AbstractParallelOptimizerWorker(Worker):
                     return_codes[gid] = ''' + self._get_optimizer_call_name() + '''(''' + optimizer_call_args + ''');
 
                     ''' + ('decodeParameters(x);' if self._use_param_codec else '') + '''
+                    ''' + ('applyFinalParamTransforms(&data, x);' if cl_final_param_transform else '') + '''
 
                     for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
                         params[gid * ''' + str(nmr_params) + ''' + i] = x[i];

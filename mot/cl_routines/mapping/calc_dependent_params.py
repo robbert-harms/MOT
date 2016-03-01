@@ -22,7 +22,8 @@ class CalculateDependentParameters(AbstractCLRoutine):
         calculate these maps.
 
         Args:
-            double_precision (boolean): if we will use the double (True) or single floating (False) type for the calculations
+            double_precision (boolean): if we will use the double (True) or single floating (False) type
+                for the calculations
         """
         super(CalculateDependentParameters, self).__init__(cl_environments, load_balancer)
         self._double_precision = double_precision
@@ -93,7 +94,7 @@ class _CDPWorker(Worker):
             hostbuf=self._estimated_parameters[ep_start:ep_end])
 
         results_buffer = cl.Buffer(self._cl_run_context.context, write_only_flags,
-                                hostbuf=self._results_list[range_start:range_end, :])
+                                   hostbuf=self._results_list[range_start:range_end, :])
 
         data_buffers = [estimated_parameters_buf, results_buffer]
         for data in self._var_data_dict.values():
