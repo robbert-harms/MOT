@@ -68,9 +68,13 @@ class _LogLikelihoodCalculatorWorker(Worker):
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
 
-        all_buffers = self._create_buffers(range_start, range_end)
+        all_buffers, likelihoods_buffer = self._create_buffers(range_start, range_end)
 
-        return self._kernel.run_kernel(self._cl_run_context.queue, (int(nmr_problems), ), None, *all_buffers)
+        self._kernel.run_kernel(self._cl_run_context.queue, (int(nmr_problems), ), None, *all_buffers)
+        event = cl.enqueue_copy(self._cl_run_context.queue, self._log_likelihoods[range_start:range_end],
+                                likelihoods_buffer, is_blocking=False)
+
+        return event
 
     def _create_buffers(self, range_start, range_end):
         likelihoods_buffer = cl.Buffer(self._cl_run_context.context,
@@ -88,7 +92,7 @@ class _LogLikelihoodCalculatorWorker(Worker):
                                          hostbuf=data.get_opencl_data()[range_start:range_end, ...]))
 
         all_buffers.extend(self._constant_buffers)
-        return all_buffers
+        return all_buffers, likelihoods_buffer
 
     def _get_kernel_source(self):
         cl_func = self._model.get_log_likelihood_function('getLogLikelihood', evaluation_model=self._evaluation_model)

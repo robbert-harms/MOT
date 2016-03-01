@@ -132,8 +132,10 @@ class _GenerateRandomWorker(Worker):
         global_range = (int(nmr_problems), )
         local_range = None
 
-        return self._kernel.sample(self._cl_run_context.queue, global_range, local_range,
-                                   ranluxcltab_buffer, samples_buf)
+        self._kernel.sample(self._cl_run_context.queue, global_range, local_range, ranluxcltab_buffer, samples_buf)
+        event = cl.enqueue_copy(self._cl_run_context.queue, self._samples[range_start:range_end], samples_buf,
+                                is_blocking=False)
+        return event
 
     def _get_kernel_source(self):
         return self._kernel_source
