@@ -111,10 +111,10 @@ class _CodecWorker(Worker):
         kernel_source += get_float_type_def(self._double_precision)
         kernel_source += self._cl_func
         kernel_source += '''
-            __kernel void transformParameterSpace(global MOT_FLOAT_TYPE* x_global){
+            __kernel void transformParameterSpace(global mot_float_type* x_global){
                 int gid = get_global_id(0);
 
-                MOT_FLOAT_TYPE x[''' + str(self._nmr_params) + '''];
+                mot_float_type x[''' + str(self._nmr_params) + '''];
 
                 for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                     x[i] = x_global[gid * ''' + str(self._nmr_params) + ''' + i];

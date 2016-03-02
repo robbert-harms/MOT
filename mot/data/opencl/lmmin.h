@@ -9,6 +9,6 @@
  * Email = robbert.harms@maastrichtuniversity.nl
  */
 
-int lmmin(MOT_FLOAT_TYPE * const x, const void* const data);
+int lmmin(mot_float_type * const x, const void* const data);
 
 #endif // LMMIN_H

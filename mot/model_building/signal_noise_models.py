@@ -27,12 +27,12 @@ class SignalNoiseModel(ModelFunction):
 
         Returns:
             A function with signature:
-                MOT_FLOAT_TYPE fname(const MOT_FLOAT_TYPE signal, <noise model parameters ...>);
+                mot_float_type fname(const mot_float_type signal, <noise model parameters ...>);
 
             For example, if the noise model has only one parameter 'sigma' the function should look like:
-                MOT_FLOAT_TYPE fname(const MOT_FLOAT_TYPE signal, const MOT_FLOAT_TYPE sigma);
+                mot_float_type fname(const mot_float_type signal, const mot_float_type sigma);
 
-            The CL function should return a single MOT_FLOAT_TYPE that represents the signal with the signal noise
+            The CL function should return a single mot_float_type that represents the signal with the signal noise
                 added to it.
         """
 
@@ -44,12 +44,12 @@ class JohnsonSignalNoise(SignalNoiseModel):
         super(JohnsonSignalNoise, self).__init__(
             'JohnsonNoise',
             'johnsonNoiseModel',
-            (FreeParameter(CLDataType.from_string('MOT_FLOAT_TYPE'), 'eta', False, 0.1, 0, 1e6,
+            (FreeParameter(CLDataType.from_string('mot_float_type'), 'eta', False, 0.1, 0, 1e6,
                            parameter_transform=CosSqrClampTransform()),), ())
 
     def get_signal_function(self, fname='signalNoiseModel'):
         return '''
-            MOT_FLOAT_TYPE ''' + fname + '''(const MOT_FLOAT_TYPE signal, const MOT_FLOAT_TYPE eta){
+            mot_float_type ''' + fname + '''(const mot_float_type signal, const mot_float_type eta){
                 return sqrt((signal * signal) + (eta * eta));
             }
         '''

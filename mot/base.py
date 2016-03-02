@@ -34,7 +34,7 @@ class CLDataType(DataType):
                  address_space_qualifier=None, pre_data_type_type_qualifiers=None, post_data_type_type_qualifier=None):
         """Create a new CL data type container.
 
-        The CL type can either be a CL native type (half, double, int, ...) or the special MOT_FLOAT_TYPE type.
+        The CL type can either be a CL native type (half, double, int, ...) or the special mot_float_type type.
 
         Args:
             raw_data_type (str): the specific data type without the vector number and asterisks

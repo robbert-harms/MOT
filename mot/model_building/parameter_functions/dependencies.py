@@ -96,7 +96,7 @@ class WeightSumToOneRule(AbstractParameterDependency):
             for p in parameter_names:
                 divisors += p + ' /= _weight_sum;' + "\n" + "\t" * 5
             self._pre_transform_code += '''
-                MOT_FLOAT_TYPE _weight_sum = ''' + ' + '.join(parameter_names) + ''';
+                mot_float_type _weight_sum = ''' + ' + '.join(parameter_names) + ''';
                 if(_weight_sum < 1.0){
                     _weight_sum = 1 - _weight_sum;
                 }

@@ -98,7 +98,7 @@ class _FPTWorker(Worker):
         param_code_gen = ParameterCLCodeGenerator(self._cl_environment.device,
                                                   self._var_data_dict, self._protocol_data_dict, self._model_data_dict)
 
-        kernel_param_names = ['global MOT_FLOAT_TYPE* params']
+        kernel_param_names = ['global mot_float_type* params']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
         kernel_source = ''
@@ -112,7 +112,7 @@ class _FPTWorker(Worker):
                     int gid = get_global_id(0);
                     ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
 
-                    MOT_FLOAT_TYPE x[''' + str(self._nmr_params) + '''];
+                    mot_float_type x[''' + str(self._nmr_params) + '''];
                     for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                         x[i] = params[gid * ''' + str(self._nmr_params) + ''' + i];
                     }

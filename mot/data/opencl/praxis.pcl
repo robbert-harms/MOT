@@ -95,15 +95,15 @@ typedef enum {
 
 
 struct global_s {
-    MOT_FLOAT_TYPE fx, ldt, dmin__;
+    mot_float_type fx, ldt, dmin__;
     int nf, nl;
 };
 
 struct q_s {
-    MOT_FLOAT_TYPE *v; /* size n x n */
-    MOT_FLOAT_TYPE *q0, *q1, *t_flin; /* size n */
-    MOT_FLOAT_TYPE qa, qb, qc, qd0, qd1, qf1;
-    MOT_FLOAT_TYPE fbest, *xbest; /* size n */
+    mot_float_type *v; /* size n x n */
+    mot_float_type *q0, *q1, *t_flin; /* size n */
+    mot_float_type qa, qb, qc, qd0, qd1, qf1;
+    mot_float_type fbest, *xbest; /* size n */
 };
 
 /* Table of constant values */
@@ -123,14 +123,14 @@ int pow_ii(int x, int n){
     return p;
 }
 
-return_code praxis_(int n, MOT_FLOAT_TYPE *x, const void * const data, MOT_FLOAT_TYPE *minf, void* rand_settings);
+return_code praxis_(int n, mot_float_type *x, const void * const data, mot_float_type *minf, void* rand_settings);
 
-int praxis(MOT_FLOAT_TYPE* model_parameters, const void* const data, void* rand_settings){
-    MOT_FLOAT_TYPE minf = 0;
+int praxis(mot_float_type* model_parameters, const void* const data, void* rand_settings){
+    mot_float_type minf = 0;
     praxis_(%(NMR_PARAMS)r, model_parameters, data, &minf, rand_settings);
 }
 
-int relstop(MOT_FLOAT_TYPE vold, MOT_FLOAT_TYPE vnew){
+int relstop(mot_float_type vold, mot_float_type vnew){
      if (isinf(vold)){
         return 0;
      }
@@ -139,11 +139,11 @@ int relstop(MOT_FLOAT_TYPE vold, MOT_FLOAT_TYPE vnew){
 	    || (0 > 0 && vnew == vold)); /* catch vnew == vold == 0 */
 }
 
-int stopping_test_f(MOT_FLOAT_TYPE f, MOT_FLOAT_TYPE oldf){
+int stopping_test_f(mot_float_type f, mot_float_type oldf){
      return (f <= 0 || relstop(f, oldf));
 }
 
-int stopping_test_x(const MOT_FLOAT_TYPE *x, const MOT_FLOAT_TYPE *oldx){
+int stopping_test_x(const mot_float_type *x, const mot_float_type *oldx){
      for(int i = 0; i < %(NMR_PARAMS)r; ++i){
         if (!relstop(oldx[i], x[i])){
             return 0;
@@ -152,13 +152,13 @@ int stopping_test_x(const MOT_FLOAT_TYPE *x, const MOT_FLOAT_TYPE *oldx){
      return 1;
 }
 
-void minfit_(int m, int n, MOT_FLOAT_TYPE tol, MOT_FLOAT_TYPE *ab, MOT_FLOAT_TYPE *q, MOT_FLOAT_TYPE *ework);
-return_code min_(int n, int j, int nits, MOT_FLOAT_TYPE *d2, MOT_FLOAT_TYPE *x1, MOT_FLOAT_TYPE *f1, int fk, const void * const data, MOT_FLOAT_TYPE *x, MOT_FLOAT_TYPE *t_old, MOT_FLOAT_TYPE *h__, struct global_s *global_1, struct q_s *q_1);
-MOT_FLOAT_TYPE flin_(int n, int j, MOT_FLOAT_TYPE *l, const void * const data, MOT_FLOAT_TYPE *x, int *nf, struct q_s *q_1, return_code *ret);
-void sort_(int m, int n, MOT_FLOAT_TYPE *d__, MOT_FLOAT_TYPE *v);
-void quad_(int n, const void * const data, MOT_FLOAT_TYPE *x, MOT_FLOAT_TYPE *t_old, MOT_FLOAT_TYPE *h__, struct global_s *global_1, struct q_s *q_1);
+void minfit_(int m, int n, mot_float_type tol, mot_float_type *ab, mot_float_type *q, mot_float_type *ework);
+return_code min_(int n, int j, int nits, mot_float_type *d2, mot_float_type *x1, mot_float_type *f1, int fk, const void * const data, mot_float_type *x, mot_float_type *t_old, mot_float_type *h__, struct global_s *global_1, struct q_s *q_1);
+mot_float_type flin_(int n, int j, mot_float_type *l, const void * const data, mot_float_type *x, int *nf, struct q_s *q_1, return_code *ret);
+void sort_(int m, int n, mot_float_type *d__, mot_float_type *v);
+void quad_(int n, const void * const data, mot_float_type *x, mot_float_type *t_old, mot_float_type *h__, struct global_s *global_1, struct q_s *q_1);
 
-return_code praxis_(int n, MOT_FLOAT_TYPE *x, const void * const data, MOT_FLOAT_TYPE *minf, void* rand_settings)
+return_code praxis_(int n, mot_float_type *x, const void * const data, mot_float_type *minf, void* rand_settings)
 {
     return_code ret = RETURN_CODE_SUCCESS;
 
@@ -167,17 +167,17 @@ return_code praxis_(int n, MOT_FLOAT_TYPE *x, const void * const data, MOT_FLOAT
     struct q_s q_1;
 
     /* Local variables */
-    MOT_FLOAT_TYPE *d__, *y, *z__, *e_minfit, *prev_xbest; /* size n */
-    MOT_FLOAT_TYPE prev_fbest;
-    MOT_FLOAT_TYPE h__;
+    mot_float_type *d__, *y, *z__, *e_minfit, *prev_xbest; /* size n */
+    mot_float_type prev_fbest;
+    mot_float_type h__;
     int i__, j, k, kl, ii, kt, illc;
-    MOT_FLOAT_TYPE s, t_old, f1;
-    MOT_FLOAT_TYPE t2_old, df, dn;
-    MOT_FLOAT_TYPE sf;
-    MOT_FLOAT_TYPE sl;
-    MOT_FLOAT_TYPE dni, lds;
-    MOT_FLOAT_TYPE ldfac, value;
-    MOT_FLOAT_TYPE work[(%(NMR_PARAMS)r * %(NMR_PARAMS)r + %(NMR_PARAMS)r * 9)];
+    mot_float_type s, t_old, f1;
+    mot_float_type t2_old, df, dn;
+    mot_float_type sf;
+    mot_float_type sl;
+    mot_float_type dni, lds;
+    mot_float_type ldfac, value;
+    mot_float_type work[(%(NMR_PARAMS)r * %(NMR_PARAMS)r + %(NMR_PARAMS)r * 9)];
 
     --x;
 
@@ -578,13 +578,13 @@ return_code praxis_(int n, MOT_FLOAT_TYPE *x, const void * const data, MOT_FLOAT
 /*   overwritten with the orthogonal matrix v such that u.diag(q) = ab.v, */
 /*   where u is another orthogonal matrix. */
 /* ...householder's reduction to bidiagonal form... */
-void minfit_(const int m, const int n, MOT_FLOAT_TYPE tol, MOT_FLOAT_TYPE *ab, MOT_FLOAT_TYPE *q, MOT_FLOAT_TYPE *ework){
+void minfit_(const int m, const int n, mot_float_type tol, mot_float_type *ab, mot_float_type *q, mot_float_type *ework){
 
-    MOT_FLOAT_TYPE *e; /* size n */
-    MOT_FLOAT_TYPE c__, f, g, h__;
+    mot_float_type *e; /* size n */
+    mot_float_type c__, f, g, h__;
     int i__, j, k, l, ii, kk, kt;
-    MOT_FLOAT_TYPE s, x, y, z__;
-    MOT_FLOAT_TYPE eps, temp;
+    mot_float_type s, x, y, z__;
+    mot_float_type eps, temp;
 
     e = ework;
 
@@ -892,24 +892,24 @@ void minfit_(const int m, const int n, MOT_FLOAT_TYPE tol, MOT_FLOAT_TYPE *ab, M
 /*   on entry unless final fx is greater than f1. */
 /*   nits controls the number of times an attempt will be made to halve */
 /*   the interval. */
-return_code min_(const int n, const int j, int nits, MOT_FLOAT_TYPE * d2,
-                         MOT_FLOAT_TYPE *x1, MOT_FLOAT_TYPE *f1, int fk, const void * const data, MOT_FLOAT_TYPE * x,
-                         MOT_FLOAT_TYPE *t_old, MOT_FLOAT_TYPE *h__, struct global_s *global_1, struct q_s *q_1){
+return_code min_(const int n, const int j, int nits, mot_float_type * d2,
+                         mot_float_type *x1, mot_float_type *f1, int fk, const void * const data, mot_float_type * x,
+                         mot_float_type *t_old, mot_float_type *h__, struct global_s *global_1, struct q_s *q_1){
     int i__, k;
-    MOT_FLOAT_TYPE f0, x2, fm;
+    mot_float_type f0, x2, fm;
     int dz;
-    MOT_FLOAT_TYPE xm, sf1, sx1;
-    MOT_FLOAT_TYPE temp;
+    mot_float_type xm, sf1, sx1;
+    mot_float_type temp;
     return_code ret = RETURN_CODE_SUCCESS;
 
 	/* this variable is first used as 's' for the step size determination.
 	 * next, it is used as d1 to hold the value of the first derivative.
 	 * this is purely to save a double/float */
-    MOT_FLOAT_TYPE s_and_d1;
+    mot_float_type s_and_d1;
 
     /* this variable is first used as 't2', second as f2.
      * this is purely to save a double/float */
-    MOT_FLOAT_TYPE t2_and_f2;
+    mot_float_type t2_and_f2;
 
     --x;
 
@@ -1084,11 +1084,11 @@ return_code min_(const int n, const int j, int nits, MOT_FLOAT_TYPE * d2,
 } /* min_ */
 
 /* ...flin is the function of one real variable l that is minimized by the subroutine min... */
-MOT_FLOAT_TYPE flin_(const int n, const int j, MOT_FLOAT_TYPE *l, const void * const data, MOT_FLOAT_TYPE *x, int *nf, struct q_s *q_1, return_code *ret){
+mot_float_type flin_(const int n, const int j, mot_float_type *l, const void * const data, mot_float_type *x, int *nf, struct q_s *q_1, return_code *ret){
 
-    MOT_FLOAT_TYPE ret_val;
+    mot_float_type ret_val;
     int i__;
-    MOT_FLOAT_TYPE *t; /* size n */
+    mot_float_type *t; /* size n */
 
     t = q_1->t_flin;
     --x;
@@ -1131,11 +1131,11 @@ MOT_FLOAT_TYPE flin_(const int n, const int j, MOT_FLOAT_TYPE *l, const void * c
 	corresponding columns of v(n,n).
     m is the row dimension of v as declared in the calling program.
  */
-void sort_(const int m, const int n, MOT_FLOAT_TYPE *d__, MOT_FLOAT_TYPE *v){
+void sort_(const int m, const int n, mot_float_type *d__, mot_float_type *v){
 
     /* Local variables */
     int i__, j, k;
-    MOT_FLOAT_TYPE s;
+    mot_float_type s;
 
     /* parameter adjustments */
     v -= 1 + m;
@@ -1170,11 +1170,11 @@ void sort_(const int m, const int n, MOT_FLOAT_TYPE *d__, MOT_FLOAT_TYPE *v){
 } /* sort_ */
 
 /* ...quad looks for the minimum of f along a curve defined by q0,q1,x... */
-void quad_(const int n, const void * const data, MOT_FLOAT_TYPE *x, MOT_FLOAT_TYPE *t_old, MOT_FLOAT_TYPE *h__, struct global_s *global_1, struct q_s *q_1){
+void quad_(const int n, const void * const data, mot_float_type *x, mot_float_type *t_old, mot_float_type *h__, struct global_s *global_1, struct q_s *q_1){
 
     /* Local variables */
     int i__;
-    MOT_FLOAT_TYPE l, s;
+    mot_float_type l, s;
 
     /* Parameter adjustments */
     --x;

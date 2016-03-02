@@ -135,7 +135,7 @@ class CLDataTypeParser(Parser):
 
     @graken()
     def _vector_data_type_(self):
-        self._pattern(r'(char|uchar|short|ushort|int|uint|long|ulong|float|double|half|MOT_FLOAT_TYPE)\d+')
+        self._pattern(r'(char|uchar|short|ushort|int|uint|long|ulong|float|double|half|mot_float_type)\d+')
 
     @graken()
     def _user_data_type_(self):

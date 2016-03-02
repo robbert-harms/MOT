@@ -98,12 +98,12 @@ class ClampTransform(AbstractTransformation):
     """The clamp transformation limits the parameter between its lower and upper bound using the clamp function."""
 
     def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):
-        return 'clamp((MOT_FLOAT_TYPE)' + parameter_name + ', (MOT_FLOAT_TYPE)' + str(parameter.lower_bound) + \
-               ', (MOT_FLOAT_TYPE)' + str(parameter.upper_bound) + ');'
+        return 'clamp((mot_float_type)' + parameter_name + ', (mot_float_type)' + str(parameter.lower_bound) + \
+               ', (mot_float_type)' + str(parameter.upper_bound) + ');'
 
     def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
-        return 'clamp((MOT_FLOAT_TYPE)' + parameter_name + ', (MOT_FLOAT_TYPE)' + str(parameter.lower_bound) + \
-               ', (MOT_FLOAT_TYPE)' + str(parameter.upper_bound) + ');'
+        return 'clamp((mot_float_type)' + parameter_name + ', (mot_float_type)' + str(parameter.lower_bound) + \
+               ', (mot_float_type)' + str(parameter.upper_bound) + ');'
 
 
 class CosSqrClampTransform(AbstractTransformation):
@@ -141,8 +141,8 @@ class SqrClampTransform(AbstractTransformation):
         return 'sqrt(' + parameter_name + ');'
 
     def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
-        return 'clamp((MOT_FLOAT_TYPE)(' + parameter_name + ' * ' + parameter_name + '), (MOT_FLOAT_TYPE)' + \
-               str(parameter.lower_bound) + ', (MOT_FLOAT_TYPE)' + str(parameter.upper_bound) + ');'
+        return 'clamp((mot_float_type)(' + parameter_name + ' * ' + parameter_name + '), (mot_float_type)' + \
+               str(parameter.lower_bound) + ', (mot_float_type)' + str(parameter.upper_bound) + ');'
 
 
 class SinSqrClampDependentTransform(AbstractTransformation):
@@ -169,10 +169,10 @@ class AbsModXTransform(AbstractTransformation):
             self._x = x
 
     def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):
-        return 'fmod((MOT_FLOAT_TYPE)fabs(' + parameter_name + '), (MOT_FLOAT_TYPE)' + self._x + ');'
+        return 'fmod((mot_float_type)fabs(' + parameter_name + '), (mot_float_type)' + self._x + ');'
 
     def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
-        return 'fmod((MOT_FLOAT_TYPE)fabs(' + parameter_name + '), (MOT_FLOAT_TYPE)' + self._x + ');'
+        return 'fmod((mot_float_type)fabs(' + parameter_name + '), (mot_float_type)' + self._x + ');'
 
 
 class CosSqrTransform(SimpleTransformation):

@@ -251,7 +251,7 @@ class AbstractParallelOptimizerWorker(Worker):
                                                   self._protocol_data_dict,
                                                   self._model_data_dict)
 
-        kernel_param_names = ['global MOT_FLOAT_TYPE* params', 'global int* return_codes']
+        kernel_param_names = ['global mot_float_type* params', 'global int* return_codes']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
         if self._uses_random_numbers():
@@ -288,7 +288,7 @@ class AbstractParallelOptimizerWorker(Worker):
             optimizer_call_args += ', (void*) &ranluxclstate'
 
         kernel_source += '''
-                    MOT_FLOAT_TYPE x[''' + str(nmr_params) + '''];
+                    mot_float_type x[''' + str(nmr_params) + '''];
                     for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
                         x[i] = params[gid * ''' + str(nmr_params) + ''' + i];
                     }
@@ -327,8 +327,8 @@ class AbstractParallelOptimizerWorker(Worker):
         kernel_source = ''
         if self._use_param_codec:
             kernel_source += '''
-                MOT_FLOAT_TYPE evaluate(MOT_FLOAT_TYPE* x, const void* data){
-                    MOT_FLOAT_TYPE x_model[''' + str(self._nmr_params) + '''];
+                mot_float_type evaluate(mot_float_type* x, const void* data){
+                    mot_float_type x_model[''' + str(self._nmr_params) + '''];
                     for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                         x_model[i] = x[i];
                     }
@@ -338,7 +338,7 @@ class AbstractParallelOptimizerWorker(Worker):
             '''
         else:
             kernel_source += '''
-                MOT_FLOAT_TYPE evaluate(MOT_FLOAT_TYPE* x, const void* data){
+                mot_float_type evaluate(mot_float_type* x, const void* data){
                     return calculateObjective((optimize_data*)data, x);
                 }
             '''

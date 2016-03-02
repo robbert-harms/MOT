@@ -52,9 +52,9 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
         kernel_source += cl_eval_func
 
         kernel_source += '''
-            void evaluate(const void* data, MOT_FLOAT_TYPE* x, MOT_FLOAT_TYPE* result){
+            void evaluate(const void* data, mot_float_type* x, mot_float_type* result){
                 int i;
-                MOT_FLOAT_TYPE x_model[''' + str(nmr_params) + '''];
+                mot_float_type x_model[''' + str(nmr_params) + '''];
                 for(i = 0; i < ''' + str(nmr_params) + '''; i++){
                     x_model[i] = x[i];
                 }

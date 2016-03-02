@@ -22,9 +22,9 @@ class _MeanFilterWorker(AbstractFilterWorker):
         kernel_source += self._get_ks_sub2ind_func(self._volume_shape)
         kernel_source += '''
             __kernel void filter(
-                global MOT_FLOAT_TYPE* volume,
+                global mot_float_type* volume,
                 ''' + ('global char* mask,' if self._use_mask else '') + '''
-                global MOT_FLOAT_TYPE* results
+                global mot_float_type* results
                 ){
                     ''' + self._get_ks_dimension_inits(len(self._volume_shape)) + '''
                     int ind = ''' + self._get_ks_sub2ind_func_call(len(self._volume_shape)) + ''';
@@ -32,7 +32,7 @@ class _MeanFilterWorker(AbstractFilterWorker):
                     ''' + ('if(mask[ind] > 0){' if self._use_mask else 'if(true){') + '''
                         ''' + self._get_ks_dimension_sizes(self._volume_shape) + '''
 
-                        MOT_FLOAT_TYPE sum = 0.0;
+                        mot_float_type sum = 0.0;
                         int count = 0;
 
                         ''' + self._get_ks_loop(self._volume_shape) + '''

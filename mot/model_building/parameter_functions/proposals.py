@@ -88,7 +88,7 @@ class ProposalParameter(object):
 
         Returns:
             A function with the signature:
-                MOT_FLOAT_TYPE <func_name>(const MOT_FLOAT_TYPE current_value,
+                mot_float_type <func_name>(const mot_float_type current_value,
                                            const uint acceptance_counter,
                                            const uint jump_counter)
 
@@ -99,14 +99,14 @@ class ProposalParameter(object):
             #ifndef PROPOSAL_DEFAULT_PARAMETER_UPDATE
             #define PROPOSAL_DEFAULT_PARAMETER_UPDATE
 
-            MOT_FLOAT_TYPE proposal_default_parameter_update(const MOT_FLOAT_TYPE current_value,
+            mot_float_type proposal_default_parameter_update(const mot_float_type current_value,
                                                              const uint acceptance_counter,
                                                              const uint jump_counter){
                 return min(current_value *
-                            sqrt( (MOT_FLOAT_TYPE)(acceptance_counter+1) /
+                            sqrt( (mot_float_type)(acceptance_counter+1) /
                                   ((jump_counter - acceptance_counter) + 1)
                             ),
-                           (MOT_FLOAT_TYPE)1e10);
+                           (mot_float_type)1e10);
             }
 
             #endif //PROPOSAL_DEFAULT_PARAMETER_UPDATE
@@ -138,10 +138,10 @@ class GaussianProposal(AbstractParameterProposal):
             #ifndef PROP_GAUSSIANPROPOSAL_CL
             #define PROP_GAUSSIANPROPOSAL_CL
 
-            MOT_FLOAT_TYPE proposal_gaussianProposal(MOT_FLOAT_TYPE current,
+            mot_float_type proposal_gaussianProposal(mot_float_type current,
                                                      ranluxcl_state_t* const ranluxclstate,
-                                                     MOT_FLOAT_TYPE std){
-                return fma(std, (MOT_FLOAT_TYPE)ranluxcl_gaussian(ranluxclstate), current);
+                                                     mot_float_type std){
+                return fma(std, (mot_float_type)ranluxcl_gaussian(ranluxclstate), current);
             }
 
             #endif //PROP_GAUSSIANPROPOSAL_CL
@@ -155,9 +155,9 @@ class GaussianProposal(AbstractParameterProposal):
             #ifndef PROP_GAUSSIANPROPOSALLOGPDF_CL
             #define PROP_GAUSSIANPROPOSALLOGPDF_CL
 
-            MOT_FLOAT_TYPE proposal_gaussianProposalLogPDF(MOT_FLOAT_TYPE x,
-                                                           MOT_FLOAT_TYPE mu,
-                                                           MOT_FLOAT_TYPE std){
+            mot_float_type proposal_gaussianProposalLogPDF(mot_float_type x,
+                                                           mot_float_type mu,
+                                                           mot_float_type std){
                 return log(std * sqrt(2 * M_PI)) - (((x - mu) * (x - mu)) / (2 * std * std));
             }
 

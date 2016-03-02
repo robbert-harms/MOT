@@ -9,6 +9,6 @@
  * Email = robbert.harms@maastrichtuniversity.nl
  */
 
-int praxis(MOT_FLOAT_TYPE* model_parameters, const void* const data, void* rand_settings);
+int praxis(mot_float_type* model_parameters, const void* const data, void* rand_settings);
 
 #endif // PRAXIS_H

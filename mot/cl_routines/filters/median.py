@@ -22,9 +22,9 @@ class _MedianFilterWorker(AbstractFilterWorker):
         kernel_source += self._get_ks_sub2ind_func(self._volume_shape)
         kernel_source += '''
             __kernel void filter(
-                global MOT_FLOAT_TYPE* volume,
+                global mot_float_type* volume,
                 ''' + ('global char* mask,' if self._use_mask else '') + '''
-                global MOT_FLOAT_TYPE* results
+                global mot_float_type* results
                 ){
 
                     ''' + self._get_ks_dimension_inits(len(self._volume_shape)) + '''
@@ -34,17 +34,17 @@ class _MedianFilterWorker(AbstractFilterWorker):
 
                         ''' + self._get_ks_dimension_sizes(self._volume_shape) + '''
 
-                        MOT_FLOAT_TYPE guess;
-                        MOT_FLOAT_TYPE maxltguess;
-                        MOT_FLOAT_TYPE mingtguess;
-                        MOT_FLOAT_TYPE less;
-                        MOT_FLOAT_TYPE greater;
-                        MOT_FLOAT_TYPE equal;
-                        MOT_FLOAT_TYPE minv = volume[ind];
-                        MOT_FLOAT_TYPE maxv = volume[ind];
+                        mot_float_type guess;
+                        mot_float_type maxltguess;
+                        mot_float_type mingtguess;
+                        mot_float_type less;
+                        mot_float_type greater;
+                        mot_float_type equal;
+                        mot_float_type minv = volume[ind];
+                        mot_float_type maxv = volume[ind];
                         int number_of_items = 0;
 
-                        MOT_FLOAT_TYPE tmp_val = 0.0;
+                        mot_float_type tmp_val = 0.0;
 
                         ''' + self._loop_encapsulate('''
                             tmp_val = volume[''' +

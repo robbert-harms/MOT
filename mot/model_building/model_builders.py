@@ -307,7 +307,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             if self.problems_to_analyze is not None:
                 observations = observations[self.problems_to_analyze, ...]
 
-            data_adapter = SimpleDataAdapter(observations, CLDataType.from_string('MOT_FLOAT_TYPE*'),
+            data_adapter = SimpleDataAdapter(observations, CLDataType.from_string('mot_float_type*'),
                                              self._get_mot_float_type())
             var_data_dict.update({'observations': data_adapter})
 
@@ -370,7 +370,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         starting_points = np.concatenate([np.transpose(np.array([s]))
                                           if len(s.shape) < 2 else s for s in starting_points], axis=1)
 
-        data_adapter = SimpleDataAdapter(starting_points, CLDataType.from_string('MOT_FLOAT_TYPE'),
+        data_adapter = SimpleDataAdapter(starting_points, CLDataType.from_string('mot_float_type'),
                                          self._get_mot_float_type())
         return data_adapter.get_opencl_data()
 
@@ -436,7 +436,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         Returns:
             str: A function of the kind:
-                void finalParameterTransformations(const optimize_data* data, MOT_FLOAT_TYPE* x)
+                void finalParameterTransformations(const optimize_data* data, mot_float_type* x)
                 Which is called for every voxel and must in place edit the x variable.
         """
         transform_needed = any(dp.has_side_effects or not dp.fixed for dp in
@@ -455,7 +455,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         param_listing = self._get_parameters_listing(exclude_list=param_exclude_list)
 
-        func = "\n\t\t\t" + 'void ' + func_name + '(const optimize_data* const data, MOT_FLOAT_TYPE* const x){' + "\n"
+        func = "\n\t\t\t" + 'void ' + func_name + '(const optimize_data* const data, mot_float_type* const x){' + "\n"
         func += param_listing + "\n"
 
         for i, (m, p) in enumerate(self._get_parameter_type_lists()['estimable']):
@@ -466,7 +466,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
     def get_observation_return_function(self, func_name='getObservation'):
         func = '''
-            MOT_FLOAT_TYPE ''' + func_name + '''(const optimize_data* const data, const int observation_index){
+            mot_float_type ''' + func_name + '''(const optimize_data* const data, const int observation_index){
                 return data->var_data_observations[observation_index];
             }
         '''
@@ -481,8 +481,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             func += pre_model_function
 
         func += '''
-            MOT_FLOAT_TYPE ''' + func_name + \
-                '(const optimize_data* const data, const MOT_FLOAT_TYPE* const x, const int observation_index){' + "\n"
+            mot_float_type ''' + func_name + \
+                '(const optimize_data* const data, const mot_float_type* const x, const int observation_index){' + "\n"
 
         func += self._get_parameters_listing(exclude_list=[m.name + '_' + p.name for (m, p) in
                                                            self._get_non_model_tree_param_listing()])
@@ -1121,7 +1121,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         return value.item(0)
 
     def _get_mot_float_type(self):
-        """Get the data type for the MOT_FLOAT_TYPE"""
+        """Get the data type for the mot_float_type"""
         if self.double_precision:
             return CLDataType.from_string('double')
         return CLDataType.from_string('float')
@@ -1134,8 +1134,8 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
                                                  problem_data)
 
     def get_log_prior_function(self, func_name='getLogPrior'):
-        prior = 'MOT_FLOAT_TYPE ' + func_name + '(const MOT_FLOAT_TYPE* const x){' + "\n"
-        prior += "\t" + 'MOT_FLOAT_TYPE prior = 1.0;' + "\n"
+        prior = 'mot_float_type ' + func_name + '(const mot_float_type* const x){' + "\n"
+        prior += "\t" + 'mot_float_type prior = 1.0;' + "\n"
         for i, (m, p) in enumerate(self._get_estimable_parameters_list()):
             prior += "\t" + 'prior *= ' + p.sampling_prior.get_cl_assignment(p, 'x[' + str(i) + ']') + "\n"
         prior += "\n" + "\t" + 'return log(prior);' + "\n" + '}'
@@ -1157,9 +1157,9 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         for _, p in self._get_estimable_parameters_list():
             return_str += p.sampling_proposal.get_proposal_logpdf_function()
 
-        return_str += "\n" + 'MOT_FLOAT_TYPE ' + func_name + \
-            '(const int i, const MOT_FLOAT_TYPE proposal, const MOT_FLOAT_TYPE current, ' \
-            ' MOT_FLOAT_TYPE* const proposal_parameters){' + "\n\t"
+        return_str += "\n" + 'mot_float_type ' + func_name + \
+            '(const int i, const mot_float_type proposal, const mot_float_type current, ' \
+            ' mot_float_type* const proposal_parameters){' + "\n\t"
 
         return_str += "\n\t" + 'switch(i){' + "\n\t\t"
 
@@ -1189,9 +1189,9 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         for _, p in self._get_estimable_parameters_list():
             return_str += p.sampling_proposal.get_proposal_function()
 
-        return_str += "\n" + 'MOT_FLOAT_TYPE ' + func_name + \
-            '(const int i, const MOT_FLOAT_TYPE current, ranluxcl_state_t* const ranluxclstate, ' \
-            ' MOT_FLOAT_TYPE* const proposal_parameters){'
+        return_str += "\n" + 'mot_float_type ' + func_name + \
+            '(const int i, const mot_float_type current, ranluxcl_state_t* const ranluxclstate, ' \
+            ' mot_float_type* const proposal_parameters){'
 
         return_str += "\n\t" + 'switch(i){' + "\n\t\t"
 
@@ -1224,7 +1224,7 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
                     return_str += param.get_parameter_update_function()
 
         return_str += 'void ' + func_name + '(uint* const ac_between_proposal_updates, ' + \
-            'const uint proposal_update_intervals, MOT_FLOAT_TYPE* const proposal_parameters){' + "\n"
+            'const uint proposal_update_intervals, mot_float_type* const proposal_parameters){' + "\n"
 
         adaptable_parameter_count = 0
         for i, (m, p) in enumerate(self._get_estimable_parameters_list()):

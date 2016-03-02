@@ -48,7 +48,7 @@ class SimpleDataAdapter(DataAdapter):
         Args:
             value (ndarray): The value to adapt to different run environments
             data_type (DataType): the data type we need to convert it to
-            mot_float_type (DataType): the data type of the MOT_FLOAT_TYPE
+            mot_float_type (DataType): the data type of the mot_float_type
         """
         self._data = data
         self._data_type = data_type
@@ -99,7 +99,7 @@ class SimpleDataAdapter(DataAdapter):
             return np.int32
         if raw_type == 'double':
             return np.float64
-        if raw_type == 'MOT_FLOAT_TYPE':
+        if raw_type == 'mot_float_type':
             return self._get_cl_numpy_type(self._mot_float_type)
 
     def _array_to_cl_vector(self):
@@ -138,7 +138,7 @@ class SimpleDataAdapter(DataAdapter):
 
         if self._data_type.raw_data_type == 'double':
             data_type = 'double'
-        elif self._data_type.raw_data_type == 'MOT_FLOAT_TYPE':
+        elif self._data_type.raw_data_type == 'mot_float_type':
             data_type = self._mot_float_type.raw_data_type
         else:
             data_type = 'float'

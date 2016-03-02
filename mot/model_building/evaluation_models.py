@@ -24,14 +24,14 @@ class EvaluationModel(ModelFunction):
             fname (str): the name of the resulting function
             inst_per_problem (int): the number of instances per problem
             eval_fname (str): the name of the function that can be called to get the evaluation, its signature is:
-                MOT_FLOAT_TYPE <fname>(const optimize_data* data, const MOT_FLOAT_TYPE* x, const int observation_index);
+                mot_float_type <fname>(const optimize_data* data, const mot_float_type* x, const int observation_index);
             obs_fname (str): the name of the function that can be called for the observed data, its signature is:
-                MOT_FLOAT_TYPE <fname>(const optimize_data* data, const int observation_index);
+                mot_float_type <fname>(const optimize_data* data, const int observation_index);
             param_listing (str): the parameter listings for the parameters of the noise model
 
         Returns:
             The objective function under this noise model, its signature is:
-                double <fname>(const optimize_data* const data, MOT_FLOAT_TYPE* const x);
+                double <fname>(const optimize_data* const data, mot_float_type* const x);
 
             That is, it always returns a double since the summations may get large.
         """
@@ -44,16 +44,16 @@ class EvaluationModel(ModelFunction):
             fname (str): the name of the resulting function
             inst_per_problem (int): the number of instances per problem
             eval_fname (str): the name of the function that can be called to get the evaluation, its signature is:
-                MOT_FLOAT_TYPE <fname>(const optimize_data* data, const MOT_FLOAT_TYPE* x, const int observation_index);
+                mot_float_type <fname>(const optimize_data* data, const mot_float_type* x, const int observation_index);
             obs_fname (str): the name of the function that can be called for the observed data, its signature is:
-                MOT_FLOAT_TYPE <fname>(const optimize_data* data, const int observation_index);
+                mot_float_type <fname>(const optimize_data* data, const int observation_index);
             param_listing (str): the parameter listings for the parameters of the noise model
             full_likelihood (boolean): if we want the complete likelihood, or if we can drop the constant terms.
                 The default is the complete likelihood. Disable for speed.
 
         Returns:
             the objective function under this noise model, its signature is:
-                double <fname>(const optimize_data* const data, MOT_FLOAT_TYPE* const x);
+                double <fname>(const optimize_data* const data, mot_float_type* const x);
 
             That is, it always returns a double since the summations may get large.
         """
@@ -98,7 +98,7 @@ class SumOfSquares(EvaluationModel):
 
     def get_objective_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
         return '''
-            double ''' + fname + '''(const optimize_data* const data, MOT_FLOAT_TYPE* const x){
+            double ''' + fname + '''(const optimize_data* const data, mot_float_type* const x){
                 ''' + param_listing + '''
                 double sum = 0.0;
                 for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
@@ -111,7 +111,7 @@ class SumOfSquares(EvaluationModel):
     def get_log_likelihood_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing,
                                     full_likelihood=True):
         return '''
-            double ''' + fname + '''(const optimize_data* const data, const MOT_FLOAT_TYPE* const x){
+            double ''' + fname + '''(const optimize_data* const data, const mot_float_type* const x){
                 ''' + param_listing + '''
                 double sum = 0.0;
                 for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
@@ -149,14 +149,14 @@ class GaussianEvaluationModel(EvaluationModel):
         super(GaussianEvaluationModel, self).__init__(
             'GaussianNoise',
             'gaussianNoiseModel',
-            (FreeParameter(CLDataType.from_string('MOT_FLOAT_TYPE'), 'sigma', False, 1, 0, 'INF',
+            (FreeParameter(CLDataType.from_string('mot_float_type'), 'sigma', False, 1, 0, 'INF',
                            parameter_transform=CosSqrClampTransform()),), ())
 
     def get_objective_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
         # omitted constant term for speed
         # + log(GaussianNoise_sigma * sqrt(2 * M_PI));
         return '''
-            double ''' + fname + '''(const optimize_data* const data, MOT_FLOAT_TYPE* const x){
+            double ''' + fname + '''(const optimize_data* const data, mot_float_type* const x){
                 ''' + param_listing + '''
                 double sum = 0.0;
                 for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
@@ -169,7 +169,7 @@ class GaussianEvaluationModel(EvaluationModel):
     def get_log_likelihood_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing,
                                     full_likelihood=True):
         return '''
-            double ''' + fname + '''(const optimize_data* const data, const MOT_FLOAT_TYPE* const x){
+            double ''' + fname + '''(const optimize_data* const data, const mot_float_type* const x){
                 ''' + param_listing + '''
                 double sum = 0.0;
                 for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
@@ -221,14 +221,14 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
         super(OffsetGaussianEvaluationModel, self).__init__(
             'OffsetGaussianNoise',
             'offsetGaussianNoiseModel',
-            (FreeParameter(CLDataType.from_string('MOT_FLOAT_TYPE'), 'sigma', False, 1, 0, 'INF',
+            (FreeParameter(CLDataType.from_string('mot_float_type'), 'sigma', False, 1, 0, 'INF',
                            parameter_transform=CosSqrClampTransform()),), ())
 
     def get_objective_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
         # omitted constant terms for speed
         # + log(OffsetGaussianNoise_sigma * sqrt(2 * M_PI));
         return '''
-            double ''' + fname + '''(const optimize_data* const data, MOT_FLOAT_TYPE* const x){
+            double ''' + fname + '''(const optimize_data* const data, mot_float_type* const x){
                 ''' + param_listing + '''
                 double sum = 0.0;
                 for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
@@ -243,7 +243,7 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
     def get_log_likelihood_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing,
                                     full_likelihood=True):
         return '''
-            double ''' + fname + '''(const optimize_data* const data, MOT_FLOAT_TYPE* const x){
+            double ''' + fname + '''(const optimize_data* const data, mot_float_type* const x){
                 ''' + param_listing + '''
                 double sum = 0.0;
                 for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
@@ -300,7 +300,7 @@ class RicianEvaluationModel(EvaluationModel):
         super(RicianEvaluationModel, self).__init__(
             'RicianNoise',
             'ricianNoiseModel',
-            (FreeParameter(CLDataType.from_string('MOT_FLOAT_TYPE'), 'sigma', False, 1, 0, 'INF',
+            (FreeParameter(CLDataType.from_string('mot_float_type'), 'sigma', False, 1, 0, 'INF',
                            parameter_transform=CosSqrClampTransform()),),
             (Bessel(),))
 
@@ -309,7 +309,7 @@ class RicianEvaluationModel(EvaluationModel):
         # + log(observation / (RicianNoise_sigma * RicianNoise_sigma))
         # - ((observation * observation) / (2 * (RicianNoise_sigma * RicianNoise_sigma)))
         return '''
-            double ''' + fname + '''(const optimize_data* const data, MOT_FLOAT_TYPE* const x){
+            double ''' + fname + '''(const optimize_data* const data, mot_float_type* const x){
                 ''' + param_listing + '''
                 double sum = 0.0;
                 double observation;
@@ -328,7 +328,7 @@ class RicianEvaluationModel(EvaluationModel):
     def get_log_likelihood_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing,
                                     full_likelihood=True):
         return '''
-            double ''' + fname + '''(const optimize_data* const data, const MOT_FLOAT_TYPE* const x){
+            double ''' + fname + '''(const optimize_data* const data, const mot_float_type* const x){
                 ''' + param_listing + '''
                 double sum = 0.0;
                 double observation;

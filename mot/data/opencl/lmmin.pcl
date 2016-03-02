@@ -34,15 +34,15 @@ EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 /* function declarations. */
-void lm_lmpar( const int n, MOT_FLOAT_TYPE * const r, int ldr, const int* const Pivot, MOT_FLOAT_TYPE *const diag,
-               MOT_FLOAT_TYPE* const qtb, const MOT_FLOAT_TYPE delta, MOT_FLOAT_TYPE * const par, MOT_FLOAT_TYPE * const x,
-               MOT_FLOAT_TYPE * const Sdiag, MOT_FLOAT_TYPE * const aux, MOT_FLOAT_TYPE * const xdi );
-void lm_qrfac( const int m, const int n, MOT_FLOAT_TYPE * const A, int* const Pivot,
-               MOT_FLOAT_TYPE* const Rdiag, MOT_FLOAT_TYPE * const Acnorm, MOT_FLOAT_TYPE* const W );
-void lm_qrsolv( const int n, MOT_FLOAT_TYPE * const r, const int ldr, const int * const Pivot, const MOT_FLOAT_TYPE * const diag,
-                const MOT_FLOAT_TYPE * const qtb, MOT_FLOAT_TYPE * const x, MOT_FLOAT_TYPE * const Sdiag, MOT_FLOAT_TYPE * const W );
+void lm_lmpar( const int n, mot_float_type * const r, int ldr, const int* const Pivot, mot_float_type *const diag,
+               mot_float_type* const qtb, const mot_float_type delta, mot_float_type * const par, mot_float_type * const x,
+               mot_float_type * const Sdiag, mot_float_type * const aux, mot_float_type * const xdi );
+void lm_qrfac( const int m, const int n, mot_float_type * const A, int* const Pivot,
+               mot_float_type* const Rdiag, mot_float_type * const Acnorm, mot_float_type* const W );
+void lm_qrsolv( const int n, mot_float_type * const r, const int ldr, const int * const Pivot, const mot_float_type * const diag,
+                const mot_float_type * const qtb, mot_float_type * const x, mot_float_type * const Sdiag, mot_float_type * const W );
 
-MOT_FLOAT_TYPE lm_euclidian_norm(const MOT_FLOAT_TYPE* const x, const int n);
+mot_float_type lm_euclidian_norm(const mot_float_type* const x, const int n);
 
 /*****************************************************************************/
 /*  Numeric constants                                                        */
@@ -110,31 +110,31 @@ MOT_FLOAT_TYPE lm_euclidian_norm(const MOT_FLOAT_TYPE* const x, const int n);
  * n: the parameter length (the number of variables to optimize)
  * m: the number of instances per problem. It must fulfill m>=n
  *
- * void evaluate(const void* data, MOT_FLOAT_TYPE* x, MOT_FLOAT_TYPE* result);
+ * void evaluate(const void* data, mot_float_type* x, mot_float_type* result);
  *
  */
 
-int lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
+int lmmin(mot_float_type * const x, const void* const data){
 
 	int j, i;
-    MOT_FLOAT_TYPE actred, dirder, fnorm, fnorm1, gnorm, pnorm, prered, ratio, step, sum, temp, temp1, temp2, temp3;
+    mot_float_type actred, dirder, fnorm, fnorm1, gnorm, pnorm, prered, ratio, step, sum, temp, temp1, temp2, temp3;
 
     bool   done_first = false;  /* loop counters, for monitoring */
     bool   inner_success; /* flag for loop control */
-    MOT_FLOAT_TYPE lmpar = 0;     /* Levenberg-Marquardt parameter */
-    MOT_FLOAT_TYPE delta = 0;
-    MOT_FLOAT_TYPE xnorm = 0;
+    mot_float_type lmpar = 0;     /* Levenberg-Marquardt parameter */
+    mot_float_type delta = 0;
+    mot_float_type xnorm = 0;
 	int nfev = 0;
 
 	/***  Allocate work space.  ***/
-    MOT_FLOAT_TYPE fvec[NMR_INST_PER_PROBLEM];
-    MOT_FLOAT_TYPE diag[%(NMR_PARAMS)s];
-    MOT_FLOAT_TYPE qtf[%(NMR_PARAMS)s];
-    MOT_FLOAT_TYPE fjac[%(NMR_PARAMS)s * NMR_INST_PER_PROBLEM];
-    MOT_FLOAT_TYPE wa1[%(NMR_PARAMS)s];
-    MOT_FLOAT_TYPE wa2[%(NMR_PARAMS)s];
-    MOT_FLOAT_TYPE wa3[%(NMR_PARAMS)s];
-    MOT_FLOAT_TYPE wf[NMR_INST_PER_PROBLEM];
+    mot_float_type fvec[NMR_INST_PER_PROBLEM];
+    mot_float_type diag[%(NMR_PARAMS)s];
+    mot_float_type qtf[%(NMR_PARAMS)s];
+    mot_float_type fjac[%(NMR_PARAMS)s * NMR_INST_PER_PROBLEM];
+    mot_float_type wa1[%(NMR_PARAMS)s];
+    mot_float_type wa2[%(NMR_PARAMS)s];
+    mot_float_type wa3[%(NMR_PARAMS)s];
+    mot_float_type wf[NMR_INST_PER_PROBLEM];
     int Pivot[%(NMR_PARAMS)s];
 
     /* Initialize diag. */
@@ -325,12 +325,12 @@ int lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
                     temp = 0.5;
                 }
                 else if ( actred > -99 ){ /* -99 = 1-1/0.1^2 */
-                    temp = max( dirder / (2*dirder + actred), (MOT_FLOAT_TYPE) 0.1 );
+                    temp = max( dirder / (2*dirder + actred), (mot_float_type) 0.1 );
                 }
                 else{
                     temp = 0.1;
                 }
-                delta = temp * min(delta, (MOT_FLOAT_TYPE)(pnorm / 0.1));
+                delta = temp * min(delta, (mot_float_type)(pnorm / 0.1));
                 lmpar /= temp;
             }
             else if ( ratio >= 0.75 ) {
@@ -404,9 +404,9 @@ int lmmin(MOT_FLOAT_TYPE * const x, const void* const data){
 /*  lm_lmpar (determine Levenberg-Marquardt parameter)                       */
 /*****************************************************************************/
 
-void lm_lmpar(const int n, MOT_FLOAT_TYPE* const r, int ldr, const int* const Pivot, MOT_FLOAT_TYPE * const diag,
-              MOT_FLOAT_TYPE* const qtb, const MOT_FLOAT_TYPE delta, MOT_FLOAT_TYPE* const par, MOT_FLOAT_TYPE * const x,
-              MOT_FLOAT_TYPE * const Sdiag, MOT_FLOAT_TYPE * const aux, MOT_FLOAT_TYPE * const xdi)
+void lm_lmpar(const int n, mot_float_type* const r, int ldr, const int* const Pivot, mot_float_type * const diag,
+              mot_float_type* const qtb, const mot_float_type delta, mot_float_type* const par, mot_float_type * const x,
+              mot_float_type * const Sdiag, mot_float_type * const aux, mot_float_type * const xdi)
 {
 /*     Given an m by n matrix A, an n by n nonsingular diagonal matrix D,
  *     an m-vector b, and a positive number delta, the problem is to
@@ -478,10 +478,10 @@ void lm_lmpar(const int n, MOT_FLOAT_TYPE* const r, int ldr, const int* const Pi
     // used as both iter and nsing
     int iter, nsing;
     int i, j;
-    MOT_FLOAT_TYPE gnorm, parc;
-    MOT_FLOAT_TYPE dxnorm, fp, fp_old, parl, paru;
-    MOT_FLOAT_TYPE temp;
-    MOT_FLOAT_TYPE p1 = 0.1;
+    mot_float_type gnorm, parc;
+    mot_float_type dxnorm, fp, fp_old, parl, paru;
+    mot_float_type temp;
+    mot_float_type p1 = 0.1;
 
     /*** Compute and store in x the Gauss-Newton direction. If the Jacobian
          is rank-deficient, obtain a least-squares solution. ***/
@@ -573,7 +573,7 @@ void lm_lmpar(const int n, MOT_FLOAT_TYPE* const r, int ldr, const int* const Pi
         /** Evaluate the function at the current value of par. **/
 
         if (*par == 0){
-            *par = max(LM_DWARF, (MOT_FLOAT_TYPE)(0.001 * paru));
+            *par = max(LM_DWARF, (mot_float_type)(0.001 * paru));
         }
         temp = sqrt(*par);
         for (j = 0; j < n; j++){
@@ -631,8 +631,8 @@ void lm_lmpar(const int n, MOT_FLOAT_TYPE* const r, int ldr, const int* const Pi
 /*  lm_qrfac (QR factorization, from lapack)                                  */
 /******************************************************************************/
 
-void lm_qrfac(const int m, const int n, MOT_FLOAT_TYPE* const A, int* const Pivot,
-              MOT_FLOAT_TYPE* const Rdiag, MOT_FLOAT_TYPE* const Acnorm, MOT_FLOAT_TYPE* const W)
+void lm_qrfac(const int m, const int n, mot_float_type* const A, int* const Pivot,
+              mot_float_type* const Rdiag, mot_float_type* const Acnorm, mot_float_type* const W)
 {
 /*
  *     This subroutine uses Householder transformations with column pivoting
@@ -673,7 +673,7 @@ void lm_qrfac(const int m, const int n, MOT_FLOAT_TYPE* const A, int* const Pivo
  *
  */
     int i, j, k, kmax;
-    MOT_FLOAT_TYPE ajnorm, temp;
+    mot_float_type ajnorm, temp;
 
     /** Compute initial column norms;
         initialize Pivot with identity permutation. ***/
@@ -769,14 +769,14 @@ void lm_qrfac(const int m, const int n, MOT_FLOAT_TYPE* const A, int* const Pivo
 /*****************************************************************************/
 
 void lm_qrsolv(const int n,
-               MOT_FLOAT_TYPE* const r,
+               mot_float_type* const r,
                const int ldr,
                const int* const Pivot,
-               const MOT_FLOAT_TYPE* const diag,
-               const MOT_FLOAT_TYPE* const qtb,
-	           MOT_FLOAT_TYPE* const x,
-	           MOT_FLOAT_TYPE* const Sdiag,
-               MOT_FLOAT_TYPE* const W)
+               const mot_float_type* const diag,
+               const mot_float_type* const qtb,
+	           mot_float_type* const x,
+	           mot_float_type* const Sdiag,
+               mot_float_type* const W)
 {
 /*
  *     Given an m by n matrix A, an n by n diagonal matrix D, and an
@@ -838,8 +838,8 @@ void lm_qrsolv(const int n,
  *
  */
     int i, kk, j, k, nsing;
-    MOT_FLOAT_TYPE qtbpj, temp;
-    MOT_FLOAT_TYPE _sin, _cos, _tan, _cot; /* local variables, not functions */
+    mot_float_type qtbpj, temp;
+    mot_float_type _sin, _cos, _tan, _cot; /* local variables, not functions */
 
     /*** Copy R and Q^T*b to preserve input and initialize S.
          In particular, save the diagonal elements of R in x. ***/
@@ -939,7 +939,7 @@ void lm_qrsolv(const int n,
 /******************************************************************************/
 /*  lm_enorm (Euclidean norm)                                                 */
 /******************************************************************************/
-MOT_FLOAT_TYPE lm_euclidian_norm(const MOT_FLOAT_TYPE* const x, const int n){
+mot_float_type lm_euclidian_norm(const mot_float_type* const x, const int n){
 /*     This function calculates the Euclidean norm of an n-vector x.
  *
  *     The Euclidean norm is computed by accumulating the sum of squares

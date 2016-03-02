@@ -39,7 +39,7 @@ class Semantics(CLDataTypeSemantics):
         return ast
 
     def vector_data_type(self, ast):
-        match = re.match(r'(char|uchar|short|ushort|int|uint|long|ulong|float|double|half|MOT_FLOAT_TYPE)(\d+)', ast)
+        match = re.match(r'(char|uchar|short|ushort|int|uint|long|ulong|float|double|half|mot_float_type)(\d+)', ast)
         self._raw_data_type = match.group(1)
         self._vector_length = match.group(2)
         return ast

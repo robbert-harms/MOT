@@ -73,11 +73,11 @@ def get_float_type_def(double_precision):
     The MOT_INT_CMP_TYPE is meant for the select() function where you need a long in the case of double precision.
 
     Args:
-        double_precision (boolean): if True we will use the double type for the MOT_FLOAT_TYPE type.
-            Else, we will use the single precision float type for the MOT_FLOAT_TYPE type.
+        double_precision (boolean): if True we will use the double type for the mot_float_type type.
+            Else, we will use the single precision float type for the mot_float_type type.
 
     Returns:
-        str: defines for the MOT_FLOAT_TYPE type
+        str: defines for the mot_float_type type
     """
     if double_precision:
         return '''
@@ -85,11 +85,11 @@ def get_float_type_def(double_precision):
                 #pragma OPENCL EXTENSION cl_khr_fp64 : enable
             #endif
 
-            #define MOT_FLOAT_TYPE double
-            #define MOT_FLOAT_TYPE2 double2
-            #define MOT_FLOAT_TYPE4 double4
-            #define MOT_FLOAT_TYPE8 double8
-            #define MOT_FLOAT_TYPE16 double16
+            #define mot_float_type double
+            #define mot_float_type2 double2
+            #define mot_float_type4 double4
+            #define mot_float_type8 double8
+            #define mot_float_type16 double16
             #define MOT_EPSILON DBL_EPSILON
             #define MOT_MIN DBL_MIN
             #define MOT_MAX DBL_MAX
@@ -101,11 +101,11 @@ def get_float_type_def(double_precision):
                 #pragma OPENCL EXTENSION cl_khr_fp64 : enable
             #endif
 
-            #define MOT_FLOAT_TYPE float
-            #define MOT_FLOAT_TYPE2 float2
-            #define MOT_FLOAT_TYPE4 float4
-            #define MOT_FLOAT_TYPE8 float8
-            #define MOT_FLOAT_TYPE16 float16
+            #define mot_float_type float
+            #define mot_float_type2 float2
+            #define mot_float_type4 float4
+            #define mot_float_type8 float8
+            #define mot_float_type16 float16
             #define MOT_EPSILON FLT_EPSILON
             #define MOT_MIN FLT_MIN
             #define MOT_MAX FLT_MAX

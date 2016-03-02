@@ -184,8 +184,8 @@ class _MHWorker(Worker):
         param_code_gen = ParameterCLCodeGenerator(self._cl_environment.device, self._var_data_dict,
                                                   self._protocol_data_dict, self._model_data_dict)
 
-        kernel_param_names = ['global MOT_FLOAT_TYPE* params',
-                              'global MOT_FLOAT_TYPE* samples',
+        kernel_param_names = ['global mot_float_type* params',
+                              'global mot_float_type* samples',
                               'global float4* ranluxcltab']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
@@ -214,7 +214,7 @@ class _MHWorker(Worker):
         kernel_source += self._model.get_log_likelihood_function('getLogLikelihood', full_likelihood=False)
 
         kernel_source += '''
-            void _update_proposals(MOT_FLOAT_TYPE* const proposal_parameters, uint* const ac_between_proposal_updates,
+            void _update_proposals(mot_float_type* const proposal_parameters, uint* const ac_between_proposal_updates,
                                    uint* const proposal_update_count){
 
                 *proposal_update_count += 1;
@@ -232,19 +232,19 @@ class _MHWorker(Worker):
                 }
             }
 
-            void _update_state(MOT_FLOAT_TYPE* const x,
+            void _update_state(mot_float_type* const x,
                                ranluxcl_state_t* ranluxclstate,
                                double* const current_likelihood,
-                               MOT_FLOAT_TYPE* const current_prior,
+                               mot_float_type* const current_prior,
                                const optimize_data* const data,
-                               MOT_FLOAT_TYPE* const proposal_parameters,
+                               mot_float_type* const proposal_parameters,
                                uint * const ac_between_proposal_updates){
 
                 float4 randomnmr;
-                MOT_FLOAT_TYPE new_prior;
+                mot_float_type new_prior;
                 double new_likelihood;
                 double bayesian_f;
-                MOT_FLOAT_TYPE old_x;
+                mot_float_type old_x;
 
                 #pragma unroll 1
                 for(int k = 0; k < ''' + str(self._nmr_params) + '''; k++){
@@ -264,8 +264,8 @@ class _MHWorker(Worker):
                 '''
         else:
             kernel_source += '''
-                        MOT_FLOAT_TYPE x_to_prop = getProposalLogPDF(k, old_x, x[k], proposal_parameters);
-                        MOT_FLOAT_TYPE prop_to_x = getProposalLogPDF(k, x[k], x[k], proposal_parameters);
+                        mot_float_type x_to_prop = getProposalLogPDF(k, old_x, x[k], proposal_parameters);
+                        mot_float_type prop_to_x = getProposalLogPDF(k, x[k], x[k], proposal_parameters);
 
                         bayesian_f = exp((new_likelihood + new_prior + x_to_prop) -
                             (*current_likelihood + *current_prior + prop_to_x));
@@ -286,19 +286,19 @@ class _MHWorker(Worker):
                 }
             }
 
-            void _sample(MOT_FLOAT_TYPE* const x,
+            void _sample(mot_float_type* const x,
                          ranluxcl_state_t* ranluxclstate,
                          double* const current_likelihood,
-                         MOT_FLOAT_TYPE* const current_prior,
+                         mot_float_type* const current_prior,
                          const optimize_data* const data,
-                         MOT_FLOAT_TYPE* const proposal_parameters,
+                         mot_float_type* const proposal_parameters,
                          uint* const ac_between_proposal_updates,
                          uint* const proposal_update_count,
-                         global MOT_FLOAT_TYPE* samples){
+                         global mot_float_type* samples){
 
                 uint i, j;
                 uint gid = get_global_id(0);
-                MOT_FLOAT_TYPE x_saved[''' + str(self._nmr_params) + '''];
+                mot_float_type x_saved[''' + str(self._nmr_params) + '''];
 
                 for(i = 0; i < ''' + str(self._nmr_samples * self._sample_intervals + self._burn_length) + '''; i++){
                     _update_state(x, ranluxclstate, current_likelihood, current_prior,
@@ -329,7 +329,7 @@ class _MHWorker(Worker):
                     uint gid = get_global_id(0);
                     uint proposal_update_count = 0;
 
-                    MOT_FLOAT_TYPE proposal_parameters[] = ''' + adaptable_proposal_parameters_str + ''';
+                    mot_float_type proposal_parameters[] = ''' + adaptable_proposal_parameters_str + ''';
                     uint ac_between_proposal_updates[] = ''' + acceptance_counters_between_proposal_updates + ''';
 
                     ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
@@ -337,14 +337,14 @@ class _MHWorker(Worker):
                     ranluxcl_state_t ranluxclstate;
                     ranluxcl_download_seed(&ranluxclstate, ranluxcltab);
 
-                    MOT_FLOAT_TYPE x[''' + str(self._nmr_params) + '''];
+                    mot_float_type x[''' + str(self._nmr_params) + '''];
 
                     for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                         x[i] = params[gid * ''' + str(self._nmr_params) + ''' + i];
                     }
 
                     double current_likelihood = getLogLikelihood(&data, x);
-                    MOT_FLOAT_TYPE current_prior = getLogPrior(x);
+                    mot_float_type current_prior = getLogPrior(x);
 
                     _sample(x, &ranluxclstate, &current_likelihood,
                             &current_prior, &data, proposal_parameters, ac_between_proposal_updates,

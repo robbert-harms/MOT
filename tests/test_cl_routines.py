@@ -41,7 +41,7 @@ class TestRosenbrock(CLRoutineTestCase):
         for optimizer in self.optimizers:
             v = optimizer.minimize(self.model)
             for p in self.model.get_optimized_param_names():
-                self.assertAlmostEqual(float(v[p]), 1.0, places=4)
+                self.assertAlmostEqual(float(v[p]), 1.0, places=3)
 
 
 class TestLSQNonLinExample(CLRoutineTestCase):

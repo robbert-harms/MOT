@@ -12,7 +12,7 @@
 /**
  * The Scalar compartment model, this just returns the input.
  */
-MOT_FLOAT_TYPE cmScalar(const MOT_FLOAT_TYPE c){
+mot_float_type cmScalar(const mot_float_type c){
     return c;
 }
 
