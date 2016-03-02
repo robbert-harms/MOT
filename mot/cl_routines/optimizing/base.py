@@ -186,33 +186,37 @@ class AbstractParallelOptimizerWorker(Worker):
         nmr_problems = range_end - range_start
         all_buffers, parameters_buffer, return_code_buffer = self._create_buffers(range_start, range_end)
 
-        self._kernel.minimize(self._cl_run_context.queue, (nmr_problems, ), None, *all_buffers)
+        event = self._kernel.minimize(self._cl_run_context.queue, (nmr_problems, ), None, *all_buffers)
 
-        event = cl.enqueue_copy(self._cl_run_context.queue, self._starting_points[range_start:range_end, :],
-                                parameters_buffer, is_blocking=False)
-        event = cl.enqueue_copy(self._cl_run_context.queue, self._return_codes[range_start:range_end],
-                                return_code_buffer, is_blocking=False, wait_for=[event])
-        return event
+        event = cl.enqueue_map_buffer(self._cl_run_context.queue, parameters_buffer,
+                                      cl.map_flags.READ, 0,
+                                      [nmr_problems, self._starting_points.shape[1]],
+                                      self._return_codes.dtype,
+                                      order="C", wait_for=[event], is_blocking=False)[1]
+
+        return cl.enqueue_map_buffer(self._cl_run_context.queue, return_code_buffer,
+                                     cl.map_flags.READ, 0,
+                                     [nmr_problems], self._return_codes.dtype,
+                                     order="C", wait_for=[event], is_blocking=False)[1]
 
     def _create_buffers(self, range_start, range_end):
         nmr_problems = range_end - range_start
 
-        read_only_flags = self._cl_environment.get_read_only_cl_mem_flags()
-        read_write_flags = self._cl_environment.get_read_write_cl_mem_flags()
-
         all_buffers = []
 
-        parameters_buffer = cl.Buffer(self._cl_run_context.context, read_write_flags,
+        parameters_buffer = cl.Buffer(self._cl_run_context.context,
+                                      cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR,
                                       hostbuf=self._starting_points[range_start:range_end, :])
         all_buffers.append(parameters_buffer)
 
         return_code_buffer = cl.Buffer(self._cl_run_context.context,
-                                       cl.mem_flags.WRITE_ONLY | cl.mem_flags.ALLOC_HOST_PTR,
-                                       size=nmr_problems * self._return_codes.dtype.itemsize)
+                                       cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
+                                       hostbuf=self._return_codes[range_start:range_end])
         all_buffers.append(return_code_buffer)
 
         for data in self._var_data_dict.values():
-            all_buffers.append(cl.Buffer(self._cl_run_context.context, read_only_flags,
+            all_buffers.append(cl.Buffer(self._cl_run_context.context,
+                                         cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR,
                                          hostbuf=data.get_opencl_data()[range_start:range_end, ...]))
 
         all_buffers.extend(self._constant_buffers)

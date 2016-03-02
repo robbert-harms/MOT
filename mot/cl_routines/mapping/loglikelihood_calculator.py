@@ -74,11 +74,6 @@ class _LogLikelihoodCalculatorWorker(Worker):
                                      [nmr_problems], self._log_likelihoods.dtype,
                                      order="C", wait_for=[event], is_blocking=False)[1]
 
-        # event = cl.enqueue_copy(self._cl_run_context.queue, self._log_likelihoods[range_start:range_end],
-        #                         self._likelihoods_buffer, is_blocking=False)
-
-        # return event
-
     def _create_buffers(self):
         constant_buffers = self._generate_constant_buffers(self._protocol_data_dict, self._model_data_dict)
 
