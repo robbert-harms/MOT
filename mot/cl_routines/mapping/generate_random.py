@@ -35,7 +35,7 @@ class GenerateRandom(AbstractCLRoutine):
         Returns:
             ndarray: A numpy array with nmr_samples random samples drawn from the uniform distribution.
         """
-        seed = seed or nmr_samples / time.time()
+        seed = seed or (nmr_samples / time.time()) * 1e10
         return self._generate_samples(nmr_samples, self._get_uniform_kernel(minimum, maximum), seed)
 
     def generate_gaussian(self, nmr_samples, mean=0, std=1, seed=None):
@@ -50,7 +50,7 @@ class GenerateRandom(AbstractCLRoutine):
         Returns:
             ndarray: A numpy array with nmr_samples random samples drawn from the Gaussian distribution.
         """
-        seed = seed or nmr_samples / time.time()
+        seed = seed or (nmr_samples / time.time()) * 1e10
         return self._generate_samples(nmr_samples, self._get_gaussian_kernel(mean, std), seed)
 
     def _generate_samples(self, nmr_samples, kernel_source, seed):
@@ -120,21 +120,26 @@ class _GenerateRandomWorker(Worker):
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
 
-        range_start *= 4
-        range_end *= 4
-
         ranluxcltab_buffer = initialize_ranlux(self._cl_environment, self._cl_run_context, nmr_problems,
-                                               seed=self._seed)
+                                               seed=self._seed + range_start)
 
         samples_buf = cl.Buffer(self._cl_run_context.context, cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
-                                hostbuf=self._samples[range_start:range_end])
+                                hostbuf=self._samples[range_start * 4:range_end * 4])
 
         global_range = (int(nmr_problems), )
         local_range = None
 
-        self._kernel.sample(self._cl_run_context.queue, global_range, local_range, ranluxcltab_buffer, samples_buf)
-        event = cl.enqueue_copy(self._cl_run_context.queue, self._samples[range_start:range_end], samples_buf,
-                                is_blocking=False)
+        event = self._kernel.sample(self._cl_run_context.queue, global_range, local_range, ranluxcltab_buffer,
+                                    samples_buf)
+        [array, event] = cl.enqueue_map_buffer(self._cl_run_context.queue, samples_buf,
+                                               cl.map_flags.READ,
+                                               0,
+                                               [nmr_problems * 4],
+                                               self._samples.dtype,
+                                               order="C", wait_for=[event], is_blocking=True)
+        print(array)
+        print(self._samples)
+
         return event
 
     def _get_kernel_source(self):

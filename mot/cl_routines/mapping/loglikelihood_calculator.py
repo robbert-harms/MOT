@@ -61,19 +61,25 @@ class _LogLikelihoodCalculatorWorker(Worker):
         self._protocol_data_dict = model.get_problems_protocol_data()
         self._model_data_dict = model.get_model_data()
 
-        self._all_buffers, self._likelihoods_buffer = self._get_buffers()
+        self._all_buffers, self._likelihoods_buffer = self._create_buffers()
         self._kernel = self._build_kernel()
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
-        self._kernel.run_kernel(self._cl_run_context.queue, (int(nmr_problems), ), None, *self._all_buffers,
-                                global_offset=(int(range_start),))
-        event = cl.enqueue_copy(self._cl_run_context.queue, self._log_likelihoods[range_start:range_end],
-                                self._likelihoods_buffer, is_blocking=False)
+        event = self._kernel.run_kernel(self._cl_run_context.queue, (int(nmr_problems), ), None, *self._all_buffers,
+                                        global_offset=(int(range_start),))
 
-        return event
+        return cl.enqueue_map_buffer(self._cl_run_context.queue, self._likelihoods_buffer,
+                                     cl.map_flags.READ, range_start * self._log_likelihoods.dtype.itemsize,
+                                     [nmr_problems], self._log_likelihoods.dtype,
+                                     order="C", wait_for=[event], is_blocking=False)[1]
 
-    def _get_buffers(self):
+        # event = cl.enqueue_copy(self._cl_run_context.queue, self._log_likelihoods[range_start:range_end],
+        #                         self._likelihoods_buffer, is_blocking=False)
+
+        # return event
+
+    def _create_buffers(self):
         constant_buffers = self._generate_constant_buffers(self._protocol_data_dict, self._model_data_dict)
 
         likelihoods_buffer = cl.Buffer(self._cl_run_context.context,
