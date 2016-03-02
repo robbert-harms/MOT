@@ -61,37 +61,39 @@ class _LogLikelihoodCalculatorWorker(Worker):
         self._protocol_data_dict = model.get_problems_protocol_data()
         self._model_data_dict = model.get_model_data()
 
-        self._constant_buffers = self._generate_constant_buffers(self._protocol_data_dict, self._model_data_dict)
-
+        self._all_buffers, self._likelihoods_buffer = self._get_buffers()
         self._kernel = self._build_kernel()
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
-
-        all_buffers, likelihoods_buffer = self._create_buffers(range_start, range_end)
-
-        self._kernel.run_kernel(self._cl_run_context.queue, (int(nmr_problems), ), None, *all_buffers)
+        self._kernel.run_kernel(self._cl_run_context.queue, (int(nmr_problems), ), None, *self._all_buffers,
+                                global_offset=(int(range_start),))
         event = cl.enqueue_copy(self._cl_run_context.queue, self._log_likelihoods[range_start:range_end],
-                                likelihoods_buffer, is_blocking=False)
+                                self._likelihoods_buffer, is_blocking=False)
 
         return event
 
-    def _create_buffers(self, range_start, range_end):
+    def _get_buffers(self):
+        constant_buffers = self._generate_constant_buffers(self._protocol_data_dict, self._model_data_dict)
+
         likelihoods_buffer = cl.Buffer(self._cl_run_context.context,
                                        cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
-                                       hostbuf=self._log_likelihoods[range_start:range_end])
+                                       hostbuf=self._log_likelihoods)
 
-        all_buffers = [cl.Buffer(self._cl_run_context.context,
-                                 cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
-                                 hostbuf=self._parameters[range_start:range_end, :]),
-                       likelihoods_buffer]
+        params_buffer = cl.Buffer(self._cl_run_context.context,
+                                  cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR,
+                                  hostbuf=self._parameters)
 
+        var_data_buffers = []
         for data in self._var_data_dict.values():
-            all_buffers.append(cl.Buffer(self._cl_run_context.context,
-                                         cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
-                                         hostbuf=data.get_opencl_data()[range_start:range_end, ...]))
+            var_data_buffers.append(cl.Buffer(self._cl_run_context.context,
+                                              cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR,
+                                              hostbuf=data.get_opencl_data()))
 
-        all_buffers.extend(self._constant_buffers)
+        all_buffers = [params_buffer, likelihoods_buffer]
+        all_buffers.extend(var_data_buffers)
+        all_buffers.extend(constant_buffers)
+
         return all_buffers, likelihoods_buffer
 
     def _get_kernel_source(self):
