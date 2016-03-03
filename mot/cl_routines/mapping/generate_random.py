@@ -121,7 +121,7 @@ class _GenerateRandomWorker(Worker):
         nmr_problems = range_end - range_start
 
         ranluxcltab_buffer = initialize_ranlux(self._cl_environment, self._cl_run_context, nmr_problems,
-                                               seed=self._seed + range_start)
+                                               seed=np.abs(np.log(self._seed + range_start)))
 
         samples_buf = cl.Buffer(self._cl_run_context.context, cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
                                 hostbuf=self._samples[range_start * 4:range_end * 4])
