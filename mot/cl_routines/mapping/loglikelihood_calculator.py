@@ -36,7 +36,8 @@ class LogLikelihoodCalculator(AbstractCLRoutine):
 
         nmr_problems = model.get_nmr_problems()
         log_likelihoods = np.zeros((nmr_problems,), dtype=np_dtype, order='C')
-        parameters = model.get_initial_parameters(parameters_dict)
+        parameters = np.require(model.get_initial_parameters(parameters_dict),
+                                np_dtype, requirements=['C', 'A', 'O'])
 
         workers = self._create_workers(
             lambda cl_environment: _LogLikelihoodCalculatorWorker(cl_environment, model, parameters,
@@ -88,7 +89,7 @@ class _LogLikelihoodCalculatorWorker(Worker):
         var_data_buffers = []
         for data in self._var_data_dict.values():
             var_data_buffers.append(cl.Buffer(self._cl_run_context.context,
-                                              cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR,
+                                              cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
                                               hostbuf=data.get_opencl_data()))
 
         all_buffers = [params_buffer, likelihoods_buffer]

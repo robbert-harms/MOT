@@ -54,7 +54,8 @@ class CalculateDependentParameters(AbstractCLRoutine):
             (estimated_parameters_list[0].shape[0], len(dependent_parameter_names)),
             dtype=np_dtype, order='C')
 
-        estimated_parameters = np.dstack(estimated_parameters_list).flatten()
+        estimated_parameters = np.require(np.dstack(estimated_parameters_list),
+                                          np_dtype, requirements=['C', 'A', 'O'])
 
         workers = self._create_workers(
             lambda cl_environment: _CDPWorker(cl_environment, fixed_param_values, len(estimated_parameters_list),
@@ -79,32 +80,37 @@ class _CDPWorker(Worker):
         self._double_precision = double_precision
 
         self._estimated_parameters = estimated_parameters
+        self._all_buffers, self._results_list_buffer = self._create_buffers()
         self._kernel = self._build_kernel()
 
     def calculate(self, range_start, range_end):
-        write_only_flags = self._cl_environment.get_write_only_cl_mem_flags()
-        read_only_flags = self._cl_environment.get_read_only_cl_mem_flags()
         nmr_problems = int(range_end - range_start)
 
-        ep_start = range_start * self._nmr_estimated_params
-        ep_end = range_end * self._nmr_estimated_params
+        event = self._kernel.transform(self._cl_run_context.queue, (int(nmr_problems), ), None, *self._all_buffers,
+                                       global_offset=(int(range_start),))
 
-        estimated_parameters_buf = cl.Buffer(
-            self._cl_run_context.context, read_only_flags,
-            hostbuf=self._estimated_parameters[ep_start:ep_end])
+        return cl.enqueue_map_buffer(self._cl_run_context.queue, self._results_list_buffer,
+                                     cl.map_flags.READ, range_start * self._results_list.dtype.itemsize,
+                                     [nmr_problems, self._results_list.shape[1]], self._results_list.dtype,
+                                     order="C", wait_for=[event], is_blocking=False)[1]
 
-        results_buffer = cl.Buffer(self._cl_run_context.context, write_only_flags,
-                                   hostbuf=self._results_list[range_start:range_end, :])
+    def _create_buffers(self):
+        estimated_parameters_buf = cl.Buffer(self._cl_run_context.context,
+                                             cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR,
+                                             hostbuf=self._estimated_parameters)
+
+        results_buffer = cl.Buffer(self._cl_run_context.context,
+                                   cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
+                                   hostbuf=self._results_list)
 
         data_buffers = [estimated_parameters_buf, results_buffer]
-        for data in self._var_data_dict.values():
-            data_buffers.append(cl.Buffer(self._cl_run_context.context, read_only_flags,
-                                          hostbuf=data.get_opencl_data()[range_start:range_end, ...]))
 
-        self._kernel.transform(self._cl_run_context.queue, (nmr_problems, ), None, *data_buffers)
-        event = cl.enqueue_copy(self._cl_run_context.queue, self._results_list[range_start:range_end, :],
-                                results_buffer, is_blocking=False)
-        return event
+        for data in self._var_data_dict.values():
+            data_buffers.append(cl.Buffer(self._cl_run_context.context,
+                                          cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
+                                          hostbuf=data.get_opencl_data()))
+
+        return data_buffers, results_buffer
 
     def _get_kernel_source(self):
         dependent_parameter_names = [n[0] for n in self._dependent_parameter_names]

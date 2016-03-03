@@ -41,7 +41,7 @@ class FinalParametersTransformer(AbstractCLRoutine):
         if model.double_precision:
             np_dtype = np.float64
 
-        parameters = parameters.astype(np_dtype, order='C', copy=False)
+        parameters = np.require(parameters, np_dtype, requirements=['C', 'A', 'O', 'W'])
         var_data_dict = model.get_problems_var_data()
         protocol_data_dict = model.get_problems_protocol_data()
         model_data_dict = model.get_model_data()

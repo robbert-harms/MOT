@@ -75,7 +75,7 @@ class CodecRunner(AbstractCLRoutine):
         np_dtype = np.float32
         if self._double_precision:
             np_dtype = np.float64
-        data = data.astype(np_dtype, order='C', copy=True)
+        data = np.require(data, np_dtype, requirements=['C', 'A', 'O', 'W'])
         rows = data.shape[0]
         workers = self._create_workers(lambda cl_environment: _CodecWorker(cl_environment, cl_func, cl_func_name, data,
                                                                            nmr_params, self._double_precision))
@@ -92,19 +92,23 @@ class _CodecWorker(Worker):
         self._data = data
         self._nmr_params = nmr_params
         self._double_precision = double_precision
+
+        self._param_buf = cl.Buffer(self._cl_run_context.context,
+                                    cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR,
+                                    hostbuf=self._data)
+
         self._kernel = self._build_kernel()
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
 
-        param_buf = cl.Buffer(self._cl_run_context.context,
-                              cl.mem_flags.READ_WRITE | cl.mem_flags.COPY_HOST_PTR,
-                              hostbuf=self._data[range_start:range_end, :])
+        event = self._kernel.transformParameterSpace(self._cl_run_context.queue, (int(nmr_problems), ), None,
+                                                     self._param_buf, global_offset=(int(range_start),))
 
-        self._kernel.transformParameterSpace(self._cl_run_context.queue, (int(nmr_problems), ), None, param_buf)
-        event = cl.enqueue_copy(self._cl_run_context.queue, self._data[range_start:range_end, :], param_buf,
-                                is_blocking=False)
-        return event
+        return cl.enqueue_map_buffer(self._cl_run_context.queue, self._param_buf,
+                                     cl.map_flags.READ, range_start * self._data.dtype.itemsize,
+                                     [nmr_problems, self._data.shape[1]], self._data.dtype,
+                                     order="C", wait_for=[event], is_blocking=False)[1]
 
     def _get_kernel_source(self):
         kernel_source = ''

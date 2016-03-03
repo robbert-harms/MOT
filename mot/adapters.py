@@ -80,7 +80,7 @@ class SimpleDataAdapter(DataAdapter):
         numpy_type = self._get_cl_numpy_type(self._data_type)
         if isinstance(self._data, numbers.Number):
             return numpy_type(self._data)
-        return self._data.astype(numpy_type, copy=False, order='C')
+        return np.require(self._data, numpy_type, ['C', 'A', 'O'])
 
     def _get_cl_numpy_type(self, data_type):
         """Get the numpy data type for non-vector types in CL.

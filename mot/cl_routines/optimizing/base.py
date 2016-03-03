@@ -112,7 +112,13 @@ class AbstractParallelOptimizer(AbstractOptimizer):
                                                                              self._optimizer_options))
 
         self._logger.info('Starting optimization preliminaries')
-        starting_points = model.get_initial_parameters(init_params)
+
+        np_dtype = np.float32
+        if model.double_precision:
+            np_dtype = np.float64
+
+        starting_points = np.require(model.get_initial_parameters(init_params), np_dtype,
+                                     requirements=['C', 'A', 'O', 'W'])
         nmr_params = starting_points.shape[1]
 
         var_data_dict = model.get_problems_var_data()
@@ -135,9 +141,13 @@ class AbstractParallelOptimizer(AbstractOptimizer):
 
         self._logger.info('Finished optimization')
 
+        self._logger.info('Starting post-optimization transformations')
+        optimized = FinalParametersTransformer(cl_environments=self._cl_environments,
+                                               load_balancer=self.load_balancer).transform(model, starting_points)
+        self._logger.info('Finished post-optimization transformations')
+
         self._logger.info('Calling finalize optimization results in the model')
-        results = model.finalize_optimization_results(
-            results_to_dict(starting_points, model.get_optimized_param_names()))
+        results = model.finalize_optimization_results(results_to_dict(optimized, model.get_optimized_param_names()))
 
         self._logger.info('Optimization finished.')
 
@@ -188,16 +198,11 @@ class AbstractParallelOptimizerWorker(Worker):
 
         event = self._kernel.minimize(self._cl_run_context.queue, (nmr_problems, ), None, *all_buffers)
 
-        event = cl.enqueue_map_buffer(self._cl_run_context.queue, parameters_buffer,
-                                      cl.map_flags.READ, 0,
-                                      [nmr_problems, self._starting_points.shape[1]],
-                                      self._return_codes.dtype,
-                                      order="C", wait_for=[event], is_blocking=False)[1]
-
-        return cl.enqueue_map_buffer(self._cl_run_context.queue, return_code_buffer,
-                                     cl.map_flags.READ, 0,
-                                     [nmr_problems], self._return_codes.dtype,
-                                     order="C", wait_for=[event], is_blocking=False)[1]
+        event = cl.enqueue_copy(self._cl_run_context.queue, self._starting_points[range_start:range_end, :],
+                                parameters_buffer, is_blocking=False, wait_for=[event])
+        event = cl.enqueue_copy(self._cl_run_context.queue, self._return_codes[range_start:range_end],
+                                return_code_buffer, is_blocking=False, wait_for=[event])
+        return event
 
     def _create_buffers(self, range_start, range_end):
         nmr_problems = range_end - range_start
@@ -205,18 +210,18 @@ class AbstractParallelOptimizerWorker(Worker):
         all_buffers = []
 
         parameters_buffer = cl.Buffer(self._cl_run_context.context,
-                                      cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR,
+                                      cl.mem_flags.READ_WRITE | cl.mem_flags.COPY_HOST_PTR,
                                       hostbuf=self._starting_points[range_start:range_end, :])
         all_buffers.append(parameters_buffer)
 
         return_code_buffer = cl.Buffer(self._cl_run_context.context,
-                                       cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
+                                       cl.mem_flags.WRITE_ONLY | cl.mem_flags.COPY_HOST_PTR,
                                        hostbuf=self._return_codes[range_start:range_end])
         all_buffers.append(return_code_buffer)
 
         for data in self._var_data_dict.values():
             all_buffers.append(cl.Buffer(self._cl_run_context.context,
-                                         cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR,
+                                         cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
                                          hostbuf=data.get_opencl_data()[range_start:range_end, ...]))
 
         all_buffers.extend(self._constant_buffers)
@@ -243,8 +248,6 @@ class AbstractParallelOptimizerWorker(Worker):
             str: The kernel source for this optimization routine.
         """
         cl_objective_function = self._model.get_objective_function('calculateObjective')
-        cl_final_param_transform = self._model.get_final_parameter_transformations('applyFinalParamTransforms')
-
         nmr_params = self._nmr_params
         param_code_gen = ParameterCLCodeGenerator(self._cl_environment.device,
                                                   self._var_data_dict,
@@ -267,9 +270,6 @@ class AbstractParallelOptimizerWorker(Worker):
             param_codec = self._model.get_parameter_codec()
             decode_func = param_codec.get_cl_decode_function('decodeParameters')
             kernel_source += decode_func + "\n"
-
-        if cl_final_param_transform:
-            kernel_source += cl_final_param_transform
 
         kernel_source += cl_objective_function
         kernel_source += self._get_optimizer_cl_code()
@@ -297,7 +297,6 @@ class AbstractParallelOptimizerWorker(Worker):
                     return_codes[gid] = ''' + self._get_optimizer_call_name() + '''(''' + optimizer_call_args + ''');
 
                     ''' + ('decodeParameters(x);' if self._use_param_codec else '') + '''
-                    ''' + ('applyFinalParamTransforms(&data, x);' if cl_final_param_transform else '') + '''
 
                     for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
                         params[gid * ''' + str(nmr_params) + ''' + i] = x[i];

@@ -35,9 +35,8 @@ class ResidualCalculator(AbstractCLRoutine):
         nmr_inst_per_problem = model.get_nmr_inst_per_problem()
         nmr_problems = model.get_nmr_problems()
 
-        residuals = np.asmatrix(np.zeros((nmr_problems, nmr_inst_per_problem), dtype=np_dtype, order='C'))
-
-        parameters = model.get_initial_parameters(parameters_dict)
+        residuals = np.zeros((nmr_problems, nmr_inst_per_problem), dtype=np_dtype, order='C')
+        parameters = np.require(model.get_initial_parameters(parameters_dict), np_dtype, requirements=['C', 'A', 'O'])
 
         workers = self._create_workers(lambda cl_environment: _ResidualCalculatorWorker(cl_environment, model,
                                                                                         parameters, residuals))
@@ -60,37 +59,36 @@ class _ResidualCalculatorWorker(Worker):
         self._protocol_data_dict = model.get_problems_protocol_data()
         self._model_data_dict = model.get_model_data()
 
-        self._constant_buffers = self._generate_constant_buffers(self._protocol_data_dict, self._model_data_dict)
-
+        self._all_buffers, self._residuals_buffer = self._create_buffers()
         self._kernel = self._build_kernel()
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
+        event = self._kernel.get_errors(self._cl_run_context.queue, (int(nmr_problems), ), None, *self._all_buffers,
+                                        global_offset=(int(range_start),))
+        return cl.enqueue_map_buffer(self._cl_run_context.queue, self._residuals_buffer,
+                                     cl.map_flags.READ, range_start * self._residuals.dtype.itemsize,
+                                     [nmr_problems, self._residuals.shape[1]], self._residuals.dtype,
+                                     order="C", wait_for=[event], is_blocking=False)[1]
 
-        all_buffers, errors_buffer = self._create_buffers(range_start, range_end)
-
-        self._kernel.get_errors(self._cl_run_context.queue, (int(nmr_problems), ), None, *all_buffers)
-        event = cl.enqueue_copy(self._cl_run_context.queue, self._residuals[range_start:range_end, :], errors_buffer,
-                                is_blocking=False)
-
-        return event
-
-    def _create_buffers(self, range_start, range_end):
-        write_only_flags = self._cl_environment.get_write_only_cl_mem_flags()
-        read_only_flags = self._cl_environment.get_read_only_cl_mem_flags()
-
+    def _create_buffers(self):
         errors_buffer = cl.Buffer(self._cl_run_context.context,
-                                  write_only_flags, hostbuf=self._residuals[range_start:range_end, :])
+                                  cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
+                                  hostbuf=self._residuals)
 
         all_buffers = [cl.Buffer(self._cl_run_context.context,
-                                 read_only_flags, hostbuf=self._parameters[range_start:range_end, :]),
+                                 cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR,
+                                 hostbuf=self._parameters),
                        errors_buffer]
 
         for data in self._var_data_dict.values():
             all_buffers.append(cl.Buffer(self._cl_run_context.context,
-                                         read_only_flags, hostbuf=data.get_opencl_data()[range_start:range_end, ...]))
+                                         cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
+                                         hostbuf=data.get_opencl_data()))
 
-        all_buffers.extend(self._constant_buffers)
+        constant_buffers = self._generate_constant_buffers(self._protocol_data_dict, self._model_data_dict)
+        all_buffers.extend(constant_buffers)
+
         return all_buffers, errors_buffer
 
     def _get_kernel_source(self):

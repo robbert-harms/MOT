@@ -104,7 +104,7 @@ class Worker(object):
 
                 if isinstance(data, np.ndarray):
                     buffers.append(cl.Buffer(self._cl_run_context.context,
-                                             cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR,
+                                             cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
                                              hostbuf=data))
                 else:
                     buffers.append(data)
