@@ -328,7 +328,26 @@ class AbstractParallelOptimizerWorker(Worker):
             str: The kernel source for the optimization routine.
         """
         optimizer_func = self._get_optimization_function()
+        kernel_source = self._get_evaluate_function()
 
+        if self._uses_random_numbers():
+            rand_func = RanluxCL()
+            kernel_source += '#define RANLUXCL_LUX 4' + "\n"
+            kernel_source += rand_func.get_cl_header()
+            kernel_source += rand_func.get_cl_code()
+
+        kernel_source += optimizer_func.get_cl_header()
+        kernel_source += optimizer_func.get_cl_code()
+        return kernel_source
+
+    def _get_evaluate_function(self):
+        """Get the CL code for the evaluation function. This is called from _get_optimizer_cl_code.
+
+        Implementing optimizers can change this if desired.
+
+        Returns:
+            str: the evaluation function.
+        """
         kernel_source = ''
         if self._use_param_codec:
             kernel_source += '''
@@ -347,15 +366,6 @@ class AbstractParallelOptimizerWorker(Worker):
                     return calculateObjective((optimize_data*)data, x);
                 }
             '''
-
-        if self._uses_random_numbers():
-            rand_func = RanluxCL()
-            kernel_source += '#define RANLUXCL_LUX 4' + "\n"
-            kernel_source += rand_func.get_cl_header()
-            kernel_source += rand_func.get_cl_code()
-
-        kernel_source += optimizer_func.get_cl_header()
-        kernel_source += optimizer_func.get_cl_code()
         return kernel_source
 
     def _get_optimization_function(self):
