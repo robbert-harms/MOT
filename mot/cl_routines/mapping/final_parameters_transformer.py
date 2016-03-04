@@ -67,31 +67,34 @@ class _FPTWorker(Worker):
         self._protocol_data_dict = protocol_data_dict
         self._model_data_dict = model_data_dict
         self._double_precision = model.double_precision
-        self._constant_buffers = self._generate_constant_buffers(self._protocol_data_dict, self._model_data_dict)
+        self._all_buffers, self._parameters_buffer = self._create_buffers()
         self._kernel = self._build_kernel()
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
 
-        all_buffers, parameters_buffer = self._create_buffers(range_start, range_end)
+        event = self._kernel.transform(self._cl_run_context.queue, (int(nmr_problems), ), None, *self._all_buffers,
+                                       global_offset=(int(range_start),))
 
-        self._kernel.transform(self._cl_run_context.queue, (int(nmr_problems), ), None, *all_buffers)
-        event = cl.enqueue_copy(self._cl_run_context.queue, self._parameters[range_start:range_end, :],
-                                parameters_buffer, is_blocking=False)
-        return [event]
+        return [cl.enqueue_map_buffer(self._cl_run_context.queue, self._parameters_buffer,
+                                      cl.map_flags.READ, range_start * self._parameters.dtype.itemsize,
+                                      [nmr_problems, self._parameters.shape[1]], self._parameters.dtype,
+                                      order="C", wait_for=[event], is_blocking=False)[1]]
 
-    def _create_buffers(self, range_start, range_end):
-        read_write_flags = self._cl_environment.get_read_write_cl_mem_flags()
-        read_only_flags = self._cl_environment.get_read_only_cl_mem_flags()
-
+    def _create_buffers(self):
         all_buffers = []
-        parameters_buffer = cl.Buffer(self._cl_run_context.context, read_write_flags,
-                                      hostbuf=self._parameters[range_start:range_end, :])
+        parameters_buffer = cl.Buffer(self._cl_run_context.context,
+                                      cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR,
+                                      hostbuf=self._parameters)
         all_buffers.append(parameters_buffer)
+
         for data in self._var_data_dict.values():
-            all_buffers.append(cl.Buffer(self._cl_run_context.context, read_only_flags,
-                                         hostbuf=data.get_opencl_data()[range_start:range_end, ...]))
-        all_buffers.extend(self._constant_buffers)
+            all_buffers.append(cl.Buffer(self._cl_run_context.context,
+                                         cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
+                                         hostbuf=data.get_opencl_data()))
+
+        constant_buffers = self._generate_constant_buffers(self._protocol_data_dict, self._model_data_dict)
+        all_buffers.extend(constant_buffers)
         return all_buffers, parameters_buffer
 
     def _get_kernel_source(self):

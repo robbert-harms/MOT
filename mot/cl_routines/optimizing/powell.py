@@ -41,25 +41,3 @@ class PowellWorker(AbstractParallelOptimizerWorker):
 
     def _get_optimizer_call_name(self):
         return 'powell'
-
-    def _get_evaluate_function(self):
-        """Powell changes this to a call in which the original parameters change.
-
-        Returns:
-            str: the evaluation function.
-        """
-        kernel_source = ''
-        if self._use_param_codec:
-            kernel_source += '''
-                mot_float_type evaluate(mot_float_type* x, const void* data){
-                    decodeParameters(x);
-                    return calculateObjective((optimize_data*)data, x);
-                }
-            '''
-        else:
-            kernel_source += '''
-                mot_float_type evaluate(mot_float_type* x, const void* data){
-                    return calculateObjective((optimize_data*)data, x);
-                }
-            '''
-        return kernel_source
