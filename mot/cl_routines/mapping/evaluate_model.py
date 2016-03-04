@@ -77,7 +77,7 @@ class _EvaluateModelWorker(Worker):
         event = cl.enqueue_copy(self._cl_run_context.queue, self._evaluations[range_start:range_end, :], evals_buffer,
                                 is_blocking=False)
 
-        return event
+        return [event]
 
     def _create_buffers(self, range_start, range_end):
         write_only_flags = self._cl_environment.get_write_only_cl_mem_flags()

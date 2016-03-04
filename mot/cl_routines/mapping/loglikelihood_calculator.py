@@ -70,10 +70,10 @@ class _LogLikelihoodCalculatorWorker(Worker):
         event = self._kernel.run_kernel(self._cl_run_context.queue, (int(nmr_problems), ), None, *self._all_buffers,
                                         global_offset=(int(range_start),))
 
-        return cl.enqueue_map_buffer(self._cl_run_context.queue, self._likelihoods_buffer,
-                                     cl.map_flags.READ, range_start * self._log_likelihoods.dtype.itemsize,
-                                     [nmr_problems], self._log_likelihoods.dtype,
-                                     order="C", wait_for=[event], is_blocking=False)[1]
+        return [cl.enqueue_map_buffer(self._cl_run_context.queue, self._likelihoods_buffer,
+                                      cl.map_flags.READ, range_start * self._log_likelihoods.dtype.itemsize,
+                                      [nmr_problems], self._log_likelihoods.dtype,
+                                      order="C", wait_for=[event], is_blocking=False)[1]]
 
     def _create_buffers(self):
         constant_buffers = self._generate_constant_buffers(self._protocol_data_dict, self._model_data_dict)

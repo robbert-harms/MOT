@@ -78,7 +78,7 @@ class _FPTWorker(Worker):
         self._kernel.transform(self._cl_run_context.queue, (int(nmr_problems), ), None, *all_buffers)
         event = cl.enqueue_copy(self._cl_run_context.queue, self._parameters[range_start:range_end, :],
                                 parameters_buffer, is_blocking=False)
-        return event
+        return [event]
 
     def _create_buffers(self, range_start, range_end):
         read_write_flags = self._cl_environment.get_read_write_cl_mem_flags()

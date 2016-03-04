@@ -105,10 +105,10 @@ class _CodecWorker(Worker):
         event = self._kernel.transformParameterSpace(self._cl_run_context.queue, (int(nmr_problems), ), None,
                                                      self._param_buf, global_offset=(int(range_start),))
 
-        return cl.enqueue_map_buffer(self._cl_run_context.queue, self._param_buf,
-                                     cl.map_flags.READ, range_start * self._data.dtype.itemsize,
-                                     [nmr_problems, self._data.shape[1]], self._data.dtype,
-                                     order="C", wait_for=[event], is_blocking=False)[1]
+        return [cl.enqueue_map_buffer(self._cl_run_context.queue, self._param_buf,
+                                      cl.map_flags.READ, range_start * self._data.dtype.itemsize,
+                                      [nmr_problems, self._data.shape[1]], self._data.dtype,
+                                      order="C", wait_for=[event], is_blocking=False)[1]]
 
     def _get_kernel_source(self):
         kernel_source = ''

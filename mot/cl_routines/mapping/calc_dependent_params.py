@@ -89,10 +89,10 @@ class _CDPWorker(Worker):
         event = self._kernel.transform(self._cl_run_context.queue, (int(nmr_problems), ), None, *self._all_buffers,
                                        global_offset=(int(range_start),))
 
-        return cl.enqueue_map_buffer(self._cl_run_context.queue, self._results_list_buffer,
-                                     cl.map_flags.READ, range_start * self._results_list.dtype.itemsize,
-                                     [nmr_problems, self._results_list.shape[1]], self._results_list.dtype,
-                                     order="C", wait_for=[event], is_blocking=False)[1]
+        return [cl.enqueue_map_buffer(self._cl_run_context.queue, self._results_list_buffer,
+                                      cl.map_flags.READ, range_start * self._results_list.dtype.itemsize,
+                                      [nmr_problems, self._results_list.shape[1]], self._results_list.dtype,
+                                      order="C", wait_for=[event], is_blocking=False)[1]]
 
     def _create_buffers(self):
         estimated_parameters_buf = cl.Buffer(self._cl_run_context.context,

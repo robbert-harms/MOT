@@ -245,7 +245,7 @@ class LoadBalanceStrategy(object):
                 if batch_nmr < len(batches[worker_ind]):
                     self._logger.debug('Going to run batch {0} on device {1} with range ({2}, {3})'.format(
                         batch_nmr, worker_ind, *batches[worker_ind][batch_nmr]))
-                    events.append(worker.calculate(int(batches[worker_ind][batch_nmr][0]),
+                    events.extend(worker.calculate(int(batches[worker_ind][batch_nmr][0]),
                                                    int(batches[worker_ind][batch_nmr][1])))
                     problems_seen += batches[worker_ind][batch_nmr][1] - batches[worker_ind][batch_nmr][0]
 

@@ -176,7 +176,7 @@ class _MHWorker(Worker):
         event = self._kernel.sample(self._cl_run_context.queue, global_range, local_range, *data_buffers)
         event = cl.enqueue_copy(self._cl_run_context.queue, self._samples[range_start:range_end, ...],
                                 samples_buf, wait_for=(event,), is_blocking=False)
-        return event
+        return [event]
 
     def _get_kernel_source(self):
         cl_final_param_transform = self._model.get_final_parameter_transformations('applyFinalParamTransforms')

@@ -157,7 +157,7 @@ class AbstractFilterWorker(Worker):
             event = cl.enqueue_copy(self._cl_run_context.queue, self._results_dict[key], results_buf,
                                     is_blocking=False, wait_for=[event])
 
-        return event
+        return [event]
 
     def _get_kernel_source(self):
         """Get the kernel source for this filtering kernel.

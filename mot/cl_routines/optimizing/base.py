@@ -197,18 +197,19 @@ class AbstractParallelOptimizerWorker(Worker):
         nmr_problems = range_end - range_start
         all_buffers, parameters_buffer, return_code_buffer = self._create_buffers(range_start, range_end)
 
-        event = self._kernel.minimize(self._cl_run_context.queue, (nmr_problems, ), None, *all_buffers)
+        kernel_event = self._kernel.minimize(self._cl_run_context.queue, (nmr_problems, ), None, *all_buffers)
 
-        event = cl.enqueue_map_buffer(self._cl_run_context.queue, parameters_buffer,
-                                      cl.map_flags.READ, 0,
-                                      [nmr_problems, self._starting_points.shape[1]],
-                                      self._return_codes.dtype,
-                                      order="C", wait_for=[event], is_blocking=False)[1]
-
-        return cl.enqueue_map_buffer(self._cl_run_context.queue, return_code_buffer,
-                                     cl.map_flags.READ, 0,
-                                     [nmr_problems], self._return_codes.dtype,
-                                     order="C", wait_for=[event], is_blocking=False)[1]
+        return [
+            cl.enqueue_map_buffer(self._cl_run_context.queue, parameters_buffer,
+                                  cl.map_flags.READ, 0,
+                                  [nmr_problems, self._starting_points.shape[1]],
+                                  self._return_codes.dtype,
+                                  order="C", wait_for=[kernel_event], is_blocking=False)[1],
+            cl.enqueue_map_buffer(self._cl_run_context.queue, return_code_buffer,
+                                  cl.map_flags.READ, 0,
+                                  [nmr_problems], self._return_codes.dtype,
+                                  order="C", wait_for=[kernel_event], is_blocking=False)[1]
+        ]
 
     def _create_buffers(self, range_start, range_end):
         nmr_problems = range_end - range_start
