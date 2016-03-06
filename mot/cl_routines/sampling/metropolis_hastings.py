@@ -174,8 +174,8 @@ class _MHWorker(Worker):
 
         event = cl.enqueue_map_buffer(self._cl_run_context.queue, samples_buf,
                                       cl.map_flags.READ, 0,
-                                      [nmr_problems, self._samples.shape[1]], self._samples.dtype,
-                                      order="C", wait_for=[kernel_event], is_blocking=False)[1]
+                                      [nmr_problems, self._samples.shape[1], self._samples.shape[2]],
+                                      self._samples.dtype, order="C", wait_for=[kernel_event], is_blocking=False)[1]
         return [event]
 
     def _get_kernel_source(self):
