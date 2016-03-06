@@ -44,7 +44,7 @@ class LMMin(LibraryFunction):
         params = {'NMR_PARAMS': nmr_parameters, 'PATIENCE': patience}
 
         optimizer_options = optimizer_options or {}
-        option_defaults = {'step_bound': 100.0, 'scale_diag': 0}
+        option_defaults = {'step_bound': 100.0, 'scale_diag': 1}
         option_converters = {'scale_diag': lambda val: int(bool(val))}
 
         for option, default in option_defaults.items():

@@ -52,8 +52,9 @@ class Worker(object):
             range_end (int): The end of the processing range
 
         Returns:
-            cl_event: The last CL event, so the load balancer can wait for completion on it.
+            list[cl_event]: The list of CL events to wait for.
         """
+        return []
 
     def post_process(self, range_start, range_end):
         """Apply post processing at the end of the calculation.

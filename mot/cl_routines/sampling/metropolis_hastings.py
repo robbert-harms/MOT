@@ -155,10 +155,10 @@ class _MHWorker(Worker):
         ranluxcltab_buffer = initialize_ranlux(self._cl_environment, self._cl_run_context, nmr_problems)
 
         data_buffers = [cl.Buffer(self._cl_run_context.context,
-                                  cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
+                                  cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR,
                                   hostbuf=self._parameters[range_start:range_end, :])]
         samples_buf = cl.Buffer(self._cl_run_context.context,
-                                cl.mem_flags.WRITE_ONLY | cl.mem_flags.COPY_HOST_PTR,
+                                cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
                                 hostbuf=self._samples[range_start:range_end, ...])
         data_buffers.append(samples_buf)
         data_buffers.append(ranluxcltab_buffer)
@@ -170,12 +170,12 @@ class _MHWorker(Worker):
 
         data_buffers.extend(self._constant_buffers)
 
-        global_range = (int(nmr_problems), )
-        local_range = None
+        kernel_event = self._kernel.sample(self._cl_run_context.queue, (int(nmr_problems), ), None, *data_buffers)
 
-        event = self._kernel.sample(self._cl_run_context.queue, global_range, local_range, *data_buffers)
-        event = cl.enqueue_copy(self._cl_run_context.queue, self._samples[range_start:range_end, ...],
-                                samples_buf, wait_for=(event,), is_blocking=False)
+        event = cl.enqueue_map_buffer(self._cl_run_context.queue, samples_buf,
+                                      cl.map_flags.READ, 0,
+                                      [nmr_problems, self._samples.shape[1]], self._samples.dtype,
+                                      order="C", wait_for=[kernel_event], is_blocking=False)[1]
         return [event]
 
     def _get_kernel_source(self):

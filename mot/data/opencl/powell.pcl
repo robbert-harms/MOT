@@ -40,9 +40,6 @@
     brent -- Given the 3 points from mnbrak, it finds the
     minimum
 
-    Implementation note by Robbert:
-        scratch_array can be removed if desired. I added it to reduce memory overhead in f1dim.
-
  */
 
 /* Used to set the maximum number of iterations to patience*(number_of_parameters+1). */
@@ -58,18 +55,13 @@
 
 mot_float_type linmin(mot_float_type* const model_parameters,
                       mot_float_type* const x_tmp_min,
-                      const void* const data,
-                      mot_float_type* const scratch_array);
-
+                      const void* const data);
 mot_float_type bracket_and_brent(const mot_float_type* const model_parameters, const mot_float_type* const x_tmp_min,
-                                 mot_float_type *xmin, const void* const data,
-                                 mot_float_type* const scratch_array);
-
+                                 mot_float_type *xmin, const void* const data);
 mot_float_type f1dim(mot_float_type x,
                      const void* const data,
                      const mot_float_type* const model_parameters,
-                     const mot_float_type* const x_tmp_min,
-                     mot_float_type* const scratch_array);
+                     const mot_float_type* const x_tmp_min);
 
 int powell(mot_float_type* model_parameters, const void* const data){
     int i, j, i_greatest;
@@ -101,7 +93,7 @@ int powell(mot_float_type* model_parameters, const void* const data){
             }
             fval_tmp2 = fval;
 
-            fval = linmin(model_parameters, x_tmp_min, data, x_tmp2);
+            fval = linmin(model_parameters, x_tmp_min, data);
 
             if(fval_tmp2 - fval > del){
                 del = fval_tmp2 - fval;
@@ -125,7 +117,7 @@ int powell(mot_float_type* model_parameters, const void* const data){
             if(2.0 * (fval_tmp1 - 2.0 * fval + fval_tmp2) * ((fval_tmp1 - fval - del) * (fval_tmp1 - fval - del))
                         - del * ((fval_tmp1 - fval_tmp2) * (fval_tmp1 - fval_tmp2)) < 0.0){
 
-                fval = linmin(model_parameters, x_tmp_min, data, x_tmp2);
+                fval = linmin(model_parameters, x_tmp_min, data);
 
                 for(j=0; j < %(NMR_PARAMS)r; j++){
                     starting_vectors[j][i_greatest] = starting_vectors[j][%(NMR_PARAMS)r-1];
@@ -139,11 +131,10 @@ int powell(mot_float_type* model_parameters, const void* const data){
 
 mot_float_type linmin(mot_float_type* const model_parameters,
                       mot_float_type* const x_tmp_min,
-                      const void* const data,
-                      mot_float_type* const scratch_array){
+                      const void* const data){
 
     mot_float_type xmin;
-    mot_float_type fval = bracket_and_brent(model_parameters, x_tmp_min, &xmin, data, scratch_array);
+    mot_float_type fval = bracket_and_brent(model_parameters, x_tmp_min, &xmin, data);
     for(int j=0; j < %(NMR_PARAMS)r; j++){
         x_tmp_min[j] *= xmin;
         model_parameters[j] += x_tmp_min[j];
@@ -155,8 +146,7 @@ mot_float_type linmin(mot_float_type* const model_parameters,
 mot_float_type bracket_and_brent(const mot_float_type* const model_parameters,
                                  const mot_float_type* const x_tmp_min,
                                  mot_float_type* xmin,
-                                 const void* const data,
-                                 mot_float_type* const scratch_array){
+                                 const void* const data){
 
     mot_float_type ax = 0.0;
     mot_float_type bx = 1.0;
@@ -173,8 +163,8 @@ mot_float_type bracket_and_brent(const mot_float_type* const model_parameters,
     mot_float_type fx, p, tol1, tol2, v, w, x, xm;
     mot_float_type e=0.0;
 
-    fa = f1dim(ax, data, model_parameters, x_tmp_min, scratch_array);
-    fb = f1dim(bx, data, model_parameters, x_tmp_min, scratch_array);
+    fa = f1dim(ax, data, model_parameters, x_tmp_min);
+    fb = f1dim(bx, data, model_parameters, x_tmp_min);
 
     if(fb > fa){
         tmp = ax;
@@ -187,7 +177,7 @@ mot_float_type bracket_and_brent(const mot_float_type* const model_parameters,
     }
 
     cx = (bx) + BRACKET_GOLD * (bx - ax);
-    fc = f1dim(cx, data, model_parameters, x_tmp_min, scratch_array);
+    fc = f1dim(cx, data, model_parameters, x_tmp_min);
 
     while(fb > fc){
         r = (bx - ax) * (fb - fc);
@@ -199,7 +189,7 @@ mot_float_type bracket_and_brent(const mot_float_type* const model_parameters,
         ulim = (bx) + GLIMIT * (cx - bx);
 
         if((bx - u) * (u - cx) > 0.0){
-            fu = f1dim(u, data, model_parameters, x_tmp_min, scratch_array);
+            fu = f1dim(u, data, model_parameters, x_tmp_min);
 
             if(fu < fc){
                 ax = bx;
@@ -214,10 +204,10 @@ mot_float_type bracket_and_brent(const mot_float_type* const model_parameters,
                 break;
             }
             u = (cx) + BRACKET_GOLD * (cx - bx);
-            fu = f1dim(u, data, model_parameters, x_tmp_min, scratch_array);
+            fu = f1dim(u, data, model_parameters, x_tmp_min);
         }
         else if((cx - u) * (u - ulim) > 0.0){
-            fu = f1dim(u, data, model_parameters, x_tmp_min, scratch_array);
+            fu = f1dim(u, data, model_parameters, x_tmp_min);
 
             if(fu < fc){
                 bx = cx;
@@ -226,16 +216,16 @@ mot_float_type bracket_and_brent(const mot_float_type* const model_parameters,
 
                 fb = fc;
                 fc = fu;
-                fu = f1dim(u, data, model_parameters, x_tmp_min, scratch_array);
+                fu = f1dim(u, data, model_parameters, x_tmp_min);
             }
         }
         else if((u - ulim) * (ulim - cx) >= 0.0){
             u = ulim;
-            fu = f1dim(u, data, model_parameters, x_tmp_min, scratch_array);
+            fu = f1dim(u, data, model_parameters, x_tmp_min);
         }
         else{
             u = (cx) + BRACKET_GOLD * (cx - bx);
-            fu = f1dim(u, data, model_parameters, x_tmp_min, scratch_array);
+            fu = f1dim(u, data, model_parameters, x_tmp_min);
         }
         ax = bx;
         bx = cx;
@@ -254,7 +244,7 @@ mot_float_type bracket_and_brent(const mot_float_type* const model_parameters,
     mot_float_type b=(ax > cx ? ax : cx);
 
     x=w=v=bx;
-    fw=fv=fx=f1dim(x, data, model_parameters, x_tmp_min, scratch_array);
+    fw=fv=fx=f1dim(x, data, model_parameters, x_tmp_min);
 
     #pragma unroll 1
     for(iter=0; iter < MAX_IT; iter++){
@@ -299,7 +289,7 @@ mot_float_type bracket_and_brent(const mot_float_type* const model_parameters,
         }
 
         u = (fabs(d) >= tol1 ? x + d : x + copysign(tol1, d));
-        fu = f1dim(u, data, model_parameters, x_tmp_min, scratch_array);
+        fu = f1dim(u, data, model_parameters, x_tmp_min);
 
         if(fu <= fx){
             if(u >= x){
@@ -341,14 +331,14 @@ mot_float_type bracket_and_brent(const mot_float_type* const model_parameters,
 mot_float_type f1dim(mot_float_type x,
                      const void* const data,
                      const mot_float_type* const model_parameters,
-                     const mot_float_type* const x_tmp_min,
-                     mot_float_type* const scratch_array){
+                     const mot_float_type* const x_tmp_min){
 
+    mot_float_type xt[%(NMR_PARAMS)r];
     for(int j=0; j < %(NMR_PARAMS)r; j++){
-        scratch_array[j] = x * x_tmp_min[j] + model_parameters[j];
+        xt[j] = x * x_tmp_min[j] + model_parameters[j];
     }
 
-    return evaluate(scratch_array, data);
+    return evaluate(xt, data);
 }
 
 
