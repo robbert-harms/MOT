@@ -21,7 +21,6 @@ class AbstractCLRoutine(object):
         self.compile_flags = {
             '-cl-single-precision-constant': True,
             '-cl-denorms-are-zero': True,
-            '-cl-strict-aliasing': True,
             '-cl-mad-enable': True,
             '-cl-no-signed-zeros': True
         }
