@@ -40,7 +40,8 @@ class LogLikelihoodCalculator(AbstractCLRoutine):
                                 np_dtype, requirements=['C', 'A', 'O'])
 
         workers = self._create_workers(
-            lambda cl_environment: _LogLikelihoodCalculatorWorker(cl_environment, model, parameters,
+            lambda cl_environment: _LogLikelihoodCalculatorWorker(cl_environment, self.get_compile_flags_list(),
+                                                                  model, parameters,
                                                                   log_likelihoods, evaluation_model))
         self.load_balancer.process(workers, model.get_nmr_problems())
 
@@ -49,7 +50,7 @@ class LogLikelihoodCalculator(AbstractCLRoutine):
 
 class _LogLikelihoodCalculatorWorker(Worker):
 
-    def __init__(self, cl_environment, model, parameters, log_likelihoods, evaluation_model):
+    def __init__(self, cl_environment, compile_flags, model, parameters, log_likelihoods, evaluation_model):
         super(_LogLikelihoodCalculatorWorker, self).__init__(cl_environment)
 
         self._model = model
@@ -63,7 +64,7 @@ class _LogLikelihoodCalculatorWorker(Worker):
         self._model_data_dict = model.get_model_data()
 
         self._all_buffers, self._likelihoods_buffer = self._create_buffers()
-        self._kernel = self._build_kernel()
+        self._kernel = self._build_kernel(compile_flags)
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start

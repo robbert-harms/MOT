@@ -47,9 +47,9 @@ class FinalParametersTransformer(AbstractCLRoutine):
         model_data_dict = model.get_model_data()
 
         if model.get_final_parameter_transformations():
-            workers = self._create_workers(lambda cl_environment: _FPTWorker(cl_environment, model, parameters,
-                                                                             var_data_dict, protocol_data_dict,
-                                                                             model_data_dict))
+            workers = self._create_workers(lambda cl_environment: _FPTWorker(
+                cl_environment, self.get_compile_flags_list(), model, parameters,
+                var_data_dict, protocol_data_dict, model_data_dict))
             self.load_balancer.process(workers, model.get_nmr_problems())
 
         return parameters
@@ -57,7 +57,8 @@ class FinalParametersTransformer(AbstractCLRoutine):
 
 class _FPTWorker(Worker):
 
-    def __init__(self, cl_environment, model, parameters, var_data_dict, protocol_data_dict, model_data_dict):
+    def __init__(self, cl_environment, compile_flags, model, parameters, var_data_dict, protocol_data_dict,
+                 model_data_dict):
         super(_FPTWorker, self).__init__(cl_environment)
 
         self._parameters = parameters
@@ -68,7 +69,7 @@ class _FPTWorker(Worker):
         self._model_data_dict = model_data_dict
         self._double_precision = model.double_precision
         self._all_buffers, self._parameters_buffer = self._create_buffers()
-        self._kernel = self._build_kernel()
+        self._kernel = self._build_kernel(compile_flags)
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start

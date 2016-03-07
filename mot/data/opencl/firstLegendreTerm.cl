@@ -58,7 +58,7 @@ double getFirstLegendreTerm(const double x, const int n){
         return 0.0;
     }
 
-    if(isequal(fabs(x), 1.0)){
+    if(fabs(x) == 1.0){
         if (x > 0.0){
             return 1.0;
         }

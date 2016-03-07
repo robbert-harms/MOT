@@ -80,17 +80,17 @@ class _EvaluateModelWorker(Worker):
         return [event]
 
     def _create_buffers(self, range_start, range_end):
-        write_only_flags = self._cl_environment.get_write_only_cl_mem_flags()
-        read_only_flags = self._cl_environment.get_read_only_cl_mem_flags()
-
-        evals_buffer = cl.Buffer(self._cl_run_context.context, write_only_flags,
+        evals_buffer = cl.Buffer(self._cl_run_context.context,
+                                 cl.mem_flags.WRITE_ONLY | cl.mem_flags.COPY_HOST_PTR,
                                  hostbuf=self._evaluations[range_start:range_end, :])
 
-        all_buffers = [cl.Buffer(self._cl_run_context.context, read_only_flags,
+        all_buffers = [cl.Buffer(self._cl_run_context.context,
+                                 cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
                                  hostbuf=self._parameters[range_start:range_end, :]),
                        evals_buffer]
         for data in self._var_data_dict.values():
-            all_buffers.append(cl.Buffer(self._cl_run_context.context, read_only_flags,
+            all_buffers.append(cl.Buffer(self._cl_run_context.context,
+                                         cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
                                          hostbuf=data.get_opencl_data()[range_start:range_end, ...]))
 
         all_buffers.extend(self._constant_buffers)

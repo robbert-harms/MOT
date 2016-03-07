@@ -104,7 +104,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         self._logger.info('We will use a {} precision float type for the calculations.'.format(
             'double' if model.double_precision else 'single'))
         for env in self.load_balancer.get_used_cl_environments(self.cl_environments):
-            self._logger.info('Using device \'{}\' with compile flags {}'.format(str(env), str(env.compile_flags)))
+            self._logger.info('Using device \'{}\'.'.format(str(env)))
         self._logger.info('The parameters we will optimize are: {0}'.format(model.get_optimized_param_names()))
         self._logger.info('We will use the optimizer {} '
                           'with patience {} and optimizer options {}'.format(self.get_pretty_name(),
@@ -191,7 +191,7 @@ class AbstractParallelOptimizerWorker(Worker):
         self._use_param_codec = self._parent_optimizer.use_param_codec and param_codec
 
         self._starting_points = starting_points
-        self._kernel = self._build_kernel()
+        self._kernel = self._build_kernel(self._parent_optimizer.get_compile_flags_list())
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start

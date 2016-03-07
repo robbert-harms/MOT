@@ -1,5 +1,4 @@
 from contextlib import contextmanager
-import copy
 from .cl_environments import CLEnvironmentFactory
 from .load_balance_strategies import PreferGPU
 
@@ -23,6 +22,8 @@ We require that all CL routines are instantiated with the CL environment and the
 known from the context defaults can be obtained from this module.
 
 """
+ignore_kernel_warnings = True
+
 runtime_config = {
     'cl_environments': CLEnvironmentFactory.all_devices(),
     'load_balancer': PreferGPU(),

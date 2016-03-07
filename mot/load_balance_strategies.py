@@ -67,19 +67,19 @@ class Worker(object):
             range_end (int): The end of the processing range
         """
 
-    def _build_kernel(self):
+    def _build_kernel(self, compile_flags=()):
         """Build the kernel for this worker.
 
         This assumes that the implementer implements the function _get_kernel_source() to get the source.
 
         Returns:
-            a compiled kernel
+            a compiled CL kernel
         """
         kernel_source = self._get_kernel_source()
-        warnings.simplefilter("ignore")
-        kernel = cl.Program(self._cl_run_context.context,
-                            kernel_source).build(' '.join(self._cl_environment.compile_flags))
-        return kernel
+        from mot import runtime_configuration
+        if runtime_configuration.ignore_kernel_warnings:
+            warnings.simplefilter("ignore")
+        return cl.Program(self._cl_run_context.context, kernel_source).build(' '.join(compile_flags))
 
     def _get_kernel_source(self):
         """Calculate the kernel source for this worker.

@@ -7,15 +7,44 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class AbstractCLRoutine(object):
 
-    def __init__(self, cl_environments, load_balancer, **kwargs):
+    def __init__(self, cl_environments, load_balancer, compile_flags=None, **kwargs):
         """This class serves as an abstract basis for all CL routine classes.
 
         Args:
             cl_environments (list of CLEnvironment): The list of CL environments using by this routine.
             load_balancer (LoadBalancingStrategy): The load balancing strategy to be used by this routine.
+            compile_flags (dict): the list of compile flags we want to enable or disable. The keys (str)
+                should be the compile flag, the value (boolean) specifies enable or disable.
         """
         self._cl_environments = cl_environments
         self._load_balancer = load_balancer
+        self.compile_flags = {
+            '-cl-single-precision-constant': True,
+            '-cl-denorms-are-zero': True,
+            '-cl-strict-aliasing': True,
+            '-cl-mad-enable': True,
+            '-cl-no-signed-zeros': True
+        }
+
+        if compile_flags:
+            self.compile_flags.update(compile_flags)
+
+    def set_compile_flag(self, compile_flag, enable):
+        """Enable or disable the given compile flag.
+
+        Args:
+            compile_flag (str): the compile flag we want to enable or disable
+            enable (boolean): if we enable (True) or disable (False) this compile flag
+        """
+        self.compile_flags.update({compile_flag: enable})
+
+    def get_compile_flags_list(self):
+        """Get a list of the enabled compile flags.
+
+        Returns:
+            list: the list of enabled compile flags.
+        """
+        return [flag for flag, enabled in self.compile_flags.items() if enabled]
 
     @property
     def cl_environments(self):

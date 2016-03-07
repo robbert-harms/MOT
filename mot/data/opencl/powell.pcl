@@ -154,7 +154,6 @@ mot_float_type bracket_and_brent(const mot_float_type* const model_parameters,
 
     mot_float_type ulim, u, r, q, fu, tmp;
     mot_float_type maxarg = 0.0;
-    int j;
     mot_float_type fa = 0.0;
     mot_float_type fb = 0.0;
     mot_float_type fc = 0.0;

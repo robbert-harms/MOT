@@ -58,7 +58,8 @@ class CalculateDependentParameters(AbstractCLRoutine):
                                           np_dtype, requirements=['C', 'A', 'O'])
 
         workers = self._create_workers(
-            lambda cl_environment: _CDPWorker(cl_environment, fixed_param_values, len(estimated_parameters_list),
+            lambda cl_environment: _CDPWorker(cl_environment, self.get_compile_flags_list(),
+                                              fixed_param_values, len(estimated_parameters_list),
                                               estimated_parameters, parameters_listing,
                                               dependent_parameter_names, results_list, self._double_precision))
         self.load_balancer.process(workers, estimated_parameters_list[0].shape[0])
@@ -68,7 +69,7 @@ class CalculateDependentParameters(AbstractCLRoutine):
 
 class _CDPWorker(Worker):
 
-    def __init__(self, cl_environment, var_data_dict, nmr_estimated_params, estimated_parameters,
+    def __init__(self, cl_environment, compile_flags, var_data_dict, nmr_estimated_params, estimated_parameters,
                  parameters_listing, dependent_parameter_names, results_list, double_precision):
         super(_CDPWorker, self).__init__(cl_environment)
 
@@ -81,7 +82,7 @@ class _CDPWorker(Worker):
 
         self._estimated_parameters = estimated_parameters
         self._all_buffers, self._results_list_buffer = self._create_buffers()
-        self._kernel = self._build_kernel()
+        self._kernel = self._build_kernel(compile_flags)
 
     def calculate(self, range_start, range_end):
         nmr_problems = int(range_end - range_start)

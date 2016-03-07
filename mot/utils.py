@@ -333,6 +333,6 @@ def initialize_ranlux(cl_environment, cl_context, nmr_instances, ranlux=RanluxCL
     ranluxcltab_buffer = cl.Buffer(cl_context.context,
                                    cl.mem_flags.READ_WRITE | cl.mem_flags.ALLOC_HOST_PTR,
                                    size=np.dtype(cl_array.vec.float4).itemsize * nmr_instances * 7)
-    kernel = cl.Program(cl_context.context, kernel_source).build(' '.join(cl_environment.compile_flags))
+    kernel = cl.Program(cl_context.context, kernel_source).build()
     kernel.init(cl_context.queue, (int(nmr_instances), ), None, ranluxcltab_buffer).wait()
     return ranluxcltab_buffer

@@ -41,7 +41,7 @@ class GaussianFilter(AbstractFilter):
         self.sigma = sigma
 
     def _get_worker_generator(self, *args):
-        return lambda cl_environment: _GaussianFilterWorker(cl_environment, *args)
+        return lambda cl_environment: _GaussianFilterWorker(cl_environment, self.get_compile_flags_list(), *args)
 
 
 class _GaussianFilterWorker(AbstractFilterWorker):
@@ -72,10 +72,7 @@ class _GaussianFilterWorker(AbstractFilterWorker):
                                               hostbuf=filter_kernel)
 
                 kernel_source = self._get_gaussian_kernel_source(dimension)
-
-                warnings.simplefilter("ignore")
-                kernel = cl.Program(self._cl_run_context.context,
-                                    kernel_source).build(' '.join(self._cl_environment.compile_flags))
+                kernel = cl.Program(self._cl_run_context.context, kernel_source).build()
 
                 if dimension % 2 == 0:
                     buffers_list = self._list_all_buffers(volume_buf, filter_kernel_buf, results_buf)

@@ -74,10 +74,11 @@ class MetropolisHastings(AbstractSampler):
 
         self._logger.info('Starting sampling with method {0}'.format(self.get_pretty_name()))
 
-        workers = self._create_workers(lambda cl_environment: _MHWorker(cl_environment, model, parameters, samples,
-                                       var_data_dict, protocol_data_dict, model_data_dict,
-                                       self.nmr_samples, self.burn_length, self.sample_intervals,
-                                       self.proposal_update_intervals))
+        workers = self._create_workers(lambda cl_environment: _MHWorker(
+            cl_environment, self.get_compile_flags_list(), model, parameters, samples,
+            var_data_dict, protocol_data_dict, model_data_dict,
+            self.nmr_samples, self.burn_length, self.sample_intervals,
+            self.proposal_update_intervals))
         self.load_balancer.process(workers, model.get_nmr_problems())
 
         samples_dict = results_to_dict(samples, model.get_optimized_param_names())
@@ -108,7 +109,9 @@ class MetropolisHastings(AbstractSampler):
         if not model.double_precision:
             self._logger.warn('Please be warned that with single float precision the results may look truncated.')
         for env in self.load_balancer.get_used_cl_environments(self.cl_environments):
-            self._logger.info('Using device \'{}\' with compile flags {}'.format(str(env), str(env.compile_flags)))
+            self._logger.info('Using device \'{}\'.'.format(str(env)))
+
+        self._logger.debug('Using compile flags: {}'.format(self.get_compile_flags_list()))
 
         self._logger.info('The parameters we will sample are: {0}'.format(model.get_optimized_param_names()))
 
@@ -128,7 +131,7 @@ class MetropolisHastings(AbstractSampler):
 
 class _MHWorker(Worker):
 
-    def __init__(self, cl_environment, model, parameters, samples,
+    def __init__(self, cl_environment, compile_flags, model, parameters, samples,
                  var_data_dict, protocol_data_dict, model_data_dict, nmr_samples, burn_length, sample_intervals,
                  proposal_update_intervals):
         super(_MHWorker, self).__init__(cl_environment)
@@ -148,7 +151,7 @@ class _MHWorker(Worker):
         self.proposal_update_intervals = proposal_update_intervals
 
         self._constant_buffers = self._generate_constant_buffers(self._protocol_data_dict, self._model_data_dict)
-        self._kernel = self._build_kernel()
+        self._kernel = self._build_kernel(compile_flags)
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start

@@ -11,21 +11,15 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class CLEnvironment(object):
 
-    def __init__(self, platform, device, compile_flags=()):
+    def __init__(self, platform, device):
         """Storage unit for an OpenCL environment.
 
         Args:
             platform (pyopencl platform): An PyOpenCL platform.
             device (pyopencl device): An PyOpenCL device
-            context (pyopencl context): An PyOpenCL context
-            compile_flags (list of str): A list of strings with compile flags (see the OpenCL specifications)
-
-        Attributes:
-            compile_flags (list of str): A list of strings with compile flags (see the OpenCL specifications)
         """
         self._platform = platform
         self._device = device
-        self.compile_flags = compile_flags
         self._cl_context = CLRunContext(self)
 
     def get_new_context(self):
@@ -35,30 +29,6 @@ class CLEnvironment(object):
             CLContext: a CL context for single run use
         """
         return self._cl_context
-
-    def get_read_only_cl_mem_flags(self):
-        """Get the read only memory flags for this environment.
-
-        Returns:
-            int: CL integer representing the memory flags to use.
-        """
-        return cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR
-
-    def get_read_write_cl_mem_flags(self):
-        """Get the read write memory flags for this environment.
-
-        Returns:
-            int: CL integer representing the memory flags to use.
-        """
-        return cl.mem_flags.READ_WRITE | cl.mem_flags.COPY_HOST_PTR
-
-    def get_write_only_cl_mem_flags(self):
-        """Get the write only memory flags for this environment.
-
-        Returns:
-            int: CL integer representing the memory flags to use.
-        """
-        return cl.mem_flags.WRITE_ONLY | cl.mem_flags.COPY_HOST_PTR
 
     @property
     def supports_double(self):
@@ -180,8 +150,7 @@ class CLRunContext(object):
 class CLEnvironmentFactory(object):
 
     @staticmethod
-    def single_device(cl_device_type=cl.device_type.GPU, platform=None, compile_flags=(),
-                      fallback_to_any_device_type=False):
+    def single_device(cl_device_type=cl.device_type.GPU, platform=None, fallback_to_any_device_type=False):
         """Get a list containing a single device environment, for a device of the given type on the given platform.
 
         This will only fetch devices that support double (possibly only double with a pragma
@@ -191,7 +160,6 @@ class CLEnvironmentFactory(object):
             cl_device_type (cl.device_type.* or string): The type of the device we want,
                 can be a opencl device type or a string matching 'GPU', 'CPU' or 'ALL'.
             platform (opencl platform): The opencl platform to select the devices from
-            compile_flags (list of str): A tuple with compile flags to use for this device / context.
             fallback_to_any_device_type (boolean): If True, try to fallback to any possible device in the system.
 
         Returns:
@@ -208,7 +176,7 @@ class CLEnvironmentFactory(object):
             for dev in devices:
                 if device_supports_double(dev):
                     try:
-                        env = CLEnvironment(platform, dev, compile_flags=compile_flags)
+                        env = CLEnvironment(platform, dev)
                         return [env]
                     except cl.RuntimeError:
                         pass
@@ -223,7 +191,7 @@ class CLEnvironmentFactory(object):
         raise ValueError('No suitable OpenCL device found.')
 
     @staticmethod
-    def all_devices(cl_device_type=None, platform=None, compile_flags=()):
+    def all_devices(cl_device_type=None, platform=None):
         """Get multiple device environments, optionally only of the indicated type.
 
         This will only fetch devices that support double (possibly only devices
@@ -233,7 +201,6 @@ class CLEnvironmentFactory(object):
             cl_device_type (cl.device_type.* or string): The type of the device we want,
                 can be a opencl device type or a string matching 'GPU' or 'CPU'.
             platform (opencl platform): The opencl platform to select the devices from
-            compile_flags (list of str): A tuple with compile flags to use for this device / context.
 
         Returns:
             list of CLEnvironment: List with one element, the CL runtime environment requested.
@@ -257,7 +224,7 @@ class CLEnvironmentFactory(object):
             for device in devices:
                 if device_supports_double(device):
                     try:
-                        env = CLEnvironment(platform, device, compile_flags=compile_flags)
+                        env = CLEnvironment(platform, device)
                         runtime_list.append(env)
                     except cl.RuntimeError:
                         pass

@@ -101,12 +101,13 @@ class AbstractFilter(AbstractCLRoutine):
         Returns:
             the python callback for generating the worker
         """
-        return lambda cl_environment: AbstractFilterWorker(cl_environment, *args)
+        return lambda cl_environment: AbstractFilterWorker(cl_environment, self.get_compile_flags_list(), *args)
 
 
 class AbstractFilterWorker(Worker):
 
-    def __init__(self, cl_environment, parent_filter, results_dict, volumes_list, mask, double_precision):
+    def __init__(self, cl_environment, compile_flags, parent_filter, results_dict,
+                 volumes_list, mask, double_precision):
         """Create a filter worker.
 
         Args:
@@ -127,10 +128,11 @@ class AbstractFilterWorker(Worker):
             self._use_mask = False
         else:
             self._use_mask = True
-            self._mask_buf = cl.Buffer(self._cl_run_context.context, self._cl_environment.get_read_only_cl_mem_flags(),
+            self._mask_buf = cl.Buffer(self._cl_run_context.context,
+                                       cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
                                        hostbuf=self._mask)
 
-        self._kernel = self._build_kernel()
+        self._kernel = self._build_kernel(compile_flags)
 
     def calculate(self, range_start, range_end):
         volumes_to_run = [self._volumes_list[i] for i in range(len(self._volumes_list)) if range_start <= i < range_end]

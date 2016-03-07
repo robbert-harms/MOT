@@ -77,7 +77,8 @@ class CodecRunner(AbstractCLRoutine):
             np_dtype = np.float64
         data = np.require(data, np_dtype, requirements=['C', 'A', 'O', 'W'])
         rows = data.shape[0]
-        workers = self._create_workers(lambda cl_environment: _CodecWorker(cl_environment, cl_func, cl_func_name, data,
+        workers = self._create_workers(lambda cl_environment: _CodecWorker(cl_environment, self.get_compile_flags_list(),
+                                                                           cl_func, cl_func_name, data,
                                                                            nmr_params, self._double_precision))
         self.load_balancer.process(workers, rows)
         return data
@@ -85,7 +86,7 @@ class CodecRunner(AbstractCLRoutine):
 
 class _CodecWorker(Worker):
 
-    def __init__(self, cl_environment, cl_func, cl_func_name, data, nmr_params, double_precision):
+    def __init__(self, cl_environment, compile_flags, cl_func, cl_func_name, data, nmr_params, double_precision):
         super(_CodecWorker, self).__init__(cl_environment)
         self._cl_func = cl_func
         self._cl_func_name = cl_func_name
@@ -97,7 +98,7 @@ class _CodecWorker(Worker):
                                     cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR,
                                     hostbuf=self._data)
 
-        self._kernel = self._build_kernel()
+        self._kernel = self._build_kernel(compile_flags)
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
