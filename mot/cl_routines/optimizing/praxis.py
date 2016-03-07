@@ -40,11 +40,5 @@ class PrAxisWorker(AbstractParallelOptimizerWorker):
     def _get_optimizer_call_name(self):
         return 'praxis'
 
-    def _optimizer_supports_float(self):
-        return True
-
-    def _optimizer_supports_double(self):
-        return True
-
     def _uses_random_numbers(self):
         return True

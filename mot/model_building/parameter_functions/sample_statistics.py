@@ -50,10 +50,10 @@ class CircularGaussianPSS(ParameterSampleStatistics):
         self.max_angle = max_angle
 
     def get_mean(self, samples):
-        return CircularGaussianPSS.circmean(samples, high=self.max_angle, low=0, axis=1)
+        return CircularGaussianPSS.circmean(np.mod(samples, self.max_angle), high=self.max_angle, low=0, axis=1)
 
     def get_std(self, samples):
-        return CircularGaussianPSS.circstd(samples, high=self.max_angle, low=0, axis=1)
+        return CircularGaussianPSS.circstd(np.mod(samples, self.max_angle), high=self.max_angle, low=0, axis=1)
 
     @staticmethod
     def circmean(samples, high=2 * np.pi, low=0, axis=None):
@@ -83,7 +83,7 @@ class CircularGaussianPSS(ParameterSampleStatistics):
     def circstd(samples, high=2 * np.pi, low=0, axis=None):
         """Compute the circular standard deviation for samples assumed to be in the range [low to high].
 
-        Taken from scipy.stats
+        Taken from scipy.stats, with a small change on the 4th line.
 
         This uses a definition of circular standard deviation that in the limit of
         small angles returns a number close to the 'linear' standard deviation.
@@ -101,4 +101,5 @@ class CircularGaussianPSS(ParameterSampleStatistics):
         ang = (samples - low) * 2 * np.pi / (high - low)
         res = np.mean(np.exp(1j * ang), axis=axis)
         R = abs(res)
+        R[R >= 1] = 1 - np.finfo(np.float).eps
         return ((high - low) / 2.0 / np.pi) * np.sqrt(-2 * np.log(R))

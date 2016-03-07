@@ -29,7 +29,7 @@ class AbstractParameterProposal(object):
         """Get the proposal function as a CL string. This should include include guards (#ifdef's).
 
         This should follow the signature:
-        double <proposal_fname>(double current, ranluxcl_state_t* ranlux, <additional_parameters>)
+        mot_float_type <proposal_fname>(mot_float_type current, ranluxcl_state_t* ranlux, <additional_parameters>)
 
         That is, it can have more than two parameter, but the first two are obligatory. The additional parameters
         are defined by the get_parameters function of this python class.
@@ -48,10 +48,13 @@ class AbstractParameterProposal(object):
         """
 
     def get_proposal_logpdf_function(self):
-        """Get the proposal pdf function as a CL string. This should include include guards.
+        """Get the proposal pdf function as a CL string.
+
+        This function is used if the proposal is not symmetric. The implementation should include include guards.
 
         This should follow the signature:
-            double <proposal_pdf_fname>(double proposal, double current, <additional_parameters>)
+            mot_float_type <proposal_pdf_fname>(mot_float_type proposal, mot_float_type current,
+                                                <additional_parameters>)
 
         Returns:
             str: The proposal log pdf function as a CL string
@@ -122,11 +125,8 @@ class GaussianProposal(AbstractParameterProposal):
         """Create a new proposal function using a Gaussian distribution with the given scale.
 
         Args:
-            gaussian_scale (float): The scale of the Gaussian distribution.
+            std (float): The scale of the Gaussian distribution.
             adaptable (boolean): If this proposal is adaptable during sampling
-
-        Attributes:
-            gaussian_scale (float): The scale of the Gaussian distribution.
         """
         self._parameters = [ProposalParameter(std, adaptable)]
 
@@ -166,4 +166,57 @@ class GaussianProposal(AbstractParameterProposal):
 
     def get_proposal_logpdf_function_name(self):
         return 'proposal_gaussianProposalLogPDF'
+
+
+class CircularGaussianProposal(AbstractParameterProposal):
+
+    def __init__(self, modulus, std=1.0, adaptable=True):
+        """A Gaussian distribution which loops around the given modulus.
+
+        Args:
+            modulus (float): at which point we loop around
+            std (float): The scale of the Gaussian distribution.
+            adaptable (boolean): If this proposal is adaptable during sampling
+        """
+        self._parameters = [ProposalParameter(std, adaptable)]
+        self.modulus = modulus
+
+    def get_parameters(self):
+        return self._parameters
+
+    def get_proposal_function(self):
+        return '''
+            #ifndef PROP_CIRCULARGAUSSIANPROPOSAL_CL
+            #define PROP_CIRCULARGAUSSIANPROPOSAL_CL
+
+            mot_float_type proposal_circular_gaussianProposal(mot_float_type current,
+                                                              ranluxcl_state_t* const ranluxclstate,
+                                                              mot_float_type std){
+                double x1 = fma(std, (mot_float_type)ranluxcl_gaussian(ranluxclstate), current);
+                double x2 = ''' + str(self.modulus) + ''';
+                return (mot_float_type) (x1 - floor(x1 / x2) * x2);
+            }
+
+            #endif //PROP_CIRCULARGAUSSIANPROPOSAL_CL
+        '''
+
+    def get_proposal_function_name(self):
+        return 'proposal_circular_gaussianProposal'
+
+    def get_proposal_logpdf_function(self):
+        return '''
+            #ifndef PROP_CIRCULARGAUSSIANPROPOSALLOGPDF_CL
+            #define PROP_CIRCULARGAUSSIANPROPOSALLOGPDF_CL
+
+            mot_float_type proposal_circular_gaussianProposalLogPDF(mot_float_type x,
+                                                                    mot_float_type mu,
+                                                                    mot_float_type std){
+                return log(std * sqrt(2 * M_PI)) - (((x - mu) * (x - mu)) / (2 * std * std));
+            }
+
+            #endif //PROP_CIRCULARGAUSSIANPROPOSALLOGPDF_CL
+        '''
+
+    def get_proposal_logpdf_function_name(self):
+        return 'proposal_circular_gaussianProposalLogPDF'
 

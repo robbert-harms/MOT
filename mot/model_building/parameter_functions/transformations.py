@@ -163,16 +163,13 @@ class AbsModXTransform(AbstractTransformation):
     def __init__(self, x, dependencies=()):
         """Create an transformation that returns the absolute modulo x value of the input."""
         super(AbsModXTransform, self).__init__(dependencies)
-        if isinstance(x, numbers.Number):
-            self._x = str(x)
-        else:
-            self._x = x
+        self._x = x
 
     def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):
-        return 'fmod((mot_float_type)fabs(' + parameter_name + '), (mot_float_type)' + self._x + ');'
+        return 'fmod((mot_float_type)fabs(' + parameter_name + '), (mot_float_type)' + str(self._x) + ');'
 
     def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
-        return 'fmod((mot_float_type)fabs(' + parameter_name + '), (mot_float_type)' + self._x + ');'
+        return 'fmod((mot_float_type)fabs(' + parameter_name + '), (mot_float_type)' + str(self._x) + ');'
 
 
 class CosSqrTransform(SimpleTransformation):
