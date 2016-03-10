@@ -105,6 +105,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
             'double' if model.double_precision else 'single'))
         for env in self.load_balancer.get_used_cl_environments(self.cl_environments):
             self._logger.info('Using device \'{}\'.'.format(str(env)))
+        self._logger.debug('Using compile flags: {}'.format(self.get_compile_flags_list()))
         self._logger.info('The parameters we will optimize are: {0}'.format(model.get_optimized_param_names()))
         self._logger.info('We will use the optimizer {} '
                           'with patience {} and optimizer options {}'.format(self.get_pretty_name(),
