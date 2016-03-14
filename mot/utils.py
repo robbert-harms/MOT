@@ -1,4 +1,3 @@
-from collections import defaultdict
 import pyopencl.array as cl_array
 import numpy as np
 import pyopencl as cl
@@ -296,17 +295,6 @@ class ParameterCLCodeGenerator(object):
             boolean: if it fits in the constant memory buffer or not
         """
         return np.product(array.shape) * np.dtype(dtype).itemsize < self._max_constant_buffer_size
-
-
-def init_dict_tree():
-    """Create an auto-vivacious dictionary (PHP like dictionary).
-
-    If changing the name of the routine also change the body.
-
-    Returns:
-        A default dict which is auto-vivacious.
-    """
-    return defaultdict(init_dict_tree)
 
 
 def initialize_ranlux(cl_environment, cl_context, nmr_instances, ranlux=RanluxCL(), ranluxcl_lux=4, seed=1):
