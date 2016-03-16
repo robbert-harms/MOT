@@ -68,13 +68,14 @@ class GenerateRandom(AbstractCLRoutine):
 
     def _get_uniform_kernel(self, min_val, max_val):
         kernel_source = '#define RANLUXCL_LUX 4' + "\n"
+        kernel_source += RanluxCL().get_cl_header()
         kernel_source += RanluxCL().get_cl_code()
         kernel_source += '''
-            __kernel void sample(global float4 *ranluxcltab, global float *samples){
+            __kernel void sample(global ranluxcl_state_t *ranluxcltab, global float *samples){
                 ranluxcl_state_t ranluxclstate;
                 ranluxcl_download_seed(&ranluxclstate, ranluxcltab);
 
-                float4 randomnr = ranluxcl(&ranluxclstate);
+                float4 randomnr = ranluxcl32(&ranluxclstate);
 
                 int gid = get_global_id(0);
 
@@ -82,15 +83,18 @@ class GenerateRandom(AbstractCLRoutine):
                 samples[gid * 4 + 1] = ''' + str(min_val) + ''' + randomnr.y * ''' + str(max_val - min_val) + ''';
                 samples[gid * 4 + 2] = ''' + str(min_val) + ''' + randomnr.z * ''' + str(max_val - min_val) + ''';
                 samples[gid * 4 + 3] = ''' + str(min_val) + ''' + randomnr.w * ''' + str(max_val - min_val) + ''';
+
+                ranluxcl_upload_seed(&ranluxclstate, ranluxcltab);
             }
         '''
         return kernel_source
 
     def _get_gaussian_kernel(self, mean, std):
         kernel_source = '#define RANLUXCL_LUX 4' + "\n"
+        kernel_source += RanluxCL().get_cl_header()
         kernel_source += RanluxCL().get_cl_code()
         kernel_source += '''
-            __kernel void sample(global float4 *ranluxcltab, global float *samples){
+            __kernel void sample(global ranluxcl_state_t *ranluxcltab, global float *samples){
                 ranluxcl_state_t ranluxclstate;
                 ranluxcl_download_seed(&ranluxclstate, ranluxcltab);
 
@@ -102,6 +106,8 @@ class GenerateRandom(AbstractCLRoutine):
                 samples[gid * 4 + 1] = ''' + str(mean) + ''' + randomnr.y * ''' + str(std) + ''';
                 samples[gid * 4 + 2] = ''' + str(mean) + ''' + randomnr.z * ''' + str(std) + ''';
                 samples[gid * 4 + 3] = ''' + str(mean) + ''' + randomnr.w * ''' + str(std) + ''';
+
+                ranluxcl_upload_seed(&ranluxclstate, ranluxcltab);
             }
         '''
         return kernel_source
@@ -115,25 +121,23 @@ class _GenerateRandomWorker(Worker):
         self._nmr_samples = nmr_samples
         self._kernel_source = kernel_source
         self._seed = seed
+
+        self._ranluxcltab_buffer = initialize_ranlux(self._cl_environment, self._cl_run_context, self._nmr_samples,
+                                                     seed=self._seed)
+
+        self._samples_buf = cl.Buffer(self._cl_run_context.context, cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
+                                      hostbuf=self._samples)
+
         self._kernel = self._build_kernel()
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
 
-        ranluxcltab_buffer = initialize_ranlux(self._cl_environment, self._cl_run_context, nmr_problems,
-                                               seed=np.abs(np.log(self._seed + range_start)))
-
-        samples_buf = cl.Buffer(self._cl_run_context.context, cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
-                                hostbuf=self._samples[range_start * 4:range_end * 4])
-
-        global_range = (int(nmr_problems), )
-        local_range = None
-
-        event = self._kernel.sample(self._cl_run_context.queue, global_range, local_range, ranluxcltab_buffer,
-                                    samples_buf)
-        return [cl.enqueue_map_buffer(self._cl_run_context.queue, samples_buf,
+        event = self._kernel.sample(self._cl_run_context.queue, (int(nmr_problems), ), None,
+                                    self._ranluxcltab_buffer, self._samples_buf, global_offset=(range_start,))
+        return [cl.enqueue_map_buffer(self._cl_run_context.queue, self._samples_buf,
                                       cl.map_flags.READ,
-                                      0,
+                                      range_start * 4 * self._samples.dtype.itemsize,
                                       [nmr_problems * 4],
                                       self._samples.dtype,
                                       order="C", wait_for=[event], is_blocking=False)[1]]

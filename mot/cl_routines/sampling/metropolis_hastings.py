@@ -189,7 +189,7 @@ class _MHWorker(Worker):
 
         kernel_param_names = ['global mot_float_type* params',
                               'global mot_float_type* samples',
-                              'global float4* ranluxcltab']
+                              'global ranluxcl_state_t* ranluxcltab']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
         rng_code = RanluxCL()
@@ -201,9 +201,10 @@ class _MHWorker(Worker):
         kernel_source = '''
             #define NMR_INST_PER_PROBLEM ''' + str(self._model.get_nmr_inst_per_problem()) + '''
         '''
+        kernel_source += rng_code.get_cl_header()
+        kernel_source += rng_code.get_cl_code()
         kernel_source += get_float_type_def(self._model.double_precision)
         kernel_source += param_code_gen.get_data_struct()
-        kernel_source += rng_code.get_cl_header()
         kernel_source += self._model.get_log_prior_function('getLogPrior')
         kernel_source += self._model.get_proposal_function('getProposal')
         kernel_source += self._model.get_proposal_parameters_update_function('updateProposalParameters')
@@ -251,7 +252,7 @@ class _MHWorker(Worker):
 
                 #pragma unroll 1
                 for(int k = 0; k < ''' + str(self._nmr_params) + '''; k++){
-                    randomnmr = ranluxcl(ranluxclstate);
+                    randomnmr = ranluxcl32(ranluxclstate);
 
                     old_x = x[k];
                     x[k] = getProposal(k, x[k], ranluxclstate, proposal_parameters);

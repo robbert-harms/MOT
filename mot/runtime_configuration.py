@@ -1,6 +1,6 @@
 from contextlib import contextmanager
 from .cl_environments import CLEnvironmentFactory
-from .load_balance_strategies import PreferGPU
+from .load_balance_strategies import EvenDistribution
 
 __author__ = 'Robbert Harms'
 __date__ = "2015-07-22"
@@ -25,8 +25,8 @@ known from the context defaults can be obtained from this module.
 ignore_kernel_warnings = True
 
 runtime_config = {
-    'cl_environments': CLEnvironmentFactory.all_devices(),
-    'load_balancer': PreferGPU(),
+    'cl_environments': CLEnvironmentFactory.all_devices(cl_device_type='GPU'),
+    'load_balancer': EvenDistribution(),
 }
 
 @contextmanager

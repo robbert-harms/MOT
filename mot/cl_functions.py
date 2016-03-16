@@ -216,7 +216,7 @@ class RanluxCL(LibraryFunction):
         """
         super(RanluxCL, self).__init__(
             'float4',
-            'ranluxcl',
+            'ranluxcl32',
             (LibraryParameter(CLDataType.from_string('ranluxcl_state_t*'), 'ranluxclstate'),),
             resource_filename('mot', 'data/opencl/ranluxcl.h'),
             resource_filename('mot', 'data/opencl/ranluxcl.cl'),

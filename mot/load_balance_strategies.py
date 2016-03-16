@@ -207,14 +207,10 @@ class LoadBalanceStrategy(object):
 
         if run_in_batches:
             batches = []
-            batch_pos = range_start
-
-            while batch_pos < range_end:
-                new_batch = (batch_pos, min(range_end, batch_pos + single_batch_length))
-                batches.append(new_batch)
-                batch_pos = new_batch[1]
-
+            for start_pos in range(int(range_start), int(range_end), int(single_batch_length)):
+                batches.append((start_pos, min(start_pos + single_batch_length, range_end)))
             return batches
+
         return [(range_start, range_end)]
 
     def _run_batches(self, workers, batches):
