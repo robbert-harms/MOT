@@ -196,8 +196,7 @@ class AbstractParallelOptimizerWorker(Worker):
         self._starting_points = starting_points
 
         self._voxels_calculated = np.zeros((self._starting_points.shape[0],), dtype=np.int8)
-        self._all_buffers, self._results_buffer, self._return_code_buffer, self._voxels_calculated_buffer\
-            = self._create_buffers()
+        self._all_buffers, self._results_buffer, self._return_code_buffer = self._create_buffers()
         self._kernel = self._build_kernel(self._parent_optimizer.get_compile_flags_list())
 
     def calculate(self, range_start, range_end):
@@ -205,7 +204,6 @@ class AbstractParallelOptimizerWorker(Worker):
 
         kernel_event = self._kernel.minimize(self._cl_run_context.queue, (nmr_problems, ), None, *self._all_buffers,
                                              global_offset=(range_start,))
-
         return [
             kernel_event,
             cl.enqueue_map_buffer(self._cl_run_context.queue, self._results_buffer,
@@ -216,43 +214,11 @@ class AbstractParallelOptimizerWorker(Worker):
             cl.enqueue_map_buffer(self._cl_run_context.queue, self._return_code_buffer,
                                   cl.map_flags.READ, range_start * self._return_codes.dtype.itemsize,
                                   [nmr_problems], self._return_codes.dtype,
-                                  order="C", wait_for=[kernel_event], is_blocking=False)[1],
-            cl.enqueue_map_buffer(self._cl_run_context.queue, self._voxels_calculated_buffer,
-                                  cl.map_flags.READ, range_start * self._voxels_calculated.dtype.itemsize,
-                                  [nmr_problems], self._voxels_calculated.dtype,
                                   order="C", wait_for=[kernel_event], is_blocking=False)[1]
         ]
-    #
-    # def post_process(self, range_start, range_end):
-    #     """ Rerun the calculation on voxels that did not finish.
-    #
-    #     In this post processing we check if there are voxels that did not finish before kernel timeout. We use the
-    #     array self._voxels_calculated for this purpose. If there are such voxels, we try do call the kernel
-    #     again, this time for those voxels that did not complete.
-    #
-    #     This function is recursive and tries to process all voxels before the initial call finishes.
-    #
-    #     Args:
-    #         range_start (int): the starting position of the previous calculation process
-    #         range_end (int): the end position of the previous calculation process
-    #     """
-    #     pos_first_non_calculated = np.where(self._voxels_calculated == 0)[0]
-    #
-    #     if len(pos_first_non_calculated) and range_start <= pos_first_non_calculated[0] < range_end:
-    #         pos_first_non_calculated = pos_first_non_calculated[0]
-    #
-    #         events = self.calculate(pos_first_non_calculated, range_end)
-    #         for event in events:
-    #             event.wait()
-    #         self.post_process(range_start, range_end)
 
     def _create_buffers(self):
         all_buffers = []
-
-        voxels_calculated_buffer = cl.Buffer(self._cl_run_context.context,
-                                             cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
-                                             hostbuf=self._voxels_calculated)
-        all_buffers.append(voxels_calculated_buffer)
 
         parameters_buffer = cl.Buffer(self._cl_run_context.context,
                                       cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR,
@@ -280,7 +246,7 @@ class AbstractParallelOptimizerWorker(Worker):
             all_buffers.append(initialize_ranlux(self._cl_environment, self._cl_run_context,
                                                  self._starting_points.shape[0]))
 
-        return all_buffers, results_buffer, return_code_buffer, voxels_calculated_buffer
+        return all_buffers, results_buffer, return_code_buffer
 
     def _get_kernel_source(self):
         """Generate the kernel source for this optimization routine.
@@ -305,8 +271,7 @@ class AbstractParallelOptimizerWorker(Worker):
                                                   self._protocol_data_dict,
                                                   self._model_data_dict)
 
-        kernel_param_names = ['global char* voxels_calculated',
-                              'global mot_float_type* params',
+        kernel_param_names = ['global mot_float_type* params',
                               'global mot_float_type* results',
                               'global int* return_codes']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
@@ -356,7 +321,6 @@ class AbstractParallelOptimizerWorker(Worker):
                         results[gid * ''' + str(nmr_params) + ''' + i] = x[i];
                     }
                     return_codes[gid] = return_code;
-                    voxels_calculated[gid] = 1;
                 }
         '''
         return kernel_source
