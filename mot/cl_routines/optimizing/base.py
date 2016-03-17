@@ -206,16 +206,21 @@ class AbstractParallelOptimizerWorker(Worker):
                                              global_offset=(range_start,))
         return [
             kernel_event,
-            cl.enqueue_map_buffer(self._cl_run_context.queue, self._results_buffer,
-                                  cl.map_flags.READ, range_start * self._results.dtype.itemsize,
-                                  [nmr_problems, self._results.shape[1]],
-                                  self._results.dtype,
-                                  order="C", wait_for=[kernel_event], is_blocking=False)[1],
-            cl.enqueue_map_buffer(self._cl_run_context.queue, self._return_code_buffer,
-                                  cl.map_flags.READ, range_start * self._return_codes.dtype.itemsize,
-                                  [nmr_problems], self._return_codes.dtype,
-                                  order="C", wait_for=[kernel_event], is_blocking=False)[1]
+
+            self._enqueue_readout(self._results_buffer, self._results, range_start, range_end, [kernel_event]),
+            #
+            # cl.enqueue_map_buffer(self._cl_run_context.queue, self._results_buffer,
+            #                       cl.map_flags.READ, range_start * self._results.strides[0],
+            #                       [nmr_problems, self._results.shape[1]],
+            #                       self._results.dtype,
+            #                       order="C", wait_for=[kernel_event], is_blocking=False)[1],
+            self._enqueue_readout(self._return_code_buffer, self._return_codes, range_start, range_end, [kernel_event])
+            # cl.enqueue_map_buffer(self._cl_run_context.queue, self._return_code_buffer,
+            #                       cl.map_flags.READ, range_start * self._return_codes.strides[0],
+            #                       [nmr_problems], self._return_codes.dtype,
+            #                       order="C", wait_for=[kernel_event], is_blocking=False)[1]
         ]
+
 
     def _create_buffers(self):
         all_buffers = []

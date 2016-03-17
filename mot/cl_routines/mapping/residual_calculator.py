@@ -66,10 +66,7 @@ class _ResidualCalculatorWorker(Worker):
         nmr_problems = range_end - range_start
         event = self._kernel.get_errors(self._cl_run_context.queue, (int(nmr_problems), ), None, *self._all_buffers,
                                         global_offset=(int(range_start),))
-        return [cl.enqueue_map_buffer(self._cl_run_context.queue, self._residuals_buffer,
-                                      cl.map_flags.READ, range_start * self._residuals.dtype.itemsize,
-                                      [nmr_problems, self._residuals.shape[1]], self._residuals.dtype,
-                                      order="C", wait_for=[event], is_blocking=False)[1]]
+        return [self._enqueue_readout(self._residuals_buffer, self._residuals, range_start, range_end, [event])]
 
     def _create_buffers(self):
         errors_buffer = cl.Buffer(self._cl_run_context.context,
