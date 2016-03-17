@@ -90,7 +90,7 @@ class _CDPWorker(Worker):
         event = self._kernel.transform(self._cl_run_context.queue, (int(nmr_problems), ), None, *self._all_buffers,
                                        global_offset=(int(range_start),))
         return [self._enqueue_readout(self._results_list_buffer, self._results_list, range_start, range_end, [event])]
-        
+
     def _create_buffers(self):
         estimated_parameters_buf = cl.Buffer(self._cl_run_context.context,
                                              cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR,
