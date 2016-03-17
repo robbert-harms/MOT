@@ -182,7 +182,7 @@ mot_float_type bracket_and_brent(const mot_float_type* const model_parameters,
         r = (bx - ax) * (fb - fc);
         q = (bx - cx) * (fb - fa);
 
-        maxarg = fmax(fabs(q-r), EPSILON);
+        maxarg = fmax(fabs(q-r), (mot_float_type)EPSILON);
 
         u = (bx) - ((bx - cx) * q - (bx - ax) * r) / (2.0 * copysign(maxarg, q-r));
         ulim = (bx) + GLIMIT * (cx - bx);
