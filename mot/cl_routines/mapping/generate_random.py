@@ -135,12 +135,7 @@ class _GenerateRandomWorker(Worker):
 
         event = self._kernel.sample(self._cl_run_context.queue, (int(nmr_problems), ), None,
                                     self._ranluxcltab_buffer, self._samples_buf, global_offset=(range_start,))
-        return [cl.enqueue_map_buffer(self._cl_run_context.queue, self._samples_buf,
-                                      cl.map_flags.READ,
-                                      range_start * 4 * self._samples.dtype.itemsize,
-                                      [nmr_problems * 4],
-                                      self._samples.dtype,
-                                      order="C", wait_for=[event], is_blocking=False)[1]]
+        return [self._enqueue_readout(self._samples_buf, self._samples, range_start * 4, range_end * 4, [event])]
 
     def _get_kernel_source(self):
         return self._kernel_source

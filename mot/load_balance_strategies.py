@@ -114,9 +114,17 @@ class Worker(object):
     def _enqueue_readout(self, buffer, host_array, range_start, range_end, wait_for):
         """Enqueue a readout for a buffer started with use_host_ptr.
 
-        This encapsulates all the low level details needed to readout, from the GPU, the given range of values.
+        This encapsulates all the low level details needed to readout the given range of values.
 
         Args:
+            buffer: the buffer on the device
+            host_array (ndarray): the host side array of the given buffer
+            range_start (int): the start of the range to read out (in the first dimension)
+            range_end (int): the end of the range to read out (in the first dimension)
+            wait_for (list of event): the list of events to wait for
+
+        Returns:
+            event; the event of the readout
         """
         nmr_problems = range_end - range_start
         return cl.enqueue_map_buffer(

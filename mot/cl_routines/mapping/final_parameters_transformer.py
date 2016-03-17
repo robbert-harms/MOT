@@ -76,11 +76,7 @@ class _FPTWorker(Worker):
 
         event = self._kernel.transform(self._cl_run_context.queue, (int(nmr_problems), ), None, *self._all_buffers,
                                        global_offset=(int(range_start),))
-
-        return [cl.enqueue_map_buffer(self._cl_run_context.queue, self._parameters_buffer,
-                                      cl.map_flags.READ, range_start * self._parameters.dtype.itemsize,
-                                      [nmr_problems, self._parameters.shape[1]], self._parameters.dtype,
-                                      order="C", wait_for=[event], is_blocking=False)[1]]
+        return [self._enqueue_readout(self._parameters_buffer, self._parameters, range_start, range_end, [event])]
 
     def _create_buffers(self):
         all_buffers = []

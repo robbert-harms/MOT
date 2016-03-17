@@ -312,6 +312,7 @@ def initialize_ranlux(cl_environment, cl_context, nmr_instances, ranlux=RanluxCL
         cl buffer: the buffer containing the initialized ranlux cl tab for use in the given environment/queue.
     """
     kernel_source = '#define RANLUXCL_LUX ' + str(ranluxcl_lux) + "\n"
+    kernel_source += ranlux.get_cl_header()
     kernel_source += ranlux.get_cl_code()
     kernel_source += '''
         __kernel void init(global float4 *ranluxcltab){
