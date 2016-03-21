@@ -119,8 +119,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
             np_dtype = np.float64
 
         starting_points = np.require(model.get_initial_parameters(init_params), np_dtype,
-                                     requirements=['C', 'A', 'O'])
-        results = np.zeros_like(starting_points)
+                                     requirements=['C', 'A', 'O', 'W'])
         nmr_params = starting_points.shape[1]
 
         var_data_dict = model.get_problems_var_data()
@@ -139,7 +138,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
 
         workers = self._create_workers(self._get_worker_generator(self, model, starting_points, full_output,
                                                                   var_data_dict, protocol_data_dict, model_data_dict,
-                                                                  nmr_params, results, return_codes,
+                                                                  nmr_params, return_codes,
                                                                   self._optimizer_options))
         self.load_balancer.process(workers, model.get_nmr_problems())
 
@@ -147,7 +146,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
 
         self._logger.info('Starting post-optimization transformations')
         results = FinalParametersTransformer(cl_environments=self._cl_environments,
-                                             load_balancer=self.load_balancer).transform(model, results)
+                                             load_balancer=self.load_balancer).transform(model, starting_points)
         self._logger.info('Finished post-optimization transformations')
 
         self._logger.info('Calling finalize optimization results in the model')
@@ -173,7 +172,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
 class AbstractParallelOptimizerWorker(Worker):
 
     def __init__(self, cl_environment, parent_optimizer, model, starting_points, full_output,
-                 var_data_dict, protocol_data_dict, model_data_dict, nmr_params, results, return_codes,
+                 var_data_dict, protocol_data_dict, model_data_dict, nmr_params, return_codes,
                  optimizer_options=None):
         super(AbstractParallelOptimizerWorker, self).__init__(cl_environment)
 
@@ -187,16 +186,13 @@ class AbstractParallelOptimizerWorker(Worker):
         self._var_data_dict = var_data_dict
         self._protocol_data_dict = protocol_data_dict
         self._model_data_dict = model_data_dict
-        self._results = results
         self._return_codes = return_codes
 
         param_codec = model.get_parameter_codec()
         self._use_param_codec = self._parent_optimizer.use_param_codec and param_codec
 
         self._starting_points = starting_points
-
-        self._voxels_calculated = np.zeros((self._starting_points.shape[0],), dtype=np.int8)
-        self._all_buffers, self._results_buffer, self._return_code_buffer = self._create_buffers()
+        self._all_buffers, self._params_buffer, self._return_code_buffer = self._create_buffers()
         self._kernel = self._build_kernel(self._parent_optimizer.get_compile_flags_list())
 
     def calculate(self, range_start, range_end):
@@ -206,7 +202,7 @@ class AbstractParallelOptimizerWorker(Worker):
                                              global_offset=(range_start,))
         return [
             kernel_event,
-            self._enqueue_readout(self._results_buffer, self._results, range_start, range_end, [kernel_event]),
+            self._enqueue_readout(self._params_buffer, self._starting_points, range_start, range_end, [kernel_event]),
             self._enqueue_readout(self._return_code_buffer, self._return_codes, range_start, range_end, [kernel_event])
         ]
 
@@ -214,14 +210,9 @@ class AbstractParallelOptimizerWorker(Worker):
         all_buffers = []
 
         parameters_buffer = cl.Buffer(self._cl_run_context.context,
-                                      cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR,
+                                      cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR,
                                       hostbuf=self._starting_points)
         all_buffers.append(parameters_buffer)
-
-        results_buffer = cl.Buffer(self._cl_run_context.context,
-                                   cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
-                                   hostbuf=self._results)
-        all_buffers.append(results_buffer)
 
         return_code_buffer = cl.Buffer(self._cl_run_context.context,
                                        cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
@@ -239,7 +230,7 @@ class AbstractParallelOptimizerWorker(Worker):
             all_buffers.append(initialize_ranlux(self._cl_environment, self._cl_run_context,
                                                  self._starting_points.shape[0]))
 
-        return all_buffers, results_buffer, return_code_buffer
+        return all_buffers, parameters_buffer, return_code_buffer
 
     def _get_kernel_source(self):
         """Generate the kernel source for this optimization routine.
@@ -265,7 +256,6 @@ class AbstractParallelOptimizerWorker(Worker):
                                                   self._model_data_dict)
 
         kernel_param_names = ['global mot_float_type* params',
-                              'global mot_float_type* results',
                               'global int* return_codes']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
@@ -311,7 +301,7 @@ class AbstractParallelOptimizerWorker(Worker):
                     ''' + ('decodeParameters(x);' if self._use_param_codec else '') + '''
 
                     for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
-                        results[gid * ''' + str(nmr_params) + ''' + i] = x[i];
+                        params[gid * ''' + str(nmr_params) + ''' + i] = x[i];
                     }
                     return_codes[gid] = return_code;
                 }
