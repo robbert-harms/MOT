@@ -125,7 +125,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         var_data_dict = model.get_problems_var_data()
         protocol_data_dict = model.get_problems_protocol_data()
         model_data_dict = model.get_model_data()
-        return_codes = np.zeros((starting_points.shape[0],), dtype=np.int32, order='C')
+        return_codes = np.zeros((starting_points.shape[0],), dtype=np.int8, order='C')
 
         space_transformer = CodecRunner(self.cl_environments, self.load_balancer, model.double_precision)
         param_codec = model.get_parameter_codec()
@@ -201,7 +201,6 @@ class AbstractParallelOptimizerWorker(Worker):
         kernel_event = self._kernel.minimize(self._cl_run_context.queue, (nmr_problems, ), None, *self._all_buffers,
                                              global_offset=(range_start,))
         return [
-            kernel_event,
             self._enqueue_readout(self._params_buffer, self._starting_points, range_start, range_end, [kernel_event]),
             self._enqueue_readout(self._return_code_buffer, self._return_codes, range_start, range_end, [kernel_event])
         ]
@@ -241,10 +240,6 @@ class AbstractParallelOptimizerWorker(Worker):
         One could overwrite this function to completely generate the kernel source, but most likely
         you would want to implement _get_optimizer_cl_code() and _get_optimizer_call_name().
 
-        Args:
-            data_state (OptimizeDataStateObject): The internal data state object
-            cl_environment (CLEnvironment): The environment to create the kernel source for.
-
         Returns:
             str: The kernel source for this optimization routine.
         """
@@ -256,7 +251,7 @@ class AbstractParallelOptimizerWorker(Worker):
                                                   self._model_data_dict)
 
         kernel_param_names = ['global mot_float_type* params',
-                              'global int* return_codes']
+                              'global char* return_codes']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
         if self._uses_random_numbers():
@@ -303,7 +298,7 @@ class AbstractParallelOptimizerWorker(Worker):
                     for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
                         params[gid * ''' + str(nmr_params) + ''' + i] = x[i];
                     }
-                    return_codes[gid] = return_code;
+                    return_codes[gid] = (char)return_code;
                 }
         '''
         return kernel_source
