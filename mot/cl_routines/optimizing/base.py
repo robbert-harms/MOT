@@ -291,14 +291,13 @@ class AbstractParallelOptimizerWorker(Worker):
                     }
 
                     ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
-                    int return_code = ''' + self._get_optimizer_call_name() + '''(''' + optimizer_call_args + ''');
+                    return_codes[gid] = (char) ''' + self._get_optimizer_call_name() + '''(''' + optimizer_call_args + ''');
 
                     ''' + ('decodeParameters(x);' if self._use_param_codec else '') + '''
 
                     for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
                         params[gid * ''' + str(nmr_params) + ''' + i] = x[i];
                     }
-                    return_codes[gid] = (char)return_code;
                 }
         '''
         return kernel_source
