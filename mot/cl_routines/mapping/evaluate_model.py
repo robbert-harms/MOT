@@ -14,11 +14,6 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class EvaluateModelPerProtocol(AbstractCLRoutine):
 
-    def __init__(self, cl_environments, load_balancer):
-        """Evaluate the model at each problem instance for each data point.
-        """
-        super(EvaluateModelPerProtocol, self).__init__(cl_environments, load_balancer)
-
     def calculate(self, model, parameters):
         """Evaluate the model at each problem instance for each data point.
 

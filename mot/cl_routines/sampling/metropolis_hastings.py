@@ -19,8 +19,8 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class MetropolisHastings(AbstractSampler):
 
-    def __init__(self, cl_environments, load_balancer, nmr_samples=500, burn_length=500,
-                 sample_intervals=5, proposal_update_intervals=50):
+    def __init__(self, cl_environments=None, load_balancer=None, nmr_samples=500, burn_length=500,
+                 sample_intervals=5, proposal_update_intervals=50, **kwargs):
         """An CL implementation of Metropolis Hastings.
 
         Args:
@@ -43,7 +43,7 @@ class MetropolisHastings(AbstractSampler):
             proposal_update_intervals (int): after how many samples we would like to update the proposals
                 This is during burning and sampling. A value of 1 means update after every jump.
         """
-        super(MetropolisHastings, self).__init__(cl_environments=cl_environments, load_balancer=load_balancer)
+        super(MetropolisHastings, self).__init__(cl_environments=cl_environments, load_balancer=load_balancer, **kwargs)
         self._nmr_samples = nmr_samples or 1
         self.burn_length = burn_length
         self.sample_intervals = sample_intervals

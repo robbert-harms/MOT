@@ -10,8 +10,8 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class AbstractSampler(AbstractCLRoutine):
 
-    def __init__(self, cl_environments, load_balancer):
-        super(AbstractSampler, self).__init__(cl_environments, load_balancer)
+    def __init__(self, cl_environments=None, load_balancer=None, **kwargs):
+        super(AbstractSampler, self).__init__(cl_environments=cl_environments, load_balancer=load_balancer, **kwargs)
         self._logger = logging.getLogger(__name__)
 
     def sample(self, model, init_params=None, full_output=False):

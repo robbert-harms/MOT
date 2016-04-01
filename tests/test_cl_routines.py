@@ -11,8 +11,8 @@ Tests for `mot` module.
 import unittest
 
 import numpy as np
-from mot import runtime_configuration
 
+from mot import configuration
 from mot.cl_routines.mapping.residual_calculator import ResidualCalculator
 from mot.cl_routines.optimizing.nmsimplex import NMSimplex
 from mot.cl_routines.optimizing.levenberg_marquardt import LevenbergMarquardt
@@ -27,8 +27,8 @@ class CLRoutineTestCase(unittest.TestCase):
 
     def __init__(self, *args, **kwargs):
         super(CLRoutineTestCase, self).__init__(*args, **kwargs)
-        self._runtime_args = [runtime_configuration.runtime_config['cl_environments'],
-                              runtime_configuration.runtime_config['load_balancer']]
+        self._runtime_args = [configuration.get_cl_environments(),
+                              configuration.get_load_balancer()]
 
 
 class TestRosenbrock(CLRoutineTestCase):
@@ -100,6 +100,7 @@ class TestFilters(CLRoutineTestCase):
                              [0.10351076, 0.22325308, 0.28434043, 0.20994687],
                              [0.02661242, 0.10351076, 0.20994687, 0.22470613]])
         np.testing.assert_almost_equal(s2, expected)
+
 
 if __name__ == '__main__':
     unittest.main()

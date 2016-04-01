@@ -1,3 +1,5 @@
+from mot import configuration
+
 __author__ = 'Robbert Harms'
 __date__ = "2014-04-26"
 __license__ = "LGPL v3"
@@ -7,26 +9,29 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class AbstractCLRoutine(object):
 
-    def __init__(self, cl_environments, load_balancer, compile_flags=None, **kwargs):
+    def __init__(self, cl_environments=None, load_balancer=None, compile_flags=None, **kwargs):
         """This class serves as an abstract basis for all CL routine classes.
 
         Args:
             cl_environments (list of CLEnvironment): The list of CL environments using by this routine.
+                If None is given we use the defaults in the current configuration.
             load_balancer (LoadBalancingStrategy): The load balancing strategy to be used by this routine.
-            compile_flags (dict): the list of compile flags we want to enable or disable. The keys (str)
-                should be the compile flag, the value (boolean) specifies enable or disable.
+                If None is given we use the defaults in the current configuration.
+            compile_flags (dict): the list of compile flags to use during model fitting. As values use the
+                flag name, as keys a boolean flag indicating if that one is active.
         """
         self._cl_environments = cl_environments
         self._load_balancer = load_balancer
-        self.compile_flags = {
-            '-cl-single-precision-constant': True,
-            '-cl-denorms-are-zero': True,
-            '-cl-mad-enable': True,
-            '-cl-no-signed-zeros': True
-        }
+        self.compile_flags = compile_flags
 
-        if compile_flags:
-            self.compile_flags.update(compile_flags)
+        if self._cl_environments is None:
+            self._cl_environments = configuration.get_cl_environments()
+
+        if self._load_balancer is None:
+            self._load_balancer = configuration.get_load_balancer()
+
+        if self.compile_flags is None:
+            self.compile_flags = configuration.get_compile_flags()
 
     def set_compile_flag(self, compile_flag, enable):
         """Enable or disable the given compile flag.

@@ -76,8 +76,8 @@ class Worker(object):
             a compiled CL kernel
         """
         kernel_source = self._get_kernel_source()
-        from mot import runtime_configuration
-        if runtime_configuration.ignore_kernel_warnings:
+        from mot import configuration
+        if configuration.ignore_kernel_compile_warnings:
             warnings.simplefilter("ignore")
         return cl.Program(self._cl_run_context.context, kernel_source).build(' '.join(compile_flags))
 

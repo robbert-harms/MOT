@@ -14,7 +14,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class CalculateDependentParameters(AbstractCLRoutine):
 
-    def __init__(self, cl_environments, load_balancer, double_precision=False):
+    def __init__(self, cl_environments=None, load_balancer=None, compile_flags=None, double_precision=False, **kwargs):
         """CL code for calculating the dependent parameters.
 
         Some of the models may contain parameter dependencies. We would like to return the maps for these parameters
@@ -25,7 +25,8 @@ class CalculateDependentParameters(AbstractCLRoutine):
             double_precision (boolean): if we will use the double (True) or single floating (False) type
                 for the calculations
         """
-        super(CalculateDependentParameters, self).__init__(cl_environments, load_balancer)
+        super(CalculateDependentParameters, self).__init__(cl_environments=cl_environments,
+                                                           load_balancer=load_balancer, **kwargs)
         self._double_precision = double_precision
 
     def calculate(self, fixed_param_values, estimated_parameters_list, parameters_listing, dependent_parameter_names):

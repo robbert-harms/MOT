@@ -2,7 +2,6 @@ import numbers
 import numpy as np
 from mot.adapters import SimpleDataAdapter
 from mot.base import ProtocolParameter, ModelDataParameter, FreeParameter, CLDataType, StaticMapParameter
-from mot import runtime_configuration
 from mot.cl_routines.mapping.calc_dependent_params import CalculateDependentParameters
 from mot.utils import TopologicalSort
 from mot.model_building.parameter_functions.codecs import CodecBuilder
@@ -580,9 +579,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             dependent_parameter_names = [(m.name + '_' + p.name, m.name + '.' + p.name)
                                          for m, p in param_lists['dependent']]
 
-            cpd = CalculateDependentParameters(runtime_configuration.runtime_config['cl_environments'],
-                                               runtime_configuration.runtime_config['load_balancer'],
-                                               self.double_precision)
+            cpd = CalculateDependentParameters(double_precision=self.double_precision)
             dependent_parameters = cpd.calculate(self._get_fixed_parameters_as_var_data(),
                                                  estimated_parameters, func, dependent_parameter_names)
 

@@ -15,7 +15,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class AbstractFilter(AbstractCLRoutine):
 
-    def __init__(self, size, cl_environments, load_balancer):
+    def __init__(self, size, cl_environments=None, load_balancer=None):
         """Initialize an abstract filter routine.
 
         This is meant to be called by the constructor of an implementing class.
@@ -34,7 +34,7 @@ class AbstractFilter(AbstractCLRoutine):
                 Either way this value is the distance to the left and to the right of each value.
                 That means that the total kernel size is the product of 1 + 2*s for each size s of each dimension.
         """
-        super(AbstractFilter, self).__init__(cl_environments, load_balancer)
+        super(AbstractFilter, self).__init__(cl_environments=cl_environments, load_balancer=load_balancer)
         self.size = size
         self._logger = logging.getLogger(__name__)
 

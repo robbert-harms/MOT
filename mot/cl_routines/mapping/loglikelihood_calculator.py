@@ -14,10 +14,6 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class LogLikelihoodCalculator(AbstractCLRoutine):
 
-    def __init__(self, cl_environments, load_balancer):
-        """Calculate the residuals, that is the errors, per problem instance per data point."""
-        super(LogLikelihoodCalculator, self).__init__(cl_environments, load_balancer)
-
     def calculate(self, model, parameters_dict, evaluation_model=None):
         """Calculate and return the residuals.
 
