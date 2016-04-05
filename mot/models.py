@@ -106,8 +106,23 @@ class OptimizeModelInterface(object):
             func_name (string): specifies the name of the function.
 
         Returns:
-            A function of the kind:
+            A CL function with signature:
                 mot_float_type <func_name>(const optimize_data* const data, mot_float_type* const x);
+        """
+
+    def get_objective_list_function(self, func_name="calculateObjectiveList"):
+        """Get the objective function returning a list with the objective functions per instance point.
+
+        This function is used by some evaluation routines (like for example LevenbergMarquardt) that need
+        a list of objective values (one per instance point), instead of a single objective function scalar.
+
+        Args:
+            func_name (str): the name of the function
+
+        Returns:
+            A CL function with signature:
+                mot_float_type <func_name>(const optimize_data* const data, mot_float_type* const x,
+                                           mot_float_type* result);
         """
 
     def get_initial_parameters(self, results_dict=None):

@@ -243,7 +243,6 @@ class AbstractParallelOptimizerWorker(Worker):
         Returns:
             str: The kernel source for this optimization routine.
         """
-        cl_objective_function = self._model.get_objective_function('calculateObjective')
         nmr_params = self._nmr_params
         param_code_gen = ParameterCLCodeGenerator(self._cl_environment.device,
                                                   self._var_data_dict,
@@ -268,7 +267,6 @@ class AbstractParallelOptimizerWorker(Worker):
             decode_func = param_codec.get_cl_decode_function('decodeParameters')
             kernel_source += decode_func + "\n"
 
-        kernel_source += cl_objective_function
         kernel_source += self._get_optimizer_cl_code()
         kernel_source += '''
             __kernel void minimize(
@@ -340,6 +338,7 @@ class AbstractParallelOptimizerWorker(Worker):
             str: the evaluation function.
         """
         kernel_source = ''
+        kernel_source += self._model.get_objective_function('calculateObjective')
         if self._use_param_codec:
             kernel_source += '''
                 mot_float_type evaluate(mot_float_type* x, const void* data){

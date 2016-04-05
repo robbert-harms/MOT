@@ -86,14 +86,9 @@ mot_float_type lm_euclidian_norm(const mot_float_type* const x, const int n);
 #define LM_ENORM_SQRT_DWARF sqrt(MOT_MIN) /* square should not underflow */
 
 /**
- * The function furthermore requires you to define:
- * #define NMR_INST_PER_PROBLEM         | as the number of instances per problem (m)
- */
-
-/**
  * Make sure that the following holds:
  * %(NMR_PARAMS)s > 0
- * NMR_INST_PER_PROBLEM >= %(NMR_PARAMS)s
+ * %(NMR_INST_PER_PROBLEM)s >= %(NMR_PARAMS)s
  * FTOL >= 0. && XTOL >= 0. && GTOL >= 0.
  * MAXFEV > 0
  * STEP_BOUND > 0.
@@ -110,7 +105,7 @@ mot_float_type lm_euclidian_norm(const mot_float_type* const x, const int n);
  * n: the parameter length (the number of variables to optimize)
  * m: the number of instances per problem. It must fulfill m>=n
  *
- * void evaluate(const void* data, mot_float_type* x, mot_float_type* result);
+ * void evaluate(mot_float_type* x, const void* data, mot_float_type* result);
  *
  */
 
@@ -127,14 +122,14 @@ int lmmin(mot_float_type * const x, const void* const data){
 	int nfev = 0;
 
 	/***  Allocate work space.  ***/
-    mot_float_type fvec[NMR_INST_PER_PROBLEM];
+    mot_float_type fvec[%(NMR_INST_PER_PROBLEM)s];
     mot_float_type diag[%(NMR_PARAMS)s];
     mot_float_type qtf[%(NMR_PARAMS)s];
-    mot_float_type fjac[%(NMR_PARAMS)s * NMR_INST_PER_PROBLEM];
+    mot_float_type fjac[%(NMR_PARAMS)s * %(NMR_INST_PER_PROBLEM)s];
     mot_float_type wa1[%(NMR_PARAMS)s];
     mot_float_type wa2[%(NMR_PARAMS)s];
     mot_float_type wa3[%(NMR_PARAMS)s];
-    mot_float_type wf[NMR_INST_PER_PROBLEM];
+    mot_float_type wf[%(NMR_INST_PER_PROBLEM)s];
     int Pivot[%(NMR_PARAMS)s];
 
     /* Initialize diag. */
@@ -145,9 +140,9 @@ int lmmin(mot_float_type * const x, const void* const data){
 
     /***  Evaluate function at starting point and calculate norm.  ***/
 
-    evaluate(data, x, fvec);
+    evaluate(x, data, fvec);
     nfev = 1;
-    fnorm = lm_euclidian_norm(fvec, NMR_INST_PER_PROBLEM);
+    fnorm = lm_euclidian_norm(fvec, %(NMR_INST_PER_PROBLEM)s);
     if (!isfinite(fnorm)) {
 	    return 10; /* nan */
     } else if (fnorm <= LM_DWARF) {
@@ -162,10 +157,10 @@ int lmmin(mot_float_type * const x, const void* const data){
             temp = x[j];
             step = max(EPS*EPS, EPS * fabs(temp));
             x[j] += step; /* replace temporarily */
-            evaluate(data, x, wf);
+            evaluate(x, data, wf);
             ++nfev;
-            for (i = 0; i < NMR_INST_PER_PROBLEM; i++){
-                fjac[j*NMR_INST_PER_PROBLEM+i] = (wf[i] - fvec[i]) / step;
+            for (i = 0; i < %(NMR_INST_PER_PROBLEM)s; i++){
+                fjac[j*%(NMR_INST_PER_PROBLEM)s+i] = (wf[i] - fvec[i]) / step;
             }
             x[j] = temp; /* restore */
         }
@@ -192,27 +187,27 @@ int lmmin(mot_float_type * const x, const void* const data){
          *   is column Pivot(j) of the identity matrix.
          */
 
-        lm_qrfac(NMR_INST_PER_PROBLEM, %(NMR_PARAMS)s, fjac, Pivot, wa1, wa2, wa3);
+        lm_qrfac(%(NMR_INST_PER_PROBLEM)s, %(NMR_PARAMS)s, fjac, Pivot, wa1, wa2, wa3);
         /* return values are Pivot, wa1=rdiag, wa2=acnorm */
 
         /** Form Q^T * fvec, and store first n components in qtf. **/
-        for (i = 0; i < NMR_INST_PER_PROBLEM; i++){
+        for (i = 0; i < %(NMR_INST_PER_PROBLEM)s; i++){
             wf[i] = fvec[i];
         }
 
         for(j = 0; j < %(NMR_PARAMS)s; j++){
-            temp3 = fjac[j*NMR_INST_PER_PROBLEM+j];
+            temp3 = fjac[j*%(NMR_INST_PER_PROBLEM)s+j];
             if (temp3 != 0) {
                 sum = 0;
-                for (i = j; i < NMR_INST_PER_PROBLEM; i++){
-                    sum += fjac[j*NMR_INST_PER_PROBLEM+i] * wf[i];
+                for (i = j; i < %(NMR_INST_PER_PROBLEM)s; i++){
+                    sum += fjac[j*%(NMR_INST_PER_PROBLEM)s+i] * wf[i];
                 }
                 temp = -sum / temp3;
-                for (i = j; i < NMR_INST_PER_PROBLEM; i++){
-                    wf[i] += fjac[j*NMR_INST_PER_PROBLEM+i] * temp;
+                for (i = j; i < %(NMR_INST_PER_PROBLEM)s; i++){
+                    wf[i] += fjac[j*%(NMR_INST_PER_PROBLEM)s+i] * temp;
                 }
             }
-            fjac[j*NMR_INST_PER_PROBLEM+j] = wa1[j];
+            fjac[j*%(NMR_INST_PER_PROBLEM)s+j] = wa1[j];
             qtf[j] = wf[j];
         }
 
@@ -224,7 +219,7 @@ int lmmin(mot_float_type * const x, const void* const data){
             else{
                 sum = 0;
                 for (i = 0; i <= j; i++){
-                    sum += fjac[j*NMR_INST_PER_PROBLEM+i] * qtf[i];
+                    sum += fjac[j*%(NMR_INST_PER_PROBLEM)s+i] * qtf[i];
                 }
                 gnorm = max(gnorm, fabs(sum / wa2[Pivot[j]] / fnorm));
             }
@@ -271,7 +266,7 @@ int lmmin(mot_float_type * const x, const void* const data){
         /** The inner loop. **/
         do {
             /** Determine the Levenberg-Marquardt parameter. **/
-            lm_lmpar(%(NMR_PARAMS)s, fjac, NMR_INST_PER_PROBLEM, Pivot, diag, qtf, delta, &lmpar, wa1, wa2, wf, wa3 );
+            lm_lmpar(%(NMR_PARAMS)s, fjac, %(NMR_INST_PER_PROBLEM)s, Pivot, diag, qtf, delta, &lmpar, wa1, wa2, wf, wa3 );
             /* used return values are fjac (partly), lmpar, wa1=x, wa3=diag*x */
 
             /* Predict scaled reduction */
@@ -283,7 +278,7 @@ int lmmin(mot_float_type * const x, const void* const data){
             for (j = 0; j < %(NMR_PARAMS)s; j++) {
                 wa3[j] = 0;
                 for (i = 0; i <= j; i++){
-                    wa3[i] -= fjac[j*NMR_INST_PER_PROBLEM+i] * wa1[Pivot[j]];
+                    wa3[i] -= fjac[j*%(NMR_INST_PER_PROBLEM)s+i] * wa1[Pivot[j]];
 				}
             }
             temp1 = lm_euclidian_norm(wa3, %(NMR_PARAMS)s) / fnorm;
@@ -304,9 +299,9 @@ int lmmin(mot_float_type * const x, const void* const data){
                 wa2[j] = x[j] - wa1[j];
 			}
 
-            evaluate(data, wa2, wf);
+            evaluate(wa2, data, wf);
             ++nfev;
-            fnorm1 = lm_euclidian_norm(wf, NMR_INST_PER_PROBLEM);
+            fnorm1 = lm_euclidian_norm(wf, %(NMR_INST_PER_PROBLEM)s);
             if(!isfinite(fnorm1)){
                 return 10;
             }
@@ -356,7 +351,7 @@ int lmmin(mot_float_type * const x, const void* const data){
                         x[j] = wa2[j];
                     }
                 }
-                for (i = 0; i < NMR_INST_PER_PROBLEM; i++){
+                for (i = 0; i < %(NMR_INST_PER_PROBLEM)s; i++){
                     fvec[i] = wf[i];
                 }
                 xnorm = lm_euclidian_norm(wa2, %(NMR_PARAMS)s);

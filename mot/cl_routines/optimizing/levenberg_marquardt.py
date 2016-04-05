@@ -30,49 +30,44 @@ class LevenbergMarquardt(AbstractParallelOptimizer):
 
 class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
 
-    def _get_optimizer_cl_code(self):
-        optimizer_func = self._get_optimization_function()
+    def __init__(self, *args, **kwargs):
+        super(LevenbergMarquardtWorker, self).__init__(*args, **kwargs)
 
-        cl_eval_func = self._model.get_model_eval_function('evaluateModel')
-        cl_observation_func = self._model.get_observation_return_function('getObservation')
-        nmr_params = self._nmr_params
-        nmr_inst_per_problem = self._model.get_nmr_inst_per_problem()
-
-        if nmr_params <= 0:
-            raise ValueError('The number of parameters can not be smaller or equal to 0.')
-
-        if nmr_inst_per_problem < nmr_params:
+        if self._model.get_nmr_inst_per_problem() < self._nmr_params:
             raise ValueError('The number of instances per problem must be greater than the number of parameters')
 
+    def _get_evaluate_function(self):
+        """Get the CL code for the evaluation function. This is called from _get_optimizer_cl_code.
+
+        Implementing optimizers can change this if desired.
+
+        Returns:
+            str: the evaluation function.
+        """
         kernel_source = ''
-        kernel_source += '''
-            #define NMR_INST_PER_PROBLEM ''' + str(nmr_inst_per_problem) + '''
-        '''
-        kernel_source += cl_observation_func
-        kernel_source += cl_eval_func
-
-        kernel_source += '''
-            void evaluate(const void* data, mot_float_type* x, mot_float_type* result){
-                int i;
-                mot_float_type x_model[''' + str(nmr_params) + '''];
-                for(i = 0; i < ''' + str(nmr_params) + '''; i++){
-                    x_model[i] = x[i];
+        kernel_source += self._model.get_objective_list_function('calculateObjectiveList')
+        if self._use_param_codec:
+            kernel_source += '''
+                void evaluate(mot_float_type* x, const void* data, mot_float_type* result){
+                    mot_float_type x_model[''' + str(self._nmr_params) + '''];
+                    for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
+                        x_model[i] = x[i];
+                    }
+                    decodeParameters(x_model);
+                    calculateObjectiveList((optimize_data*)data, x_model, result);
                 }
-
-                ''' + ('decodeParameters(x_model);' if self._use_param_codec else '') + '''
-
-                for(i = 0; i < NMR_INST_PER_PROBLEM; i++){
-                    result[i] = getObservation((optimize_data*)data, i) -
-                                    evaluateModel((optimize_data*)data, x_model, i);
+            '''
+        else:
+            kernel_source += '''
+                void evaluate(mot_float_type* x, const void* data, mot_float_type* result){
+                    calculateObjectiveList((optimize_data*)data, x, result);
                 }
-            }
-        '''
-        kernel_source += optimizer_func.get_cl_header()
-        kernel_source += optimizer_func.get_cl_code()
+            '''
         return kernel_source
 
     def _get_optimization_function(self):
-        return LMMin(self._nmr_params, patience=self._parent_optimizer.patience,
+        return LMMin(self._nmr_params, self._model.get_nmr_inst_per_problem(),
+                     patience=self._parent_optimizer.patience,
                      optimizer_options=self._optimizer_options)
 
     def _get_optimizer_call_name(self):

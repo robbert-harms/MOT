@@ -520,6 +520,25 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                                                                   obs_func_name, param_listing))
         return str(func)
 
+    def get_objective_list_function(self, func_name="calculateObjectiveList"):
+        inst_per_problem = self.get_nmr_inst_per_problem()
+        eval_func_name = func_name + '_evaluateModel'
+        obs_func_name = func_name + '_getObservation'
+
+        param_listing = ''
+        for p in self._evaluation_model.get_free_parameters():
+            param_listing += self._get_param_listing_for_param(self._evaluation_model, p)
+
+        func = ''
+        func += self._evaluation_model.get_cl_dependency_headers()
+        func += self._evaluation_model.get_cl_dependency_code()
+
+        func += self.get_model_eval_function(eval_func_name)
+        func += self.get_observation_return_function(obs_func_name)
+        func += str(self._evaluation_model.get_objective_list_function(func_name, inst_per_problem, eval_func_name,
+                                                                       obs_func_name, param_listing))
+        return str(func)
+
     def finalize_optimization_results(self, results_dict):
         """This adds the final optimization maps to the results dictionary.
 

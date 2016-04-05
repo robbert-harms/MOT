@@ -34,14 +34,14 @@ class EuclidianNormFunction(LibraryFunction):
 
 class LMMin(LibraryFunction):
 
-    def __init__(self, nmr_parameters, patience=250, optimizer_options=None):
+    def __init__(self, nmr_parameters, nmr_inst_per_problem, patience=250, optimizer_options=None):
         """The Levenberg Marquardt function.
 
         Args:
             nmr_parameters (int): The number of parameters we are going to optimize, this is compiled into the code.
             patience (int): The patience before stopping the iterations.
         """
-        params = {'NMR_PARAMS': nmr_parameters, 'PATIENCE': patience}
+        params = {'NMR_PARAMS': nmr_parameters, 'PATIENCE': patience, 'NMR_INST_PER_PROBLEM': nmr_inst_per_problem}
 
         optimizer_options = optimizer_options or {}
         option_defaults = {'step_bound': 100.0, 'scale_diag': 1}
