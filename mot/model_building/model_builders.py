@@ -464,12 +464,18 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         return func
 
     def get_observation_return_function(self, func_name='getObservation'):
-        func = '''
+        if self._problem_data.observations.shape[1] < 2:
+            return '''
+                mot_float_type ''' + func_name + '''(const optimize_data* const data, const int observation_index){
+                    return data->var_data_observations;
+                }
+            '''
+
+        return '''
             mot_float_type ''' + func_name + '''(const optimize_data* const data, const int observation_index){
                 return data->var_data_observations[observation_index];
             }
         '''
-        return func
 
     def get_model_eval_function(self, func_name='evaluateModel'):
         noise_func_name = func_name + '_signalNoiseModel'
