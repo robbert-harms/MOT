@@ -26,6 +26,7 @@ class ErrorMeasures(AbstractCLRoutine):
             A dictionary containing (for each voxel)
                 - Errors.l2: the l2 norm
         """
+        sse = np.sum(np.power(errors, 2), axis=1)
         return {'Errors.l2': np.linalg.norm(errors, axis=1),
-                'Errors.sse': np.sum(np.power(errors, 2), axis=1),
-                'Errors.mse': np.sum(np.power(errors, 2), axis=1)/errors.shape[1]}
+                'Errors.sse': sse,
+                'Errors.mse': sse/errors.shape[1]}

@@ -351,7 +351,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         for m, p in self._get_estimable_parameters_list():
             if results_dict and (m.name + '.' + p.name) in results_dict:
                 starting_points.append(results_dict[m.name + '.' + p.name])
-            elif isinstance(p.value, numbers.Number):
+            elif isinstance(p.value, (numbers.Number, np.generic)):
                 starting_points.append(np.full((self.get_nmr_problems(), 1), p.value, dtype=np_dtype))
             else:
                 if len(p.value.shape) < 2:
@@ -789,13 +789,10 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             name = m.name + '_' + p.name
             if name not in exclude_list:
                 data_type = p.data_type.raw_data_type
-                if isinstance(p.value, numbers.Number):
-                    assignment = '(' + data_type + ')' + str(float(p.value))
+                if self._all_elements_equal(p.value):
+                    assignment = '(' + data_type + ')' + str(float(self._get_single_value(p.value)))
                 else:
-                    if p.value.max() == p.value.min():
-                        assignment = '(' + data_type + ')' + str(float(p.value[0]))
-                    else:
-                        assignment = '(' + data_type + ') data->var_data_' + m.name + '_' + p.name
+                    assignment = '(' + data_type + ') data->var_data_' + m.name + '_' + p.name
                 func += "\t"*4 + data_type + ' ' + name + ' = ' + assignment + ';' + "\n"
         return func
 
@@ -906,13 +903,10 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             assignment = 'data->protocol_data_' + p.name + '[observation_index]'
         elif isinstance(p, FreeParameter):
             if p.fixed and not self._parameter_has_dependency(m, p):
-                if isinstance(p.value, numbers.Number):
-                    assignment = '(' + data_type + ')' + str(float(p.value))
+                if self._all_elements_equal(p.value):
+                    assignment = '(' + data_type + ')' + str(float(self._get_single_value(p.value)))
                 else:
-                    if p.value.max() == p.value.min():
-                        assignment = '(' + data_type + ')' + str(float(p.value[0]))
-                    else:
-                        assignment = '(' + data_type + ') data->var_data_' + m.name + '_' + p.name
+                    assignment = '(' + data_type + ') data->var_data_' + m.name + '_' + p.name
             elif not self._parameter_has_dependency(m, p) \
                 or (self._parameter_has_dependency(m, p) and not self._parameter_fixed_to_dependency(m, p)):
                 ind = self._get_parameter_estimable_index(m.name + '.' + p.name)
@@ -1036,7 +1030,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         var_data_dict = {}
         for m, p in self._get_free_parameters_list():
             if p.fixed \
-                    and not isinstance(p.value, numbers.Number) \
+                    and not isinstance(p.value, (numbers.Number, np.generic)) \
                     and not self._parameter_fixed_to_dependency(m, p):
 
                 duplicate_found = False
@@ -1122,7 +1116,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         Returns:
             bool: true if all elements are equal to each other, false otherwise
         """
-        if isinstance(value, numbers.Number):
+        if isinstance(value, (numbers.Number, np.generic)):
             return True
         return (value == value[0]).all()
 
@@ -1138,7 +1132,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         Returns:
             number: a single number from the input
         """
-        if isinstance(value, numbers.Number):
+        if isinstance(value, (numbers.Number, np.generic)):
             return value
         return value.item(0)
 
