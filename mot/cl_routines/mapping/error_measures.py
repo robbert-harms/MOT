@@ -11,9 +11,9 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class ErrorMeasures(AbstractCLRoutine):
 
-    def __init__(self, cl_environments, load_balancer, double_precision):
+    def __init__(self, cl_environments=None, load_balancer=None, double_precision=False):
         """Given a set of raw errors per voxel, calculate some interesting measures."""
-        super(ErrorMeasures, self).__init__(cl_environments, load_balancer)
+        super(ErrorMeasures, self).__init__(cl_environments=cl_environments, load_balancer=load_balancer)
         self._double_precision = double_precision
 
     def calculate(self, errors):
