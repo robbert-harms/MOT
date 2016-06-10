@@ -22,11 +22,11 @@ class CLEnvironment(object):
         self._device = device
         self._cl_context = CLRunContext(self)
 
-    def get_new_context(self):
-        """Generate a new context using this environment.
+    def get_cl_context(self):
+        """Get a CL context from this environment.
 
         Returns:
-            CLContext: a CL context for single run use
+            CLContext: a CL context for the computations
         """
         return self._cl_context
 
@@ -223,10 +223,7 @@ class CLEnvironmentFactory(object):
 
             for device in devices:
                 if device_supports_double(device):
-                    try:
-                        env = CLEnvironment(platform, device)
-                        runtime_list.append(env)
-                    except cl.RuntimeError:
-                        pass
+                    env = CLEnvironment(platform, device)
+                    runtime_list.append(env)
 
         return runtime_list

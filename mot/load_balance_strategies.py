@@ -30,7 +30,7 @@ class Worker(object):
             cl_environment (CLEnvironment): The cl environment, can be used to determine the load
         """
         self._cl_environment = cl_environment
-        self._cl_run_context = self._cl_environment.get_new_context()
+        self._cl_run_context = self._cl_environment.get_cl_context()
         self._constant_buffers = []
 
     @property
