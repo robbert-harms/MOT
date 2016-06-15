@@ -29,7 +29,8 @@ return_code_labels = {
     7: ['failed', 'ftol<tol: cannot reduce sum of squares any further'],
     8: ['failed', 'xtol<tol: cannot improve approximate solution any further'],
     9: ['failed', 'gtol<tol: cannot improve approximate solution any further'],
-    10: ['NaN', 'Function value is not-a-number or infinite']
+    10: ['NaN', 'Function value is not-a-number or infinite'],
+    11: ['exhausted', 'temperature decreased to 0.0']
 }
 
 

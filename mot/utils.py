@@ -315,7 +315,7 @@ def initialize_ranlux(cl_environment, cl_context, nmr_instances, ranlux=RanluxCL
     kernel_source += ranlux.get_cl_header()
     kernel_source += ranlux.get_cl_code()
     kernel_source += '''
-        __kernel void init(global float4 *ranluxcltab){
+        __kernel void init(global ranluxcl_state_t *ranluxcltab){
             ranluxcl_initialization(''' + str(seed) + ''', ranluxcltab);
         }
     '''

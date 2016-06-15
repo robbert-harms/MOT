@@ -33,10 +33,14 @@ class SimulatedAnnealing(AbstractParallelOptimizer):
         super(SimulatedAnnealing, self).__init__(cl_environments, load_balancer, False, patience=patience, **kwargs)
         optimizer_options = optimizer_options or {}
         self.proposal_update_intervals = optimizer_options.get('proposal_update_intervals', 50)
+        self._annealing_schedule = ExponentialCoolingSchedule()
+        self._initial_temperature_strategy = SimpleInitialTemperatureStrategy()
 
     def _get_worker_generator(self, *args):
         return lambda cl_environment: SimulatedAnnealingWorker(cl_environment, *args, patience=self.patience,
-                                                               proposal_update_intervals=self.proposal_update_intervals)
+                                                               proposal_update_intervals=self.proposal_update_intervals,
+                                                               annealing_schedule=self._annealing_schedule,
+                                                               init_temp_strategy=self._initial_temperature_strategy)
 
 
 class SimulatedAnnealingWorker(AbstractParallelOptimizerWorker):
@@ -44,6 +48,8 @@ class SimulatedAnnealingWorker(AbstractParallelOptimizerWorker):
     def __init__(self, *args, **kwargs):
         self.patience = kwargs.pop('patience')
         self.proposal_update_intervals = kwargs.pop('proposal_update_intervals')
+        self._annealing_schedule = kwargs.pop('annealing_schedule')
+        self._init_temp_strategy = kwargs.pop('init_temp_strategy')
 
         super(SimulatedAnnealingWorker, self).__init__(*args, **kwargs)
         self._use_param_codec = False
@@ -76,7 +82,8 @@ class SimulatedAnnealingWorker(AbstractParallelOptimizerWorker):
         adaptable_proposal_parameters_str = '{' + ', '.join(map(str, self._model.get_proposal_parameter_values())) + '}'
         acceptance_counters_between_proposal_updates = '{' + ', '.join('0' * self._nmr_params) + '}'
 
-        kernel_source = '''
+        kernel_source = self._annealing_schedule.get_temperature_update_cl_function()
+        kernel_source += '''
             void _update_proposals(mot_float_type* const proposal_parameters, uint* const ac_between_proposal_updates,
                                    uint* const proposal_update_count){
 
@@ -101,7 +108,8 @@ class SimulatedAnnealingWorker(AbstractParallelOptimizerWorker):
                                mot_float_type* const current_prior,
                                const optimize_data* const data,
                                mot_float_type* const proposal_parameters,
-                               uint * const ac_between_proposal_updates){
+                               uint* const ac_between_proposal_updates,
+                               mot_float_type* temperature){
 
                 mot_float_type new_prior;
                 double new_likelihood;
@@ -121,15 +129,16 @@ class SimulatedAnnealingWorker(AbstractParallelOptimizerWorker):
         '''
         if self._model.is_proposal_symmetric():
             kernel_source += '''
-                        bayesian_f = exp((new_likelihood + new_prior) - (*current_likelihood + *current_prior));
+                        bayesian_f = exp(((new_likelihood + new_prior) -
+                                            (*current_likelihood + *current_prior)) / *temperature);
                 '''
         else:
             kernel_source += '''
                         mot_float_type x_to_prop = getProposalLogPDF(k, old_x, x[k], proposal_parameters);
                         mot_float_type prop_to_x = getProposalLogPDF(k, x[k], x[k], proposal_parameters);
 
-                        bayesian_f = exp((new_likelihood + new_prior + x_to_prop) -
-                            (*current_likelihood + *current_prior + prop_to_x));
+                        bayesian_f = exp(((new_likelihood + new_prior + x_to_prop) -
+                                          (*current_likelihood + *current_prior + prop_to_x)) / *temperature);
                 '''
         kernel_source += '''
                         if(new_likelihood > *current_likelihood || rand(rand_settings) < bayesian_f){
@@ -146,7 +155,9 @@ class SimulatedAnnealingWorker(AbstractParallelOptimizerWorker):
                     }
                 }
             }
-
+        '''
+        kernel_source += self._init_temp_strategy.get_init_temp_cl_function()
+        kernel_source += '''
             int simulated_annealing(mot_float_type* const x, const void* const data, void* rand_settings){
                 uint proposal_update_count = 0;
 
@@ -158,9 +169,24 @@ class SimulatedAnnealingWorker(AbstractParallelOptimizerWorker):
 
                 rand(rand_settings);
 
-                for(uint i = 0; i < ''' + str(self.patience * (self._nmr_params + 1)) + '''; i++){
+                mot_float_type temperature;
+                mot_float_type min_temp;
+                mot_float_type max_temp;
+                its_get_initial_temperature(&temperature, &min_temp, &max_temp,
+                                            x, rand_settings, &current_likelihood, &current_prior,
+                                            data, proposal_parameters, ac_between_proposal_updates,
+                                            &proposal_update_count);
+
+                for(uint step = 0; step < ''' + str(self.patience * (self._nmr_params + 1)) + '''; step++){
+                    as_update_temperature(&temperature, min_temp, max_temp, step,
+                                          (uint) ''' + str(self.patience * (self._nmr_params + 1)) + ''');
+
+                    if(temperature <= 0.0f){
+                        return 2;
+                    }
+
                     _update_state(x, rand_settings, &current_likelihood, &current_prior,
-                                  data, proposal_parameters, ac_between_proposal_updates);
+                                  data, proposal_parameters, ac_between_proposal_updates, &temperature);
                     _update_proposals(proposal_parameters, ac_between_proposal_updates, &proposal_update_count);
                 }
 
@@ -171,3 +197,116 @@ class SimulatedAnnealingWorker(AbstractParallelOptimizerWorker):
 
     def _uses_random_numbers(self):
         return True
+
+
+class InitialTemperatureStrategy(object):
+
+    def __init__(self, *args, **kwargs):
+        """The base class for strategies for determining the initial temperature to use during annealing.
+        """
+
+    def get_init_temp_cl_function(self):
+        """Get the function called by the annealing routine to determine the initial temperature.
+
+        void its_get_initial_temperature(mot_float_type* temperature, mot_float_type* min_temp,
+                                         mot_float_type* max_temp){
+
+        """
+
+
+class SimpleInitialTemperatureStrategy(InitialTemperatureStrategy):
+
+    def __init__(self, *args, acceptance_prob=0.8, nmr_steps=10, max_temp=1e4, **kwargs):
+        """Do an initial search to find an initial temperature.
+
+        This tries to find a temperature T_0 that results in an average acceptance probability given by
+        the parameter acceptance_prob. It does this by running an initial n steps (n given by nmr_steps)
+        and calculate T_0 by:
+            T_0 = min( -(dE / ln(a)), m)
+
+        where dE is the delta energy after the initial steps, a is the desired acceptance probability and m is
+        the predefined maximum temperature max_temp.
+        """
+        super(SimpleInitialTemperatureStrategy, self).__init__(*args, **kwargs)
+        self.nmr_steps = nmr_steps
+        self.acceptance_prob = acceptance_prob
+        self.max_temp = max_temp
+
+    def get_init_temp_cl_function(self):
+        return '''
+            void its_get_initial_temperature(
+                    mot_float_type* temperature,
+                    mot_float_type* min_temp,
+                    mot_float_type* max_temp,
+                    mot_float_type* const x,
+                    void* rand_settings,
+                    double* const current_likelihood,
+                    mot_float_type* const current_prior,
+                    const optimize_data* const data,
+                    mot_float_type* const proposal_parameters,
+                    uint* const ac_between_proposal_updates,
+                    uint* const proposal_update_count){
+
+                double initial_likelihood = *current_likelihood;
+                double initial_prior = *current_prior;
+
+                *temperature = 1.0;
+                *min_temp = 0;
+                *max_temp = ''' + str(self.max_temp) + ''';
+
+                for(uint step = 0; step < ''' + str(self.nmr_steps) + '''; step++){
+                    _update_state(x, rand_settings, current_likelihood, current_prior,
+                                  data, proposal_parameters, ac_between_proposal_updates, temperature);
+                    _update_proposals(proposal_parameters, ac_between_proposal_updates, proposal_update_count);
+                }
+
+                *temperature = min((mot_float_type) -(exp((*current_likelihood + *current_prior)
+                                         - (initial_likelihood + initial_prior))
+                                            / log(''' + str(self.acceptance_prob) + ''')), *max_temp);
+            }
+        '''
+
+
+class AnnealingSchedule(object):
+
+    def __init__(self, *args, **kwargs):
+        """The base class for the annealing schedule.
+
+        Implementing classes can implement an annealing schedule to update the temperature during annealing.
+        """
+
+    def get_temperature_update_cl_function(self):
+        """Get the function called by the annealing routine to update the temperature.
+
+        This must return a CL string with a function with the following signature:
+            void as_update_temperature(mot_float_type* temperature, const mot_float_type min_temp,
+                                       const mot_float_type max_temp, const uint step, const uint nmr_steps);
+
+        (where the prefix 'as' stands for Annealing Schedule)
+        """
+
+
+class ExponentialCoolingSchedule(AnnealingSchedule):
+
+    def __init__(self, *args, damping_factor=0.95, **kwargs):
+        """A simple exponential cooling schedule.
+
+        The temperature T at time k+1 is given by:
+            T_k+1 = a * T_k
+
+        Where 0<a<1 is the damping factor.
+        """
+        self.damping_factor = damping_factor
+        super(ExponentialCoolingSchedule, self).__init__(*args, **kwargs)
+
+    def get_temperature_update_cl_function(self):
+        return '''
+            void as_update_temperature(mot_float_type* temperature, const mot_float_type min_temp,
+                                       const mot_float_type max_temp, const uint step, const uint nmr_steps){
+                *temperature *= ''' + (str(self.damping_factor)) + ''';
+
+                 if(*temperature < min_temp){
+                    *temperature = min_temp;
+                 }
+            }
+        '''
