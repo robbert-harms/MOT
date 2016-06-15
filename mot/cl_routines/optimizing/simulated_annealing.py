@@ -167,18 +167,21 @@ class SimulatedAnnealingWorker(AbstractParallelOptimizerWorker):
                 double current_likelihood = getLogLikelihood((optimize_data*)data, x);
                 mot_float_type current_prior = getLogPrior(x);
 
+                double prev_likelihood = current_likelihood;
+                mot_float_type prev_prior = current_prior;
+
                 rand(rand_settings);
 
                 mot_float_type temperature;
                 mot_float_type min_temp;
-                mot_float_type max_temp;
-                its_get_initial_temperature(&temperature, &min_temp, &max_temp,
+                mot_float_type initial_temp;
+                its_get_initial_temperature(&temperature, &min_temp, &initial_temp,
                                             x, rand_settings, &current_likelihood, &current_prior,
                                             data, proposal_parameters, ac_between_proposal_updates,
                                             &proposal_update_count);
 
                 for(uint step = 0; step < ''' + str(self.patience * (self._nmr_params + 1)) + '''; step++){
-                    as_update_temperature(&temperature, min_temp, max_temp, step,
+                    as_update_temperature(&temperature, min_temp, initial_temp, step,
                                           (uint) ''' + str(self.patience * (self._nmr_params + 1)) + ''');
 
                     if(temperature <= 0.0f){
@@ -207,37 +210,24 @@ class InitialTemperatureStrategy(object):
 
     def get_init_temp_cl_function(self):
         """Get the function called by the annealing routine to determine the initial temperature.
-
-        void its_get_initial_temperature(mot_float_type* temperature, mot_float_type* min_temp,
-                                         mot_float_type* max_temp){
-
         """
 
 
 class SimpleInitialTemperatureStrategy(InitialTemperatureStrategy):
 
-    def __init__(self, *args, acceptance_prob=0.8, nmr_steps=10, max_temp=1e4, **kwargs):
-        """Do an initial search to find an initial temperature.
-
-        This tries to find a temperature T_0 that results in an average acceptance probability given by
-        the parameter acceptance_prob. It does this by running an initial n steps (n given by nmr_steps)
-        and calculate T_0 by:
-            T_0 = min( -(dE / ln(a)), m)
-
-        where dE is the delta energy after the initial steps, a is the desired acceptance probability and m is
-        the predefined maximum temperature max_temp.
+    def __init__(self, *args, min_temp=0, initial_temp=1e5, **kwargs):
+        """Sets the initial temperature to a predefined value.
         """
         super(SimpleInitialTemperatureStrategy, self).__init__(*args, **kwargs)
-        self.nmr_steps = nmr_steps
-        self.acceptance_prob = acceptance_prob
-        self.max_temp = max_temp
+        self.min_temp = min_temp
+        self.initial_temp = initial_temp
 
     def get_init_temp_cl_function(self):
         return '''
             void its_get_initial_temperature(
                     mot_float_type* temperature,
                     mot_float_type* min_temp,
-                    mot_float_type* max_temp,
+                    mot_float_type* initial_temp,
                     mot_float_type* const x,
                     void* rand_settings,
                     double* const current_likelihood,
@@ -247,22 +237,9 @@ class SimpleInitialTemperatureStrategy(InitialTemperatureStrategy):
                     uint* const ac_between_proposal_updates,
                     uint* const proposal_update_count){
 
-                double initial_likelihood = *current_likelihood;
-                double initial_prior = *current_prior;
-
-                *temperature = 1.0;
-                *min_temp = 0;
-                *max_temp = ''' + str(self.max_temp) + ''';
-
-                for(uint step = 0; step < ''' + str(self.nmr_steps) + '''; step++){
-                    _update_state(x, rand_settings, current_likelihood, current_prior,
-                                  data, proposal_parameters, ac_between_proposal_updates, temperature);
-                    _update_proposals(proposal_parameters, ac_between_proposal_updates, proposal_update_count);
-                }
-
-                *temperature = min((mot_float_type) -(exp((*current_likelihood + *current_prior)
-                                         - (initial_likelihood + initial_prior))
-                                            / log(''' + str(self.acceptance_prob) + ''')), *max_temp);
+                *min_temp = ''' + str(self.min_temp) + ''';
+                *initial_temp = ''' + str(self.initial_temp) + ''';
+                *temperature = *initial_temp;
             }
         '''
 
@@ -278,11 +255,13 @@ class AnnealingSchedule(object):
     def get_temperature_update_cl_function(self):
         """Get the function called by the annealing routine to update the temperature.
 
-        This must return a CL string with a function with the following signature:
+        This must return a CL string with a function with the following signature
+        (where the prefix 'as' stands for Annealing Schedule):
             void as_update_temperature(mot_float_type* temperature, const mot_float_type min_temp,
-                                       const mot_float_type max_temp, const uint step, const uint nmr_steps);
+                                       const mot_float_type initial_temp, const uint step, const uint nmr_steps);
 
-        (where the prefix 'as' stands for Annealing Schedule)
+        Here temperature is the value to control, min_temp is the minimum temperature allowed, initial_temp was
+        the initial temperature, step is the current step and nmr_steps is the maximum number of steps.
         """
 
 
@@ -302,7 +281,7 @@ class ExponentialCoolingSchedule(AnnealingSchedule):
     def get_temperature_update_cl_function(self):
         return '''
             void as_update_temperature(mot_float_type* temperature, const mot_float_type min_temp,
-                                       const mot_float_type max_temp, const uint step, const uint nmr_steps){
+                                       const mot_float_type initial_temp, const uint step, const uint nmr_steps){
                 *temperature *= ''' + (str(self.damping_factor)) + ''';
 
                  if(*temperature < min_temp){
