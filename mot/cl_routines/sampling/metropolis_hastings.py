@@ -106,8 +106,6 @@ class MetropolisHastings(AbstractSampler):
         self._logger.info('We will use a {} precision float type for the calculations.'.format(
             'double' if model.double_precision else 'single'))
 
-        if not model.double_precision:
-            self._logger.warn('Please be warned that with single float precision the results may look truncated.')
         for env in self.load_balancer.get_used_cl_environments(self.cl_environments):
             self._logger.info('Using device \'{}\'.'.format(str(env)))
 
