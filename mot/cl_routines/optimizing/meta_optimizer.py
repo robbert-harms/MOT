@@ -1,4 +1,6 @@
 import logging
+
+from mot.cl_routines.mapping.calculate_model_estimates import CalculateModelEstimates
 from ...cl_routines.filters.median import MedianFilter
 from ...cl_routines.optimizing.base import AbstractOptimizer
 from ...cl_routines.mapping.error_measures import ErrorMeasures
@@ -14,7 +16,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class MetaOptimizer(AbstractOptimizer):
 
-    def __init__(self, cl_environments, load_balancer, use_param_codec=True, patience=None):
+    def __init__(self, cl_environments, load_balancer, use_param_codec=True, patience=None, **kwargs):
         """This meta optimization routine uses optimizers and smoothing routines to provide a meta optimization.
 
         In general one can enable a grid search beforehand, multiple optimizers, parameter smoothing and perturbation.
@@ -44,7 +46,7 @@ class MetaOptimizer(AbstractOptimizer):
             optimizer (Optimizer, default NMSimplex): The default optimization routine
             smoother (Smoother, default MedianFilter(1)): The default smoothing routine
         """
-        super(MetaOptimizer, self).__init__(cl_environments, load_balancer, use_param_codec)
+        super(MetaOptimizer, self).__init__(cl_environments, load_balancer, use_param_codec, **kwargs)
         self.enable_sampling = False
 
         self.extra_optim_runs = 0
@@ -88,14 +90,24 @@ class MetaOptimizer(AbstractOptimizer):
                     results, extra_maps = optimizer.minimize(model, init_params=results, full_output=True)
 
         if full_output:
+            extra_output = {}
+
+            self._logger.info('Calculating model estimates')
+            model_estimates = CalculateModelEstimates(self.cl_environments,
+                                                      self.load_balancer).calculate(model, results)
+            extra_output.update({'SignalEstimates': model_estimates})
+            self._logger.info('Done calculating model estimates')
+
             self._logger.info('Calculating errors measures')
             errors = ResidualCalculator(cl_environments=self.cl_environments,
-                                        load_balancer=self.load_balancer).calculate(model, results)
-            error_measures = ErrorMeasures(self.cl_environments, self.load_balancer,
-                                           model.double_precision).calculate(errors)
+                                        load_balancer=self.load_balancer).calculate(model, results, model_estimates)
+
+            extra_output.update(ErrorMeasures(self.cl_environments, self.load_balancer,
+                                              model.double_precision).calculate(errors))
             self._logger.info('Done calculating errors measures')
-            error_measures.update(extra_maps)
-            return results, error_measures
+
+            extra_output.update(extra_maps)
+            return results, extra_output
 
         return results
 

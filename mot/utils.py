@@ -1,7 +1,7 @@
 import pyopencl.array as cl_array
 import numpy as np
 import pyopencl as cl
-from functools import reduce
+from functools import reduce, wraps
 
 from mot.adapters import DataAdapter
 from .cl_functions import RanluxCL

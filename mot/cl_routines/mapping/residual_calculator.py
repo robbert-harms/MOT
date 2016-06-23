@@ -18,12 +18,14 @@ class ResidualCalculator(AbstractCLRoutine):
         """Calculate the residuals, that is the errors, per problem instance per data point."""
         super(ResidualCalculator, self).__init__(cl_environments=cl_environments, load_balancer=load_balancer)
 
-    def calculate(self, model, parameters_dict):
+    def calculate(self, model, parameters_dict, model_estimates=None):
         """Calculate and return the residuals.
 
         Args:
             model (AbstractModel): The model to calculate the residuals of.
             parameters_dict (dict): The parameters to use in the evaluation of the model
+            model_estimates (ndarray): The model estimates of the model if available. These are used
+                when given.
 
         Returns:
             Return per voxel the errors (eval - data) per protocol item
@@ -38,8 +40,11 @@ class ResidualCalculator(AbstractCLRoutine):
         residuals = np.zeros((nmr_problems, nmr_inst_per_problem), dtype=np_dtype, order='C')
         parameters = np.require(model.get_initial_parameters(parameters_dict), np_dtype, requirements=['C', 'A', 'O'])
 
+        if model_estimates is not None:
+            model_estimates = np.require(model_estimates, np_dtype, requirements=['C', 'A', 'O'])
+
         workers = self._create_workers(lambda cl_environment: _ResidualCalculatorWorker(
-            cl_environment, self.get_compile_flags_list(), model, parameters, residuals))
+            cl_environment, self.get_compile_flags_list(), model, parameters, residuals, model_estimates))
         self.load_balancer.process(workers, model.get_nmr_problems())
 
         return residuals
@@ -47,13 +52,14 @@ class ResidualCalculator(AbstractCLRoutine):
 
 class _ResidualCalculatorWorker(Worker):
 
-    def __init__(self, cl_environment, compile_flags, model, parameters, residuals):
+    def __init__(self, cl_environment, compile_flags, model, parameters, residuals, model_estimates=None):
         super(_ResidualCalculatorWorker, self).__init__(cl_environment)
 
         self._model = model
         self._double_precision = model.double_precision
         self._residuals = residuals
         self._parameters = parameters
+        self._model_estimates = model_estimates
 
         self._var_data_dict = model.get_problems_var_data()
         self._protocol_data_dict = model.get_problems_protocol_data()
@@ -73,10 +79,16 @@ class _ResidualCalculatorWorker(Worker):
                                   cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
                                   hostbuf=self._residuals)
 
-        all_buffers = [cl.Buffer(self._cl_run_context.context,
-                                 cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR,
-                                 hostbuf=self._parameters),
-                       errors_buffer]
+        if self._model_estimates is None:
+            all_buffers = [cl.Buffer(self._cl_run_context.context,
+                                     cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR,
+                                     hostbuf=self._parameters),
+                           errors_buffer]
+        else:
+            all_buffers = [cl.Buffer(self._cl_run_context.context,
+                                     cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR,
+                                     hostbuf=self._model_estimates),
+                           errors_buffer]
 
         for data in self._var_data_dict.values():
             all_buffers.append(cl.Buffer(self._cl_run_context.context,
@@ -89,14 +101,17 @@ class _ResidualCalculatorWorker(Worker):
         return all_buffers, errors_buffer
 
     def _get_kernel_source(self):
-        cl_func = self._model.get_model_eval_function('evaluateModel')
         nmr_inst_per_problem = self._model.get_nmr_inst_per_problem()
         nmr_params = self._parameters.shape[1]
-        observation_func = self._model.get_observation_return_function('getObservation')
+
         param_code_gen = ParameterCLCodeGenerator(self._cl_environment.device, self._var_data_dict,
                                                   self._protocol_data_dict, self._model_data_dict)
 
-        kernel_param_names = ['global mot_float_type* params', 'global mot_float_type* errors']
+        if self._model_estimates is None:
+            kernel_param_names = ['global mot_float_type* params', 'global mot_float_type* errors']
+        else:
+            kernel_param_names = ['global mot_float_type* model_estimates', 'global mot_float_type* errors']
+
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
         kernel_source = '''
@@ -105,25 +120,41 @@ class _ResidualCalculatorWorker(Worker):
 
         kernel_source += get_float_type_def(self._double_precision)
         kernel_source += param_code_gen.get_data_struct()
-        kernel_source += observation_func
-        kernel_source += cl_func
-        kernel_source += '''
-            __kernel void get_errors(
-                ''' + ",\n".join(kernel_param_names) + '''
-                ){
-                    int gid = get_global_id(0);
-                    ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
+        kernel_source += self._model.get_observation_return_function('getObservation')
+        if self._model_estimates is None:
+            kernel_source += self._model.get_model_eval_function('evaluateModel')
+            kernel_source += '''
+                __kernel void get_errors(
+                    ''' + ",\n".join(kernel_param_names) + '''
+                    ){
+                        int gid = get_global_id(0);
+                        ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
 
-                    mot_float_type x[''' + str(nmr_params) + '''];
-                    for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
-                        x[i] = params[gid * ''' + str(nmr_params) + ''' + i];
-                    }
+                        mot_float_type x[''' + str(nmr_params) + '''];
+                        for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
+                            x[i] = params[gid * ''' + str(nmr_params) + ''' + i];
+                        }
 
-                    global mot_float_type* result = errors + gid * NMR_INST_PER_PROBLEM;
+                        global mot_float_type* result = errors + gid * NMR_INST_PER_PROBLEM;
 
-                    for(int i = 0; i < NMR_INST_PER_PROBLEM; i++){
-                        result[i] = getObservation(&data, i) - evaluateModel(&data, x, i);
-                    }
-            }
-        '''
+                        for(int i = 0; i < NMR_INST_PER_PROBLEM; i++){
+                            result[i] = getObservation(&data, i) - evaluateModel(&data, x, i);
+                        }
+                }
+            '''
+        else:
+            kernel_source += '''
+                __kernel void get_errors(
+                    ''' + ",\n".join(kernel_param_names) + '''
+                    ){
+                        int gid = get_global_id(0);
+                        ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
+
+                        global mot_float_type* result = errors + gid * NMR_INST_PER_PROBLEM;
+
+                        for(int i = 0; i < NMR_INST_PER_PROBLEM; i++){
+                            result[i] = getObservation(&data, i) - model_estimates[i + gid * NMR_INST_PER_PROBLEM];
+                        }
+                }
+            '''
         return kernel_source
