@@ -215,10 +215,10 @@ class InitialTemperatureStrategy(object):
 
 class SimpleInitialTemperatureStrategy(InitialTemperatureStrategy):
 
-    def __init__(self, *args, min_temp=0, initial_temp=1e5, **kwargs):
+    def __init__(self, min_temp=0, initial_temp=1e5, **kwargs):
         """Sets the initial temperature to a predefined value.
         """
-        super(SimpleInitialTemperatureStrategy, self).__init__(*args, **kwargs)
+        super(SimpleInitialTemperatureStrategy, self).__init__(**kwargs)
         self.min_temp = min_temp
         self.initial_temp = initial_temp
 
@@ -267,7 +267,7 @@ class AnnealingSchedule(object):
 
 class ExponentialCoolingSchedule(AnnealingSchedule):
 
-    def __init__(self, *args, damping_factor=0.95, **kwargs):
+    def __init__(self, damping_factor=0.95, **kwargs):
         """A simple exponential cooling schedule.
 
         The temperature T at time k+1 is given by:
@@ -276,7 +276,7 @@ class ExponentialCoolingSchedule(AnnealingSchedule):
         Where 0<a<1 is the damping factor.
         """
         self.damping_factor = damping_factor
-        super(ExponentialCoolingSchedule, self).__init__(*args, **kwargs)
+        super(ExponentialCoolingSchedule, self).__init__(**kwargs)
 
     def get_temperature_update_cl_function(self):
         return '''
