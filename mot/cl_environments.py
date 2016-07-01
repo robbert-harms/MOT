@@ -191,7 +191,7 @@ class CLEnvironmentFactory(object):
         raise ValueError('No suitable OpenCL device found.')
 
     @staticmethod
-    def all_devices(cl_device_type=None, platform=None):
+    def all_devices(cl_device_type=None, platform=None, platform_ignore_keywords=('Clover',)):
         """Get multiple device environments, optionally only of the indicated type.
 
         This will only fetch devices that support double (possibly only devices
@@ -201,6 +201,8 @@ class CLEnvironmentFactory(object):
             cl_device_type (cl.device_type.* or string): The type of the device we want,
                 can be a opencl device type or a string matching 'GPU' or 'CPU'.
             platform (opencl platform): The opencl platform to select the devices from
+            platform_ignore_keywords (list of str): we ignore all platforms where one of the keywords match
+                only used if the argument platform is None
 
         Returns:
             list of CLEnvironment: List with one element, the CL runtime environment requested.
@@ -212,6 +214,10 @@ class CLEnvironmentFactory(object):
 
         if platform is None:
             platforms = cl.get_platforms()
+
+            if platform_ignore_keywords:
+                platforms = [platform for platform in platforms if
+                             all(keyword not in platform.name for keyword in platform_ignore_keywords)]
         else:
             platforms = [platform]
 
