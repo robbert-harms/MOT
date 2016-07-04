@@ -1,5 +1,5 @@
 mot
-====
+===
 
 .. toctree::
    :maxdepth: 4
