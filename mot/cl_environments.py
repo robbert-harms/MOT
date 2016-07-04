@@ -203,7 +203,7 @@ class CLEnvironmentFactory(object):
             platform (opencl platform): The opencl platform to select the devices from
 
         Returns:
-            list of CLEnvironment: List with one element, the CL runtime environment requested.
+            list of CLEnvironment: List with the CL device environments.
         """
         if isinstance(cl_device_type, string_types):
             cl_device_type = device_type_from_string(cl_device_type)
@@ -227,3 +227,27 @@ class CLEnvironmentFactory(object):
                     runtime_list.append(env)
 
         return runtime_list
+
+    @staticmethod
+    def smart_device_selection():
+        """Get a list of device environments that is suitable for use in MOT.
+
+        Basically this gets the total list of devices using all_devices() and applies a smart filter on it.
+
+        This filter does the following:
+            1) if the 'AMD Accelerated Parallel Processing' is available remove all environments using the 'Clover'
+                platform.
+
+        More things may be implemented in the future.
+
+        Returns:
+            list of CLEnvironment: List with the CL device environments.
+        """
+        cl_environments = CLEnvironmentFactory.all_devices()
+        platform_names = [env.platform.name for env in cl_environments]
+        has_amd_pro_platform = any('AMD Accelerated Parallel Processing' in name for name in platform_names)
+
+        if has_amd_pro_platform:
+            return list(filter(lambda env: 'Clover' not in env.platform.name, cl_environments))
+
+        return cl_environments

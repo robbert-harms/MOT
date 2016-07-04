@@ -14,7 +14,7 @@ For any of the AbstractCLRoutines it holds that if no suitable defaults are give
 module. This entire module acts as a singleton containing the current runtime configuration.
 """
 _config = {
-    'cl_environments': CLEnvironmentFactory.all_devices(),
+    'cl_environments': CLEnvironmentFactory.smart_device_selection(),
     'load_balancer': PreferGPU(),
     'compile_flags': {
         '-cl-single-precision-constant': True,
