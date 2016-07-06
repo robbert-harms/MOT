@@ -14,12 +14,12 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class CalculateModelEstimates(AbstractCLRoutine):
 
-    def calculate(self, model, parameters_dict):
+    def calculate(self, model, parameters):
         """Evaluate the model for every problem and every observation and return the estimates.
 
         Args:
             model (AbstractModel): The model to evaluate.
-            parameters_dict (ndarray): The parameters to use in the evaluation of the model
+            parameters (ndarray): The parameters to use in the evaluation of the model
 
         Returns:
             ndarray: Return per problem instance the evaluation per data point.
@@ -29,14 +29,13 @@ class CalculateModelEstimates(AbstractCLRoutine):
             np_dtype = np.float64
 
         nmr_inst_per_problem = model.get_nmr_inst_per_problem()
-        nmr_problems = model.get_nmr_problems()
+        nmr_problems = parameters.shape[0]
 
         evaluations = np.zeros((nmr_problems, nmr_inst_per_problem), dtype=np_dtype, order='C')
-        parameters = np.require(model.get_initial_parameters(parameters_dict), np_dtype, requirements=['C', 'A', 'O'])
 
         workers = self._create_workers(lambda cl_environment: _EvaluateModelWorker(
             cl_environment, self.get_compile_flags_list(), model, parameters, evaluations))
-        self.load_balancer.process(workers, model.get_nmr_problems())
+        self.load_balancer.process(workers, nmr_problems)
 
         return evaluations
 
