@@ -19,7 +19,9 @@ class CalculateModelEstimates(AbstractCLRoutine):
 
         Args:
             model (AbstractModel): The model to evaluate.
-            parameters (ndarray): The parameters to use in the evaluation of the model
+            parameters (dict or ndarray): The parameters to use in the evaluation of the model
+                If a dict is given we assume it is with values for a set of parameters
+                If an ndarray is given we assume that we have data for all parameters.
 
         Returns:
             ndarray: Return per problem instance the evaluation per data point.
@@ -29,7 +31,13 @@ class CalculateModelEstimates(AbstractCLRoutine):
             np_dtype = np.float64
 
         nmr_inst_per_problem = model.get_nmr_inst_per_problem()
-        nmr_problems = parameters.shape[0]
+
+        if isinstance(parameters, dict):
+            nmr_problems = model.get_nmr_problems()
+            parameters = np.require(model.get_initial_parameters(parameters), np_dtype,
+                                    requirements=['C', 'A', 'O'])
+        else:
+            nmr_problems = parameters.shape[0]
 
         evaluations = np.zeros((nmr_problems, nmr_inst_per_problem), dtype=np_dtype, order='C')
 
