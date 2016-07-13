@@ -36,7 +36,7 @@ return_code_labels = {
 
 class AbstractOptimizer(AbstractCLRoutine):
 
-    def __init__(self, cl_environments, load_balancer, use_param_codec=True, patience=1,
+    def __init__(self, cl_environments=None, load_balancer=None, use_param_codec=True, patience=1,
                  optimizer_options=None, **kwargs):
         """Create a new optimizer that will minimize the given model with the given codec using the given environments.
 
@@ -94,7 +94,7 @@ class AbstractOptimizer(AbstractCLRoutine):
 
 class AbstractParallelOptimizer(AbstractOptimizer):
 
-    def __init__(self, cl_environments, load_balancer, use_param_codec=True, patience=1,
+    def __init__(self, cl_environments=None, load_balancer=None, use_param_codec=True, patience=1,
                  optimizer_options=None, **kwargs):
         super(AbstractParallelOptimizer, self).__init__(cl_environments, load_balancer, use_param_codec, patience,
                                                         optimizer_options=optimizer_options, **kwargs)

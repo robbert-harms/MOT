@@ -12,7 +12,7 @@ class SimulatedAnnealing(AbstractParallelOptimizer):
 
     default_patience = 500
 
-    def __init__(self, cl_environments, load_balancer, use_param_codec=False, patience=None,
+    def __init__(self, cl_environments=None, load_balancer=None, use_param_codec=False, patience=None,
                  optimizer_options=None, **kwargs):
         """Use Simulated Annealing to calculate the optimum.
 

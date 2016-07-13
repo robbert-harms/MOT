@@ -133,6 +133,12 @@ class CLEnvironment(object):
         s += "\n"
         return s
 
+    def __eq__(self, other):
+        """A device is equal to another if the platform and the device are equal."""
+        if isinstance(other, CLEnvironment):
+            return other.platform == self.platform and other.device == self.device
+        return False
+
 
 class CLRunContext(object):
 

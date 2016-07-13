@@ -12,7 +12,7 @@ class PrAxis(AbstractParallelOptimizer):
 
     default_patience = 1000
 
-    def __init__(self, cl_environments, load_balancer, use_param_codec=True, patience=None,
+    def __init__(self, cl_environments=None, load_balancer=None, use_param_codec=True, patience=None,
                  optimizer_options=None, **kwargs):
         """Use the Principal Axis method to calculate the optimum.
 

@@ -16,7 +16,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class MetaOptimizer(AbstractOptimizer):
 
-    def __init__(self, cl_environments, load_balancer, use_param_codec=True, patience=None, **kwargs):
+    def __init__(self, cl_environments=None, load_balancer=None, use_param_codec=True, patience=None, **kwargs):
         """This meta optimization routine uses optimizers and smoothing routines to provide a meta optimization.
 
         In general one can enable a grid search beforehand, multiple optimizers, parameter smoothing and perturbation.

@@ -12,7 +12,7 @@ class LevenbergMarquardt(AbstractParallelOptimizer):
 
     default_patience = 250
 
-    def __init__(self, cl_environments, load_balancer, use_param_codec=True, patience=None,
+    def __init__(self, cl_environments=None, load_balancer=None, use_param_codec=True, patience=None,
                  optimizer_options=None, **kwargs):
         """Use the Levenberg-Marquardt method to calculate the optimimum.
 
