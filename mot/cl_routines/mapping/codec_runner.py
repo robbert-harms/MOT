@@ -15,7 +15,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class CodecRunner(AbstractCLRoutine):
 
-    def __init__(self, cl_environments, load_balancer, double_precision=False):
+    def __init__(self, cl_environments=None, load_balancer=None, double_precision=False):
         """This class can run the codecs used to transform the parameters to and from optimization space.
 
         Args:
