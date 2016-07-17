@@ -3,7 +3,7 @@ import numpy as np
 from mot.adapters import SimpleDataAdapter
 from mot.base import ProtocolParameter, ModelDataParameter, FreeParameter, CLDataType, StaticMapParameter
 from mot.cl_routines.mapping.calc_dependent_params import CalculateDependentParameters
-from mot.utils import TopologicalSort
+from mot.utils import TopologicalSort, is_scalar
 from mot.model_building.parameter_functions.codecs import CodecBuilder
 from mot.model_building.parameter_functions.dependencies import SimpleAssignment
 from mot.models import OptimizeModelInterface, SampleModelInterface
@@ -351,7 +351,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         for m, p in self._get_estimable_parameters_list():
             if results_dict and (m.name + '.' + p.name) in results_dict:
                 starting_points.append(results_dict[m.name + '.' + p.name])
-            elif isinstance(p.value, (numbers.Number, np.generic)):
+            elif is_scalar(p.value):
                 starting_points.append(np.full((self.get_nmr_problems(), 1), p.value, dtype=np_dtype))
             else:
                 if len(p.value.shape) < 2:
@@ -581,7 +581,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         for (m, p) in fixed_params:
             if not self._parameter_fixed_to_dependency(m, p):
                 name = m.name + '.' + p.name
-                if isinstance(p.value, numbers.Number):
+                if is_scalar(p.value):
                     results_dict.update({name: np.tile(np.array([p.value]), (self.get_nmr_problems(),))})
                 else:
                     value = p.value
@@ -1030,7 +1030,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         var_data_dict = {}
         for m, p in self._get_free_parameters_list():
             if p.fixed \
-                    and not isinstance(p.value, (numbers.Number, np.generic)) \
+                    and not is_scalar(p.value) \
                     and not self._parameter_fixed_to_dependency(m, p):
 
                 duplicate_found = False
@@ -1116,7 +1116,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         Returns:
             bool: true if all elements are equal to each other, false otherwise
         """
-        if isinstance(value, (numbers.Number, np.generic)):
+        if is_scalar(value):
             return True
         return (value == value[0]).all()
 
@@ -1132,7 +1132,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         Returns:
             number: a single number from the input
         """
-        if isinstance(value, (numbers.Number, np.generic)):
+        if is_scalar(value):
             return value
         return value.item(0)
 
