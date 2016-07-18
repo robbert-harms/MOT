@@ -330,9 +330,9 @@ def initialize_ranlux(cl_environment, cl_context, nmr_instances, ranlux=RanluxCL
 def is_scalar(value):
     """Test if the given value is a scalar.
 
-    This function also works with memmapped array values, in contrast to the numpy isscalar method.
+    This function also works with memory mapped array values, in contrast to the numpy is_scalar method.
 
     Args:
         value: the value to test for being a scalar value
     """
-    return np.isscalar(value) or (isinstance(value, np.ndarray) and (len(np.squeeze(value.shape)) == 0))
+    return np.isscalar(value) or (isinstance(value, np.ndarray) and (len(np.squeeze(value).shape) == 0))
