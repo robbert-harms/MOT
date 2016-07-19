@@ -10,7 +10,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class NMSimplex(AbstractParallelOptimizer):
 
-    default_patience = 125
+    default_patience = 200
 
     def __init__(self, cl_environments=None, load_balancer=None, use_param_codec=True, patience=None,
                  optimizer_options=None, **kwargs):
