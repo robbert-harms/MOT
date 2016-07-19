@@ -671,7 +671,11 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 if self._all_elements_equal(static_map_value):
                     param_list.append(str(self._get_single_value(static_map_value)))
                 else:
-                    param_list.append('data->var_data_' + model.name + '_' + param.name)
+                    if len(static_map_value.shape) > 1 \
+                            and static_map_value.shape[1] == self._problem_data.observations.shape[1]:
+                        param_list.append('data->var_data_' + model.name + '_' + param.name + '[observation_index]')
+                    else:
+                        param_list.append('data->var_data_' + model.name + '_' + param.name)
             else:
                 param_list.append(model.name + '_' + param.name)
 
