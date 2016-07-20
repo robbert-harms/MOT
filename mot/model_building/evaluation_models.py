@@ -1,6 +1,6 @@
 from mot.base import ModelFunction, FreeParameter
 from mot.cl_functions import Bessel
-from mot.model_building.parameter_functions.transformations import CosSqrClampTransform
+from mot.model_building.parameter_functions.transformations import ClampTransform
 from mot.base import CLDataType
 
 
@@ -81,7 +81,7 @@ class EvaluationModel(ModelFunction):
             That is, it always returns a double since the summations may get large.
         """
 
-    def set_noise_level_std(self, noise_std, fix=False):
+    def set_noise_level_std(self, noise_std):
         """Set the estimate of the noise level standard deviation.
 
         We put this here as a method to make the method work with object oriented polymorphism. That is, not
@@ -92,8 +92,6 @@ class EvaluationModel(ModelFunction):
 
         Args:
             noise_std (double): the noise standard deviation
-            fix (boolean): if we also fix the parameter. This fixes the parameter to the given value.
-                On False this does nothing and does not set fixed to False if it was already set to True.
 
         Returns:
             self: for chaining
@@ -182,8 +180,8 @@ class GaussianEvaluationModel(EvaluationModel):
         super(GaussianEvaluationModel, self).__init__(
             'GaussianNoise',
             'gaussianNoiseModel',
-            (FreeParameter(CLDataType.from_string('mot_float_type'), 'sigma', False, 1, 0, 'INF',
-                           parameter_transform=CosSqrClampTransform()),), ())
+            (FreeParameter(CLDataType.from_string('mot_float_type'), 'sigma', True, 1, 0, 'INFINITY',
+                           parameter_transform=ClampTransform()),), ())
 
     def get_objective_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
         # omitted constant term for speed
@@ -225,12 +223,8 @@ class GaussianEvaluationModel(EvaluationModel):
             }
         '''
 
-    def set_noise_level_std(self, noise_std, fix=False):
+    def set_noise_level_std(self, noise_std):
         self.parameter_list[0].value = noise_std
-
-        if fix:
-            self.parameter_list[0].fixed = True
-
         return self
 
     def get_noise_level_std(self):
@@ -267,8 +261,8 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
         super(OffsetGaussianEvaluationModel, self).__init__(
             'OffsetGaussianNoise',
             'offsetGaussianNoiseModel',
-            (FreeParameter(CLDataType.from_string('mot_float_type'), 'sigma', False, 1, 0, 'INF',
-                           parameter_transform=CosSqrClampTransform()),), ())
+            (FreeParameter(CLDataType.from_string('mot_float_type'), 'sigma', True, 1, 0, 'INFINITY',
+                           parameter_transform=ClampTransform()),), ())
 
     def get_objective_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
         return '''
@@ -313,12 +307,8 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
             }
         '''
 
-    def set_noise_level_std(self, noise_std, fix=False):
+    def set_noise_level_std(self, noise_std):
         self.parameter_list[0].value = noise_std
-
-        if fix:
-            self.parameter_list[0].fixed = True
-
         return self
 
     def get_noise_level_std(self):
@@ -356,8 +346,8 @@ class RicianEvaluationModel(EvaluationModel):
         super(RicianEvaluationModel, self).__init__(
             'RicianNoise',
             'ricianNoiseModel',
-            (FreeParameter(CLDataType.from_string('mot_float_type'), 'sigma', False, 1, 0, 'INF',
-                           parameter_transform=CosSqrClampTransform()),),
+            (FreeParameter(CLDataType.from_string('mot_float_type'), 'sigma', True, 1, 0, 'INFINITY',
+                           parameter_transform=ClampTransform()),),
             (Bessel(),))
 
     def get_objective_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
@@ -418,12 +408,8 @@ class RicianEvaluationModel(EvaluationModel):
             }
         '''
 
-    def set_noise_level_std(self, noise_std, fix=False):
+    def set_noise_level_std(self, noise_std):
         self.parameter_list[0].value = noise_std
-
-        if fix:
-            self.parameter_list[0].fixed = True
-
         return self
 
     def get_noise_level_std(self):

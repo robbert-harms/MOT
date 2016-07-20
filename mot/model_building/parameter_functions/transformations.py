@@ -112,12 +112,12 @@ class CosSqrClampTransform(AbstractTransformation):
     def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):
         return 'acos(sqrt(fabs((' + parameter_name + ' - ' + \
                str(parameter.lower_bound) + ') / ' + \
-               str(parameter.upper_bound - parameter.lower_bound) + ')));'
+               '(' + str(parameter.upper_bound) + ' - ' + str(parameter.lower_bound) + ')' + ')));'
 
     def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
         return 'pown(cos(' + parameter_name + '), 2) * ' + \
-               str(parameter.upper_bound - parameter.lower_bound) + \
-               ' + ' + str(parameter.lower_bound) + ';'
+               '(' + str(parameter.upper_bound) + ' - ' + str(parameter.lower_bound) + ')' + \
+                ' + ' + str(parameter.lower_bound) + ';'
 
 
 class SinSqrClampTransform(AbstractTransformation):
@@ -126,11 +126,11 @@ class SinSqrClampTransform(AbstractTransformation):
     def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):
         return 'asin(sqrt(fabs((' + parameter_name + ' - ' + \
                str(parameter.lower_bound) + ') / ' + \
-               str(parameter.upper_bound - parameter.lower_bound) + ')));'
+               '(' + str(parameter.upper_bound) + ' - ' + str(parameter.lower_bound) + ')' + ')));'
 
     def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
         return 'pown(sin(' + parameter_name + '), 2) * ' + \
-               str(parameter.upper_bound - parameter.lower_bound) + \
+               '(' + str(parameter.upper_bound) + ' - ' + str(parameter.lower_bound) + ')' + \
                ' + ' + str(parameter.lower_bound) + ';'
 
 

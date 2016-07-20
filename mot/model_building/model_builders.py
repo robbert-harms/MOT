@@ -169,7 +169,9 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         return False
 
     def set_problem_data(self, problem_data):
-        """Set the data this model will deal with. This overwrites those optionally set in the constructor.
+        """Set the problem data this model will deal with.
+
+        This will also call the function set_noise_level_std() with the noise_std from the new problem data.
 
         Args:
             problem_data (ProblemData):
@@ -179,6 +181,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             Returns self for chainability
         """
         self._problem_data = problem_data
+        self._evaluation_model.set_noise_level_std(self._problem_data.noise_std)
         return self
 
     def cmf(self, model_name):

@@ -223,19 +223,35 @@ class AbstractProblemData(object):
         """
         return {}
 
+    @property
+    def noise_std(self):
+        """The noise standard deviation we will use during model evaluation.
+
+        During optimization or sampling the model will be evaluated against the observations using an evaluation
+        model. Most of these evaluation models need to have a standard deviation.
+
+        Returns:
+            number of ndarray: either a scalar or a 2d matrix with one value per problem instance.
+        """
+        return 1
+
 
 class SimpleProblemData(AbstractProblemData):
 
-    def __init__(self, protocol_data_dict, observations_list, static_maps=None):
+    def __init__(self, protocol_data_dict, observations_list, static_maps=None, noise_std=None):
         """A simple data container for the data for optimization/sampling models.
 
         Args:
             protocol_data_dict (dict): The protocol data dictionary
             observations_list (ndarray): The array with the observations
+            static_maps (dict): The dictionary with the static maps. These are 2d/3d ndarrays with one or more
+                values per problem instance.
+            noise_std (number or ndarray): either a scalar or a 2d matrix with one value per problem instance.
         """
         self._protocol_data_dict = protocol_data_dict
         self._observation_list = observations_list
         self._static_maps = static_maps or {}
+        self._noise_std = noise_std
 
     @property
     def protocol_data_dict(self):
@@ -248,6 +264,10 @@ class SimpleProblemData(AbstractProblemData):
     @property
     def static_maps(self):
         return self._static_maps
+
+    @property
+    def noise_std(self):
+        return self._noise_std
 
 
 class CLFunction(object):
