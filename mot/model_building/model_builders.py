@@ -1,4 +1,3 @@
-import numbers
 import numpy as np
 from mot.adapters import SimpleDataAdapter
 from mot.base import ProtocolParameter, ModelDataParameter, FreeParameter, CLDataType, StaticMapParameter
@@ -305,6 +304,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         if observations is not None:
             if self.problems_to_analyze is not None:
                 observations = observations[self.problems_to_analyze, ...]
+
+            observations = self._transform_observations(observations)
 
             data_adapter = SimpleDataAdapter(observations, CLDataType.from_string('mot_float_type*'),
                                              self._get_mot_float_type())
@@ -618,6 +619,23 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         Args:
             results_dict (args): the results from model optmization. We are to modify this in-place.
         """
+
+    def _transform_observations(self, observations):
+        """Apply a transformation on the observations before fitting.
+
+        This function is called by get_problems_var_data() just before the observations are handed over to the
+        CL routine, and just after the the list has been (optionally) limited with self.problems_to_analyze.
+
+        To implement any behaviour here, you can override this function and add behaviour that changes the observations.
+
+        Args:
+            observations (ndarray): the 2d matrix with the observations. This is the list of
+                observations *after* the list has been (optionally) limited with self.problems_to_analyze.
+
+        Returns:
+            observations (ndarray): a 2d matrix of the same shape as the input. This should hold the transformed data.
+        """
+        return observations
 
     def _construct_model_expression(self, noise_func_name):
         """Construct the model signel expression. This is supposed to be used in get_model_eval_function.
