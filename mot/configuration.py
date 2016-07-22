@@ -1,4 +1,6 @@
 from contextlib import contextmanager
+from copy import deepcopy
+
 from .cl_environments import CLEnvironmentFactory
 from .load_balance_strategies import PreferGPU
 
@@ -75,6 +77,11 @@ def get_compile_flags():
 
 @contextmanager
 def config_context(config_action):
+    """Creates a context in which the config action is applied and unapplies the configuration after execution.
+
+    Args:
+        config_action (ConfigAction): the configuration action to use
+    """
     config_action.apply()
     yield
     config_action.unapply()
@@ -89,28 +96,49 @@ class ConfigAction(object):
 
         The applying action needs to remember the state before applying the action.
         """
+
+    def apply(self):
+        """Apply the current action to the current runtime configuration."""
+
+    def unapply(self):
+        """Reset the current configuration to the previous state."""
+
+
+class SimpleConfigAction(ConfigAction):
+
+    def __init__(self):
+        """Defines a default implementation of a configuration action.
+
+        This simple config implements a default apply() method that saves the current state and a default
+        unapply() that restores the previous state.
+
+        It is easiest to implement _apply() for extra actions.
+        """
+        super(SimpleConfigAction, self).__init__()
         self._old_config = {}
 
     def apply(self):
         """Apply the current action to the current runtime configuration."""
         self._old_config = {k: v for k, v in _config.items()}
+        self._apply()
 
     def unapply(self):
         """Reset the current configuration to the previous state."""
         for key, value in self._old_config.items():
             _config[key] = value
 
+    def _apply(self):
+        """Implement this function add apply() logic after this class saves the current config."""
 
-class RuntimeConfigurationAction(ConfigAction):
+
+class RuntimeConfigurationAction(SimpleConfigAction):
 
     def __init__(self, cl_environments=None, load_balancer=None):
         super(RuntimeConfigurationAction, self).__init__()
         self._cl_environments = cl_environments
         self._load_balancer = load_balancer
 
-    def apply(self):
-        super(RuntimeConfigurationAction, self).apply()
-
+    def _apply(self):
         if self._cl_environments is not None:
             set_cl_environments(self._cl_environments)
 
