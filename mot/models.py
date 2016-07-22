@@ -61,7 +61,7 @@ class OptimizeModelInterface(object):
         """
 
     def get_nmr_problems(self):
-        """Get the number of problems (number of voxels in MRI).
+        """Get the number of problems we need to analyze.
 
         Returns:
             int: A single integer specifying the number of problem instances
@@ -179,7 +179,7 @@ class OptimizeModelInterface(object):
         """
 
     def get_nmr_inst_per_problem(self):
-        """Get the number of instances/data points per problem. In DMRI this is the length of the protocol.
+        """Get the number of instances/data points per problem.
 
         The minimum is one instance per problem.
 

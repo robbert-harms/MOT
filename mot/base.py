@@ -190,7 +190,7 @@ class AbstractProblemData(object):
     """A simple data container for the data for optimization/sampling models."""
 
     @property
-    def protocol_data_dict(self):
+    def protocol(self):
         """Return the protocol data stored in this problem data container.
 
         The protocol data contains information about the experimental setup. In MRI this is the scanner protocol.
@@ -200,15 +200,35 @@ class AbstractProblemData(object):
         """
         return {}
 
+    def get_nmr_inst_per_problem(self):
+        """Get the number of instances/data points per problem.
+
+        The minimum is one instance per problem.
+
+        This number represents the number of data points
+
+        Returns:
+            int: A single integer specifying the number of instances per problem.
+        """
+        return np.array(self.protocol[list(self.protocol.keys())[0]]).shape[0]
+
+    def get_nmr_problems(self):
+        """Get the number of problems present in this problem data.
+
+        Returns:
+            int: A single integer specifying the number of problem instances
+        """
+        return self.observations.shape[0]
+
     @property
     def observations(self):
         """Return the observations stored in this problem data container.
 
         Returns:
-            ndarray: The list of observed instances per problem. Should be a matrix with as columns the observations
+            ndarray: The list of observed instances per problem. Should be a 2d matrix with as columns the observations
                 and as rows the problems.
         """
-        return np.array([])
+        return np.array([[]])
 
     @property
     def static_maps(self):
@@ -238,28 +258,28 @@ class AbstractProblemData(object):
 
 class SimpleProblemData(AbstractProblemData):
 
-    def __init__(self, protocol_data_dict, observations_list, static_maps=None, noise_std=None):
+    def __init__(self, protocol, observations, static_maps=None, noise_std=None):
         """A simple data container for the data for optimization/sampling models.
 
         Args:
-            protocol_data_dict (dict): The protocol data dictionary
-            observations_list (ndarray): The array with the observations
+            protocol (dict): The protocol data dictionary
+            observations (ndarray): The 2d array with the observations
             static_maps (dict): The dictionary with the static maps. These are 2d/3d ndarrays with one or more
                 values per problem instance.
             noise_std (number or ndarray): either a scalar or a 2d matrix with one value per problem instance.
         """
-        self._protocol_data_dict = protocol_data_dict
-        self._observation_list = observations_list
+        self._protocol = protocol
+        self._observation = observations
         self._static_maps = static_maps or {}
         self._noise_std = noise_std
 
     @property
-    def protocol_data_dict(self):
-        return self._protocol_data_dict
+    def protocol(self):
+        return self._protocol
 
     @property
     def observations(self):
-        return self._observation_list
+        return self._observation
 
     @property
     def static_maps(self):

@@ -286,12 +286,11 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
     def get_nmr_problems(self):
         if self.problems_to_analyze is None:
-            return self._problem_data.observations.shape[0]
+            return self._problem_data.get_nmr_problems()
         return len(self.problems_to_analyze)
 
     def get_nmr_inst_per_problem(self):
-        return np.array(self._problem_data.protocol_data_dict[
-                            list(self._problem_data.protocol_data_dict.keys())[0]]).shape[0]
+        return self._problem_data.get_nmr_inst_per_problem()
 
     def get_nmr_estimable_parameters(self):
         return len(self.get_optimized_param_names())
@@ -301,9 +300,9 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         When overriding this function, please note that it should adhere to the attribute problems_to_analyze.
         """
-        observations = self._problem_data.observations
         var_data_dict = {}
 
+        observations = self._problem_data.observations
         if observations is not None:
             if self.problems_to_analyze is not None:
                 observations = observations[self.problems_to_analyze, ...]
@@ -320,18 +319,19 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         return var_data_dict
 
     def get_problems_protocol_data(self):
-        protocol_data_dict = {}
+        protocol_info = self._problem_data.protocol
+        return_data = {}
         for m, p in self._get_model_parameter_list():
             if isinstance(p, ProtocolParameter):
-                if p.name in self._problem_data.protocol_data_dict:
-                    if not self._all_elements_equal(self._problem_data.protocol_data_dict[p.name]):
-                        const_d = {p.name: SimpleDataAdapter(self._problem_data.protocol_data_dict[p.name],
+                if p.name in protocol_info:
+                    if not self._all_elements_equal(protocol_info[p.name]):
+                        const_d = {p.name: SimpleDataAdapter(protocol_info[p.name],
                                                              p.data_type, self._get_mot_float_type())}
-                        protocol_data_dict.update(const_d)
+                        return_data.update(const_d)
                 else:
                     exception = 'Constant parameter "{}" could not be resolved'.format(m.name + '.' + p.name)
                     raise ParameterResolutionException(exception)
-        return protocol_data_dict
+        return return_data
 
     def get_model_data(self):
         model_data_dict = {}
@@ -767,6 +767,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             param_list: the list with the protocol parameters
             exclude_list: a list of parameters to exclude from this listing
         """
+        protocol_info = self._problem_data.protocol
         if param_list is None:
             param_list = self._get_parameter_type_lists()['protocol']
 
@@ -776,15 +777,15 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             if (m.name + '_' + p.name) not in exclude_list:
                 data_type = p.data_type.cl_type
                 if p.name not in const_params_seen:
-                    if self._all_elements_equal(self._problem_data.protocol_data_dict[p.name]):
+                    if self._all_elements_equal(protocol_info[p.name]):
                         if p.data_type.is_vector_type:
                             vector_length = p.data_type.vector_length
-                            values = [str(val) for val in self._problem_data.protocol_data_dict[p.name][0]]
+                            values = [str(val) for val in protocol_info[p.name][0]]
                             if len(values) < vector_length:
                                 values.append(str(0))
                             assignment = '(' + data_type + ')(' + ', '.join(values) + ')'
                         else:
-                            assignment = str(float(self._problem_data.protocol_data_dict[p.name][0]))
+                            assignment = str(float(protocol_info[p.name][0]))
                     else:
                         if p.data_type.is_pointer_type:
                             # this requires generic address spaces available in OpenCL >= 2.0.
@@ -871,9 +872,6 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             static_map_value = self._get_static_map_value(p)
 
             if not self._all_elements_equal(static_map_value):
-                if self.problems_to_analyze is not None:
-                    static_map_value = static_map_value[self.problems_to_analyze, ...]
-
                 data_adapter = SimpleDataAdapter(static_map_value, p.data_type, self._get_mot_float_type())
                 static_data_dict.update({m.name + '_' + p.name: data_adapter})
 
@@ -885,19 +883,26 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         This first checks if the parameter is defined in the static maps data in the problem data. If not, we try
         to get it from the value stored in the parameter itself. If that fails as well we raise an error.
 
+        Also, this only returns the problems for which problems_to_analyze is set.
+
         Args:
             parameter (CLParameter): the parameter for which we want to get the value
 
         Returns:
             ndarray or number: the value for the given parameter.
         """
+        data = None
         if parameter.name in self._problem_data.static_maps:
-            return self._problem_data.static_maps[parameter.name]
+            data = self._problem_data.static_maps[parameter.name]
+        elif parameter.value is not None:
+            data = parameter.value
 
-        if parameter.value is not None:
-            return parameter.value
+        if data is None:
+            raise ValueError('No suitable data could be found for the static parameter {}.'.format(parameter.name))
 
-        raise ValueError('No suitable data could be found for the static parameter {}.'.format(parameter.name))
+        if self.problems_to_analyze is not None:
+            return data[self.problems_to_analyze, ...]
+        return data
 
     def _get_non_model_tree_param_listing(self):
         listing = []
