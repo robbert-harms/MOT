@@ -809,3 +809,18 @@ class StaticMapParameter(CLFunctionParameter):
         """
         super(StaticMapParameter, self).__init__(data_type, name)
         self.value = value
+
+
+class CurrentObservationParam(CLFunctionParameter):
+
+    def __init__(self, name='_observation'):
+        """This parameter indicates that the model should inject the current observation value in the model.
+
+        Sometimes during model linearization or other mathematical operations the current observation appears on
+        both sides of the optimization equation. That is, it sometimes happens you want to use the current observation
+        to model that same observation. This parameter is a signal to the model builder to inject the current
+        observation.
+
+        You can use this parameter by adding it to your model and then use the current name in your model equation.
+        """
+        super(CurrentObservationParam, self).__init__(CLDataType.from_string('mot_float_type'), name)

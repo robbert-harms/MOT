@@ -1,6 +1,7 @@
 import numpy as np
 from mot.adapters import SimpleDataAdapter
-from mot.base import ProtocolParameter, ModelDataParameter, FreeParameter, CLDataType, StaticMapParameter
+from mot.base import ProtocolParameter, ModelDataParameter, FreeParameter, CLDataType, StaticMapParameter, \
+    CurrentObservationParam
 from mot.cl_routines.mapping.calc_dependent_params import CalculateDependentParameters
 from mot.utils import TopologicalSort, is_scalar
 from mot.model_building.parameter_functions.codecs import CodecBuilder
@@ -329,7 +330,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                                                              p.data_type, self._get_mot_float_type())}
                         return_data.update(const_d)
                 else:
-                    exception = 'Constant parameter "{}" could not be resolved'.format(m.name + '.' + p.name)
+                    exception = 'Protocol parameter "{}" could not be resolved'.format(m.name + '.' + p.name)
                     raise ParameterResolutionException(exception)
         return return_data
 
@@ -697,6 +698,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                         param_list.append('data->var_data_' + model.name + '_' + param.name + '[observation_index]')
                     else:
                         param_list.append('data->var_data_' + model.name + '_' + param.name)
+            elif isinstance(param, CurrentObservationParam):
+                param_list.append('data->var_data_observations[observation_index]')
             else:
                 param_list.append(model.name + '_' + param.name)
 
