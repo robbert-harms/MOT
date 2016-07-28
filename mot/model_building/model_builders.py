@@ -903,6 +903,9 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         if data is None:
             raise ValueError('No suitable data could be found for the static parameter {}.'.format(parameter.name))
 
+        if is_scalar(data):
+            return data
+
         if self.problems_to_analyze is not None:
             return data[self.problems_to_analyze, ...]
         return data
