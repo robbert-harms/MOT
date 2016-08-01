@@ -1,10 +1,10 @@
 import logging
 
 from mot.cl_routines.mapping.calculate_model_estimates import CalculateModelEstimates
+from mot.cl_routines.optimizing.powell import Powell
 from ...cl_routines.optimizing.base import AbstractOptimizer
 from ...cl_routines.mapping.error_measures import ErrorMeasures
 from ...cl_routines.mapping.residual_calculator import ResidualCalculator
-from ...cl_routines.optimizing.nmsimplex import NMSimplex
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-06-19"
@@ -32,19 +32,18 @@ class MetaOptimizer(AbstractOptimizer):
             extra_optim_runs_optimizers (list, default None): A list of optimizers with one optimizer for every extra
                 optimization run. If the length of this list is smaller than the number of runs, the last optimizer is
                 used for all remaining runs.
-            optimizer (Optimizer, default NMSimplex): The default optimization routine
+            optimizer (Optimizer, default Powell): The default optimization routine
             add_model_estimates (boolean): if true we add the model estimates to the dictionary returned when
                 full_output is set to True
         """
         super(MetaOptimizer, self).__init__(cl_environments, load_balancer, use_param_codec, **kwargs)
-        self.enable_sampling = False
 
         self.add_model_estimates = False
         self.extra_optim_runs = 0
         self.extra_optim_runs_optimizers = []
 
-        self.optimizer = NMSimplex(self.cl_environments, self.load_balancer, use_param_codec=self.use_param_codec,
-                                   patience=patience)
+        self.optimizer = Powell(self.cl_environments, self.load_balancer, use_param_codec=self.use_param_codec,
+                                patience=patience)
 
         self._propagate_property('cl_environments', cl_environments)
         self._propagate_property('load_balancer', load_balancer)

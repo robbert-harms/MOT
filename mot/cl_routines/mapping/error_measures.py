@@ -25,10 +25,8 @@ class ErrorMeasures(AbstractCLRoutine):
         Returns:
             A dictionary containing (for each voxel)
                 - Errors.l2: the l2 norm (square root of sum of squares)
-                - Errors.sse: the sum of squared errors
                 - Errors.mse: the mean sum of squared errors
         """
         sse = np.sum(np.power(errors, 2), axis=1)
         return {'Errors.l2': np.linalg.norm(errors, axis=1),
-                'Errors.sse': sse,
                 'Errors.mse': sse/errors.shape[1]}

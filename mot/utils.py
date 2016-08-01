@@ -1,9 +1,9 @@
 import pyopencl.array as cl_array
 import numpy as np
 import pyopencl as cl
-from functools import reduce, wraps
+from functools import reduce
 
-from mot.adapters import DataAdapter
+from .adapters import DataAdapter
 from .cl_functions import RanluxCL
 
 __author__ = 'Robbert Harms'
@@ -297,7 +297,7 @@ class ParameterCLCodeGenerator(object):
         return np.product(array.shape) * np.dtype(dtype).itemsize < self._max_constant_buffer_size
 
 
-def initialize_ranlux(cl_environment, cl_context, nmr_instances, ranlux=RanluxCL(), ranluxcl_lux=4, seed=1):
+def initialize_ranlux(cl_environment, cl_context, nmr_instances, ranlux=RanluxCL(), ranluxcl_lux=None, seed=None):
     """Create an opencl buffer with the initialized RanluxCLTab.
 
     Args:
@@ -306,11 +306,18 @@ def initialize_ranlux(cl_environment, cl_context, nmr_instances, ranlux=RanluxCL
         nmr_instances (int): for how many thread instances we should initialize the ranlux cl tab.
         ranlux (RanluxCL): the ranlux cl function to use
         ranluxcl_lux (int): the luxury level of the ranluxcl generator. See the ranluxcl.cl source for details.
-        seed (int): the seed to use, see the ranluxcl.cl source for details.
+        seed (int): the seed to use, see the ranluxcl.cl source for details. If not given (is None) we will use
+            the seed number defined in the current configuration.
 
     Returns:
         cl buffer: the buffer containing the initialized ranlux cl tab for use in the given environment/queue.
     """
+    from mot.configuration import get_ranlux_seed, get_ranlux_lux_factor
+    if seed is None:
+        seed = get_ranlux_seed()
+    if ranluxcl_lux is None:
+        ranluxcl_lux = get_ranlux_lux_factor()
+
     kernel_source = '#define RANLUXCL_LUX ' + str(ranluxcl_lux) + "\n"
     kernel_source += ranlux.get_cl_header()
     kernel_source += ranlux.get_cl_code()

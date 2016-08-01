@@ -1,3 +1,4 @@
+from mot.cl_routines.sampling.metropolis_hastings import MetropolisHastings
 from .cl_routines.optimizing.simulated_annealing import SimulatedAnnealing
 from .cl_routines.optimizing.levenberg_marquardt import LevenbergMarquardt
 from .cl_routines.filters.gaussian import GaussianFilter
@@ -29,6 +30,21 @@ def get_optimizer_by_name(name):
     """
     optimizers = [LevenbergMarquardt, Powell, NMSimplex, SimulatedAnnealing, MetaOptimizer, PrAxis]
     return _get_item(name, optimizers, 'optimizers')
+
+
+def get_sampler_by_name(name):
+    """ Get the class by the given name.
+
+    This does not instantiate the class, only returns a reference to it.
+
+    Args:
+        name: the name of the optimizer we want to return
+
+    Returns:
+        class: the class of the sampler requested
+    """
+    samplers = [MetropolisHastings]
+    return _get_item(name, samplers, 'samplers')
 
 
 def get_filter_by_name(name):
