@@ -67,6 +67,17 @@ class Rosenbrock(OptimizeModelInterface):
             }
         '''
 
+    def get_objective_list_function(self, fname="calculateObjectiveList"):
+        eval_fname = fname + '_evaluateModel'
+        obs_fname = fname + '_getObservation'
+        func = self.get_model_eval_function(eval_fname)
+        func += self.get_observation_return_function(obs_fname)
+        return func + '''
+            void ''' + fname + '''(const optimize_data* const data, mot_float_type* const x, mot_float_type* result){
+                result[1] = ''' + obs_fname + '''(data, 1) - ''' + eval_fname + '''(data, x, 1);
+            }
+        '''
+
     def get_initial_parameters(self, results_dict=None):
         params = np.ones((1, self.n)) * 3
         if results_dict:
@@ -158,6 +169,20 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
                     sum += ''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i);
                 }
                 return sum;
+            }
+        '''
+
+    def get_objective_list_function(self, fname="calculateObjectiveList"):
+        eval_fname = fname + '_evaluateModel'
+        obs_fname = fname + '_getObservation'
+        func = self.get_model_eval_function(eval_fname)
+        func += self.get_observation_return_function(obs_fname)
+        return func + '''
+            void ''' + fname + '''(const optimize_data* const data, mot_float_type* const x,
+                                     mot_float_type* result){
+                for(int i = 0; i < 10; i++){
+                    result[i] = ''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i);
+                }
             }
         '''
 

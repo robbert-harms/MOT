@@ -84,10 +84,13 @@ class _GaussianFilterWorker(AbstractFilterWorker):
                 kernel.filter(self._cl_run_context.queue, self._volume_shape, None, *buffers_list)
 
                 if dimension == len(self._volume_shape) - 1:
-                    return_event = cl.enqueue_copy(self._cl_run_context.queue, self._results_dict[volume_name],
-                                                   results_buf_ptr, is_blocking=False)
+                    return_event = [cl.enqueue_copy(self._cl_run_context.queue, self._results_dict[volume_name],
+                                                   results_buf_ptr, is_blocking=False)]
 
         return return_event
+
+    def _build_kernel(self, compile_flags=()):
+        pass
 
     def _list_all_buffers(self, input_buffer, filter_kernel_buffer, output_buffer):
         """Helper function of calculate().
@@ -99,9 +102,6 @@ class _GaussianFilterWorker(AbstractFilterWorker):
             buffers_list.append(self._mask_buf)
         buffers_list.extend([filter_kernel_buffer, output_buffer])
         return buffers_list
-
-    def _build_kernel(self):
-        pass
 
     def _get_gaussian_kernel_source(self, dimension):
         left_right = self._get_size_in_dimension(dimension)

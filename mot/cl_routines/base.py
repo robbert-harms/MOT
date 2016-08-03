@@ -31,7 +31,7 @@ class AbstractCLRoutine(object):
             self._load_balancer = configuration.get_load_balancer()
 
         if self.compile_flags is None:
-            self.compile_flags = configuration.get_compile_flags()
+            self.compile_flags = configuration.get_compile_flags(self.__class__.__name__)
 
     def set_compile_flag(self, compile_flag, enable):
         """Enable or disable the given compile flag.

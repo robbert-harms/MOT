@@ -1,4 +1,4 @@
-.PHONY: clean clean-build clean-pyc clean-test lint test tests test-all coverage docs release dist install uninstall
+.PHONY: clean clean-build clean-pyc clean-test lint test tests test-all coverage docs release dist install uninstall dist-deb
 
 help:
 	@echo "clean - remove all build, test, coverage and Python artifacts (no uninstall)"
@@ -13,6 +13,7 @@ help:
 	@echo "docs - generate Sphinx HTML documentation, including API docs"
 	@echo "release - package and upload a release"
 	@echo "dist - create the package"
+	@echo "dist-deb - create a debian package"
 	@echo "install - installs the package using pip"
 	@echo "uninstall - uninstalls the package using pip"
 
@@ -73,5 +74,10 @@ dist: clean
 install: dist
 	pip install --upgrade --no-deps --force-reinstall dist/mot-*.tar.gz
 
-uninstall: 
+uninstall:
 	pip uninstall -y mot
+
+dist-deb: dist
+	py2dsc -d dist/deb --with-python3=True --with-python2=False dist/mot*.tar.gz
+	python setup.py prepare_debian_dist
+	cd dist/deb/*/; fakeroot debian/rules binary

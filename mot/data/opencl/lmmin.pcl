@@ -80,7 +80,7 @@ mot_float_type lm_euclidian_norm(const mot_float_type* const x, const int n);
 #define SCALE_DIAG %(SCALE_DIAG)r  /* If 1, the variables will be rescaled internally.
                              Recommended value is 1. */
 #define MAXFEV (PATIENCE * (%(NMR_PARAMS)s+1)) /** the maximum number of evaluations */
-#define EPS sqrt(max(EPSILON, LM_MACHEP)) /* for forward differences */
+#define EPS ((mot_float_type)sqrt(max(EPSILON, LM_MACHEP))) /* for forward differences */
 
 #define LM_ENORM_SQRT_GIANT sqrt(MOT_MAX) /* square should not overflow */
 #define LM_ENORM_SQRT_DWARF sqrt(MOT_MIN) /* square should not underflow */

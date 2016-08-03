@@ -12,6 +12,7 @@ import unittest
 
 import numpy as np
 
+import mot
 from mot import configuration
 from mot.cl_routines.mapping.residual_calculator import ResidualCalculator
 from mot.cl_routines.optimizing.nmsimplex import NMSimplex
@@ -29,6 +30,10 @@ class CLRoutineTestCase(unittest.TestCase):
         super(CLRoutineTestCase, self).__init__(*args, **kwargs)
         self._runtime_args = [configuration.get_cl_environments(),
                               configuration.get_load_balancer()]
+
+        mot.configuration._config['compile_flags'].update({
+            '-cl-single-precision-constant': False
+        })
 
 
 class TestRosenbrock(CLRoutineTestCase):

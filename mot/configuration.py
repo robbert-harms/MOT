@@ -1,4 +1,6 @@
 from contextlib import contextmanager
+from copy import copy
+
 from .cl_environments import CLEnvironmentFactory
 from .load_balance_strategies import PreferGPU
 
@@ -17,10 +19,13 @@ _config = {
     'cl_environments': CLEnvironmentFactory.smart_device_selection(),
     'load_balancer': PreferGPU(),
     'compile_flags': {
-        '-cl-single-precision-constant': True,
-        '-cl-denorms-are-zero': True,
-        '-cl-mad-enable': True,
-        '-cl-no-signed-zeros': True
+        'general': {
+            '-cl-single-precision-constant': True,
+            '-cl-denorms-are-zero': True,
+            '-cl-mad-enable': True,
+            '-cl-no-signed-zeros': True
+        },
+        'cl_routine_specific': {}
     },
     'ranlux': {
         'seed': 1,
@@ -68,13 +73,20 @@ def set_load_balancer(load_balancer):
     _config['load_balancer'] = load_balancer
 
 
-def get_compile_flags():
+def get_compile_flags(cl_routine_name=None):
     """Get the default compile flags to use in a CL routine.
+
+    Args:
+        cl_routine_name (str): the name of the CL routine for which we want the compile flags. If not given
+            we return the default flags. If given we return the default flags updated with the routine specific flags.
 
     Returns:
         dict: the default list of compile flags we wish to use
     """
-    return _config['compile_flags']
+    flags = copy(_config['compile_flags']['general'])
+    if cl_routine_name in _config['compile_flags']['cl_routine_specific']:
+        flags.update(_config['compile_flags']['cl_routine_specific'][cl_routine_name])
+    return flags
 
 
 def get_ranlux_seed():
