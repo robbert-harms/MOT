@@ -568,7 +568,7 @@ void lm_lmpar(const int n, mot_float_type* const r, int ldr, const int* const Pi
         /** Evaluate the function at the current value of par. **/
 
         if (*par == 0){
-            *par = max(LM_DWARF, (mot_float_type)(0.001 * paru));
+            *par = max((mot_float_type)LM_DWARF, (mot_float_type)(0.001 * paru));
         }
         temp = sqrt(*par);
         for (j = 0; j < n; j++){

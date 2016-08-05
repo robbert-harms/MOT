@@ -40,6 +40,7 @@ class OptimizeModelInterface(object):
                 The data in the adapter should contain for each problem (first dimension / rows) a
                 number of items (second dimension / columns) that is used in the evaluation function.
         """
+        raise NotImplementedError
 
     def get_problems_protocol_data(self):
         """Get a dict with the data that is constant for each problem (in Diffusion MRI the protocol/scheme), but
@@ -49,6 +50,7 @@ class OptimizeModelInterface(object):
             dict: A dict where each element holds a SimpleDataAdapter that is used in the evaluation function.
                 Each key is used as name in the cl data struct.
         """
+        raise NotImplementedError
 
     def get_model_data(self):
         """Get a dict with all the model data. This is model data necessary for computations in the model.
@@ -66,6 +68,7 @@ class OptimizeModelInterface(object):
         Returns:
             int: A single integer specifying the number of problem instances
         """
+        raise NotImplementedError
 
     def get_model_eval_function(self, func_name='evaluateModel'):
         """Get the evaluation function that evaluates the model at the given parameters.
@@ -87,6 +90,7 @@ class OptimizeModelInterface(object):
                 mot_float_type <func_name>(const optimize_data* const data, const mot_float_type* const x,
                                         const int observation_index);
         """
+        raise NotImplementedError
 
     def get_observation_return_function(self, func_name='getObservation'):
         """Get the CL function that returns the observation for the given problem.
@@ -98,6 +102,7 @@ class OptimizeModelInterface(object):
             str: An CL function with the signature:
                 mot_float_type <func_name>(const optimize_data* const data, const int observation_index);
         """
+        raise NotImplementedError
 
     def get_objective_function(self, func_name="calculateObjective"):
         """Get the objective function that evaluates the entire problem instance under a noise model.
@@ -109,6 +114,7 @@ class OptimizeModelInterface(object):
             A CL function with signature:
                 mot_float_type <func_name>(const optimize_data* const data, mot_float_type* const x);
         """
+        raise NotImplementedError
 
     def get_objective_list_function(self, func_name="calculateObjectiveList"):
         """Get the objective function returning a list with the objective functions per instance point.
@@ -124,6 +130,7 @@ class OptimizeModelInterface(object):
                 mot_float_type <func_name>(const optimize_data* const data, mot_float_type* const x,
                                            mot_float_type* result);
         """
+        raise NotImplementedError
 
     def get_initial_parameters(self, results_dict=None):
         """Get a two dimensional matrix with the initial parameters (starting points) for every voxel.
@@ -139,6 +146,7 @@ class OptimizeModelInterface(object):
             array like: A two dimensional matrix with on the first axis the problem instances and on the second
                 the parameter values per problem instance
         """
+        raise NotImplementedError
 
     def get_lower_bounds(self):
         """Get for each estimable parameter the lower bounds.
@@ -147,6 +155,7 @@ class OptimizeModelInterface(object):
             An numpy row with on each column a single value, the lower bound for that parameter. This value
             can be the literal string '-inf' for infinity.
         """
+        raise NotImplementedError
 
     def get_upper_bounds(self):
         """Get for each estimable parameter the upper bounds.
@@ -155,6 +164,7 @@ class OptimizeModelInterface(object):
             An numpy row with on each column a single value, the upper bound for that parameter. This value
             can be the literal string 'inf' for infinity.
         """
+        raise NotImplementedError
 
     def get_optimized_param_names(self):
         """Get a list of names with the free parameter names (the parameters that are estimated by the routines).
@@ -166,6 +176,7 @@ class OptimizeModelInterface(object):
         Returns:
             A list with the parameter names (in dot format) of all the estimated (free) parameters.
         """
+        raise NotImplementedError
 
     def get_optimization_output_param_names(self):
         """Get a list with the names of the parameters, this is the list of keys to the titles and results.
@@ -177,6 +188,7 @@ class OptimizeModelInterface(object):
         Returns:
             list of str: a list with the parameter names
         """
+        raise NotImplementedError
 
     def get_nmr_inst_per_problem(self):
         """Get the number of instances/data points per problem.
@@ -188,6 +200,7 @@ class OptimizeModelInterface(object):
         Returns:
             int: A single integer specifying the number of instances per problem.
         """
+        raise NotImplementedError
 
     def get_nmr_estimable_parameters(self):
         """Get the number of estimable parameters.
@@ -195,6 +208,7 @@ class OptimizeModelInterface(object):
         Returns:
             int: A single integer specifying the number of estimable parameters
         """
+        raise NotImplementedError
 
     def get_parameter_codec(self):
         """Get the parameter codec from this model. This should be an implementation of AbstractCodec.
@@ -203,6 +217,7 @@ class OptimizeModelInterface(object):
             An abstract codec model that holds the CL code for the codec transformations. This function may also
             return None, which indicates that no parameter codec is supposed to be used.
         """
+        raise NotImplementedError
 
     def get_final_parameter_transformations(self, func_name='applyFinalParameterTransformations'):
         """Get the transformations that must be applied at the end of an optimization (or sampling) routine.
@@ -224,6 +239,7 @@ class OptimizeModelInterface(object):
 
             Which is called for every voxel and must in place edit the x variable.
         """
+        raise NotImplementedError
 
     def finalize_optimization_results(self, results_dict):
         """After optimization create the final dictionary with the result maps.
@@ -255,6 +271,7 @@ class SampleModelInterface(OptimizeModelInterface):
         Returns:
             list: list of double values with the proposal parameter values that are adaptable.
         """
+        raise NotImplementedError
 
     def get_log_likelihood_function(self, func_name="getLogLikelihood", evaluation_model=None, full_likelihood=True):
         """Get the Log Likelihood function that evaluates the entire problem instance under a noise model
@@ -270,6 +287,7 @@ class SampleModelInterface(OptimizeModelInterface):
             str: A function of the kind:
                 mot_float_type <func_name>(const optimize_data* const data, mot_float_type* const x);
         """
+        raise NotImplementedError
 
     def is_proposal_symmetric(self):
         """Check if the entire proposal distribution is symmetric ( q(x|x') == q(x'|x) ).
@@ -277,6 +295,7 @@ class SampleModelInterface(OptimizeModelInterface):
         Returns:
             boolean: True if the proposal distribution is symmetric, false otherwise.
         """
+        raise NotImplementedError
 
     def get_proposal_logpdf(self, func_name='getProposalLogPDF'):
         """Get the probability density function of the proposal in log space.
@@ -295,6 +314,7 @@ class SampleModelInterface(OptimizeModelInterface):
             the current value (in log space).
             Parameters is the list of adaptable parameters.
         """
+        raise NotImplementedError
 
     def get_proposal_function(self, func_name='getProposal'):
         """Get a proposal function that returns proposals for a requested parameter.
@@ -312,6 +332,7 @@ class SampleModelInterface(OptimizeModelInterface):
                 float4 randomnr = ranluxcl(ranluxclstate);
             Parameters is the list of adaptable parameters.
         """
+        raise NotImplementedError
 
     def get_proposal_parameters_update_function(self, func_name='updateProposalParameters'):
         """Get a function that can update the parameters of the proposals
@@ -332,6 +353,7 @@ class SampleModelInterface(OptimizeModelInterface):
             per proposal parameter. If the number of parameters of a proposal function is not equal to one then those
             two arrays do not share the same index.
         """
+        raise NotImplementedError
 
     def get_log_prior_function(self, func_name='getLogPrior'):
         """Get the prior function that returns a double representing the prior information about the given parameters.
@@ -347,6 +369,7 @@ class SampleModelInterface(OptimizeModelInterface):
 
             Which is called by the sampling routine to calculate the posterior probability.
         """
+        raise NotImplementedError
 
     def samples_to_statistics(self, samples_dict):
         """Create statistics out of the given set of samples (in a dictionary).
@@ -359,6 +382,7 @@ class SampleModelInterface(OptimizeModelInterface):
             The same dictionary but with statistical maps (mean, avg etc.) for each parameter, instead of the raw
             samples. In essence this is where one can place the logic to go from samples to meaningful maps.
         """
+        raise NotImplementedError
 
 
 class PerturbationModelInterface(OptimizeModelInterface):
@@ -373,3 +397,4 @@ class PerturbationModelInterface(OptimizeModelInterface):
             results (dict): A dictionary with the same keys as the given results,
                 but with perturbated values. This can be performed in-place.
         """
+        raise NotImplementedError

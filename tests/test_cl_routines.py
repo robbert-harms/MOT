@@ -31,7 +31,7 @@ class CLRoutineTestCase(unittest.TestCase):
         self._runtime_args = [configuration.get_cl_environments(),
                               configuration.get_load_balancer()]
 
-        mot.configuration._config['compile_flags'].update({
+        mot.configuration._config['compile_flags']['general'].update({
             '-cl-single-precision-constant': False
         })
 
