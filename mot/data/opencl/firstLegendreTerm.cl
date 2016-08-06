@@ -59,15 +59,10 @@ double getFirstLegendreTerm(const double x, const int n){
     }
 
     if(fabs(x) == 1.0){
-        if (x > 0.0){
+        if(x > 0.0 || n % 2 == 0){
             return 1.0;
         }
-        else if (n % 2 == 0){
-            return 1.0;
-        }
-        else{
-            return -1.0;
-        }
+        return -1.0;
     }
 
     if (n == 0){
@@ -77,14 +72,14 @@ double getFirstLegendreTerm(const double x, const int n){
         return x;
     }
 
-    double P0, P1, Pn;
-    int k;
+    double P0 = 1.0;
+    double P1 = x;
+    double Pn;
 
-    P0 = 1.0;
-    P1 = x;
-
-    for (k = 1; k < n; k++, P0 = P1, P1 = Pn){
-        Pn = ( (double)( k + k + 1 ) * x * P1 - (double)k * P0) / (double)(k + 1);
+    for(int k = 1; k < n; k++){
+        Pn = ((2 * k + 1) * x * P1 - (k * P0)) / (k + 1);
+        P0 = P1;
+        P1 = Pn;
     }
 
     return Pn;
