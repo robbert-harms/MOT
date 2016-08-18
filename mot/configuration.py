@@ -51,7 +51,12 @@ def set_cl_environments(cl_environments):
 
     Args:
         cl_environments (list of CLEnvironment): the new list of CL environments.
+
+    Raises:
+        ValueError: if the list of environments is empty
     """
+    if not cl_environments:
+        raise ValueError('The list of CL Environments is empty.')
     _config['cl_environments'] = cl_environments
 
 
