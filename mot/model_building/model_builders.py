@@ -182,7 +182,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             Returns self for chainability
         """
         self._problem_data = problem_data
-        self._evaluation_model.set_noise_level_std(self._problem_data.noise_std)
+        if self._problem_data.noise_std is not None:
+            self._evaluation_model.set_noise_level_std(self._problem_data.noise_std)
         return self
 
     def cmf(self, model_name):
