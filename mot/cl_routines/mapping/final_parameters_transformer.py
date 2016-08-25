@@ -14,7 +14,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class FinalParametersTransformer(AbstractCLRoutine):
 
-    def __init__(self, cl_environments, load_balancer):
+    def __init__(self, cl_environments=None, load_balancer=None):
         """CL code for applying the final parameter transforms.
 
         Some of the models may contain parameter dependencies. These dependencies may have side-effects and change

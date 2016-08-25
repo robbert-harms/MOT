@@ -24,8 +24,8 @@ class ResidualCalculator(AbstractCLRoutine):
         Args:
             model (AbstractModel): The model to calculate the residuals of.
             parameters_dict (dict): The parameters to use in the evaluation of the model
-            model_estimates (ndarray): The model estimates of the model if available. These are used
-                when given.
+            model_estimates (ndarray): The model estimates of the model if available. If not given we
+                calculate the model estimates using the initial parameters from the model.
 
         Returns:
             Return per voxel the errors (eval - data) per protocol item
