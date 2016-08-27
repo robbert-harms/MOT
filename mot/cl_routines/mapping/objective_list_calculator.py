@@ -1,3 +1,5 @@
+from collections import MutableMapping
+
 import pyopencl as cl
 import numpy as np
 from ...utils import ParameterCLCodeGenerator, get_float_type_def
@@ -41,7 +43,7 @@ class ObjectiveListCalculator(AbstractCLRoutine):
         nmr_inst_per_problem = model.get_nmr_inst_per_problem()
         nmr_problems = model.get_nmr_problems()
 
-        if isinstance(parameters, dict):
+        if isinstance(parameters, MutableMapping):
             parameters = np.require(model.get_initial_parameters(parameters), np_dtype,
                                     requirements=['C', 'A', 'O'])
         else:
