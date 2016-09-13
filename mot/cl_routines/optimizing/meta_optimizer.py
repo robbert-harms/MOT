@@ -38,10 +38,6 @@ class MetaOptimizer(AbstractOptimizer):
         """
         super(MetaOptimizer, self).__init__(cl_environments, load_balancer, use_param_codec, **kwargs)
 
-        self.add_model_estimates = False
-        self.extra_optim_runs = 0
-        self.extra_optim_runs_optimizers = []
-
         self.optimizer = Powell(self.cl_environments, self.load_balancer, use_param_codec=self.use_param_codec,
                                 patience=patience)
 
@@ -52,42 +48,7 @@ class MetaOptimizer(AbstractOptimizer):
 
     def minimize(self, model, init_params=None, full_output=False):
         results = init_params
-
-        results, extra_maps = self.optimizer.minimize(model, init_params=results, full_output=True)
-
-        if self.extra_optim_runs:
-            for i in range(self.extra_optim_runs):
-                optimizer = self.optimizer
-
-                if self.extra_optim_runs_optimizers and i < len(self.extra_optim_runs_optimizers):
-                    optimizer = self.extra_optim_runs_optimizers[i]
-
-                perturbed_params = model.perturbate(results)
-                results, extra_maps = optimizer.minimize(model, init_params=perturbed_params, full_output=True)
-
-        if full_output:
-            extra_output = {}
-
-            model_estimates = None
-            if self.add_model_estimates:
-                self._logger.info('Calculating model estimates')
-                model_estimates = CalculateModelEstimates(self.cl_environments,
-                                                          self.load_balancer).calculate(model, results)
-                extra_output.update({'SignalEstimates': model_estimates})
-                self._logger.info('Done calculating model estimates')
-
-            self._logger.info('Calculating errors measures')
-            errors = ResidualCalculator(cl_environments=self.cl_environments, load_balancer=self.load_balancer).\
-                calculate(model, results, model_estimates=model_estimates)
-
-            extra_output.update(ErrorMeasures(self.cl_environments, self.load_balancer,
-                                              model.double_precision).calculate(errors))
-            self._logger.info('Done calculating errors measures')
-
-            extra_output.update(extra_maps)
-            return results, extra_output
-
-        return results
+        return self.optimizer.minimize(model, init_params=results, full_output=True)
 
     @property
     def cl_environments(self):
@@ -109,7 +70,3 @@ class MetaOptimizer(AbstractOptimizer):
 
     def _propagate_property(self, name, value):
         self.optimizer.__setattr__(name, value)
-
-        if self.extra_optim_runs_optimizers:
-            for optim in self.extra_optim_runs_optimizers:
-                optim.__setattr__(name, value)

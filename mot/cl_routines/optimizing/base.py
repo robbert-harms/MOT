@@ -3,6 +3,8 @@ import logging
 import numpy as np
 import pyopencl as cl
 from mot.cl_functions import RanluxCL
+from mot.cl_routines.mapping.error_measures import ErrorMeasures
+from mot.cl_routines.mapping.residual_calculator import ResidualCalculator
 from ...utils import results_to_dict, ParameterCLCodeGenerator, \
     get_float_type_def, initialize_ranlux
 from ...cl_routines.base import AbstractCLRoutine
@@ -156,7 +158,15 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         self._logger.info('Optimization finished.')
 
         if full_output:
-            return results, {'ReturnCodes': return_codes}
+            extra_output = {'ReturnCodes': return_codes}
+            self._logger.info('Calculating errors measures')
+            errors = ResidualCalculator(cl_environments=self.cl_environments, load_balancer=self.load_balancer).\
+                calculate(model, results)
+            extra_output.update(ErrorMeasures(self.cl_environments, self.load_balancer,
+                                              model.double_precision).calculate(errors))
+            self._logger.info('Done calculating errors measures')
+
+            return results, extra_output
         return results
 
     def _get_worker_generator(self, *args):
