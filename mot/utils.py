@@ -3,7 +3,7 @@ import numpy as np
 import pyopencl as cl
 from functools import reduce
 
-from .adapters import DataAdapter
+from .data_adapters  import DataAdapter
 from .cl_functions import RanluxCL
 
 __author__ = 'Robbert Harms'

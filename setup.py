@@ -5,9 +5,9 @@ import re
 import os
 
 import shutil
-import textwrap
 
 from setuptools import setup, find_packages, Command
+
 
 def load_requirements(fname):
     is_comment = re.compile('^\s*(#|--).*').match
@@ -16,13 +16,14 @@ def load_requirements(fname):
 
 with open('README.rst', 'rt') as f: readme = f.read()
 with open('docs/history.rst', 'rt') as f: history = f.read().replace('.. :changelog:', '')
-with open('mot/__init__.py') as f: version_file_contents = f.read()
+with open('mot/__version__.py') as f:
+    version_file_contents = f.read()
+    ver_dic = {}
+    exec(compile(version_file_contents, "mot/__version__.py", 'exec'), ver_dic)
 
 requirements = load_requirements('requirements.txt')
 requirements_tests = load_requirements('requirements_tests.txt')
 
-ver_dic = {}
-exec(compile(version_file_contents, "mot/__init__.py", 'exec'), ver_dic)
 
 info_dict = dict(
     name='mot',

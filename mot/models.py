@@ -383,18 +383,3 @@ class SampleModelInterface(OptimizeModelInterface):
             samples. In essence this is where one can place the logic to go from samples to meaningful maps.
         """
         raise NotImplementedError
-
-
-class PerturbationModelInterface(OptimizeModelInterface):
-
-    def perturbate(self, results):
-        """Perturbate the given results according to the rules in this model.
-
-        Args:
-            results (dict): Parameters and 1d maps with the voxel maps.
-
-        Returns:
-            results (dict): A dictionary with the same keys as the given results,
-                but with perturbated values. This can be performed in-place.
-        """
-        raise NotImplementedError

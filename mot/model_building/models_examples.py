@@ -1,6 +1,6 @@
 import numpy as np
 
-from mot.adapters import SimpleDataAdapter
+from mot.data_adapters  import SimpleDataAdapter
 from mot.base import CLDataType
 from mot.models import OptimizeModelInterface
 

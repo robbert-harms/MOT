@@ -1,5 +1,5 @@
 import numpy as np
-from mot.adapters import SimpleDataAdapter
+from mot.data_adapters  import SimpleDataAdapter
 from mot.base import ProtocolParameter, ModelDataParameter, FreeParameter, CLDataType, StaticMapParameter, \
     CurrentObservationParam
 from mot.cl_routines.mapping.calc_dependent_params import CalculateDependentParameters
