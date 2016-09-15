@@ -4,7 +4,6 @@ from .cl_routines.optimizing.levenberg_marquardt import LevenbergMarquardt
 from .cl_routines.filters.gaussian import GaussianFilter
 from .cl_routines.filters.mean import MeanFilter
 from .cl_routines.filters.median import MedianFilter
-from .cl_routines.optimizing.meta_optimizer import MetaOptimizer
 from .cl_routines.optimizing.nmsimplex import NMSimplex
 from .cl_routines.optimizing.powell import Powell
 from .load_balance_strategies import EvenDistribution, RuntimeLoadBalancing, PreferGPU, PreferCPU, \
@@ -28,7 +27,7 @@ def get_optimizer_by_name(name):
     Returns:
         class: the class of the optimizer requested
     """
-    optimizers = [LevenbergMarquardt, Powell, NMSimplex, SimulatedAnnealing, MetaOptimizer, PrAxis]
+    optimizers = [LevenbergMarquardt, Powell, NMSimplex, SimulatedAnnealing, PrAxis]
     return _get_item(name, optimizers, 'optimizers')
 
 
