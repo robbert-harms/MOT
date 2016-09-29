@@ -34,15 +34,16 @@ EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 /* function declarations. */
-void lm_lmpar( const int n, mot_float_type * const r, int ldr, const int* const Pivot, mot_float_type *const diag,
+void lm_lmpar( const int n, global mot_float_type * const r, int ldr, const int* const Pivot, mot_float_type *const diag,
                mot_float_type* const qtb, const mot_float_type delta, mot_float_type * const par, mot_float_type * const x,
                mot_float_type * const Sdiag, mot_float_type * const aux, mot_float_type * const xdi );
-void lm_qrfac( const int m, const int n, mot_float_type * const A, int* const Pivot,
+void lm_qrfac( const int m, const int n, global mot_float_type * const A, int* const Pivot,
                mot_float_type* const Rdiag, mot_float_type * const Acnorm, mot_float_type* const W );
-void lm_qrsolv( const int n, mot_float_type * const r, const int ldr, const int * const Pivot, const mot_float_type * const diag,
+void lm_qrsolv( const int n, global mot_float_type * const r, const int ldr, const int * const Pivot, const mot_float_type * const diag,
                 const mot_float_type * const qtb, mot_float_type * const x, mot_float_type * const Sdiag, mot_float_type * const W );
 
 mot_float_type lm_euclidian_norm(const mot_float_type* const x, const int n);
+mot_float_type lm_euclidian_norm_global(global const mot_float_type* const x, const int n);
 
 /*****************************************************************************/
 /*  Numeric constants                                                        */
@@ -98,18 +99,7 @@ mot_float_type lm_euclidian_norm(const mot_float_type* const x, const int n);
 /******************************************************************************/
 /*  lmmin (main minimization routine)                                         */
 /******************************************************************************/
-
-/**
- * x: starting parameters
- * data: a struct holding all the data necessary for fitting
- * n: the parameter length (the number of variables to optimize)
- * m: the number of instances per problem. It must fulfill m>=n
- *
- * void evaluate(mot_float_type* x, const void* data, mot_float_type* result);
- *
- */
-
-int lmmin(mot_float_type * const x, const void* const data){
+int lmmin(mot_float_type * const x, const void* const data, global mot_float_type* fjac){
 
 	int j, i;
     mot_float_type actred, dirder, fnorm, fnorm1, gnorm, pnorm, prered, ratio, step, sum, temp, temp1, temp2, temp3;
@@ -125,7 +115,6 @@ int lmmin(mot_float_type * const x, const void* const data){
     mot_float_type fvec[%(NMR_INST_PER_PROBLEM)s];
     mot_float_type diag[%(NMR_PARAMS)s];
     mot_float_type qtf[%(NMR_PARAMS)s];
-    mot_float_type fjac[%(NMR_PARAMS)s * %(NMR_INST_PER_PROBLEM)s];
     mot_float_type wa1[%(NMR_PARAMS)s];
     mot_float_type wa2[%(NMR_PARAMS)s];
     mot_float_type wa3[%(NMR_PARAMS)s];
@@ -399,7 +388,7 @@ int lmmin(mot_float_type * const x, const void* const data){
 /*  lm_lmpar (determine Levenberg-Marquardt parameter)                       */
 /*****************************************************************************/
 
-void lm_lmpar(const int n, mot_float_type* const r, int ldr, const int* const Pivot, mot_float_type * const diag,
+void lm_lmpar(const int n, global mot_float_type* const r, int ldr, const int* const Pivot, mot_float_type * const diag,
               mot_float_type* const qtb, const mot_float_type delta, mot_float_type* const par, mot_float_type * const x,
               mot_float_type * const Sdiag, mot_float_type * const aux, mot_float_type * const xdi)
 {
@@ -626,7 +615,7 @@ void lm_lmpar(const int n, mot_float_type* const r, int ldr, const int* const Pi
 /*  lm_qrfac (QR factorization, from lapack)                                  */
 /******************************************************************************/
 
-void lm_qrfac(const int m, const int n, mot_float_type* const A, int* const Pivot,
+void lm_qrfac(const int m, const int n, global mot_float_type* const A, int* const Pivot,
               mot_float_type* const Rdiag, mot_float_type* const Acnorm, mot_float_type* const W)
 {
 /*
@@ -673,7 +662,7 @@ void lm_qrfac(const int m, const int n, mot_float_type* const A, int* const Pivo
     /** Compute initial column norms;
         initialize Pivot with identity permutation. ***/
     for (j = 0; j < n; j++) {
-        W[j] = Rdiag[j] = Acnorm[j] = lm_euclidian_norm(&A[j*m], m);
+        W[j] = Rdiag[j] = Acnorm[j] = lm_euclidian_norm_global(&A[j*m], m);
         Pivot[j] = j;
     }
 
@@ -704,7 +693,7 @@ void lm_qrfac(const int m, const int n, mot_float_type* const A, int* const Pivo
 
         /** Compute the Householder reflection vector w_j to reduce the
             j-th column of A to a multiple of the j-th unit vector. **/
-        ajnorm = lm_euclidian_norm(&A[j*m+j], m-j);
+        ajnorm = lm_euclidian_norm_global(&A[j*m+j], m-j);
         if (ajnorm == 0) {
             Rdiag[j] = 0;
         }
@@ -747,7 +736,7 @@ void lm_qrfac(const int m, const int n, mot_float_type* const A, int* const Pivo
                     }
 
                     if(temp == 0 || 0.05 * (temp * temp) <= LM_MACHEP){
-                        Rdiag[k] = lm_euclidian_norm(&A[m*k+j+1], m-j-1);
+                        Rdiag[k] = lm_euclidian_norm_global(&A[m*k+j+1], m-j-1);
                         W[k] = Rdiag[k];
                     }
                 }
@@ -764,7 +753,7 @@ void lm_qrfac(const int m, const int n, mot_float_type* const A, int* const Pivo
 /*****************************************************************************/
 
 void lm_qrsolv(const int n,
-               mot_float_type* const r,
+               global mot_float_type* const r,
                const int ldr,
                const int* const Pivot,
                const mot_float_type* const diag,
@@ -935,6 +924,73 @@ void lm_qrsolv(const int n,
 /*  lm_enorm (Euclidean norm)                                                 */
 /******************************************************************************/
 mot_float_type lm_euclidian_norm(const mot_float_type* const x, const int n){
+/*     This function calculates the Euclidean norm of an n-vector x.
+ *
+ *     The Euclidean norm is computed by accumulating the sum of squares
+ *     in three different sums. The sums of squares for the small and large
+ *     components are scaled so that no overflows occur. Non-destructive
+ *     underflows are permitted. Underflows and overflows do not occur in
+ *     the computation of the unscaled sum of squares for the intermediate
+ *     components. The definitions of small, intermediate and large components
+ *     depend on two constants, LM_SQRT_DWARF and LM_SQRT_GIANT. The main
+ *     restrictions on these constants are that LM_SQRT_DWARF**2 not underflow
+ *     and LM_SQRT_GIANT**2 not overflow.
+ *
+ *     Parameters:
+ *
+ *      n is a positive integer INPUT variable.
+ *
+ *      x is an INPUT array of length n.
+ */
+    int i;
+    double agiant, s1, s2, s3, xabs, x1max, x3max;
+
+    s1 = 0;
+    s2 = 0;
+    s3 = 0;
+    x1max = 0;
+    x3max = 0;
+    agiant = LM_ENORM_SQRT_GIANT / n;
+
+    /** Sum squares. **/
+    for (i = 0; i < n; i++) {
+        xabs = fabs(x[i]);
+        if (xabs > LM_ENORM_SQRT_DWARF) {
+            if (xabs < agiant) {
+                s2 += xabs * xabs;
+            } else if (xabs > x1max) {
+                s1 = 1 + s1 * ((x1max / xabs) * (x1max / xabs));
+                x1max = xabs;
+            } else {
+                s1 += ((xabs / x1max) * (xabs / x1max));
+            }
+        } else if (xabs > x3max) {
+            s3 = 1 + s3 * ((x3max / xabs) * (x3max / xabs));
+            x3max = xabs;
+        } else if (xabs != 0) {
+            s3 += ((xabs / x3max) * (xabs / x3max));
+        }
+    }
+
+    /** Calculate the norm. **/
+    if (s1 != 0)
+        return x1max * sqrt(s1 + (s2 / x1max) / x1max);
+    else if (s2 != 0)
+        if (s2 >= x3max)
+            return sqrt(s2 * (1 + (x3max / s2) * (x3max * s3)));
+        else
+            return sqrt(x3max * ((s2 / x3max) + (x3max * s3)));
+    else
+        return x3max * sqrt(s3);
+
+
+} /*** euclidian_norm. ***/
+
+
+/******************************************************************************/
+/*  lm_enorm (Euclidean norm) for global memory                               */
+/******************************************************************************/
+mot_float_type lm_euclidian_norm_global(global const mot_float_type* const x, const int n){
 /*     This function calculates the Euclidean norm of an n-vector x.
  *
  *     The Euclidean norm is computed by accumulating the sum of squares
