@@ -5,10 +5,6 @@ Maastricht Optimization Toolbox
 .. image:: https://badge.fury.io/py/mot.png
     :target: http://badge.fury.io/py/mot
 
-.. image:: https://travis-ci.org/robbert-harms/MOT.svg
-    :target: https://travis-ci.org/robbert-harms/MOT
-
-
 
 A library for parallel optimization and sampling in python and opencl.
 
