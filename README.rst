@@ -26,7 +26,7 @@ Linux (Ubuntu)
 
 Windows
 """""""
-The easiest way is with Anaconda. Install the Python3.x bindings from [Anaconda](https://www.continuum.io/downloads)
+The easiest way is with Anaconda. Install the Python3.x bindings from `Anaconda <https://www.continuum.io/downloads>`_
 
 
 Installing OpenCL bindings
