@@ -35,7 +35,7 @@ For OpenCL you need two things, an OpenCL driver for your platform and the Pytho
 
 Linux (Ubuntu)
 """"""""""""""
-On Ubuntu, the easiest way to install all of this:
+On Ubuntu, the easiest way to install all of this::
 ``apt-get install python3-pyopencl``
 
 
