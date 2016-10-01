@@ -19,7 +19,7 @@ Since it is a Python package we need to install the Python interpreter. Consider
 
 Linux (Ubuntu)
 """"""""""""""
-
+test
 .. code-block:: sql
    :linenos:
 
