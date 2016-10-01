@@ -72,3 +72,16 @@ Windows
 Open an Anaconda shell and use:
 
 ``pip install MOT``
+
+
+|
+|
+Usage
+-----
+Open a python shell:
+
+``python3``
+
+and import MOT:
+
+``import mot``

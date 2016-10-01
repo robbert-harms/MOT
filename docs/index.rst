@@ -3,7 +3,7 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to Python Parallel Parameter Estimation library's documentation!
+Welcome to MOT's documentation!
 ======================================
 
 Contents:
@@ -12,11 +12,7 @@ Contents:
    :maxdepth: 2
 
    readme
-   installation
-   usage
-   contributing
-   authors
-   history
+   credits
 
 Indices and tables
 ==================

@@ -20,14 +20,6 @@ mot.cl_routines.optimizing.levenberg_marquardt module
     :undoc-members:
     :show-inheritance:
 
-mot.cl_routines.optimizing.meta_optimizer module
-------------------------------------------------
-
-.. automodule:: mot.cl_routines.optimizing.meta_optimizer
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
 mot.cl_routines.optimizing.nmsimplex module
 -------------------------------------------
 

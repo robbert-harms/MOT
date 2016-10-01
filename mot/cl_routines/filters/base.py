@@ -16,11 +16,9 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 class AbstractFilter(AbstractCLRoutine):
 
     def __init__(self, size, cl_environments=None, load_balancer=None):
-        """Initialize an abstract filter routine.
+        """Initialize the filter routine.
 
-        This is meant to be called by the constructor of an implementing class.
-
-         Args:
+        Args:
             size (int or tuple): Either a single dimension size for all dimensions or one value
                 for each dimension of the input data to the filter function. Maximum number of dimensions is 3.
                 Either way this value is the distance to the left and to the right of each value.

@@ -13,14 +13,6 @@ Subpackages
 Submodules
 ----------
 
-mot.adapters module
--------------------
-
-.. automodule:: mot.adapters
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
 mot.base module
 ---------------
 
@@ -49,6 +41,14 @@ mot.configuration module
 ------------------------
 
 .. automodule:: mot.configuration
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+mot.data_adapters module
+------------------------
+
+.. automodule:: mot.data_adapters
     :members:
     :undoc-members:
     :show-inheritance:
