@@ -20,7 +20,8 @@ Since it is a Python package we need to install the Python interpreter. Consider
 Linux (Ubuntu)
 """"""""""""""
 .. highlight:: console 
-    apt-get install python3 python3-pip
+
+`apt-get install python3 python3-pip`
 
 
 Windows
