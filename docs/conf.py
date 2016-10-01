@@ -17,14 +17,8 @@ import sys
 import os
 from unittest.mock import MagicMock
 
-
-class Mock(MagicMock):
-    @classmethod
-    def __getattr__(cls, name):
-            return Mock()
-
-MOCK_MODULES = ['pyopencl']
-sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
+# Mock the PyOpenCL library since we do not need it to be present for generating documentation.
+sys.modules.update((mod_name, MagicMock()) for mod_name in ['pyopencl'])
 
 
 # If extensions (or modules to document with autodoc) are in another
