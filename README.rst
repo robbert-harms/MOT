@@ -17,9 +17,9 @@ Installation
 
 The installation is a three step procedure:
 
-1) Installing a Python interpreter
-2) Installing the PyOpenCL drivers and Python bindings
-3) Install MOT
+1. Installing a Python interpreter
+2. Installing the PyOpenCL drivers and Python bindings
+3. Install MOT
 
 
 Installing Python
