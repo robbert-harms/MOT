@@ -9,13 +9,15 @@ Maastricht Optimization Toolbox
 A library for parallel optimization and sampling in python and opencl.
 
 * Free software: LGPL v3 license
+* Project home: https://github.com/robbert-harms/MOT
 * Documentation: https://mot.readthedocs.org.
+* Uses the GitLab workflow: https://docs.gitlab.com/ee/workflow/gitlab_flow.html
 * Tags: optimization, parallel, opencl, python
 
 
 Installation
 ------------
-.. highlight:: console 
+.. highlight:: console
 
 The installation is a three step procedure:
 
@@ -27,7 +29,7 @@ The installation is a three step procedure:
 |
 Installing Python
 ^^^^^^^^^^^^^^^^^
-Since it is a Python package we need to install the Python interpreter. Considering that Python2 is soon end of life, this package focuses on installing it using Python3. 
+Since it is a Python package we need to install the Python interpreter. Considering that Python2 is soon end of life, this package focuses on installing it using Python3.
 
 Linux (Ubuntu)
 """"""""""""""
