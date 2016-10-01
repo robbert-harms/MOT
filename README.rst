@@ -10,9 +10,7 @@ A library for parallel optimization and sampling in python and opencl.
 
 * Free software: LGPL v3 license
 * Documentation: https://mot.readthedocs.org.
-
-Tags:
-optimization, parallel, opencl, python
+* Tags: optimization, parallel, opencl, python
 
 
 Installation
