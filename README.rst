@@ -19,6 +19,7 @@ Since it is a Python package we need to install the Python interpreter. Consider
 
 Linux (Ubuntu)
 """"""""""""""
+
 .. code-block:: console
     apt-get install python3 python3-pip
 
