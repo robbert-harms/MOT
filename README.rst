@@ -22,6 +22,7 @@ The installation is a three step procedure:
 3. Install MOT
 
 
+|
 Installing Python
 ^^^^^^^^^^^^^^^^^
 Since it is a Python package we need to install the Python interpreter. Considering that Python2 is soon end of life, this package focuses on installing it using Python3. 
@@ -52,6 +53,7 @@ Windows
 On Windows, make sure you install the correct OpenCL driver (Intel/AMD/NVidia). For graphics cards the drivers are normally already installed. After that, Anaconda should automatically install the Python bindings.
 
 
+|
 Installing MOT
 ^^^^^^^^^^^^^^
 With OpenCL and Python installed you can now install MOT.
