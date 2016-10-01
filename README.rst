@@ -47,7 +47,7 @@ On Windows, make sure you install the correct OpenCL driver (Intel/AMD/NVidia). 
 
 Installing MOT
 ^^^^^^^^^^^^^^
-With OpenCL available you can now install MOT.
+With OpenCL and Python installed you can now install MOT.
 
 Linux (Ubuntu)
 """"""""""""""
