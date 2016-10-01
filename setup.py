@@ -3,9 +3,7 @@
 
 import re
 import os
-
 import shutil
-
 from setuptools import setup, find_packages, Command
 
 
@@ -14,8 +12,9 @@ def load_requirements(fname):
     with open(fname) as fo:
         return [line.strip() for line in fo if not is_comment(line) and line.strip()]
 
-with open('README.rst', 'rt') as f: readme = f.read()
-with open('docs/history.rst', 'rt') as f: history = f.read().replace('.. :changelog:', '')
+with open('README.rst', 'rt') as f:
+    readme = f.read()
+
 with open('mot/__version__.py') as f:
     version_file_contents = f.read()
     ver_dic = {}
@@ -29,7 +28,7 @@ info_dict = dict(
     name='mot',
     version=ver_dic["VERSION"],
     description='Parallel parameter estimation in python and opencl.',
-    long_description=readme + '\n\n' + history,
+    long_description=readme,
     author='Robbert Harms',
     author_email='robbert.harms@maastrichtuniversity.nl',
     url='https://github.com/robbert-harms/mot',
