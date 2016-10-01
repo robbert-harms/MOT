@@ -51,8 +51,6 @@ With OpenCL available you can now install MOT.
 
 Linux (Ubuntu)
 """"""""""""""
-Preferably use Python3 (Python2 will be deprecated at one point):
-
 ``pip3 install MOT``
 
 
