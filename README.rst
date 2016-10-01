@@ -36,6 +36,7 @@ Windows
 The easiest way is with Anaconda. Install the Python3.x bindings from `Anaconda <https://www.continuum.io/downloads>`_.
 
 
+
 Installing OpenCL bindings
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 For OpenCL you need two things, an OpenCL driver for your platform and the Python OpenCL bindings.
