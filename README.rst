@@ -21,7 +21,7 @@ Since it is a Python package we need to install the Python interpreter. Consider
 
 Linux (Ubuntu)
 """"""""""""""
-:python:`apt-get install python3 python3-pip`
+``apt-get install python3 python3-pip``
 
 
 Windows
@@ -36,8 +36,7 @@ For OpenCL you need two things, an OpenCL driver for your platform and the Pytho
 Linux (Ubuntu)
 """"""""""""""
 On Ubuntu, the easiest way to install all of this:
-.. code-block:: console
-    apt-get install python3-pyopencl
+``apt-get install python3-pyopencl``
 
 
 Windows
@@ -52,12 +51,10 @@ With OpenCL available you can now install MOT.
 Linux (Ubuntu)
 """"""""""""""
 Preferably use Python3 (Python2 will be deprecated at one point):
-.. code-block:: console
-    pip3 install MOT
+``pip3 install MOT``
 
 
 Windows
 """""""
 Open an Anaconda shell and use:
-.. code-block:: console
-    pip install MOT
+``pip install MOT``
