@@ -10,7 +10,7 @@ A library for parallel optimization and sampling in python and opencl.
 
 * Free software: LGPL v3 license
 * Project home: https://github.com/robbert-harms/MOT
-* Documentation: https://mot.readthedocs.org.
+* Documentation: https://mot.readthedocs.org
 * Uses the `GitLab workflow <https://docs.gitlab.com/ee/workflow/gitlab_flow.html>`_
 * Tags: optimization, parallel, opencl, python
 
