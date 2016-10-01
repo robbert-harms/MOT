@@ -55,7 +55,7 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = u'Python Parallel Parameter Estimation library'
+project = u'Maastricht Optimization Toolbox (MOT)'
 copyright = u'2015, Robbert Harms'
 
 # The version info for the project you're documenting, acts as replacement
