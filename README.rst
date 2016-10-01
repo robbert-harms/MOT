@@ -17,11 +17,12 @@ Installation
 
 The installation is a three step procedure:
 
-1. Installing a Python interpreter
+1. :ref:`python`
 2. Installing the PyOpenCL drivers and Python bindings
 3. Install MOT
 
 
+.. _python:
 Installing Python
 ^^^^^^^^^^^^^^^^^
 Since it is a Python package we need to install the Python interpreter. Considering that Python2 is soon end of life, this package focuses on installing it using Python3. 
