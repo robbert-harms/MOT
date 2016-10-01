@@ -52,10 +52,12 @@ With OpenCL available you can now install MOT.
 Linux (Ubuntu)
 """"""""""""""
 Preferably use Python3 (Python2 will be deprecated at one point):
+
 ``pip3 install MOT``
 
 
 Windows
 """""""
 Open an Anaconda shell and use:
+
 ``pip install MOT``
