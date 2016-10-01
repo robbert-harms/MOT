@@ -21,7 +21,7 @@ Linux (Ubuntu)
 """"""""""""""
 .. highlight:: console 
 
-`apt-get install python3 python3-pip`
+``apt-get install python3 python3-pip``
 
 
 Windows
