@@ -3,7 +3,7 @@ from collections import MutableMapping
 import pyopencl as cl
 import numpy as np
 from ...utils import ParameterCLCodeGenerator, get_float_type_def
-from ...cl_routines.base import AbstractCLRoutine
+from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
 
 
@@ -14,7 +14,7 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class ObjectiveListCalculator(AbstractCLRoutine):
+class ObjectiveListCalculator(CLRoutine):
 
     def __init__(self, cl_environments=None, load_balancer=None):
         """Calculate the objective list, that is it can compute the get_objective_list_function of the given model.

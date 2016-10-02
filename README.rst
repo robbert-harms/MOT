@@ -9,8 +9,8 @@ Maastricht Optimization Toolbox
 A library for parallel optimization and sampling in python and opencl.
 
 * Free software: LGPL v3 license
+* Full documentation: https://mot.readthedocs.org
 * Project home: https://github.com/robbert-harms/MOT
-* Documentation: https://mot.readthedocs.org
 * Uses the `GitLab workflow <https://docs.gitlab.com/ee/workflow/gitlab_flow.html>`_
 * Tags: optimization, parallel, opencl, python
 
@@ -72,16 +72,3 @@ Windows
 Open an Anaconda shell and use:
 
 ``pip install MOT``
-
-
-|
-|
-Usage
------
-Open a python shell:
-
-``python3``
-
-and import MOT:
-
-``import mot``

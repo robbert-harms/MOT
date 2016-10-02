@@ -6,7 +6,7 @@ from mot.cl_routines.mapping.calc_dependent_params import CalculateDependentPara
 from mot.utils import TopologicalSort, is_scalar
 from mot.model_building.parameter_functions.codecs import CodecBuilder
 from mot.model_building.parameter_functions.dependencies import SimpleAssignment
-from mot.models import OptimizeModelInterface, SampleModelInterface
+from mot.model_interfaces import OptimizeModelInterface, SampleModelInterface
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-03-14"

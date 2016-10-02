@@ -1,5 +1,5 @@
 import numpy as np
-from ...cl_routines.base import AbstractCLRoutine
+from ...cl_routines.base import CLRoutine
 
 
 __author__ = 'Robbert Harms'
@@ -9,7 +9,7 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class ErrorMeasures(AbstractCLRoutine):
+class ErrorMeasures(CLRoutine):
 
     def __init__(self, cl_environments=None, load_balancer=None, double_precision=False):
         """Given a set of raw errors per voxel, calculate some interesting measures."""

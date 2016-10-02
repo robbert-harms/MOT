@@ -1,5 +1,5 @@
 import logging
-from ...cl_routines.base import AbstractCLRoutine
+from ...cl_routines.base import CLRoutine
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-05-18"
@@ -8,7 +8,7 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class AbstractSampler(AbstractCLRoutine):
+class AbstractSampler(CLRoutine):
 
     def __init__(self, cl_environments=None, load_balancer=None, **kwargs):
         super(AbstractSampler, self).__init__(cl_environments=cl_environments, load_balancer=load_balancer, **kwargs)

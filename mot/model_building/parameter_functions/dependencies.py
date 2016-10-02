@@ -6,6 +6,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
 class AbstractParameterDependency(object):
+
     @property
     def pre_transform_code(self):
         """Some code that may be prefixed to this parameter dependency.
@@ -46,6 +47,7 @@ class AbstractParameterDependency(object):
 
 
 class SimpleAssignment(AbstractParameterDependency):
+
     def __init__(self, assignment_code, fixed=True, has_side_effects=False):
         """Adds a simple parameter dependency rule for the given parameter.
 

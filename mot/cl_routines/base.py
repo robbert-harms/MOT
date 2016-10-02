@@ -7,10 +7,10 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class AbstractCLRoutine(object):
+class CLRoutine(object):
 
     def __init__(self, cl_environments=None, load_balancer=None, compile_flags=None, **kwargs):
-        """This class serves as an abstract basis for all CL routine classes.
+        """Base class for CL routines. Im
 
         Args:
             cl_environments (list of CLEnvironment): The list of CL environments using by this routine.
@@ -77,14 +77,3 @@ class AbstractCLRoutine(object):
         """
         cl_environments = self.load_balancer.get_used_cl_environments(self.cl_environments)
         return [worker_generating_cb(env) for env in cl_environments]
-
-    @classmethod
-    def get_pretty_name(cls):
-        """The pretty name of this routine.
-
-        This is used to create an object of the implementing class using a factory, and is used in the logging.
-
-        Returns:
-            str: the pretty name of this routine.
-        """
-        return cls.__name__

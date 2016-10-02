@@ -1,7 +1,7 @@
 import pyopencl as cl
 import numpy as np
 from ...utils import ParameterCLCodeGenerator, get_float_type_def
-from ...cl_routines.base import AbstractCLRoutine
+from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
 
 
@@ -12,7 +12,7 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class FinalParametersTransformer(AbstractCLRoutine):
+class FinalParametersTransformer(CLRoutine):
 
     def __init__(self, cl_environments=None, load_balancer=None):
         """CL code for applying the final parameter transforms.

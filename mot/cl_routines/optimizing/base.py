@@ -7,7 +7,7 @@ from mot.cl_routines.mapping.error_measures import ErrorMeasures
 from mot.cl_routines.mapping.residual_calculator import ResidualCalculator
 from ...utils import results_to_dict, ParameterCLCodeGenerator, \
     get_float_type_def, initialize_ranlux
-from ...cl_routines.base import AbstractCLRoutine
+from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
 from ...cl_routines.mapping.final_parameters_transformer import FinalParametersTransformer
 from ...cl_routines.mapping.codec_runner import CodecRunner
@@ -36,7 +36,7 @@ return_code_labels = {
 }
 
 
-class AbstractOptimizer(AbstractCLRoutine):
+class AbstractOptimizer(CLRoutine):
 
     def __init__(self, cl_environments=None, load_balancer=None, use_param_codec=True, patience=1,
                  optimizer_options=None, **kwargs):
@@ -111,7 +111,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         self._logger.debug('Using compile flags: {}'.format(self.get_compile_flags_list()))
         self._logger.info('The parameters we will optimize are: {0}'.format(model.get_optimized_param_names()))
         self._logger.info('We will use the optimizer {} '
-                          'with patience {} and optimizer options {}'.format(self.get_pretty_name(),
+                          'with patience {} and optimizer options {}'.format(self.__class__.__name__,
                                                                              self.patience,
                                                                              self._optimizer_options))
 
@@ -237,8 +237,7 @@ class AbstractParallelOptimizerWorker(Worker):
         all_buffers.extend(self._generate_constant_buffers(self._protocol_data_dict, self._model_data_dict))
 
         if self._uses_random_numbers():
-            all_buffers.append(initialize_ranlux(self._cl_environment, self._cl_run_context,
-                                                 self._starting_points.shape[0]))
+            all_buffers.append(initialize_ranlux(self._cl_run_context, self._starting_points.shape[0]))
 
         return all_buffers, parameters_buffer, return_code_buffer
 

@@ -2,8 +2,8 @@ import logging
 import numbers
 import numpy as np
 import pyopencl as cl
-from ...cl_routines.base import AbstractCLRoutine
-from ...load_balance_strategies import Worker
+from mot.cl_routines.base import CLRoutine
+from mot.load_balance_strategies import Worker
 
 
 __author__ = 'Robbert Harms'
@@ -13,7 +13,7 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class AbstractFilter(AbstractCLRoutine):
+class AbstractFilter(CLRoutine):
 
     def __init__(self, size, cl_environments=None, load_balancer=None):
         """Initialize the filter routine.
@@ -58,7 +58,7 @@ class AbstractFilter(AbstractCLRoutine):
             nmr_of_times = 1
 
         if nmr_of_times == 1:
-            self._logger.info('Applying filtering with filter {0}'.format(self.get_pretty_name()))
+            self._logger.info('Applying filtering with filter {0}'.format(self.__class__.__name__))
             if isinstance(value, dict):
                 return self._filter(value, mask, double_precision)
             else:

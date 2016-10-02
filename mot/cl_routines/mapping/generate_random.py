@@ -3,7 +3,7 @@ import numpy as np
 import pyopencl as cl
 from ...cl_functions import RanluxCL
 from ...utils import initialize_ranlux
-from ...cl_routines.base import AbstractCLRoutine
+from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
 
 
@@ -14,7 +14,7 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class GenerateRandom(AbstractCLRoutine):
+class GenerateRandom(CLRoutine):
 
     def __init__(self, cl_environments, load_balancer):
         """This class is there to generate random numbers using OpenCL.
@@ -122,8 +122,7 @@ class _GenerateRandomWorker(Worker):
         self._kernel_source = kernel_source
         self._seed = seed
 
-        self._ranluxcltab_buffer = initialize_ranlux(self._cl_environment, self._cl_run_context, self._nmr_samples,
-                                                     seed=self._seed)
+        self._ranluxcltab_buffer = initialize_ranlux(self._cl_run_context, self._nmr_samples, seed=self._seed)
 
         self._samples_buf = cl.Buffer(self._cl_run_context.context, cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
                                       hostbuf=self._samples)

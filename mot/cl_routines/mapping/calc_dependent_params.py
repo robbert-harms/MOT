@@ -1,6 +1,6 @@
 import pyopencl as cl
 from ...utils import results_to_dict, ParameterCLCodeGenerator, get_float_type_def
-from ...cl_routines.base import AbstractCLRoutine
+from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
 import numpy as np
 
@@ -12,7 +12,7 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class CalculateDependentParameters(AbstractCLRoutine):
+class CalculateDependentParameters(CLRoutine):
 
     def __init__(self, cl_environments=None, load_balancer=None, compile_flags=None, double_precision=False, **kwargs):
         """CL code for calculating the dependent parameters.

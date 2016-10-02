@@ -1,5 +1,6 @@
-from .base import AbstractFilter, AbstractFilterWorker
-from ...utils import get_float_type_def
+from mot.cl_routines.filters.base import AbstractFilter, AbstractFilterWorker
+from mot.utils import get_float_type_def
+
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-04-26"

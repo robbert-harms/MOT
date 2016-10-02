@@ -78,6 +78,6 @@ def get_load_balance_strategy_by_name(name):
 
 def _get_item(name, item_list, factory_type):
     for item in item_list:
-        if item.get_pretty_name() == name:
+        if item.__name__ == name:
             return item
     raise ValueError('The item with the name {0} could not be found in the {1} factory.'.format(name, factory_type))

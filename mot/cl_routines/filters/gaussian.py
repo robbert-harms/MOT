@@ -1,9 +1,9 @@
 import numbers
-import warnings
-from .base import AbstractFilter, AbstractFilterWorker
 import numpy as np
 import pyopencl as cl
-from ...utils import get_float_type_def
+from mot.cl_routines.filters.base import AbstractFilter, AbstractFilterWorker
+from mot.utils import get_float_type_def
+
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-04-26"
@@ -14,28 +14,17 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class GaussianFilter(AbstractFilter):
 
-    def __init__(self, size, cl_environments, load_balancer, sigma=None):
-        """Create a new filterer for gaussian filtering.
+    def __init__(self, size, sigma=None, cl_environments=None, load_balancer=None):
+        """Initialize a Gaussian filter.
 
         Args:
             size (int or tuple): (x, y, z, ...). Either a single dimension size for all dimensions or one value
                 for each dimension of the input data to the filter function.
                 Either way this value is the distance to the left and to the right of each value.
                 That means that the total kernel size is the product of 1 + 2*s for each size s of each dimension.
-            cl_environments: The cl environments
-            load_balancer: The load balancer to use
             sigma (double or list of double): Either a single double or a list of doubles, one for each size.
                 This parameter defines the sigma of the Gaussian distribution used for creating the Gaussian filtering
                 kernel. If None, the sigma is calculated using size / 3.0.
-
-        Attributes:
-            size (int or tuple): (x, y, z, ...). Either a single dimension size for all dimensions or one value
-                for each dimension of the input data to the filter function.
-                Either way this value is the distance to the left and to the right of each value.
-                That means that the total kernel size is the product of 1 + 2*s for each size s of each dimension.
-            sigma (double or list of double): Either a single double or a list of doubles, one for each size.
-                This parameter defines the sigma of the Gaussian distribution used for creating the Gaussian filtering
-                kernel.
         """
         super(GaussianFilter, self).__init__(size, cl_environments=cl_environments, load_balancer=load_balancer)
         self.sigma = sigma

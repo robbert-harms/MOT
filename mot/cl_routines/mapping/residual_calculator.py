@@ -1,7 +1,7 @@
 import pyopencl as cl
 import numpy as np
 from ...utils import ParameterCLCodeGenerator, get_float_type_def
-from ...cl_routines.base import AbstractCLRoutine
+from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
 
 
@@ -12,7 +12,7 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class ResidualCalculator(AbstractCLRoutine):
+class ResidualCalculator(CLRoutine):
 
     def __init__(self, cl_environments=None, load_balancer=None):
         """Calculate the residuals, that is the errors, per problem instance per data point."""

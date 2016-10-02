@@ -297,7 +297,7 @@ class ParameterCLCodeGenerator(object):
         return np.product(array.shape) * np.dtype(dtype).itemsize < self._max_constant_buffer_size
 
 
-def initialize_ranlux(cl_environment, cl_context, nmr_instances, ranlux=RanluxCL(), ranluxcl_lux=None, seed=None):
+def initialize_ranlux(cl_context, nmr_instances, ranlux=RanluxCL(), ranluxcl_lux=None, seed=None):
     """Create an opencl buffer with the initialized RanluxCLTab.
 
     Args:

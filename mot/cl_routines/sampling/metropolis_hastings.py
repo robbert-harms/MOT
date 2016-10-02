@@ -72,7 +72,7 @@ class MetropolisHastings(AbstractSampler):
         samples = np.zeros((model.get_nmr_problems(), parameters.shape[1], self.nmr_samples),
                            dtype=np_dtype, order='C')
 
-        self._logger.info('Starting sampling with method {0}'.format(self.get_pretty_name()))
+        self._logger.info('Starting sampling with method {0}'.format(self.__class__.__name__))
 
         workers = self._create_workers(lambda cl_environment: _MHWorker(
             cl_environment, self.get_compile_flags_list(), model, parameters, samples,
@@ -153,7 +153,7 @@ class _MHWorker(Worker):
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
-        ranluxcltab_buffer = initialize_ranlux(self._cl_environment, self._cl_run_context, nmr_problems)
+        ranluxcltab_buffer = initialize_ranlux(self._cl_run_context, nmr_problems)
 
         data_buffers = [cl.Buffer(self._cl_run_context.context,
                                   cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR,

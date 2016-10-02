@@ -1,6 +1,5 @@
 from contextlib import contextmanager
 from copy import copy
-
 from .cl_environments import CLEnvironmentFactory
 from .load_balance_strategies import PreferGPU
 
