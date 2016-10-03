@@ -1,8 +1,7 @@
 import time
 import numpy as np
 import pyopencl as cl
-from ...cl_functions import RanluxCL
-from ...utils import initialize_ranlux
+from ...utils import initialize_ranlux, get_ranlux_cl
 from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
 
@@ -68,8 +67,7 @@ class GenerateRandom(CLRoutine):
 
     def _get_uniform_kernel(self, min_val, max_val):
         kernel_source = '#define RANLUXCL_LUX 4' + "\n"
-        kernel_source += RanluxCL().get_cl_header()
-        kernel_source += RanluxCL().get_cl_code()
+        kernel_source += get_ranlux_cl()
         kernel_source += '''
             __kernel void sample(global ranluxcl_state_t *ranluxcltab, global float *samples){
                 ranluxcl_state_t ranluxclstate;
@@ -91,8 +89,7 @@ class GenerateRandom(CLRoutine):
 
     def _get_gaussian_kernel(self, mean, std):
         kernel_source = '#define RANLUXCL_LUX 4' + "\n"
-        kernel_source += RanluxCL().get_cl_header()
-        kernel_source += RanluxCL().get_cl_code()
+        kernel_source += get_ranlux_cl()
         kernel_source += '''
             __kernel void sample(global ranluxcl_state_t *ranluxcltab, global float *samples){
                 ranluxcl_state_t ranluxclstate;

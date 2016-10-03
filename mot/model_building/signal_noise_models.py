@@ -1,4 +1,5 @@
-from mot.base import ModelFunction, FreeParameter
+from mot.model_building.cl_functions.parameters import FreeParameter
+from mot.model_building.cl_functions.base import ModelFunction
 from mot.model_building.parameter_functions.transformations import CosSqrClampTransform
 from mot.base import CLDataType
 

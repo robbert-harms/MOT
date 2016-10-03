@@ -1,4 +1,5 @@
-from ...cl_functions import NMSimplexFunc
+import os
+from pkg_resources import resource_filename
 from ...cl_routines.optimizing.base import AbstractParallelOptimizer, AbstractParallelOptimizerWorker
 
 __author__ = 'Robbert Harms'
@@ -38,8 +39,21 @@ class NMSimplex(AbstractParallelOptimizer):
 class NMSimplexWorker(AbstractParallelOptimizerWorker):
 
     def _get_optimization_function(self):
-        return NMSimplexFunc(self._nmr_params, patience=self._parent_optimizer.patience,
-                             optimizer_options=self._optimizer_options)
+        params = {'NMR_PARAMS': self._nmr_params, 'PATIENCE': self._parent_optimizer.patience}
+
+        optimizer_options = self._optimizer_options or {}
+        option_defaults = {'alpha': 1.0, 'beta': 0.5, 'gamma': 2.0, 'delta': 0.5, 'scale': 1.0}
+
+        for option, default in option_defaults.items():
+            if option == 'scale':
+                params['INITIAL_SIMPLEX_SCALES'] = '{' + ', '.join([str(default)] * self._nmr_params) + '}'
+            else:
+                params.update({option.upper(): optimizer_options.get(option, default)})
+
+        body = open(os.path.abspath(resource_filename('mot', 'data/opencl/nmsimplex.pcl')), 'r').read()
+        if params:
+            body = body % params
+        return body
 
     def _get_optimizer_call_name(self):
         return 'nmsimplex'

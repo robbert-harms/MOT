@@ -1,7 +1,8 @@
-from mot.base import ModelFunction, FreeParameter
-from mot.cl_functions import Bessel
+from mot.model_building.cl_functions.parameters import FreeParameter
+from mot.model_building.cl_functions.base import ModelFunction
+from mot.model_building.cl_functions.library_functions import Bessel
 from mot.model_building.parameter_functions.transformations import ClampTransform
-from mot.base import CLDataType
+from mot.cl_data_type import CLDataType
 
 
 __author__ = 'Robbert Harms'
@@ -184,7 +185,7 @@ class GaussianEvaluationModel(EvaluationModel):
                            parameter_transform=ClampTransform()),), ())
 
     def get_objective_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
-        # omitted constant term for speed
+        # omitted constant term for speed:
         # + log(GaussianNoise_sigma * sqrt(2 * M_PI));
         return '''
             double ''' + fname + '''(const optimize_data* const data, mot_float_type* const x){
@@ -351,7 +352,7 @@ class RicianEvaluationModel(EvaluationModel):
             (Bessel(),))
 
     def get_objective_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
-        # omitted the constant terms for speed
+        # omitted the constant terms for speed:
         # + log(observation / (RicianNoise_sigma * RicianNoise_sigma))
         # - ((observation * observation) / (2 * (RicianNoise_sigma * RicianNoise_sigma)))
         return '''

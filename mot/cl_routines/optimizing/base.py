@@ -1,12 +1,10 @@
 import logging
-
 import numpy as np
 import pyopencl as cl
-from mot.cl_functions import RanluxCL
 from mot.cl_routines.mapping.error_measures import ErrorMeasures
 from mot.cl_routines.mapping.residual_calculator import ResidualCalculator
 from ...utils import results_to_dict, ParameterCLCodeGenerator, \
-    get_float_type_def, initialize_ranlux
+    get_float_type_def, initialize_ranlux, get_ranlux_cl
 from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
 from ...cl_routines.mapping.final_parameters_transformer import FinalParametersTransformer
@@ -139,7 +137,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         self._logger.info('Finished optimization preliminaries')
         self._logger.info('Starting optimization')
 
-        workers = self._create_workers(self._get_worker_generator(self, model, starting_points, full_output,
+        workers = self._create_workers(self._get_worker_generator(self, model, starting_points,
                                                                   var_data_dict, protocol_data_dict, model_data_dict,
                                                                   nmr_params, return_codes,
                                                                   self._optimizer_options))
@@ -182,7 +180,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
 
 class AbstractParallelOptimizerWorker(Worker):
 
-    def __init__(self, cl_environment, parent_optimizer, model, starting_points, full_output,
+    def __init__(self, cl_environment, parent_optimizer, model, starting_points,
                  var_data_dict, protocol_data_dict, model_data_dict, nmr_params, return_codes,
                  optimizer_options=None):
         super(AbstractParallelOptimizerWorker, self).__init__(cl_environment)
@@ -311,32 +309,23 @@ class AbstractParallelOptimizerWorker(Worker):
         return kernel_source
 
     def _get_optimizer_cl_code(self):
-        """Get the cl code for the implemented CL optimization routine.
+        """Get the optimization CL code that is called during optimization for each voxel.
 
-        This is used by the default implementation of _get_kernel_source(). This function should return the
-        CL code that is called during optimization for each voxel.
+        This is normally called by the default implementation of _get_kernel_source().
 
         By default this creates a CL function named 'evaluation' that can be called by the optimization routine.
         This default function takes into account the use of the parameter codec and calls the objective function
         of the model to actually evaluate the model.
 
-        Args:
-            data_state (OptimizeDataStateObject): The internal data state object
-
         Returns:
             str: The kernel source for the optimization routine.
         """
-        optimizer_func = self._get_optimization_function()
         kernel_source = self._get_evaluate_function()
 
         if self._uses_random_numbers():
-            rand_func = RanluxCL()
-            kernel_source += '#define RANLUXCL_LUX 4' + "\n"
-            kernel_source += rand_func.get_cl_header()
-            kernel_source += rand_func.get_cl_code()
+            kernel_source += get_ranlux_cl(ranluxcl_lux=4)
 
-        kernel_source += optimizer_func.get_cl_header()
-        kernel_source += optimizer_func.get_cl_code()
+        kernel_source += self._get_optimization_function()
         return kernel_source
 
     def _get_evaluate_function(self):
@@ -369,13 +358,12 @@ class AbstractParallelOptimizerWorker(Worker):
         return kernel_source
 
     def _get_optimization_function(self):
-        """Return the optimization CLFunction object used by the implementing optimizer.
+        """Return the optimization function as a CL string for the implementing optimizer.
 
         This is a convenience function to avoid boilerplate in implementing _get_optimizer_cl_code().
 
         Returns:
-            CLFunction: The optimization routine function that can provide the cl code for the actual
-                optimization routine.
+            str: The optimization routine function
         """
 
     def _get_optimizer_call_name(self):

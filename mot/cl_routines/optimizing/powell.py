@@ -1,4 +1,5 @@
-from ...cl_functions import PowellFunc
+import os
+from pkg_resources import resource_filename
 from .base import AbstractParallelOptimizer, AbstractParallelOptimizerWorker
 
 __author__ = 'Robbert Harms'
@@ -20,10 +21,8 @@ class Powell(AbstractParallelOptimizer):
             patience (int):
                 Used to set the maximum number of iterations to patience*(number_of_parameters+1)
             optimizer_options (dict): the optimization settings, you can use the following:
-                - bracket_gold (double): the default ratio by which successive intervals are magnified in Bracketing
-                - glimit (double): the maximum magnification allowed for a parabolic-fit step in Bracketing
-
-                For the defaults please see PowellFunc.
+                bracket_gold (double): the default ratio by which successive intervals are magnified in Bracketing
+                glimit (double): the maximum magnification allowed for a parabolic-fit step in Bracketing
         """
         patience = patience or self.default_patience
         super(Powell, self).__init__(cl_environments, load_balancer, use_param_codec, patience=patience,
@@ -36,8 +35,18 @@ class Powell(AbstractParallelOptimizer):
 class PowellWorker(AbstractParallelOptimizerWorker):
 
     def _get_optimization_function(self):
-        return PowellFunc(self._nmr_params, patience=self._parent_optimizer.patience,
-                          optimizer_options=self._optimizer_options)
+        params = {'NMR_PARAMS': self._nmr_params, 'PATIENCE': self._parent_optimizer.patience}
+
+        optimizer_options = self._optimizer_options or {}
+        option_defaults = {'bracket_gold': 1.618034, 'glimit': 100.0}
+
+        for option, default in option_defaults.items():
+            params.update({option.upper(): optimizer_options.get(option, default)})
+
+        body = open(os.path.abspath(resource_filename('mot', 'data/opencl/powell.pcl')), 'r').read()
+        if params:
+            body = body % params
+        return body
 
     def _get_optimizer_call_name(self):
         return 'powell'

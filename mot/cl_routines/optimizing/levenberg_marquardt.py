@@ -1,7 +1,7 @@
+import os
+from pkg_resources import resource_filename
 import pyopencl as cl
-
 from mot.utils import ParameterCLCodeGenerator, get_float_type_def
-from ...cl_functions import LMMin
 from .base import AbstractParallelOptimizer, AbstractParallelOptimizerWorker
 
 __author__ = 'Robbert Harms'
@@ -139,9 +139,24 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
         return kernel_source
 
     def _get_optimization_function(self):
-        return LMMin(self._nmr_params, self._model.get_nmr_inst_per_problem(),
-                     patience=self._parent_optimizer.patience,
-                     optimizer_options=self._optimizer_options)
+        params = {'NMR_PARAMS': self._nmr_params,
+                  'PATIENCE': self._parent_optimizer.patience,
+                  'NMR_INST_PER_PROBLEM': self._model.get_nmr_inst_per_problem()}
+
+        optimizer_options = self._optimizer_options or {}
+        option_defaults = {'step_bound': 100.0, 'scale_diag': 1}
+        option_converters = {'scale_diag': lambda val: int(bool(val))}
+
+        for option, default in option_defaults.items():
+            v = optimizer_options.get(option, default)
+            if option in option_converters:
+                v = option_converters[option](v)
+            params.update({option.upper(): v})
+
+        body = open(os.path.abspath(resource_filename('mot', 'data/opencl/lmmin.pcl')), 'r').read()
+        if params:
+            body = body % params
+        return body
 
     def _get_optimizer_call_name(self):
         return 'lmmin'

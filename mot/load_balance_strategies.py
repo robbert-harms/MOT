@@ -175,11 +175,10 @@ class LoadBalanceStrategy(object):
 class Worker(object):
 
     def __init__(self, cl_environment):
-        """Create a new worker object. This is meant to be subclassed by the user.
+        """Create a new worker.
 
-        The idea is that the workload strategy can use this object to calculate the data, in a way it seems
-        fit for the strategy. During determining the strategy, all items computed should be stored
-        internally by the worker.
+        Workload strategies use workers to perform the calculations, in a distributed way determined by the strategy.
+        All computed results should be stored internally by the worker.
 
         Args:
             cl_environment (CLEnvironment): The cl environment, can be used to determine the load

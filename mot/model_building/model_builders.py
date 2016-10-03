@@ -1,7 +1,8 @@
 import numpy as np
-from mot.data_adapters  import SimpleDataAdapter
-from mot.base import ProtocolParameter, ModelDataParameter, FreeParameter, CLDataType, StaticMapParameter, \
-    CurrentObservationParam
+from mot.data_adapters import SimpleDataAdapter
+from mot.cl_data_type import CLDataType
+from mot.model_building.cl_functions.parameters import CurrentObservationParam, StaticMapParameter, ProtocolParameter, \
+    ModelDataParameter, FreeParameter
 from mot.cl_routines.mapping.calc_dependent_params import CalculateDependentParameters
 from mot.utils import TopologicalSort, is_scalar
 from mot.model_building.parameter_functions.codecs import CodecBuilder

@@ -1,6 +1,5 @@
 import re
-
-from mot.base import CLDataType
+from mot.cl_data_type import CLDataType
 from mot.parsers.cl.CLDataType import CLDataTypeParser, CLDataTypeSemantics
 
 

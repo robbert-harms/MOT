@@ -1,11 +1,9 @@
 import pyopencl as cl
 import numpy as np
-
 from mot.cl_routines.mapping.error_measures import ErrorMeasures
 from mot.cl_routines.mapping.residual_calculator import ResidualCalculator
-from ...cl_functions import RanluxCL
 from ...utils import results_to_dict, \
-    ParameterCLCodeGenerator, initialize_ranlux, get_float_type_def
+    ParameterCLCodeGenerator, initialize_ranlux, get_float_type_def, get_ranlux_cl
 from ...load_balance_strategies import Worker
 from ...cl_routines.sampling.base import AbstractSampler
 
@@ -186,8 +184,6 @@ class _MHWorker(Worker):
                               'global ranluxcl_state_t* ranluxcltab']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
-        rng_code = RanluxCL()
-
         nrm_adaptable_proposal_parameters = len(self._model.get_proposal_parameter_values())
         adaptable_proposal_parameters_str = '{' + ', '.join(map(str, self._model.get_proposal_parameter_values())) + '}'
         acceptance_counters_between_proposal_updates = '{' + ', '.join('0' * self._nmr_params) + '}'
@@ -195,8 +191,7 @@ class _MHWorker(Worker):
         kernel_source = '''
             #define NMR_INST_PER_PROBLEM ''' + str(self._model.get_nmr_inst_per_problem()) + '''
         '''
-        kernel_source += rng_code.get_cl_header()
-        kernel_source += rng_code.get_cl_code()
+        kernel_source += get_ranlux_cl()
         kernel_source += get_float_type_def(self._model.double_precision)
         kernel_source += param_code_gen.get_data_struct()
         kernel_source += self._model.get_log_prior_function('getLogPrior')
@@ -351,5 +346,4 @@ class _MHWorker(Worker):
                     ranluxcl_upload_seed(&ranluxclstate, ranluxcltab);
             }
         '''
-        kernel_source += rng_code.get_cl_code()
         return kernel_source
