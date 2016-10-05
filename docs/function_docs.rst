@@ -1,11 +1,10 @@
 Function documentation
 ======================
 
-Function index
---------------
-:ref:`genindex`
+For an overview of all the functions, classes and modules in MDT, please see the:
 
+* :ref:`Function index <genindex>`
 
-Modules index
--------------
-:ref:`modindex`
+For an overview of the modules, please see the:
+
+* :ref:`Module index <modindex>`

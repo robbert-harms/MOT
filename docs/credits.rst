@@ -2,12 +2,11 @@
 Credits
 =======
 
-Development Lead
-----------------
+The Maastricht Optimization Toolbox is development as partial requirements of a Phd. by Robbert Harms,
+under the (Phd) supervision of Alard Roebroeck, at Maastricht University.
 
-* Robbert Harms <robbert.harms@maastrichtuniversity.nl>
 
 Contributors
 ------------
 
-None yet.
+* Robbert Harms

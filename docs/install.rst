@@ -4,10 +4,12 @@ Installation
 
 The installation is a three step procedure:
 
-1. Installing a Python interpreter
-2. Installing the PyOpenCL drivers and Python bindings
-3. Install MOT
+1. Installing a :ref:`Python interpreter <install_python>`
+2. Installing the :ref:`PyOpenCL drivers and Python bindings <install_opencl>`
+3. :ref:`Install MOT <install_mot>`
 
+
+.. _install_python:
 
 Installing Python
 ^^^^^^^^^^^^^^^^^
@@ -15,13 +17,18 @@ Since it is a Python package we need to install the Python interpreter. Consider
 
 Linux (Ubuntu)
 """"""""""""""
-``apt-get install python3 python3-pip``
+
+.. code-block:: bash
+
+    $ apt-get install python3 python3-pip
 
 
 Windows
 """""""
 The easiest way is with Anaconda. Install the Python3.x bindings from `Anaconda <https://www.continuum.io/downloads>`_.
 
+
+.. _install_opencl:
 
 Installing OpenCL bindings
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -31,7 +38,9 @@ Linux (Ubuntu)
 """"""""""""""
 On Ubuntu, the easiest way to install all of this:
 
-``apt-get install python3-pyopencl``
+.. code-block:: bash
+
+    $ apt-get install python3-pyopencl
 
 
 Windows
@@ -39,17 +48,24 @@ Windows
 On Windows, make sure you install the correct OpenCL driver (Intel/AMD/NVidia). For graphics cards the drivers are normally already installed. After that, Anaconda should automatically install the Python bindings.
 
 
+.. _install_mot:
+
 Installing MOT
 ^^^^^^^^^^^^^^
 With OpenCL and Python installed you can now install MOT.
 
 Linux (Ubuntu)
 """"""""""""""
-``pip3 install MOT``
+
+.. code-block:: bash
+
+    $ pip3 install MOT
 
 
 Windows
 """""""
 Open an Anaconda shell and use:
 
-``pip install MOT``
+.. code-block:: bash
+
+    > pip install MOT

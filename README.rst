@@ -13,6 +13,7 @@ A library for parallel optimization and sampling in python and opencl.
 * Uses the `GitLab workflow <https://docs.gitlab.com/ee/workflow/gitlab_flow.html>`_
 * Tags: optimization, parallel, opencl, python
 
+|
 
 Quick installation guide:
 
