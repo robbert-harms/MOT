@@ -13,10 +13,10 @@ Subpackages
 Submodules
 ----------
 
-mot.base module
----------------
+mot.cl_data_type module
+-----------------------
 
-.. automodule:: mot.base
+.. automodule:: mot.cl_data_type
     :members:
     :undoc-members:
     :show-inheritance:
@@ -25,14 +25,6 @@ mot.cl_environments module
 --------------------------
 
 .. automodule:: mot.cl_environments
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-mot.cl_functions module
------------------------
-
-.. automodule:: mot.cl_functions
     :members:
     :undoc-members:
     :show-inheritance:
@@ -69,18 +61,10 @@ mot.load_balance_strategies module
     :undoc-members:
     :show-inheritance:
 
-mot.models module
------------------
+mot.model_interfaces module
+---------------------------
 
-.. automodule:: mot.models
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-mot.trees module
-----------------
-
-.. automodule:: mot.trees
+.. automodule:: mot.model_interfaces
     :members:
     :undoc-members:
     :show-inheritance:

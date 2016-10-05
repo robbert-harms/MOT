@@ -1,8 +1,8 @@
 import numpy as np
 
-from mot.data_adapters  import SimpleDataAdapter
-from mot.base import CLDataType
-from mot.models import OptimizeModelInterface
+from mot.cl_data_type import CLDataType
+from mot.data_adapters import SimpleDataAdapter
+from mot.model_interfaces import OptimizeModelInterface
 
 __author__ = 'Robbert Harms'
 __date__ = "2015-04-02"

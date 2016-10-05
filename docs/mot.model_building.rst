@@ -6,6 +6,7 @@ Subpackages
 
 .. toctree::
 
+    mot.model_building.cl_functions
     mot.model_building.parameter_functions
 
 Submodules
@@ -35,10 +36,26 @@ mot.model_building.models_examples module
     :undoc-members:
     :show-inheritance:
 
+mot.model_building.problem_data module
+--------------------------------------
+
+.. automodule:: mot.model_building.problem_data
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 mot.model_building.signal_noise_models module
 ---------------------------------------------
 
 .. automodule:: mot.model_building.signal_noise_models
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+mot.model_building.trees module
+-------------------------------
+
+.. automodule:: mot.model_building.trees
     :members:
     :undoc-members:
     :show-inheritance:

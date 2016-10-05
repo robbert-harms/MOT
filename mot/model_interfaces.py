@@ -32,8 +32,9 @@ class OptimizeModelInterface(object):
         """Get a dict with all the data per problem.
 
         As an example, suppose per problem instance we have the data named 'observations'.
-        We should then return something like:
-            {'observations': SimpleDataAdapter(ndarray((<nmr_problems>, <number of items>)), ...)}
+        We should then return something like::
+
+            {'observations': SimpleDataAdapter(ndarray((<nmr_problems>, <number of items>)), ...), ...}
 
         Returns:
             dict: A dictionary where each element holds a SimpleDataAdapter from which to get the data

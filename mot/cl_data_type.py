@@ -13,15 +13,17 @@ class CLDataType(object):
                  address_space_qualifier=None, pre_data_type_type_qualifiers=None, post_data_type_type_qualifier=None):
         """Create a new CL data type container.
 
-        The CL type can either be a CL native type (half, double, int, ...) or the special mot_float_type type.
+        The CL type can either be a CL native type (``half``, ``double``, ``int``, ...) or the
+        special ``mot_float_type`` type.
 
         Args:
             raw_data_type (str): the specific data type without the vector number and asterisks
-            is_pointer_type (boolean): If this parameter is a pointer type (appened by a *)
+            is_pointer_type (boolean): If this parameter is a pointer type (appended by a ``*``)
             vector_length (int or None): If None this data type is not a CL vector type.
                 If it is an integer it is the vector length of this data type (2, 3, 4, ...)
             address_space_qualifier (str or None): the address space qualifier or None if not used. One of:
-                {__local, local, __global, global, __constant, constant, __private, private} or None.
+                {``__local``, ``local``, ``__global``, ``global``,
+                ``__constant``, ``constant``, ``__private``, ``private``} or None.
             pre_data_type_type_qualifiers (list of str or None): the type qualifiers to use before the data type.
                 One of {const, restrict, volatile}
             post_data_type_type_qualifier (str or None): the type qualifier to use after the data type.
@@ -58,7 +60,7 @@ class CLDataType(object):
         """Parse the parameter declaration into a CLDataType
 
         Args:
-            parameter_declaration (str): the CL parameter declaration. Example: global const float4* const
+            parameter_declaration (str): the CL parameter declaration. Example: ``global const float4*`` const
 
         Returns:
             CLDataType: the CL data type for this parameter declaration
@@ -70,7 +72,7 @@ class CLDataType(object):
     def cl_type(self):
         """Get the type of this parameter in CL language
 
-        This only returns the parameter type (like 'double' or 'int*' or 'float4*' ...). It does not include other
+        This only returns the parameter type (like ``double`` or ``int*`` or ``float4*`` ...). It does not include other
         qualifiers.
 
         Returns:
@@ -108,7 +110,7 @@ class CLDataType(object):
         """Set if this parameter should be treated a being a pointer type
 
         Args:
-            is_pointer_type (boolean): If this parameter is a pointer type (appened by a *)
+            is_pointer_type (boolean): If this parameter is a pointer type (appened by a ``*``)
         """
         self.is_pointer_type = is_pointer_type
 

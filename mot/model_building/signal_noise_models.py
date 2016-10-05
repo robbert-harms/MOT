@@ -1,7 +1,7 @@
 from mot.model_building.cl_functions.parameters import FreeParameter
 from mot.model_building.cl_functions.base import ModelFunction
 from mot.model_building.parameter_functions.transformations import CosSqrClampTransform
-from mot.base import CLDataType
+from mot.cl_data_type import CLDataType
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-08-05"
