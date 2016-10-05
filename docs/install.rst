@@ -68,4 +68,4 @@ Open an Anaconda shell and use:
 
 .. code-block:: bash
 
-    > pip install MOT
+    $ pip install MOT
