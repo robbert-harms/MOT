@@ -124,7 +124,8 @@ html_theme_options = {
     'description': "GPU accelerated optimization",
     'logo_name': True,
     'sidebar_collapse': False,
-    'fixed_sidebar': True
+    'fixed_sidebar': True,
+    'extra_nav_links': {'Module index': 'py-modindex.html'}
 }
 
 

@@ -30,8 +30,8 @@ The easiest way is with Anaconda. Install the Python3.x bindings from `Anaconda 
 
 .. _install_opencl:
 
-Installing OpenCL bindings
-^^^^^^^^^^^^^^^^^^^^^^^^^^
+Installing OpenCL
+^^^^^^^^^^^^^^^^^
 For OpenCL you need two things, an OpenCL driver for your platform and the Python OpenCL bindings.
 
 Linux (Ubuntu)
