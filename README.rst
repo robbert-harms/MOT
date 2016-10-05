@@ -16,14 +16,12 @@ A library for parallel optimization and sampling in python and opencl.
 
 Quick installation guide:
 
-Linux (Ubuntu)
---------------
+*Linux (Ubuntu)*
 ``apt-get install python3 python3-pip python3-pyopencl``
 ``pip3 install MOT``
 
 
-Windows
--------
+*Windows*
 * Install Anaconda from https://www.continuum.io/downloads
 * Install PyOpenCL
 * Open a Anaconda shell and type: ``pip install MOT``
