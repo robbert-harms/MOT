@@ -62,7 +62,7 @@ class SimulatedAnnealingWorker(AbstractParallelOptimizerWorker):
 
         kernel_source += self._model.get_log_prior_function('getLogPrior')
         kernel_source += self._model.get_proposal_function('getProposal')
-        kernel_source += self._model.get_proposal_parameters_update_function('updateProposalParameters')
+        kernel_source += self._model.get_proposal_state_update_function('updateProposalState')
 
         if not self._model.is_proposal_symmetric():
             kernel_source += self._model.get_proposal_logpdf('getProposalLogPDF')
@@ -76,23 +76,23 @@ class SimulatedAnnealingWorker(AbstractParallelOptimizerWorker):
         return 'simulated_annealing'
 
     def _get_sampling_code(self):
-        nrm_adaptable_proposal_parameters = len(self._model.get_proposal_parameter_values())
-        adaptable_proposal_parameters_str = '{' + ', '.join(map(str, self._model.get_proposal_parameter_values())) + '}'
+        proposal_state_size = len(self._model.get_proposal_state())
+        proposal_state = '{' + ', '.join(map(str, self._model.get_proposal_state())) + '}'
         acceptance_counters_between_proposal_updates = '{' + ', '.join('0' * self._nmr_params) + '}'
 
         kernel_source = self._annealing_schedule.get_temperature_update_cl_function()
         kernel_source += '''
-            void _update_proposals(mot_float_type* const proposal_parameters, uint* const ac_between_proposal_updates,
+            void _update_proposals(mot_float_type* const proposal_state, uint* const ac_between_proposal_updates,
                                    uint* const proposal_update_count){
 
                 *proposal_update_count += 1;
 
                 if(*proposal_update_count == ''' + str(self.proposal_update_intervals) + '''){
-                    updateProposalParameters(ac_between_proposal_updates,
-                                             ''' + str(self.proposal_update_intervals) + ''',
-                                             proposal_parameters);
+                    updateProposalState(ac_between_proposal_updates,
+                                        ''' + str(self.proposal_update_intervals) + ''',
+                                        proposal_state);
 
-                    for(int i = 0; i < ''' + str(nrm_adaptable_proposal_parameters) + '''; i++){
+                    for(int i = 0; i < ''' + str(proposal_state_size) + '''; i++){
                         ac_between_proposal_updates[i] = 0;
                     }
 
@@ -105,7 +105,7 @@ class SimulatedAnnealingWorker(AbstractParallelOptimizerWorker):
                                double* const current_likelihood,
                                mot_float_type* const current_prior,
                                const optimize_data* const data,
-                               mot_float_type* const proposal_parameters,
+                               mot_float_type* const proposal_state,
                                uint* const ac_between_proposal_updates,
                                mot_float_type* temperature){
 
@@ -118,7 +118,7 @@ class SimulatedAnnealingWorker(AbstractParallelOptimizerWorker):
                 for(int k = 0; k < ''' + str(self._nmr_params) + '''; k++){
 
                     old_x = x[k];
-                    x[k] = getProposal(k, x[k], (ranluxcl_state_t*)rand_settings, proposal_parameters);
+                    x[k] = getProposal(k, x[k], (ranluxcl_state_t*)rand_settings, proposal_state);
 
                     new_prior = getLogPrior(x);
 
@@ -132,8 +132,8 @@ class SimulatedAnnealingWorker(AbstractParallelOptimizerWorker):
                 '''
         else:
             kernel_source += '''
-                        mot_float_type x_to_prop = getProposalLogPDF(k, old_x, x[k], proposal_parameters);
-                        mot_float_type prop_to_x = getProposalLogPDF(k, x[k], x[k], proposal_parameters);
+                        mot_float_type x_to_prop = getProposalLogPDF(k, old_x, x[k], proposal_state);
+                        mot_float_type prop_to_x = getProposalLogPDF(k, x[k], x[k], proposal_state);
 
                         bayesian_f = exp(((new_likelihood + new_prior + x_to_prop) -
                                           (*current_likelihood + *current_prior + prop_to_x)) / *temperature);
@@ -159,7 +159,7 @@ class SimulatedAnnealingWorker(AbstractParallelOptimizerWorker):
             int simulated_annealing(mot_float_type* const x, const void* const data, void* rand_settings){
                 uint proposal_update_count = 0;
 
-                mot_float_type proposal_parameters[] = ''' + adaptable_proposal_parameters_str + ''';
+                mot_float_type proposal_state[] = ''' + proposal_state + ''';
                 uint ac_between_proposal_updates[] = ''' + acceptance_counters_between_proposal_updates + ''';
 
                 double current_likelihood = getLogLikelihood((optimize_data*)data, x);
@@ -175,7 +175,7 @@ class SimulatedAnnealingWorker(AbstractParallelOptimizerWorker):
                 mot_float_type initial_temp;
                 its_get_initial_temperature(&temperature, &min_temp, &initial_temp,
                                             x, rand_settings, &current_likelihood, &current_prior,
-                                            data, proposal_parameters, ac_between_proposal_updates,
+                                            data, proposal_state, ac_between_proposal_updates,
                                             &proposal_update_count);
 
                 for(uint step = 0; step < ''' + str(self.patience * (self._nmr_params + 1)) + '''; step++){
@@ -187,8 +187,8 @@ class SimulatedAnnealingWorker(AbstractParallelOptimizerWorker):
                     }
 
                     _update_state(x, rand_settings, &current_likelihood, &current_prior,
-                                  data, proposal_parameters, ac_between_proposal_updates, &temperature);
-                    _update_proposals(proposal_parameters, ac_between_proposal_updates, &proposal_update_count);
+                                  data, proposal_state, ac_between_proposal_updates, &temperature);
+                    _update_proposals(proposal_state, ac_between_proposal_updates, &proposal_update_count);
                 }
 
                 return 1;
@@ -231,7 +231,7 @@ class SimpleInitialTemperatureStrategy(InitialTemperatureStrategy):
                     double* const current_likelihood,
                     mot_float_type* const current_prior,
                     const optimize_data* const data,
-                    mot_float_type* const proposal_parameters,
+                    mot_float_type* const proposal_state,
                     uint* const ac_between_proposal_updates,
                     uint* const proposal_update_count){
 
@@ -255,11 +255,18 @@ class AnnealingSchedule(object):
 
         This must return a CL string with a function with the following signature
         (where the prefix 'as' stands for Annealing Schedule):
+
+        .. code-block:: c
+
             void as_update_temperature(mot_float_type* temperature, const mot_float_type min_temp,
                                        const mot_float_type initial_temp, const uint step, const uint nmr_steps);
 
-        Here temperature is the value to control, min_temp is the minimum temperature allowed, initial_temp was
-        the initial temperature, step is the current step and nmr_steps is the maximum number of steps.
+        Here ``temperature`` is the value to control, ``min_temp`` is the minimum temperature allowed,
+        ``initial_temp`` was the initial temperature, ``step`` is the current step and ``nmr_steps``
+        is the maximum number of steps.
+
+        Returns:
+            str: the temperature update function
         """
 
 
@@ -268,10 +275,13 @@ class ExponentialCoolingSchedule(AnnealingSchedule):
     def __init__(self, damping_factor=0.95, **kwargs):
         """A simple exponential cooling schedule.
 
-        The temperature T at time k+1 is given by:
+        The temperature ``T`` at time ``k+1`` is given by:
+
+        .. code-block:: c
+
             T_k+1 = a * T_k
 
-        Where 0<a<1 is the damping factor.
+        Where ``0 < a < 1`` is the damping factor.
         """
         self.damping_factor = damping_factor
         super(ExponentialCoolingSchedule, self).__init__(**kwargs)

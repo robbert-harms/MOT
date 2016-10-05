@@ -63,7 +63,7 @@ class CLDataType(object):
             parameter_declaration (str): the CL parameter declaration. Example: ``global const float4*`` const
 
         Returns:
-            CLDataType: the CL data type for this parameter declaration
+            mot.cl_data_type.CLDataType: the CL data type for this parameter declaration
         """
         from mot.parsers.cl.CLDataTypeParser import parse
         return parse(parameter_declaration)

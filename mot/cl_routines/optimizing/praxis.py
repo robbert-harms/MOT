@@ -20,20 +20,23 @@ class PrAxis(AbstractParallelOptimizer):
 
         This uses the Principal Axis implementation from NLOpt, slightly adapted for use in MOT.
 
+        Possible optimizer options:
+
+        - tolerance (float): default 0.0, praxis attempts to return praxis=f(x) such that if x0 is the
+            true local minimum near x, then norm(x-x0) < t0 + squareroot(machep)*norm(x)
+        - max_step_size (float):  default 1: Originally parameter H0. It is the maximum step size and
+            should be set to about the max. distance from the initial guess to the minimum.
+            If set too small or too large, the initial rate of convergence may be slow.
+        - ill_conditioned (bool): if the problem is known to be ill-conditioned set it to 1 else, set to 0.
+        - scbd (float): if the axes may be badly scaled (which is to be avoided if possible), then set SCBD=10.
+            otherwise set SCBD=1.
+        - ktm (int): KTM is the number of iterations without improvement before the algorithm terminates.
+            KTM=4 is very cautious; usually KTM=1 is satisfactory.
+
         Args:
             patience (int):
                 Used to set the maximum number of iterations to patience*(number_of_parameters+1)
-            optimizer_options (dict): the optimization settings:
-                tolerance (float): default 0.0, praxis attempts to return praxis=f(x) such that if x0 is the
-                    true local minimum near x, then norm(x-x0) < t0 + squareroot(machep)*norm(x)
-                max_step_size (float):  default 1: Originally parameter H0. It is the maximum step size and
-                    should be set to about the max. distance from the initial guess to the minimum.
-                    If set too small or too large, the initial rate of convergence may be slow.
-                ill_conditioned (bool): if the problem is known to be ill-conditioned set it to 1 else, set to 0.
-                scbd (float): if the axes may be badly scaled (which is to be avoided if possible), then set SCBD=10.
-                    otherwise set SCBD=1.
-                ktm (int): KTM is the number of iterations without improvement before the algorithm terminates.
-                    KTM=4 is very cautious; usually KTM=1 is satisfactory.
+            optimizer_options (dict): the optimization settings.
         """
         patience = patience or self.default_patience
         super(PrAxis, self).__init__(cl_environments, load_balancer, use_param_codec, patience=patience,

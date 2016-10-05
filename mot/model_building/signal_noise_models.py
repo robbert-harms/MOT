@@ -27,10 +27,16 @@ class SignalNoiseModel(ModelFunction):
             fname (str, optional): The function name of the function in OpenCL.
 
         Returns:
-            A function with signature:
+            str: A function with signature:
+
+            .. code-block:: c
+
                 mot_float_type fname(const mot_float_type signal, <noise model parameters ...>);
 
             For example, if the noise model has only one parameter 'sigma' the function should look like:
+
+            .. code-block:: c
+
                 mot_float_type fname(const mot_float_type signal, const mot_float_type sigma);
 
             The CL function should return a single mot_float_type that represents the signal with the signal noise
@@ -41,7 +47,13 @@ class SignalNoiseModel(ModelFunction):
 class JohnsonSignalNoise(SignalNoiseModel):
 
     def __init__(self):
-        """Johnson noise adds noise to the signal using the formula: sqrt(signal^2 + eta^2)"""
+        """Johnson noise adds noise to the signal using the formula:
+
+        .. code-block:: c
+
+            sqrt(signal^2 + eta^2)
+
+        """
         super(JohnsonSignalNoise, self).__init__(
             'JohnsonNoise',
             'johnsonNoiseModel',

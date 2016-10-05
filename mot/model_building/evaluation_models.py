@@ -15,7 +15,10 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 class EvaluationModel(ModelFunction):
 
     def __init__(self, name, cl_function_name, parameter_list, dependency_list=()):
-        """The evaluation model is the model under which you evaluate the estimated results against the data."""
+        """The evaluation model is the model under which you evaluate the estimated results against the data.
+
+        This normally embed the noise model assumptions of your data.
+        """
         super(EvaluationModel, self).__init__(name, cl_function_name, parameter_list, dependency_list=dependency_list)
 
     def get_objective_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
@@ -25,14 +28,26 @@ class EvaluationModel(ModelFunction):
             fname (str): the name of the resulting function
             inst_per_problem (int): the number of instances per problem
             eval_fname (str): the name of the function that can be called to get the evaluation, its signature is:
-                mot_float_type <fname>(const optimize_data* data, const mot_float_type* x, const int observation_index);
+
+                .. code-block:: c
+
+                    mot_float_type <fname>(const optimize_data* data, const mot_float_type* x,
+                                           const int observation_index);
+
             obs_fname (str): the name of the function that can be called for the observed data, its signature is:
-                mot_float_type <fname>(const optimize_data* data, const int observation_index);
+
+                .. code-block:: c
+
+                    mot_float_type <fname>(const optimize_data* data, const int observation_index);
+
             param_listing (str): the parameter listings for the parameters of the noise model
 
         Returns:
-            The objective function under this noise model, its signature is:
-                double <fname>(const optimize_data* const data, mot_float_type* const x);
+            str: The objective function under this noise model, its signature is:
+
+                .. code-block:: c
+
+                    double <fname>(const optimize_data* const data, mot_float_type* const x);
 
             That is, it always returns a double since the summations may get large.
         """
@@ -50,14 +65,26 @@ class EvaluationModel(ModelFunction):
             fname (str): the name of the resulting function
             inst_per_problem (int): the number of instances per problem
             eval_fname (str): the name of the function that can be called to get the evaluation, its signature is:
-                mot_float_type <fname>(const optimize_data* data, const mot_float_type* x, const int observation_index);
+
+                .. code-block:: c
+
+                    mot_float_type <fname>(const optimize_data* data, const mot_float_type* x,
+                                           const int observation_index);
+
             obs_fname (str): the name of the function that can be called for the observed data, its signature is:
-                mot_float_type <fname>(const optimize_data* data, const int observation_index);
+
+                .. code-block:: c
+
+                    mot_float_type <fname>(const optimize_data* data, const int observation_index);
+
             param_listing (str): the parameter listings for the parameters of the noise model
 
         Returns:
-            The objective function under this noise model, its signature is:
-                void (const optimize_data* const data, mot_float_type* const x, mot_float_type* result);
+            str: The objective function under this noise model, its signature is:
+
+                .. code-block:: c
+
+                    void (const optimize_data* const data, mot_float_type* const x, mot_float_type* result);
         """
 
     def get_log_likelihood_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing,
@@ -68,16 +95,28 @@ class EvaluationModel(ModelFunction):
             fname (str): the name of the resulting function
             inst_per_problem (int): the number of instances per problem
             eval_fname (str): the name of the function that can be called to get the evaluation, its signature is:
-                mot_float_type <fname>(const optimize_data* data, const mot_float_type* x, const int observation_index);
+
+                .. code-block:: c
+
+                    mot_float_type <fname>(const optimize_data* data, const mot_float_type* x,
+                                           const int observation_index);
+
             obs_fname (str): the name of the function that can be called for the observed data, its signature is:
-                mot_float_type <fname>(const optimize_data* data, const int observation_index);
+
+                .. code-block:: c
+
+                    mot_float_type <fname>(const optimize_data* data, const int observation_index);
+
             param_listing (str): the parameter listings for the parameters of the noise model
             full_likelihood (boolean): if we want the complete likelihood, or if we can drop the constant terms.
                 The default is the complete likelihood. Disable for speed.
 
         Returns:
-            the objective function under this noise model, its signature is:
-                double <fname>(const optimize_data* const data, mot_float_type* const x);
+            str: the objective function under this noise model, its signature is:
+
+                .. code-block:: c
+
+                    double <fname>(const optimize_data* const data, mot_float_type* const x);
 
             That is, it always returns a double since the summations may get large.
         """
@@ -113,8 +152,9 @@ class SumOfSquares(EvaluationModel):
     def __init__(self):
         """Evaluates the distance between the estimated signal and the data using the sum of squared distance.
 
-        This is implemented as:
-        sum((observation - evaluation)^2)
+        This is implemented as::
+
+            sum((observation - evaluation)^2)
         """
         super(EvaluationModel, self).__init__('SumOfSquaresNoise', 'sumOfSquaresNoise', (), ())
 
@@ -161,22 +201,35 @@ class GaussianEvaluationModel(EvaluationModel):
 
         The PDF is defined as:
 
+        .. code-block:: c
+
             PDF = 1/(sigma * sqrt(2*pi)) * exp(-(observation - evaluation)^2 / (2 * sigma^2))
 
-        To have the joined probability over all instances one would have to take the product over all n instances:
+        To have the joined probability over all instances one would normally have to take the product
+        over all ``n`` instances:
 
-            prod_n(PDF)
+        .. code-block:: c
+
+            product(PDF)
 
         Instead of taking the product of this PDF we take the sum of the log of the PDF:
 
-            sum_n(log(PDF))
+        .. code-block:: c
+
+            sum(log(PDF))
 
         Where the log of the PDF is given by:
+
+        .. code-block:: c
 
             log(PDF) = - ((observation - evaluation)^2 / (2 * sigma^2)) - log(sigma * sqrt(2*pi))
 
 
-        For the maximum likelihood estimator we use the negative of this sum: -sum_n(log(PDF)).
+        For the maximum likelihood estimator we then need to use the negative of this sum:
+
+        .. code-block:: c
+
+            - sum(log(PDF)).
         """
         super(GaussianEvaluationModel, self).__init__(
             'GaussianNoise',
@@ -185,8 +238,15 @@ class GaussianEvaluationModel(EvaluationModel):
                            parameter_transform=ClampTransform()),), ())
 
     def get_objective_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
-        # omitted constant term for speed:
-        # + log(GaussianNoise_sigma * sqrt(2 * M_PI));
+        """Get the Gaussian objective function.
+
+        This omits the constant terms for speed reasons. Ommitted terms are:
+
+         .. code-block:: c
+
+            + log(GaussianNoise_sigma * sqrt(2 * M_PI))
+
+        """
         return '''
             double ''' + fname + '''(const optimize_data* const data, mot_float_type* const x){
                 ''' + param_listing + '''
@@ -239,25 +299,33 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
 
         The PDF is defined as:
 
+        .. code-block:: c
+
             PDF = 1/(sigma * sqrt(2*pi)) * exp(-(observation - sqrt(evaluation^2 + sigma^2))^2 / (2 * sigma^2))
 
         To have the joined probability over all instances one would have to take the product over all n instances:
 
-            prod_n(PDF)
+        .. code-block:: c
+
+            product(PDF)
 
         Instead of taking the product of this PDF we take the sum of the log of the PDF:
 
-            sum_n(log(PDF))
+        .. code-block:: c
+
+            sum(log(PDF))
 
         Where the log of the PDF is given by:
 
+        .. code-block:: c
+
             log(PDF) = - ((observation - sqrt(evaluation^2 + sigma^2))^2 / (2 * sigma^2)) - log(sigma * sqrt(2*pi))
 
+        For the maximum likelihood estimator we use the negative of this sum:
 
-        Please note that in the objective function method we omitted the constant terms
-        (+ log(OffsetGaussianNoise_sigma * sqrt(2 * M_PI))) for speed reasons.
+        .. code-block:: c
 
-        For the maximum likelihood estimator we use the negative of this sum: -sum_n(log(PDF)).
+            -sum_n(log(PDF)).
         """
         super(OffsetGaussianEvaluationModel, self).__init__(
             'OffsetGaussianNoise',
@@ -266,6 +334,14 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
                            parameter_transform=ClampTransform()),), ())
 
     def get_objective_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
+        """Get the Offset Gaussian objective function.
+
+        This omits the constant terms for speed reasons. Ommitted terms are:
+
+         .. code-block:: c
+
+            (+ log(OffsetGaussianNoise_sigma * sqrt(2 * M_PI)))
+        """
         return '''
             double ''' + fname + '''(const optimize_data* const data, mot_float_type* const x){
                 ''' + param_listing + '''
@@ -323,26 +399,38 @@ class RicianEvaluationModel(EvaluationModel):
 
         The PDF is defined as:
 
+        .. code-block:: c
+
             PDF = (observation/sigma^2)
                     * exp(-(observation^2 + evaluation^2) / (2 * sigma^2))
                     * bessel_i0((observation * evaluation) / sigma^2)
 
-        Where where bessel_i0(z) is the modified Bessel function of the first kind with order zero. To have the
+        Where where ``bessel_i0(z)`` is the modified Bessel function of the first kind with order zero. To have the
         joined probability over all instances one would have to take the product over all n instances:
 
-            prod_n(PDF)
+        .. code-block:: c
+
+            product(PDF)
 
         Instead of taking the product of this PDF over all instances we take the sum of the log of the PDF:
 
-            sum_n(log(PDF))
+        .. code-block:: c
+
+            sum(log(PDF))
 
         Where the log of the PDF is given by:
+
+        .. code-block:: c
 
             log(PDF) = log(observation/sigma^2)
                         - (observation^2 + evaluation^2) / (2 * sigma^2)
                         + log(bessel_i0((observation * evaluation) / sigma^2))
 
-        For the maximum likelihood estimator we use the negative of this sum: -sum_n(log(PDF)).
+        For the maximum likelihood estimator we use the negative of this sum:
+
+        .. code-block:: c
+
+            -sum(log(PDF)).
         """
         super(RicianEvaluationModel, self).__init__(
             'RicianNoise',
@@ -352,9 +440,16 @@ class RicianEvaluationModel(EvaluationModel):
             (Bessel(),))
 
     def get_objective_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
-        # omitted the constant terms for speed:
-        # + log(observation / (RicianNoise_sigma * RicianNoise_sigma))
-        # - ((observation * observation) / (2 * (RicianNoise_sigma * RicianNoise_sigma)))
+        """Get the Rician objective function.
+
+        This omits the constant terms for speed reasons. Ommitted terms are:
+
+         .. code-block:: c
+
+            + log(observation / (RicianNoise_sigma * RicianNoise_sigma))
+            - ((observation * observation) / (2 * (RicianNoise_sigma * RicianNoise_sigma)))
+
+        """
         return '''
             double ''' + fname + '''(const optimize_data* const data, mot_float_type* const x){
                 ''' + param_listing + '''

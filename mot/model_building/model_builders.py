@@ -1195,7 +1195,7 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         prior += "\n" + "\t" + 'return log(prior);' + "\n" + '}'
         return prior
 
-    def get_proposal_parameter_values(self):
+    def get_proposal_state(self):
         return_list = []
         for m, p in self._get_estimable_parameters_list():
             for param in p.sampling_proposal.get_parameters():
@@ -1213,7 +1213,7 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
 
         return_str += "\n" + 'mot_float_type ' + func_name + \
             '(const int i, const mot_float_type proposal, const mot_float_type current, ' \
-            ' mot_float_type* const proposal_parameters){' + "\n\t"
+            ' mot_float_type* const proposal_state){' + "\n\t"
 
         return_str += "\n\t" + 'switch(i){' + "\n\t\t"
 
@@ -1226,7 +1226,7 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
 
             for param in param_proposal.get_parameters():
                 if param.adaptable:
-                    logpdf_call += ', proposal_parameters[' + str(adaptable_parameter_count) + ']'
+                    logpdf_call += ', proposal_state[' + str(adaptable_parameter_count) + ']'
                     adaptable_parameter_count += 1
                 else:
                     logpdf_call += ', ' + str(param.default_value)
@@ -1245,7 +1245,7 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
 
         return_str += "\n" + 'mot_float_type ' + func_name + \
             '(const int i, const mot_float_type current, ranluxcl_state_t* const ranluxclstate, ' \
-            ' mot_float_type* const proposal_parameters){'
+            ' mot_float_type* const proposal_state){'
 
         return_str += "\n\t" + 'switch(i){' + "\n\t\t"
 
@@ -1258,7 +1258,7 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
 
             for param in param_proposal.get_parameters():
                 if param.adaptable:
-                    proposal_call += ', proposal_parameters[' + str(adaptable_parameter_count) + ']'
+                    proposal_call += ', proposal_state[' + str(adaptable_parameter_count) + ']'
                     adaptable_parameter_count += 1
                 else:
                     proposal_call += ', ' + str(param.default_value)
@@ -1270,7 +1270,7 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         return_str += '}'
         return return_str
 
-    def get_proposal_parameters_update_function(self, func_name='updateProposalParameters'):
+    def get_proposal_state_update_function(self, func_name='updateProposalParameters'):
         return_str = ''
         for _, p in self._get_estimable_parameters_list():
             for param in p.sampling_proposal.get_parameters():
@@ -1278,7 +1278,7 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
                     return_str += param.get_parameter_update_function()
 
         return_str += 'void ' + func_name + '(uint* const ac_between_proposal_updates, ' + \
-            'const uint proposal_update_intervals, mot_float_type* const proposal_parameters){' + "\n"
+            'const uint proposal_update_intervals, mot_float_type* const proposal_state){' + "\n"
 
         adaptable_parameter_count = 0
         for i, (m, p) in enumerate(self._get_estimable_parameters_list()):
@@ -1287,9 +1287,9 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
             for param in param_proposal.get_parameters():
                 if param.adaptable:
                     return_str += "\t" * 3
-                    return_str += 'proposal_parameters[' + str(adaptable_parameter_count) + '] = '
+                    return_str += 'proposal_state[' + str(adaptable_parameter_count) + '] = '
                     return_str += param.get_parameter_update_function_name() + '(' +\
-                        'proposal_parameters[' + str(adaptable_parameter_count) + '], ' + \
+                        'proposal_state[' + str(adaptable_parameter_count) + '], ' + \
                         'ac_between_proposal_updates[' + str(i) + '], proposal_update_intervals);' + "\n"
                     adaptable_parameter_count += 1
 

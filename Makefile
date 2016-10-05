@@ -55,9 +55,9 @@ coverage:
 	@echo "To view results type: htmlcov/index.html &"
 
 docs:
-	rm -f docs/mot.rst
+	rm -f docs/mot*.rst
 	rm -f docs/modules.rst
-	sphinx-apidoc -f -o docs/ mot
+	sphinx-apidoc -o docs/ mot
 	$(MAKE) -C docs clean
 	$(MAKE) -C docs html SPHINXBUILD='python3 $(shell which sphinx-build)'
 	@echo "To view results type: firefox docs/_build/html/index.html &"

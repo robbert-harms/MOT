@@ -9,7 +9,7 @@ class OptimizeModelInterface(object):
 
     @property
     def name(self):
-        """Get the name of this model. This should be overwrited by the implementing model.
+        """Get the name of this model. This should be overwritten by the implementing model.
 
         Returns:
             str: A string with the name of this model.
@@ -32,7 +32,9 @@ class OptimizeModelInterface(object):
         """Get a dict with all the data per problem.
 
         As an example, suppose per problem instance we have the data named 'observations'.
-        We should then return something like::
+        We should then return something like:
+
+        .. code-block:: python
 
             {'observations': SimpleDataAdapter(ndarray((<nmr_problems>, <number of items>)), ...), ...}
 
@@ -44,12 +46,11 @@ class OptimizeModelInterface(object):
         raise NotImplementedError
 
     def get_problems_protocol_data(self):
-        """Get a dict with the data that is constant for each problem (in Diffusion MRI the protocol/scheme), but
-        differs per measurement.
+        """Get a dict with the data that is constant for each problem, but differs per measurement.
 
         Returns:
             dict: A dict where each element holds a SimpleDataAdapter that is used in the evaluation function.
-                Each key is used as name in the cl data struct.
+                In the CL kernel, each key is used as name in the cl data struct.
         """
         raise NotImplementedError
 
@@ -88,8 +89,10 @@ class OptimizeModelInterface(object):
 
         Returns:
             str: An CL function with the signature:
-                mot_float_type <func_name>(const optimize_data* const data, const mot_float_type* const x,
-                                        const int observation_index);
+                .. code-block:: c
+
+                    mot_float_type <func_name>(const optimize_data* const data, const mot_float_type* const x,
+                                            const int observation_index);
         """
         raise NotImplementedError
 
@@ -101,7 +104,9 @@ class OptimizeModelInterface(object):
 
         Returns:
             str: An CL function with the signature:
-                mot_float_type <func_name>(const optimize_data* const data, const int observation_index);
+                .. code-block:: c
+
+                    mot_float_type <func_name>(const optimize_data* const data, const int observation_index);
         """
         raise NotImplementedError
 
@@ -112,8 +117,10 @@ class OptimizeModelInterface(object):
             func_name (string): specifies the name of the function.
 
         Returns:
-            A CL function with signature:
-                mot_float_type <func_name>(const optimize_data* const data, mot_float_type* const x);
+            str: A CL function with signature:
+                .. code-block:: c
+
+                    mot_float_type <func_name>(const optimize_data* const data, mot_float_type* const x);
         """
         raise NotImplementedError
 
@@ -127,9 +134,11 @@ class OptimizeModelInterface(object):
             func_name (str): the name of the function
 
         Returns:
-            A CL function with signature:
-                mot_float_type <func_name>(const optimize_data* const data, mot_float_type* const x,
-                                           mot_float_type* result);
+            str: A CL function with signature:
+                .. code-block:: c
+
+                    mot_float_type <func_name>(const optimize_data* const data, mot_float_type* const x,
+                                               mot_float_type* result);
         """
         raise NotImplementedError
 
@@ -144,7 +153,7 @@ class OptimizeModelInterface(object):
                 the result of a previous calculation.
 
         Returns:
-            array like: A two dimensional matrix with on the first axis the problem instances and on the second
+            ndarray: A two dimensional matrix with on the first axis the problem instances and on the second
                 the parameter values per problem instance
         """
         raise NotImplementedError
@@ -153,7 +162,7 @@ class OptimizeModelInterface(object):
         """Get for each estimable parameter the lower bounds.
 
         Returns:
-            An numpy row with on each column a single value, the lower bound for that parameter. This value
+            ndarray: An numpy row with on each column a single value, the lower bound for that parameter. This value
             can be the literal string '-inf' for infinity.
         """
         raise NotImplementedError
@@ -162,7 +171,7 @@ class OptimizeModelInterface(object):
         """Get for each estimable parameter the upper bounds.
 
         Returns:
-            An numpy row with on each column a single value, the upper bound for that parameter. This value
+            ndarray: An numpy row with on each column a single value, the upper bound for that parameter. This value
             can be the literal string 'inf' for infinity.
         """
         raise NotImplementedError
@@ -175,7 +184,7 @@ class OptimizeModelInterface(object):
         that are actually used in the optimization.
 
         Returns:
-            A list with the parameter names (in dot format) of all the estimated (free) parameters.
+            list of str: A list with the parameter names (in dot format) of all the estimated (free) parameters.
         """
         raise NotImplementedError
 
@@ -199,7 +208,7 @@ class OptimizeModelInterface(object):
         This number represents the number of data points
 
         Returns:
-            int: A single integer specifying the number of instances per problem.
+            int: the number of instances per problem.
         """
         raise NotImplementedError
 
@@ -207,7 +216,7 @@ class OptimizeModelInterface(object):
         """Get the number of estimable parameters.
 
         Returns:
-            int: A single integer specifying the number of estimable parameters
+            int: the number of estimable parameters
         """
         raise NotImplementedError
 
@@ -215,8 +224,8 @@ class OptimizeModelInterface(object):
         """Get the parameter codec from this model. This should be an implementation of AbstractCodec.
 
         Returns:
-            An abstract codec model that holds the CL code for the codec transformations. This function may also
-            return None, which indicates that no parameter codec is supposed to be used.
+            AbstractCodec or None: An abstract codec model that holds the CL code for the codec transformations.
+            This function may also return None, which indicates that no parameter codec is supposed to be used.
         """
         raise NotImplementedError
 
@@ -235,8 +244,10 @@ class OptimizeModelInterface(object):
             func_name (string): specifies the name of the function.
 
         Returns:
-            Return None if this function is not used, else a function of the kind:
-                void <func_name>(const optimize_data* data, mot_float_type* x);
+            str or None: Return None if this function is not used, else a function of the kind:
+                .. code-block:: c
+
+                    void <func_name>(const optimize_data* data, mot_float_type* x);
 
             Which is called for every voxel and must in place edit the x variable.
         """
@@ -264,18 +275,50 @@ class OptimizeModelInterface(object):
 class SampleModelInterface(OptimizeModelInterface):
 
     def __init__(self):
+        """Extends the OptimizeModelInterface with information for sampling purposes.
+
+        To be able to sample a model we need to have a:
+
+        * log likelihood function
+        * a proposal function
+        * a prior function
+
+
+        Proposal functions can be symmetric (if it holds that ``q(x|x') == q(x'|x)``) or
+        non symmetric (i.e. ``q(x|x') != q(x'|x)``). In the case of non-symmetric proposals we need to
+        have a function to get the probability log likelihood of the proposal.
+        This indicates the need for two more pieces of information:
+
+        * test if the proposal is symmetric
+        * proposal log PDF function
+
+
+        A trick in sampling is to have auto-adapting proposals. These proposals commonly have a distribution with a
+        standard deviation that varies in time. The idea is that if the distribution is too tight (low std) only a few
+        of the proposed samples are accepted and we need to broaden the distribution (increase the std). On the other
+        hand, if the std is to high we are jumping around to much in search space. This leads us to the following
+        additional functionality:
+
+        * proposal state update function
+
+
+        Since OpenCL < 2.1 does not allow for state variables in functions and does not have classes we need to find
+        a way to store the state of the proposal distribution inside the kernel function. For that, each proposal
+        CL function has as additional parameter the ``proposal_state``. The initial state can be obtained from
+        this class and needs to be handed to the proposal functions.
+        """
         super(SampleModelInterface, self).__init__()
 
-    def get_proposal_parameter_values(self):
-        """Get a list of parameter value for the adaptable proposal parameters.
+    def get_proposal_state(self):
+        """Get a list of parameter values for the adaptable proposal parameters.
 
         Returns:
-            list: list of double values with the proposal parameter values that are adaptable.
+            list: list of float with the proposal parameter values that are adaptable.
         """
         raise NotImplementedError
 
     def get_log_likelihood_function(self, func_name="getLogLikelihood", evaluation_model=None, full_likelihood=True):
-        """Get the Log Likelihood function that evaluates the entire problem instance under a noise model
+        """Get the CL Log Likelihood function that evaluates the entire problem instance under a noise model
 
         Args:
             func_name (string): specifies the name of the function.
@@ -286,12 +329,14 @@ class SampleModelInterface(OptimizeModelInterface):
 
         Returns:
             str: A function of the kind:
-                mot_float_type <func_name>(const optimize_data* const data, mot_float_type* const x);
+                .. code-block:: c
+
+                    mot_float_type <func_name>(const optimize_data* const data, mot_float_type* const x);
         """
         raise NotImplementedError
 
     def is_proposal_symmetric(self):
-        """Check if the entire proposal distribution is symmetric ( q(x|x') == q(x'|x) ).
+        """Check if the entire proposal distribution is symmetric: ``q(x|x') == q(x'|x)``.
 
         Returns:
             boolean: True if the proposal distribution is symmetric, false otherwise.
@@ -299,21 +344,26 @@ class SampleModelInterface(OptimizeModelInterface):
         raise NotImplementedError
 
     def get_proposal_logpdf(self, func_name='getProposalLogPDF'):
-        """Get the probability density function of the proposal in log space.
+        """Get the probability density function of the proposal in log space (as a CL string).
+
+        This density function is used if the proposal is not symmetric.
 
         Args:
             func_name (str): the CL function name of the returned function
 
         Returns:
-            A function with the signature:
-                mot_float_type <func_name>(const int i, const mot_float_type proposal,
-                                        const mot_float_type current, mot_float_type* const parameters)
+            str: A function with the signature:
+                .. code-block:: c
 
-            Where i is the index of the parameter we would like to get the proposal from, current is the current
-            value of that parameter and proposal the proposal value of the parameter. It should return for the requested
-            parameter a value q(proposal | current). That is, the probability density function of the proposal given
-            the current value (in log space).
-            Parameters is the list of adaptable parameters.
+                    mot_float_type <func_name>(const int i, const mot_float_type proposal,
+                                               const mot_float_type current, mot_float_type* const proposal_state)
+
+            Where ``i`` is the index of the parameter we would like to get the proposal from, ``current`` is the current
+            value of that parameter and ``proposal`` the proposal value of the parameter. The final argument
+            ``proposal_state`` are the current settings of the proposal function.
+
+            It should return for the requested parameter a value ``q(proposal | current)``, the log Probability
+            Density Function (log PDF) of the proposal given the current value.
         """
         raise NotImplementedError
 
@@ -324,35 +374,40 @@ class SampleModelInterface(OptimizeModelInterface):
             func_name (str): the CL function name of the returned function
 
         Returns:
-            A function with the signature:
-                mot_float_type <func_name>(const int i, const mot_float_type current, ranluxcl_state_t* ranluxclstate,
-                                   mot_float_type* const parameters)
+            str: A function with the signature:
+                .. code-block:: c
 
-            Where i is the index of the parameter we would like to get the proposal from and current is the current
-            value of that parameter. One can obtain random numbers with:
+                    mot_float_type <func_name>(const int i, const mot_float_type current, ranluxcl_state_t* ranluxclstate,
+                                               mot_float_type* const proposal_state)
+
+            Where ``i`` is the index of the parameter for which we want the proposal and ``current`` is the current
+            value of that parameter. The argument ``proposal_state`` is the state of the proposal distribution.
+            One can obtain random numbers with:
+            .. code-block:: c
+
                 float4 randomnr = ranluxcl(ranluxclstate);
-            Parameters is the list of adaptable parameters.
         """
         raise NotImplementedError
 
-    def get_proposal_parameters_update_function(self, func_name='updateProposalParameters'):
+    def get_proposal_state_update_function(self, func_name='updateProposalState'):
         """Get a function that can update the parameters of the proposals
 
         Args:
             func_name (str): the CL function name of the returned function
 
         Returns:
-            A function with the signature:
-                void <func_name>(uint* const ac_between_proposal_updates, const uint proposal_update_intervals,
-                                 mot_float_type* const proposal_parameters);
+            str: A function with the signature:
+                .. code-block:: c
 
-            Where ac_between_proposal_updates is the acceptance count in between proposal updates,
-            proposal_update_intervals is the interval at which we update the proposals and proposal_parameters
-            is the current list of proposal parameters (to be updated in place),
+                    void <func_name>(uint* const ac_between_proposal_updates, const uint proposal_update_intervals,
+                                     mot_float_type* const proposal_state);
 
-            Please note that the ac_between_proposal_updates is per sampled parameter while the proposal_parameters is
-            per proposal parameter. If the number of parameters of a proposal function is not equal to one then those
-            two arrays do not share the same index.
+            Where ``ac_between_proposal_updates`` is the acceptance count in between proposal updates,
+            ``proposal_update_intervals`` is the interval at which we update the proposals and ``proposal_state``
+            is the current list of proposal parameters (to be updated in place). Please note that
+            ``ac_between_proposal_updates`` is per sampled parameter while ``proposal_state`` is
+            per proposal parameter. If the number of parameters of a proposal function is not 1, than the
+            two arrays do not share the same indices.
         """
         raise NotImplementedError
 
@@ -365,8 +420,10 @@ class SampleModelInterface(OptimizeModelInterface):
             func_name (str): the CL function name of the returned function
 
         Returns:
-            A function of the kind:
-                mot_float_type <func_name>(const mot_float_type* const x);
+            str: A function with the signature:
+                .. code-block:: c
+
+                    mot_float_type <func_name>(const mot_float_type* const x);
 
             Which is called by the sampling routine to calculate the posterior probability.
         """
@@ -376,11 +433,11 @@ class SampleModelInterface(OptimizeModelInterface):
         """Create statistics out of the given set of samples (in a dictionary).
 
         Args:
-            samples_dict (dict):
-                Keys being the parameter names, values the roi list in 2d (1st dim. is voxel, 2nd dim. is samples).
+            samples_dict (dict): Keys being the parameter names, values the roi list in 2d
+                (1st dim. is voxel, 2nd dim. is samples).
 
         Returns:
-            The same dictionary but with statistical maps (mean, avg etc.) for each parameter, instead of the raw
+            dict: The same dictionary but with statistical maps (mean, avg etc.) for each parameter, instead of the raw
             samples. In essence this is where one can place the logic to go from samples to meaningful maps.
         """
         raise NotImplementedError

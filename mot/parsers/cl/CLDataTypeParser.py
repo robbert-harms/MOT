@@ -67,7 +67,7 @@ def parse(parameter_declaration):
         parameter_declaration (str): the CL parameter declaration. Example: const float4* const test
 
     Returns:
-        CLDataType: the CL data type for this parameter declaration
+        mot.cl_data_type.CLDataType: the CL data type for this parameter declaration
     """
     parser = CLDataTypeParser(parseinfo=False)
     return parser.parse(parameter_declaration, rule_name='result', semantics=Semantics())

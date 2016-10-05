@@ -28,7 +28,7 @@ class AbstractProblemData(object):
         This number represents the number of data points
 
         Returns:
-            int: A single integer specifying the number of instances per problem.
+            int: the number of instances per problem.
         """
         return np.array(self.protocol[list(self.protocol.keys())[0]]).shape[0]
 
@@ -36,7 +36,7 @@ class AbstractProblemData(object):
         """Get the number of problems present in this problem data.
 
         Returns:
-            int: A single integer specifying the number of problem instances
+            int: the number of problem instances
         """
         return self.observations.shape[0]
 

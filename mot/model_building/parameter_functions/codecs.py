@@ -11,10 +11,13 @@ class AbstractCodec(object):
         """Get a CL function that can transform the parameters from encoded space to model space.
 
         The signature of the CL function is:
+
+        .. code-block:: c
+
             void <fname>(const mot_float_type* x);
 
         Args:
-            fname (str): The name how the function should call itself.
+            fname (str): The CL function name to use
 
         Returns:
             str: An OpenCL function that is used in the CL kernel to transform the parameters from encoded space to
@@ -26,10 +29,13 @@ class AbstractCodec(object):
         """Get a CL function that can transform the parameters from model space to an encoded space.
 
         The signature of the CL function is:
+
+        .. code-block:: c
+
             void <fname>(const mot_float_type* x);
 
         Args:
-            fname (str): The name how the function should call itself.
+            fname (str): The CL function name to use
 
         Returns:
             str: An OpenCL function that is used in the CL kernel to transform the parameters from model space to
@@ -41,7 +47,7 @@ class AbstractCodec(object):
         """Get the number of parameters that are encoded and decoded.
 
         Returns:
-            int: A single integer specifying the number of parameters that are used in the decoding and encoding.
+            int: the number of parameters that are used in the decoding and encoding.
         """
         pass
 
@@ -51,7 +57,7 @@ class IdentityCodec(AbstractCodec):
     def __init__(self, nmr_parameters):
         """Create an identity codec.
 
-        Input = output for this codec.
+        Input == output for this codec.
 
         Args:
             nmr_parameters (int): The number of parameters for the codec.
@@ -89,14 +95,17 @@ class CodecBuilder(AbstractCodec):
         Args:
             enc_trans_list (tuple): a listing of the encoding transformations, which are called in the given order.
                 Each format should be a string with the format option {0} which is meant for the name of the array.
-                The following is an example input (with two functions):
+                The following is an example input (with two functions)::
+
                     ("{0}[0] = sqrt({0}[0]);",
                      "{0}[1] = sqrt({0}[1]);")
 
             enc_trans_list (tuple): a listing of the decoding transformations, which are called in the given order.
                 Each format should be a string with the format option {0} which is meant for the name of the array.
-                Example: {0}[0] = {0}[0] * {0}[0];
-                         {0}[1] = {0}[1] * {0}[1];
+                Example::
+
+                        {0}[0] = {0}[0] * {0}[0];
+                        {0}[1] = {0}[1] * {0}[1];
         """
         super(CodecBuilder, self).__init__()
         self._nmr_parameters = len(enc_trans_list)
