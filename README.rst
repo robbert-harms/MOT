@@ -21,12 +21,10 @@ Quick installation guide:
 * ``apt-get install python3 python3-pip python3-pyopencl``
 * ``pip3 install MOT``
 
-|
 
 **Windows**
 
-* Install Anaconda from https://www.continuum.io/downloads
-* Install PyOpenCL
+* Install Python Anaconda 3.* from https://www.continuum.io/downloads
 * Open a Anaconda shell and type: ``pip install MOT``
 
 
