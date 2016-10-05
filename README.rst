@@ -21,6 +21,7 @@ Quick installation guide:
 ``apt-get install python3 python3-pip python3-pyopencl``
 ``pip3 install MOT``
 
+|
 
 **Windows**
 
