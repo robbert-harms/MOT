@@ -120,9 +120,6 @@ html_theme = 'alabaster'
 # documentation.
 
 html_theme_options = {
-    'github_user': 'cbclab',
-    'github_repo': 'MOT',
-    'github_button': True,
     'show_powered_by': False,
     'description': "GPU accelerated optimization",
     'logo_name': True,
