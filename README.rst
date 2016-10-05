@@ -14,4 +14,19 @@ A library for parallel optimization and sampling in python and opencl.
 * Tags: optimization, parallel, opencl, python
 
 
+Quick installation guide:
+
+Linux (Ubuntu)
+--------------
+``apt-get install python3 python3-pip python3-pyopencl``
+``pip3 install MOT``
+
+
+Windows
+-------
+* Install Anaconda from https://www.continuum.io/downloads
+* Install PyOpenCL
+* Open a Anaconda shell and type: ``pip install MOT``
+
+
 For more information and installation instructions, please see: https://mot.readthedocs.org
