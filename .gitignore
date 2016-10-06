@@ -42,8 +42,6 @@ output/*/index.html
 
 # Sphinx
 docs/_build
-docs/mot.*rst
-docs/modules.rst
 
 #Idea
 .idea
