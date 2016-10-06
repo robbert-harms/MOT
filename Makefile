@@ -84,9 +84,12 @@ install: dist
 uninstall:
 	pip uninstall -y $(PROJECT)
 
-dist-deb: dist
-	rm -r debian/source
+dist-deb:
+	$(PYTHON) setup.py sdist
+	rm -rf debian/source
 	$(PYTHON) setup.py --command-packages=stdeb.command debianize --with-python3 True
 	$(PYTHON) setup.py prepare_debian_dist
-	#rename -f 's/$(PROJECT)-(.*)\.tar\.gz/\.\.\/\.\.\/$(PROJECT)_$$1\.orig\.tar\.gz/' dist/*.gz
-	dpkg-source -b .
+	rename -f 's/$(PROJECT)-(.*)\.tar\.gz/$(PROJECT)_$$1\.orig\.tar\.gz/' dist/*.gz
+	tar -xzf dist/$(PROJECT)_*.orig.tar.gz -C dist/
+	cp -r debian dist/$(PROJECT)*/
+	cd dist/$(PROJECT)*/; dpkg-source -b .
