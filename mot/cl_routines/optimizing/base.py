@@ -45,7 +45,7 @@ class AbstractOptimizer(CLRoutine):
 
         Args:
             cl_environments (list of CLEnvironment): a list with the cl environments to use
-            load_balancer (LoadBalancer): the load balance strategy to use
+            load_balancer (LoadBalanceStrategy): the load balance strategy to use
             use_param_codec (boolean): if this minimization should use the parameter codecs (param transformations)
             patience (int): The patience is used in the calculation of how many iterations to iterate the optimizer.
                 The exact usage of this value of this parameter may change per optimizer.

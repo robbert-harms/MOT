@@ -16,7 +16,7 @@ class CLFunctionParameter(object):
         """Creates a new function parameter for the CL functions.
 
         Args:
-            data_type (DataType): the data type expected by this parameter
+            data_type (mot.cl_data_type.CLDataType): the data type expected by this parameter
             name (str): The name of this parameter
 
         Attributes:
@@ -75,7 +75,7 @@ class StaticMapParameter(CLFunctionParameter):
         and differ per problem instance. This makes them differ slightly in semantics.
 
         Args:
-            data_type (DataType): the data type expected by this parameter
+            data_type (mot.cl_data_type.CLDataType): the data type expected by this parameter
             name (str): The name of this parameter
             value (double or ndarray): A single value for all voxels or a list of values for each voxel
 
@@ -103,7 +103,7 @@ class ModelDataParameter(CLFunctionParameter):
         and for every measurement point (protocol in DMRI). They can consist of vector and array types.
 
         Args:
-            data_type (DataType): the data type expected by this parameter
+            data_type (mot.cl_data_type.CLDataType): the data type expected by this parameter
             name (str): The name of this parameter
             value (double or ndarray): A single value for all voxels or a list of values for each voxel
 
@@ -124,7 +124,7 @@ class FreeParameter(CLFunctionParameter):
         These parameters may optionally be fixed to a value or list of values for all voxels.
 
         Args:
-            data_type (DataType): the data type expected by this parameter
+            data_type (mot.cl_data_type.CLDataType): the data type expected by this parameter
             name (str): The name of this parameter
             fixed (boolean): Fix this parameter is fixed to the value given
             value (double or ndarray): A single value for all voxels or a list of values for each voxel

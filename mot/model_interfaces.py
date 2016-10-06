@@ -1,3 +1,15 @@
+"""The interfaces needed for models.
+
+Since a lot of information about a model is needed to be able to optimize or sample it we encapsulate all that
+information in an interface. Only objects that successful implement the interfaces in this module can be optimized or
+sampled using one of the optimization or sampling routines in MOT.
+
+These interfaces expose data and modelling code. The data is encapsulated in :class:`~mot.data_adapters.DataAdapter`
+and the code should be returned as CL strings. In the future, instead of CL strings we may require returning an
+encapsulating object such that we can run the computations on multiple types of runtime environments
+(CUDA, plain C, ...).
+"""
+
 __author__ = 'Robbert Harms'
 __date__ = "2014-03-14"
 __license__ = "LGPL v3"

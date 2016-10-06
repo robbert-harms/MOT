@@ -1,3 +1,17 @@
+"""Contains the runtime configuration of MOT.
+
+This consists of two parts, functions to get the current runtime settings and configuration actions to update these
+settings. To set a new configuration, create a new :py:class:`ConfigAction` and use this within a context environment
+using :py:func:`config_context`. Example:
+
+.. code-block:: python
+
+    from mot.configuration import RuntimeConfigurationAction, config_context
+
+    with config_context(RuntimeConfigurationAction(...)):
+        ...
+
+"""
 from contextlib import contextmanager
 from copy import copy
 from .cl_environments import CLEnvironmentFactory
@@ -63,7 +77,7 @@ def get_load_balancer():
     """Get the current load balancer to use during CL calculations.
 
     Returns:
-        LoadBalancer: the current load balancer to use
+        LoadBalanceStrategy: the current load balancer to use
     """
     return _config['load_balancer']
 
@@ -72,7 +86,7 @@ def set_load_balancer(load_balancer):
     """Set the current CL environments to the given list
 
     Args:
-        load_balancer (LoadBalancer): the current load balancer to use
+        load_balancer (LoadBalanceStrategy): the current load balancer to use
     """
     _config['load_balancer'] = load_balancer
 
@@ -150,11 +164,11 @@ def config_context(config_action):
 class ConfigAction(object):
 
     def __init__(self):
-        """Defines a configuration action for the use in a configuration context.
+        """Defines a configuration action for use in a configuration context.
 
-        This should define an apply and an unapply function that sets and unsets the given configuration options.
+        This should define an apply and unapply function that sets and unsets the configuration options.
 
-        The applying action needs to remember the state before applying the action.
+        The applying action needs to remember the state before the application of the action.
         """
 
     def apply(self):
@@ -169,10 +183,11 @@ class SimpleConfigAction(ConfigAction):
     def __init__(self):
         """Defines a default implementation of a configuration action.
 
-        This simple config implements a default apply() method that saves the current state and a default
-        unapply() that restores the previous state.
+        This simple config implements a default ``apply()`` method that saves the current state and a default
+        ``unapply()`` that restores the previous state.
 
-        It is easiest to implement _apply() for extra actions.
+        For developers, it is easiest to implement ``_apply()`` such that you do not manually need to store the old
+        configuraration.
         """
         super(SimpleConfigAction, self).__init__()
         self._old_config = {}
@@ -194,6 +209,12 @@ class SimpleConfigAction(ConfigAction):
 class RuntimeConfigurationAction(SimpleConfigAction):
 
     def __init__(self, cl_environments=None, load_balancer=None):
+        """Updates the runtime settings.
+
+        Args:
+            cl_environments (list of CLEnvironment): the new CL environments we wish to use for future computations
+            load_balancer (LoadBalanceStrategy): the load balancer to use
+        """
         super(RuntimeConfigurationAction, self).__init__()
         self._cl_environments = cl_environments
         self._load_balancer = load_balancer

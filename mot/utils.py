@@ -15,15 +15,15 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
 def device_type_from_string(cl_device_type_str):
-    """Converts values like 'gpu' to a pyopencl device type string.
+    """Converts values like ``gpu`` to a pyopencl device type string.
 
-    Supported values are: 'accelerator', 'cpu', 'custom', 'gpu'. If 'ALL' is given, None is returned.
+    Supported values are: ``accelerator``, ``cpu``, ``custom``, ``gpu``. If ``all`` is given, None is returned.
 
     Args:
         cl_device_type_str (str): The string we want to convert to a device type.
 
     Returns:
-        cl_device_type the pyopencl device type.
+        cl.device_type: the pyopencl device type.
     """
     cl_device_type_str = cl_device_type_str.upper()
     if cl_device_type_str == 'GPU':
@@ -44,7 +44,7 @@ def device_supports_double(cl_device):
         cl_device (pyopencl cl device): The device to check if it supports double.
 
     Returns:
-        True if the given cl_device supports double, false otherwise.
+        boolean: True if the given cl_device supports double, false otherwise.
     """
     return cl_device.get_info(cl.device_info.DOUBLE_FP_CONFIG) == 63
 
@@ -77,7 +77,7 @@ def get_float_type_def(double_precision):
             Else, we will use the single precision float type for the mot_float_type type.
 
     Returns:
-        str: defines for the mot_float_type type
+        str: defines the mot_float_type types, the epsilon and the MIN and MAX values.
     """
     if double_precision:
         return '''
@@ -120,7 +120,7 @@ class TopologicalSort(object):
 
         Args:
             data (dict); dictionary structure where the value is a list of dependencies for that given key.
-                as an example {'a', (), 'b': ('a',)}, here a depends on nothing and b depends on a.
+                as an example ``{'a', (), 'b': ('a',)}``, where ``a`` depends on nothing and ``b`` depends on ``a``.
         """
         self.data = data
 
@@ -153,12 +153,15 @@ class TopologicalSort(object):
                                                                                                 for x in data.items())))
 
     def get_flattened(self, sort=True):
-        """Returns a single list of dependencies.
+        """Returns a single flattened list of dependencies.
 
-        Get the sorted result flattened. Optionally sorted to make the results repeatable.
+        Optionally we can sort the list to make the results repeatable.
 
         Args:
             sort (boolean): if we want to sort the results list
+
+        Returns:
+            list: the list of dependencies in constructure order, optionally sorted
         """
         result = []
         for d in self.get_sorted():
@@ -175,11 +178,11 @@ class ParameterCLCodeGenerator(object):
 
         Args:
             device: the CL device we want to compile the code for
-            var_data_dict (dict of DataAdapter): the dictionary with the variable data. That is, the data
+            var_data_dict (dict[str, CLDataAdapter]): the dictionary with the variable data. That is, the data
                 that is different for every problem (but constant over the measurements).
-            protocol_data_dict (dict of DataAdapter): the dictionary with the protocol data. That is, the data
+            protocol_data_dict (dict[str, CLDataAdapter]): the dictionary with the protocol data. That is, the data
                 that is the same for every problem, but differs per measurement.
-            model_data_dict (dict of DataAdapter): the dictionary with the model data. That is, the data
+            model_data_dict (dict[str, CLDataAdapter]): the dictionary with the model data. That is, the data
                 that is the same for every problem and every measurement.
         """
         self._device = device
@@ -338,6 +341,9 @@ def is_scalar(value):
 
     Args:
         value: the value to test for being a scalar value
+
+    Returns:
+        boolean: if the given value is a scalar or not
     """
     return np.isscalar(value) or (isinstance(value, np.ndarray) and (len(np.squeeze(value).shape) == 0))
 

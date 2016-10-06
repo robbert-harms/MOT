@@ -8,11 +8,12 @@
 
 p + ul {
     margin-top: 0px;
+    margin-bottom:15px;
 }
 
 div.body p{
-    margin-bottom:5px;
-    margin-top:5px;
+    margin-bottom:6px;
+    margin-top:6px;
 }
 
 div.body h3{
@@ -23,7 +24,18 @@ div.body h3{
     margin-top:10px;
 }
 
-.line-block{
-    margin-top:0.5em;
-    margin-bottom:0.5em;
+#table-of-contents ul ul{
+    margin-top:5px;
+}
+
+#table-of-contents ul ul{
+    margin-top:5px;
+}
+
+#table-of-contents > ul > li{
+    margin-top:15px;
+}
+
+#table-of-contents > ul > li:first-child{
+    margin-top:0px;
 }

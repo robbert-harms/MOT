@@ -17,9 +17,52 @@ import sys
 import os
 from datetime import datetime
 from unittest.mock import MagicMock
+import builtins
 
-sys.modules['pyopencl'] = MagicMock()
-sys.modules['pyopencl.array'] = MagicMock()
+mock_as_class = []
+mock_as_decorator = []
+mock_modules = ['pyopencl']
+
+
+def mock_decorator(*args, **kwargs):
+    """Mocked decorator, needed in the case we need to mock a decorator"""
+    def _called_decorator(dec_func):
+        @wraps(dec_func)
+        def _decorator(*args, **kwargs):
+            return dec_func()
+        return _decorator
+    return _called_decorator
+
+
+class MockClass(object):
+    """Mocked class needed in the case we need to mock a class type"""
+    @classmethod
+    def __getattr__(cls, name):
+        return MockModule()
+
+
+class MockModule(MagicMock):
+    """The base mocking class. This mimics a module."""
+    @classmethod
+    def __getattr__(cls, name):
+        if name in mock_as_class:
+            return MockClass
+        if name in mock_as_decorator:
+            return mock_decorator
+        return MagicMock()
+
+
+orig_import = __import__
+
+
+def import_mock(name, *args, **kwargs):
+    """Mock all modules starting with one of the mock_modules names."""
+    if any(name.startswith(s) for s in mock_modules):
+        return MockModule()
+    return orig_import(name, *args, **kwargs)
+
+builtins.__import__ = import_mock
+
 
 
 # If extensions (or modules to document with autodoc) are in another
@@ -41,7 +84,7 @@ import mot
 
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
-extensions = ['sphinx.ext.autodoc', 'sphinx.ext.viewcode', 'sphinx.ext.napoleon']
+extensions = ['sphinx.ext.autodoc', 'sphinx.ext.viewcode', 'sphinx.ext.napoleon', 'sphinx.ext.intersphinx']
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -108,6 +151,12 @@ modindex_common_prefix = ['mot.']
 # documents.
 #keep_warnings = False
 
+# map to other projects
+intersphinx_mapping = {
+    'python': ('http://python.readthedocs.org/en/v3.4/', None),
+    'mot': ('http://mot.readthedocs.org/en/latest/', None),
+}
+
 
 # -- Options for HTML output -------------------------------------------
 
@@ -121,7 +170,7 @@ html_theme = 'alabaster'
 
 html_theme_options = {
     'show_powered_by': False,
-    'description': "GPU accelerated optimization",
+    'description': "Maastricht Optimization Toolbox",
     'logo_name': True,
     'sidebar_collapse': False,
     'fixed_sidebar': True,

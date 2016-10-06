@@ -1,3 +1,14 @@
+"""Supports hardware level load balancing over multiple CL enabled devices.
+
+This load balancing consists of three players, :class:`~mot.cl_environments.CLEnvironment`, :class:`LoadBalanceStrategy`
+and :class:`~mot.cl_routines.base.CLRoutine`. Every :class:`~mot.cl_routines.base.CLRoutine`
+(such as the Optimizers and Samplers) requires, in order to do computations,
+a list of :class:`~mot.cl_environments.CLEnvironment` and a :class:`LoadBalanceStrategy` implementation.
+The :class:`~mot.cl_environments.CLEnvironment` encapsulate all information needed to run computations on its
+contained device. The :class:`LoadBalanceStrategy` chooses which environments (i.e. devices) to use for
+the computations and how to use them. The load balancing itself is done by appointing subsets of
+problems (voxels) to specific devices.
+"""
 import logging
 import math
 import time
@@ -227,7 +238,7 @@ class Worker(object):
         This assumes that the implementer implements the function _get_kernel_source() to get the source.
 
         Returns:
-            a compiled CL kernel
+            cl.Program: a compiled CL kernel
         """
         kernel_source = self._get_kernel_source()
         from mot import configuration
@@ -249,7 +260,7 @@ class Worker(object):
             args (list of dicts): The list with dictionaries with the values we want to buffer.
 
         Returns:
-            a list of the same length with read only cl buffers.
+            list: a list of the same length with read only cl buffers.
         """
         buffers = []
         for data_dict in args:
@@ -320,7 +331,7 @@ class MetaLoadBalanceStrategy(LoadBalanceStrategy):
 
 
 class EvenDistribution(LoadBalanceStrategy):
-    """Give each worker exactly 1/nth of the work. This does not do any feedback load balancing."""
+    """Give each worker exactly 1/nth of the work."""
 
     def process(self, workers, nmr_items, run_in_batches=None, single_batch_length=None):
         items_per_worker = int(round(nmr_items / float(len(workers))))
@@ -347,11 +358,13 @@ class EvenDistribution(LoadBalanceStrategy):
 class RuntimeLoadBalancing(LoadBalanceStrategy):
 
     def __init__(self, test_percentage=10, run_in_batches=True, single_batch_length=1e6):
-        """Distribute the work by trying to minimize the time taken.
+        """Distribute the work by trying to minimize the runtime.
+
+        This first runs a batch of a small size to estimate the runtime per devices. Afterwards the
+        problem instances are distributed such to minimize the overall time.
 
         Args:
-            test_percentage (float): The percentage of items to use for the run time duration test
-                (divided by number of devices)
+            test_percentage (float): The total percentage of items to use for the run time duration test
         """
         super(RuntimeLoadBalancing, self).__init__(run_in_batches=run_in_batches,
                                                    single_batch_length=single_batch_length)

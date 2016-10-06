@@ -19,21 +19,21 @@ class DataAdapter(object):
         """Get the data type for the data in this adapter.
 
         Returns:
-            DataType: the datatype
+            mot.cl_data_type.CLDataType: the datatype
         """
 
     def get_opencl_data(self):
         """Adapt and return the data for use in OpenCL kernels.
 
         Returns:
-            np ndarray: the data to be used in compute kernels.
+            np.ndarray: the data to be used in compute kernels.
         """
 
     def get_opencl_numpy_type(self):
         """Get the numpy type for the data in this class for OpenCL use.
 
         Returns:
-            np dtype: the numpy type for the data
+            np.dtype: the numpy type for the data
         """
 
 
@@ -43,26 +43,24 @@ class SimpleDataAdapter(DataAdapter):
         """Create a data adapter for the given data and type.
 
         This data adapter is the bridge between the raw data and the data used in the kernels. If in the future we
-        want to add computation types like CUDA or compiling to C this data adapter can be used as the bridge.
+        want to add computation types like CUDA or plain C, this adapter knows how to format the data for those targets.
 
         Args:
             value (ndarray): The value to adapt to different run environments
-            data_type (DataType): the data type we need to convert it to
-            mot_float_type (DataType): the data type of the mot_float_type
+            data_type (mot.cl_data_type.CLDataType): the data type we need to convert it to
+            mot_float_type (mot.cl_data_type.CLDataType): the data type of the mot_float_type
         """
         self._data = data
         self._data_type = data_type
         self._mot_float_type = mot_float_type
 
     def get_opencl_data(self):
-        """See parent"""
         if self._data_type.is_vector_type:
             return self._array_to_cl_vector()
         else:
             return self._get_cl_array()
 
     def get_opencl_numpy_type(self):
-        """See parent"""
         if self._data_type.is_vector_type:
             return self._get_opencl_vector_data_type()
         else:
@@ -72,10 +70,10 @@ class SimpleDataAdapter(DataAdapter):
         return self._data_type
 
     def _get_cl_array(self):
-        """Convert the data to a numpy array of the current data type
+        """Convert the data to a numpy array of the current data type.
 
         Returns:
-            np ndarray: the converted self._data as a numpy type
+            np.ndarray: the converted data as a numpy type
         """
         numpy_type = self._get_cl_numpy_type(self._data_type)
         if isinstance(self._data, numbers.Number):
@@ -85,11 +83,11 @@ class SimpleDataAdapter(DataAdapter):
     def _get_cl_numpy_type(self, data_type):
         """Get the numpy data type for non-vector types in CL.
 
-        This function is not part of the DataType class since the numpy datatype may differ depending
+        This function is not part of the CLDataType class since the numpy datatype may differ depending
         on the final use case.
 
         Args:
-            data_type (DataType): the data type to convert to an numpy type
+            data_type (mot.cl_data_type.CLDataType): the data type to convert to an numpy type
         """
         raw_type = data_type.raw_data_type
 
@@ -106,8 +104,7 @@ class SimpleDataAdapter(DataAdapter):
         """Create a CL vector type of the given array.
 
         Returns:
-            ndarray: An array of the same length as the given array,
-                but with only one column per row: the opencl vector.
+            ndarray: An array of the same length as the given array, but with only one column per row, the opencl vector.
         """
         s = self._data.shape
         if len(s) > 1:

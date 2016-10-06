@@ -146,8 +146,7 @@ class CLRunContext(object):
         """Context for single run use
 
         Arguments:
-            context (pyopencl context): The context associated with this environment.
-            queue: a queue from that context
+            cl_environment (CLEnvironment): The environment for which to create a context and queue.
         """
         self.context = cl.Context([cl_environment.device])
         self.queue = cl.CommandQueue(self.context, device=cl_environment.device)
@@ -156,7 +155,7 @@ class CLRunContext(object):
 class CLEnvironmentFactory(object):
 
     @staticmethod
-    def single_device(cl_device_type=cl.device_type.GPU, platform=None, fallback_to_any_device_type=False):
+    def single_device(cl_device_type='GPU', platform=None, fallback_to_any_device_type=False):
         """Get a list containing a single device environment, for a device of the given type on the given platform.
 
         This will only fetch devices that support double (possibly only double with a pragma
@@ -176,7 +175,12 @@ class CLEnvironmentFactory(object):
 
         device = None
 
-        for platform in cl.get_platforms():
+        if platform is None:
+            platforms = cl.get_platforms()
+        else:
+            platforms = [platform]
+
+        for platform in platforms:
             devices = platform.get_devices(device_type=cl_device_type)
 
             for dev in devices:
@@ -200,8 +204,7 @@ class CLEnvironmentFactory(object):
     def all_devices(cl_device_type=None, platform=None):
         """Get multiple device environments, optionally only of the indicated type.
 
-        This will only fetch devices that support double (possibly only devices
-        with a pragma defined, but still it should support double).
+        This will only fetch devices that support double point precision.
 
         Args:
             cl_device_type (cl.device_type.* or string): The type of the device we want,
@@ -238,7 +241,7 @@ class CLEnvironmentFactory(object):
     def smart_device_selection():
         """Get a list of device environments that is suitable for use in MOT.
 
-        Basically this gets the total list of devices using all_devices() and applies a smart filter on it.
+        Basically this gets the total list of devices using all_devices() and applies a filter on it.
 
         This filter does the following:
             1) if the 'AMD Accelerated Parallel Processing' is available remove all environments using the 'Clover'
