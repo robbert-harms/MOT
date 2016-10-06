@@ -84,7 +84,7 @@ import mot
 
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
-extensions = ['sphinx.ext.autodoc', 'sphinx.ext.viewcode', 'sphinx.ext.napoleon', 'sphinx.ext.intersphinx']
+extensions = ['sphinx.ext.autodoc', 'sphinx.ext.viewcode', 'sphinx.ext.napoleon']
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -150,12 +150,6 @@ modindex_common_prefix = ['mot.']
 # If true, keep warnings as "system message" paragraphs in the built
 # documents.
 #keep_warnings = False
-
-# map to other projects
-intersphinx_mapping = {
-    'python': ('http://python.readthedocs.org/en/v3.4/', None),
-    'mot': ('http://mot.readthedocs.org/en/latest/', None),
-}
 
 
 # -- Options for HTML output -------------------------------------------
