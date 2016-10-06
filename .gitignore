@@ -17,6 +17,7 @@
 /lib
 /lib64
 .installed.cfg
+/.pybuild
 
 # Installer logs
 pip-log.txt
@@ -41,9 +42,15 @@ output/*/index.html
 
 # Sphinx
 docs/_build
+docs/mot.*.rst
+docs/modules.rst
 
 #Idea
 .idea
 
 #Miscellaneous
 /misc
+
+# debian tmps
+/debian/source
+/debian/tmp

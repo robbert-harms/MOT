@@ -28,9 +28,6 @@ class CLRoutineTestCase(unittest.TestCase):
 
     def __init__(self, *args, **kwargs):
         super(CLRoutineTestCase, self).__init__(*args, **kwargs)
-        self._runtime_args = [configuration.get_cl_environments(),
-                              configuration.get_load_balancer()]
-
         mot.configuration._config['compile_flags']['general'].update({
             '-cl-single-precision-constant': False
         })
@@ -40,7 +37,7 @@ class TestRosenbrock(CLRoutineTestCase):
 
     def setUp(self):
         self.model = Rosenbrock(5)
-        self.optimizers = (NMSimplex(*self._runtime_args), Powell(*self._runtime_args))
+        self.optimizers = (NMSimplex(), Powell())
 
     def test_model(self):
         for optimizer in self.optimizers:
@@ -53,8 +50,8 @@ class TestLSQNonLinExample(CLRoutineTestCase):
 
     def setUp(self):
         self.model = MatlabLSQNonlinExample()
-        self.optimizers = (LevenbergMarquardt(*self._runtime_args),)
-        self.residual_calc = ResidualCalculator(*self._runtime_args)
+        self.optimizers = (LevenbergMarquardt(),)
+        self.residual_calc = ResidualCalculator()
 
     def test_model(self):
         for optimizer in self.optimizers:
@@ -73,7 +70,7 @@ class TestFilters(CLRoutineTestCase):
         self.d2 = np.eye(4)
 
     def test_median(self):
-        filter = MedianFilter(2, *self._runtime_args)
+        filter = MedianFilter(2)
         s1 = filter.filter(self.d1)
         np.testing.assert_almost_equal(s1, np.array([2, 2, 2, 2, 2]))
 
@@ -81,7 +78,7 @@ class TestFilters(CLRoutineTestCase):
         np.testing.assert_almost_equal(s2, np.zeros((4, 4)))
 
     def test_mean(self):
-        filter = MeanFilter(2, *self._runtime_args)
+        filter = MeanFilter(2)
         s1 = filter.filter(self.d1)
         np.testing.assert_almost_equal(s1, np.array([2 + 1/3.0, 2.25, 2, 2.25, 2 + 1/3.0]))
 
@@ -94,7 +91,7 @@ class TestFilters(CLRoutineTestCase):
         np.testing.assert_almost_equal(s2, expected)
 
     def test_gaussian(self):
-        filter = GaussianFilter(2, *self._runtime_args, sigma=1.0)
+        filter = GaussianFilter(2, sigma=1.0)
         s1 = filter.filter(self.d1, mask=np.array([1, 1, 1, 1, 0]))
         s2 = filter.filter(self.d2)
 

@@ -10,3 +10,4 @@ Maastricht Optimization Toolbox
 
    install
    credits
+   changelog

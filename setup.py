@@ -27,11 +27,11 @@ requirements_tests = load_requirements('requirements_tests.txt')
 info_dict = dict(
     name='mot',
     version=ver_dic["VERSION"],
-    description='Parallel parameter estimation in python and opencl.',
+    description='Maastricht Optimization Toolbox',
     long_description=readme,
     author='Robbert Harms',
     author_email='robbert.harms@maastrichtuniversity.nl',
-    url='https://github.com/robbert-harms/mot',
+    url='https://github.com/cbclab/MOT',
     packages=find_packages(),
     include_package_data=True,
     install_requires=requirements,
@@ -72,17 +72,13 @@ class PrepareDebianDist(Command):
         self.cwd = os.getcwd()
 
     def run(self):
-        deb_info_path = './dist/deb/mot-{}/debian'.format(ver_dic["VERSION"])
-        with open(deb_info_path + '/rules'.format(ver_dic["VERSION"]), 'a') as f:
+        with open('./debian/rules', 'a') as f:
             f.write('\noverride_dh_auto_test:\n\techo "Skip dh_auto_test"')
 
-        self._set_copyright_file(deb_info_path)
-        self._set_description(deb_info_path)
+        self._set_copyright_file()
 
-    def _set_copyright_file(self, deb_info_path):
-        shutil.copy('debian/copyright', deb_info_path + '/copyright')
-
-        with open(deb_info_path + '/copyright', 'r') as file:
+    def _set_copyright_file(self):
+        with open('./debian/copyright', 'r') as file:
             copyright_info = file.read()
 
         copyright_info = copyright_info.replace('{{source}}', info_dict['url'])
@@ -90,23 +86,8 @@ class PrepareDebianDist(Command):
         copyright_info = copyright_info.replace('{{author}}', info_dict['author'])
         copyright_info = copyright_info.replace('{{email}}', info_dict['author_email'])
 
-        with open(deb_info_path + '/copyright', 'w') as file:
+        with open('./debian/copyright', 'w') as file:
             file.write(copyright_info)
-
-    def _set_description(self, deb_info_path):
-        with open(deb_info_path + '/control', 'r') as file:
-            control = file.readlines()
-            lines = []
-            for line in control:
-                lines.append(line)
-                if line[0:len('Description')] == 'Description':
-                    break
-
-        control = "".join(lines)
-        control += " A library for parallel parameter estimation in python and opencl."
-
-        with open(deb_info_path + '/control', 'w') as file:
-            file.write(control)
 
 
 info_dict.update(cmdclass={'prepare_debian_dist': PrepareDebianDist})
