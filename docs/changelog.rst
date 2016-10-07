@@ -1,2 +1,2 @@
 :tocdepth: 1
-.. include:: ../CHANGELOG.rst
+.. include:: ../changelog.rst
