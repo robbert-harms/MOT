@@ -1,6 +1,6 @@
 .PHONY: clean clean-build clean-pyc clean-test lint test tests test-all coverage docs release dist install uninstall dist-deb
 
-PYTHON=`which python`
+PYTHON=`which python3`
 PROJECT=mot
 
 help:
