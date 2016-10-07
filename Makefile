@@ -67,6 +67,7 @@ docs:
 	@echo "To view results type: firefox docs/_build/html/index.html &"
 
 release: clean
+	git tag -a v$$($(PYTHON) setup.py --version)
 	$(PYTHON) setup.py sdist upload
 	$(PYTHON) setup.py bdist_wheel upload
 
