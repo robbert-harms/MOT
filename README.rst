@@ -17,8 +17,8 @@ Quick installation guide:
 
 **Linux (Ubuntu)**
 
-* ``apt-get install python3 python3-pip python3-pyopencl``
-* ``pip3 install MOT``
+* ``sudo apt-get install python3 python3-pip python3-pyopencl``
+* ``sudo pip3 install MOT``
 
 
 **Windows**

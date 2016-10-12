@@ -20,7 +20,7 @@ Linux (Ubuntu)
 
 .. code-block:: bash
 
-    $ apt-get install python3 python3-pip
+    $ sudo apt-get install python3 python3-pip
 
 
 Windows
@@ -40,7 +40,7 @@ On Ubuntu, the easiest way to install all of this:
 
 .. code-block:: bash
 
-    $ apt-get install python3-pyopencl
+    $ sudo apt-get install python3-pyopencl
 
 
 Windows
@@ -59,7 +59,7 @@ Linux (Ubuntu)
 
 .. code-block:: bash
 
-    $ pip3 install MOT
+    $ sudo pip3 install MOT
 
 
 Windows
