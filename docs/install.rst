@@ -13,7 +13,7 @@ The installation is a three step procedure:
 
 Installing Python
 =================
-Since it is a Python package we need to install the Python interpreter. Considering that Python2 is soon end of life, this package focuses on installing it using Python3.
+Since it is a Python package we need to install the Python interpreter. Considering that Python2 is soon end of life, this package focuses on Python3.
 
 Linux (Ubuntu)
 --------------
@@ -61,8 +61,6 @@ Linux (Ubuntu)
 
     $ pip3 install MOT
 
-To test the installation, please open a Python shell and try to import MOT.
-
 
 Windows
 -------
@@ -84,5 +82,5 @@ Open a python shell (using Anaconda in Windows and bash in Linux) and type:
     >>> from mot.cl_environments import CLEnvironmentFactory
     >>> CLEnvironmentFactory.smart_device_selection()
 
-If you got no errors and the output is a list of CL environments the installation was successful.
+If you got no errors and the output is a list of CL environments, the installation was successful.
 
