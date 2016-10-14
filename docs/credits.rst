@@ -1,5 +1,5 @@
 :tocdepth: 1
-*******
+
 Credits
 *******
 
@@ -14,3 +14,4 @@ Contributors
 
 * Robbert Harms
     - Lead developer
+

@@ -16,6 +16,7 @@
 import sys
 import os
 from datetime import datetime
+from functools import wraps
 from unittest.mock import MagicMock
 import builtins
 
@@ -267,7 +268,7 @@ latex_elements = {
 # [howto/manual]).
 latex_documents = [
     ('index', 'mot.tex',
-     u'Python Parallel Parameter Estimation library Documentation',
+     u'Maastricht Optimization Toolbox',
      u'Robbert Harms', 'manual'),
 ]
 
@@ -298,7 +299,7 @@ latex_documents = [
 # (source start file, name, description, authors, manual section).
 man_pages = [
     ('index', 'mot',
-     u'Python Parallel Parameter Estimation library Documentation',
+     u'Maastricht Optimization Toolbox',
      [u'Robbert Harms'], 1)
 ]
 

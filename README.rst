@@ -5,7 +5,7 @@ Maastricht Optimization Toolbox
     :target: http://badge.fury.io/py/mot
 
 
-A library for parallel optimization and sampling in python and opencl.
+A library for parallel optimization and sampling using Python and OpenCL.
 
 * Free software: LGPL v3 license
 * Full documentation: https://mot.readthedocs.org
@@ -23,8 +23,11 @@ Quick installation guide:
 
 **Windows**
 
-* Install Python Anaconda 3.* from https://www.continuum.io/downloads
+* Install Python Anaconda 3.* 64bit from https://www.continuum.io/downloads
+* Install PyOpenCL:
+    * Using a binary package from http://www.lfd.uci.edu/~gohlke/pythonlibs/#pyopencl (preferred method)
+    * Compile PyOpenCL, this requires Visual Studio 2015 (Community edition is fine) with the Python bindings enabled.
 * Open a Anaconda shell and type: ``pip install MOT``
 
 
-For more information and installation instructions, please see: https://mot.readthedocs.org
+For more information and for more elaborate installation instructions, please see: https://mot.readthedocs.org
