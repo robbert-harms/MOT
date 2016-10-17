@@ -26,7 +26,7 @@ Quick installation guide:
 * Install Python Anaconda 3.* 64bit from https://www.continuum.io/downloads
 * Install PyOpenCL:
     * Using a binary package from http://www.lfd.uci.edu/~gohlke/pythonlibs/#pyopencl (preferred method)
-    * Compile PyOpenCL, this requires Visual Studio 2015 (Community edition is fine) with the Python bindings enabled.
+    * Compile PyOpenCL, this requires Visual Studio 2015 (Community edition or higher) with the Python and Common Tools for Visual C++ options enabled.
 * Open a Anaconda shell and type: ``pip install MOT``
 
 
