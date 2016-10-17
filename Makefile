@@ -81,9 +81,9 @@ dist: clean
 	ls -l dist
 
 dist-ubuntu:
-	#$(PYTHON) setup.py sdist
-	#cp dist/$(PROJECT_NAME)-$(PROJECT_VERSION).tar.gz dist/$(PROJECT_NAME)_$(PROJECT_VERSION).orig.tar.gz
-	#tar -xzf dist/$(PROJECT_NAME)-$(PROJECT_VERSION).tar.gz -C dist/
+	$(PYTHON) setup.py sdist
+	cp dist/$(PROJECT_NAME)-$(PROJECT_VERSION).tar.gz dist/$(PROJECT_NAME)_$(PROJECT_VERSION).orig.tar.gz
+	tar -xzf dist/$(PROJECT_NAME)-$(PROJECT_VERSION).tar.gz -C dist/
 
 	for ubuntu_version in $(TARGET_UBUNTU_DISTRIBUTIONS) ; do \
 		$(MAKE) create_ubuntu_package suite=$$ubuntu_version debian-version=1ubuntu1ppa1~$${ubuntu_version}1 ; \
