@@ -1,9 +1,10 @@
-.PHONY: clean clean-build clean-pyc clean-test lint test tests test-all coverage docs release dist install uninstall dist-deb
+.PHONY: clean clean-build clean-pyc clean-test lint test tests test-all coverage docs release dist install uninstall dist-ubuntu create_ubuntu_package
 
 PYTHON=$$(which python3)
 PROJECT_NAME=mot
 PROJECT_VERSION=$$($(PYTHON) setup.py --version)
 GPG_SIGN_KEY=0E1AA560
+TARGET_UBUNTU_DISTRIBUTIONS=wily xenial yakkety
 
 help:
 	@echo "clean - remove all build, test, coverage and Python artifacts (no uninstall)"
@@ -18,7 +19,7 @@ help:
 	@echo "docs - generate Sphinx HTML documentation, including API docs"
 	@echo "release - package and upload a release"
 	@echo "dist - create the package"
-	@echo "dist-deb - create a debian package"
+	@echo "dist-ubuntu - create a ubuntu package"
 	@echo "install - installs the package using pip"
 	@echo "uninstall - uninstalls the package using pip"
 
@@ -79,13 +80,19 @@ dist: clean
 	$(PYTHON) setup.py bdist_wheel
 	ls -l dist
 
-dist-deb:
-	$(PYTHON) setup.py sdist
+dist-ubuntu:
+	#$(PYTHON) setup.py sdist
+	#cp dist/$(PROJECT_NAME)-$(PROJECT_VERSION).tar.gz dist/$(PROJECT_NAME)_$(PROJECT_VERSION).orig.tar.gz
+	#tar -xzf dist/$(PROJECT_NAME)-$(PROJECT_VERSION).tar.gz -C dist/
+
+	for ubuntu_version in $(TARGET_UBUNTU_DISTRIBUTIONS) ; do \
+		$(MAKE) create_ubuntu_package suite=$$ubuntu_version debian-version=1ubuntu1ppa1~$${ubuntu_version}1 ; \
+	done
+
+create_ubuntu_package:
 	rm -rf debian/source
-	$(PYTHON) setup.py --command-packages=stdeb.command debianize --with-python3 True
-	$(PYTHON) setup.py prepare_debian_dist
-	cp dist/$(PROJECT_NAME)-$(PROJECT_VERSION).tar.gz dist/$(PROJECT_NAME)_$(PROJECT_VERSION).orig.tar.gz
-	tar -xzf dist/$(PROJECT_NAME)_$(PROJECT_VERSION).orig.tar.gz -C dist/
+	$(PYTHON) setup.py debianize --suite $(suite) --debian-version $(debian-version)
+	rm -rf dist/$(PROJECT_NAME)-$(PROJECT_VERSION)/debian/
 	cp -r debian dist/$(PROJECT_NAME)-$(PROJECT_VERSION)/
 	cd dist/$(PROJECT_NAME)-$(PROJECT_VERSION)/; dpkg-source -b . ; debuild -S -sa -k$(GPG_SIGN_KEY)
 
