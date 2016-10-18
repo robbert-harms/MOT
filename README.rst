@@ -13,7 +13,7 @@ A library for parallel optimization and sampling using Python and OpenCL.
 * Uses the `GitLab workflow <https://docs.gitlab.com/ee/workflow/gitlab_flow.html>`_
 * Tags: optimization, parallel, opencl, python
 
-For the diffusion MRI package ``MDT`` which builds on top of this, please see https://github.com/cbclab/MOT.
+For the diffusion MRI package MDT which builds on top of this, please see https://github.com/cbclab/MDT.
 
 
 Quick installation guide
