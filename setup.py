@@ -47,7 +47,7 @@ info_dict = dict(
     install_requires=requirements,
     license="LGPL v3",
     zip_safe=False,
-    keywords='mot',
+    keywords='mot, optimization, sampling, opencl, gpu, parallel, computing',
     classifiers=[
         'Environment :: Console',
         'Intended Audience :: Developers',

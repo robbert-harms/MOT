@@ -1,11 +1,12 @@
-.PHONY: clean clean-build clean-pyc clean-test lint test tests test-all coverage docs release dist install uninstall dist-ubuntu package-ubuntu
+.PHONY: clean clean-build clean-pyc clean-test lint test tests test-all coverage docs release dist install uninstall dist-ubuntu _package-ubuntu
 
 PYTHON=$$(which python3)
 PROJECT_NAME=mot
 PROJECT_VERSION=$$($(PYTHON) setup.py --version)
 GPG_SIGN_KEY=0E1AA560
-TARGET_UBUNTU_DISTRIBUTIONS=wily xenial yakkety
-#TARGET_UBUNTU_DISTRIBUTIONS=wily
+UBUNTU_MAIN_TARGET_DISTRIBUTIONS=xenial
+UBUNTU_OTHER_TARGET_DISTRIBUTIONS=wily yakkety
+
 
 help:
 	@echo "clean - remove all build, test, coverage and Python artifacts (no uninstall)"
@@ -70,16 +71,17 @@ docs:
 	$(MAKE) -C docs html SPHINXBUILD='python3 $(shell which sphinx-build)'
 	@echo "To view results type: firefox docs/_build/html/index.html &"
 
-release: clean
-	# todo: add GitHub Releases API hook here
-	# todo: upload PPA
+# todo: add GitHub Releases API hook here
+release: clean release-ubuntu-ppa release-pip
+
+release-pip:
 	$(PYTHON) setup.py sdist upload
 	$(PYTHON) setup.py bdist_wheel upload
 
-release-ubuntu: dist-ubuntu
+release-ubuntu-ppa: dist-ubuntu
 	dput ppa:robbert-harms/cbclab dist/$(PROJECT_NAME)_$(PROJECT_VERSION)-1_source.changes
-	for ubuntu_version in $(TARGET_UBUNTU_DISTRIBUTIONS) ; do \
-		dput ppa:robbert-harms/cbclab dist/$(PROJECT_NAME)_$(PROJECT_VERSION)-1~$${ubuntu_version}1_source.changes
+	for ubuntu_version in $(UBUNTU_OTHER_TARGET_DISTRIBUTIONS) ; do \
+		dput ppa:robbert-harms/cbclab dist/$(PROJECT_NAME)_$(PROJECT_VERSION)-1~$${ubuntu_version}1_source.changes ; \
 	done
 
 dist: clean
@@ -91,13 +93,13 @@ dist-ubuntu: clean
 	$(PYTHON) setup.py sdist
 	cp dist/$(PROJECT_NAME)-$(PROJECT_VERSION).tar.gz dist/$(PROJECT_NAME)_$(PROJECT_VERSION).orig.tar.gz
 	tar -xzf dist/$(PROJECT_NAME)-$(PROJECT_VERSION).tar.gz -C dist/
-	$(MAKE) package-ubuntu suite=xenial debian-version=1 build-flag=-sa
+	$(MAKE) _package-ubuntu suite=$(UBUNTU_MAIN_TARGET_DISTRIBUTIONS) debian-version=1 build-flag=-sa
 
-	for ubuntu_version in $(TARGET_UBUNTU_DISTRIBUTIONS) ; do \
-		$(MAKE) package-ubuntu suite=$$ubuntu_version debian-version=1~$${ubuntu_version}1 build-flag=-sd ; \
+	for ubuntu_version in $(UBUNTU_OTHER_TARGET_DISTRIBUTIONS) ; do \
+		$(MAKE) _package-ubuntu suite=$$ubuntu_version debian-version=1~$${ubuntu_version}1 build-flag=-sd ; \
 	done
 
-package-ubuntu:
+_package-ubuntu:
 	# Requires the following parameters to be set:
 	# suite: the suite argument in the debianize command
 	# debian-version: the debian-version argument in the debianize command
