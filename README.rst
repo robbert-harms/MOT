@@ -26,14 +26,14 @@ The basic requirements for MOT are:
 
 **Linux**
 
-For Ubuntu >= 15.10 you can use:
+For Ubuntu >= 16 you can use:
 
 * ``sudo add-apt-repository ppa:robbert-harms/cbclab``
 * ``sudo apt-get update``
 * ``sudo apt-get install python3-mot``
 
 
-For Debian and Ubuntu < 15.10, please use:
+For Debian and Ubuntu < 16, please use:
 
 * ``sudo apt-get install python3 python3-pip python3-pyopencl``
 * ``sudo pip3 install MOT``
