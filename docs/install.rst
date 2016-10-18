@@ -6,7 +6,7 @@ Ubuntu / Debian Linux
 =====================
 Using the package manager, installation in Ubuntu and Debian is easy.
 
-For **Ubuntu >= 15.10** the MOT package can be installed with a Personal Package Archive (PPA) using:
+For **Ubuntu >= 16** the MOT package can be installed with a Personal Package Archive (PPA) using:
 
 .. code-block:: bash
 
@@ -15,7 +15,7 @@ For **Ubuntu >= 15.10** the MOT package can be installed with a Personal Package
     $ sudo apt-get install python3-mot
 
 Using such a PPA ensures that your Ubuntu system can update the MOT package automatically whenever a new version is out.
-For **Debian**, and **Ubuntu < 15.10**, using a PPA is not possible and we need a more manual installation.
+For **Debian**, and **Ubuntu < 16**, using a PPA is not possible and we need a more manual installation.
 Please install the dependencies (*python3*, *pip3* and *pyopencl*) first:
 
 .. code-block:: bash
