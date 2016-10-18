@@ -3,9 +3,9 @@
 
 import re
 from textwrap import dedent
+import os
 import sys
-from setuptools import setup, find_packages
-from stdeb.command.debianize import debianize
+from setuptools import setup, find_packages, Command
 
 
 def load_requirements(fname):
@@ -25,7 +25,7 @@ requirements = load_requirements('requirements.txt')
 requirements_tests = load_requirements('requirements_tests.txt')
 
 long_description = readme
-if sys.argv[-1] == 'debianize':
+if sys.argv and len(sys.argv) > 3 and sys.argv[2] == 'debianize':
     long_description = dedent("""
         The Maastricht Optimization Toolbox contains various optimization and sampling algorithms implemented in OpenCL.
         Being GPU enabled, it allows for high-performance computing in the case of large scale parallelizable problems.
@@ -39,6 +39,8 @@ info_dict = dict(
     long_description=long_description,
     author='Robbert Harms',
     author_email='robbert.harms@maastrichtuniversity.nl',
+    maintainer='Robbert Harms',
+    maintainer_email='robbert.harms@maastrichtuniversity.nl',
     url='https://github.com/cbclab/MOT',
     packages=find_packages(),
     include_package_data=True,
@@ -69,12 +71,17 @@ info_dict = dict(
 )
 
 
-class Debianize(debianize):
-    description = "Prepares the debian archive for packaging."
+class PrepareDebianDist(Command):
+    description = "Prepares the debian dist prior to packaging."
+    user_options = []
+
+    def initialize_options(self):
+        self.cwd = None
+
+    def finalize_options(self):
+        self.cwd = os.getcwd()
 
     def run(self):
-        debianize.run(self)
-
         with open('./debian/rules', 'a') as f:
             f.write('\noverride_dh_auto_test:\n\techo "Skip dh_auto_test"')
 
@@ -93,5 +100,5 @@ class Debianize(debianize):
             file.write(copyright_info)
 
 
-info_dict.update(cmdclass={'debianize': Debianize})
+info_dict.update(cmdclass={'prepare_debian_dist': PrepareDebianDist})
 setup(**info_dict)

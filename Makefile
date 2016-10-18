@@ -1,10 +1,11 @@
-.PHONY: clean clean-build clean-pyc clean-test lint test tests test-all coverage docs release dist install uninstall dist-ubuntu create_ubuntu_package
+.PHONY: clean clean-build clean-pyc clean-test lint test tests test-all coverage docs release dist install uninstall dist-ubuntu package-ubuntu
 
 PYTHON=$$(which python3)
 PROJECT_NAME=mot
 PROJECT_VERSION=$$($(PYTHON) setup.py --version)
 GPG_SIGN_KEY=0E1AA560
 TARGET_UBUNTU_DISTRIBUTIONS=wily xenial yakkety
+#TARGET_UBUNTU_DISTRIBUTIONS=wily
 
 help:
 	@echo "clean - remove all build, test, coverage and Python artifacts (no uninstall)"
@@ -18,8 +19,8 @@ help:
 	@echo "coverage - check code coverage quickly with the default Python"
 	@echo "docs - generate Sphinx HTML documentation, including API docs"
 	@echo "release - package and upload a release"
-	@echo "dist - create the package"
-	@echo "dist-ubuntu - create a ubuntu package"
+	@echo "dist - create a pip package"
+	@echo "dist-ubuntu - create an Ubuntu package"
 	@echo "install - installs the package using pip"
 	@echo "uninstall - uninstalls the package using pip"
 
@@ -75,26 +76,40 @@ release: clean
 	$(PYTHON) setup.py sdist upload
 	$(PYTHON) setup.py bdist_wheel upload
 
+release-ubuntu: dist-ubuntu
+	dput ppa:robbert-harms/cbclab dist/$(PROJECT_NAME)_$(PROJECT_VERSION)-1_source.changes
+	for ubuntu_version in $(TARGET_UBUNTU_DISTRIBUTIONS) ; do \
+		dput ppa:robbert-harms/cbclab dist/$(PROJECT_NAME)_$(PROJECT_VERSION)-1~$${ubuntu_version}1_source.changes
+	done
+
 dist: clean
 	$(PYTHON) setup.py sdist
 	$(PYTHON) setup.py bdist_wheel
 	ls -l dist
 
-dist-ubuntu:
+dist-ubuntu: clean
 	$(PYTHON) setup.py sdist
 	cp dist/$(PROJECT_NAME)-$(PROJECT_VERSION).tar.gz dist/$(PROJECT_NAME)_$(PROJECT_VERSION).orig.tar.gz
 	tar -xzf dist/$(PROJECT_NAME)-$(PROJECT_VERSION).tar.gz -C dist/
+	$(MAKE) package-ubuntu suite=xenial debian-version=1 build-flag=-sa
 
 	for ubuntu_version in $(TARGET_UBUNTU_DISTRIBUTIONS) ; do \
-		$(MAKE) create_ubuntu_package suite=$$ubuntu_version debian-version=1ubuntu1ppa1~$${ubuntu_version}1 ; \
+		$(MAKE) package-ubuntu suite=$$ubuntu_version debian-version=1~$${ubuntu_version}1 build-flag=-sd ; \
 	done
 
-create_ubuntu_package:
+package-ubuntu:
+	# Requires the following parameters to be set:
+	# suite: the suite argument in the debianize command
+	# debian-version: the debian-version argument in the debianize command
+	# build-flag: the build flag for the debuild command. Commonly something like '-sa' or '-sd'
+
 	rm -rf debian/source
-	$(PYTHON) setup.py debianize --suite $(suite) --debian-version $(debian-version)
+	$(PYTHON) setup.py --command-packages=stdeb.command debianize --suite $(suite) --debian-version $(debian-version) --with-python2 False --with-python3 True
+	$(PYTHON) setup.py prepare_debian_dist
 	rm -rf dist/$(PROJECT_NAME)-$(PROJECT_VERSION)/debian/
 	cp -r debian dist/$(PROJECT_NAME)-$(PROJECT_VERSION)/
-	cd dist/$(PROJECT_NAME)-$(PROJECT_VERSION)/; dpkg-source -b . ; debuild -S -sa -k$(GPG_SIGN_KEY)
+	cd dist/$(PROJECT_NAME)-$(PROJECT_VERSION)/; dpkg-source -b .
+	cd dist/$(PROJECT_NAME)-$(PROJECT_VERSION)/; debuild -S $(build-flag) -k$(GPG_SIGN_KEY)
 
 install: dist
 	pip install --upgrade --no-deps --force-reinstall dist/$(PROJECT_NAME)-*.tar.gz
