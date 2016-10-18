@@ -4,21 +4,32 @@ Installation
 
 Ubuntu / Debian Linux
 =====================
-Using the package manager installation in Ubuntu and Debian is easy. To install the dependencies please use:
+Using the package manager, installation in Ubuntu and Debian is easy.
+
+For **Ubuntu >= 15.10** the MOT package can be installed with a Personal Package Archive (PPA) using:
+
+.. code-block:: bash
+
+    $ sudo add-apt-repository ppa:robbert-harms/cbclab
+    $ sudo apt-get update
+    $ sudo apt-get install python3-mot
+
+Using such a PPA ensures that your Ubuntu system can update the MOT package automatically whenever a new version is out.
+For **Debian**, and **Ubuntu < 15.10**, using a PPA is not possible and we need a more manual installation.
+Please install the dependencies (*python3*, *pip3* and *pyopencl*) first:
 
 .. code-block:: bash
 
     $ sudo apt-get install python3 python3-pip python3-pyopencl
 
-To install *python3*, *pip3* and the *pyopencl* Python package.
-
-Then, to install MOT, please type:
+and then install MOT with:
 
 .. code-block:: bash
 
     $ sudo pip3 install MOT
 
-Please continue with testing the installation at the end of this chapter.
+
+After installation please continue with testing the installation below.
 
 
 Windows
@@ -98,7 +109,7 @@ With Python and OpenCL installed you can now install MOT. Open an Anaconda Promp
 
 .. code-block:: none
 
-    > pip install MOT
+    > pip install mot
 
 
 Testing the installation
@@ -112,3 +123,24 @@ Open a Python shell. In Windows you can do this using a the Anaconda Prompt and 
     >>> CLEnvironmentFactory.smart_device_selection()
 
 If you get no errors and the output is a list of CL environments, MOT is succesfully installed.
+
+
+
+Upgrading
+=========
+
+Ubuntu / Debian Linux
+---------------------
+If you used the PPA to install the MOT package, upgrading is easy and is handled automatically by Ubuntu.
+If you used the pip3 installation you can upgrade MOT with ``sudo pip3 install --upgrade MOT``.
+
+
+Windows
+-------
+To upgrade MOT when a new version is out, open an Anaconda Prompt and type:
+
+.. code-block:: none
+
+    > pip install --upgrade mot
+
+to upgrade MOT to the latest version.

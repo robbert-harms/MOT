@@ -24,7 +24,16 @@ The basic requirements for MOT are:
 * OpenCL 1.2 (or higher) supper in GPU driver or CPU runtime
 
 
-**Linux (Ubuntu)**
+**Linux**
+
+For Ubuntu >= 15.10 you can use:
+
+* ``sudo add-apt-repository ppa:robbert-harms/cbclab``
+* ``sudo apt-get update``
+* ``sudo apt-get install python3-mot``
+
+
+For Debian and Ubuntu < 15.10, please use:
 
 * ``sudo apt-get install python3 python3-pip python3-pyopencl``
 * ``sudo pip3 install MOT``
