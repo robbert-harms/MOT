@@ -42,11 +42,9 @@ For Debian users and Ubuntu < 16 users, install MOT with:
 **Windows**
 
 * Install Python Anaconda 3.* 64bit from https://www.continuum.io/downloads
-* Install PyOpenCL:
-    * Using a binary package from http://www.lfd.uci.edu/~gohlke/pythonlibs/#pyopencl (preferred method)
-    * Compile PyOpenCL with ``pip install pyopencl``, this requires:
-        * Visual Studio 2015 (Community edition or higher) with the Python and Common Tools for Visual C++ options enabled
-        * OpenCL development kit (NVidia CUDA or Intel OpenCL SDK or the AMD APP SDK)
+* Compile PyOpenCL with ``pip install pyopencl``, this requires:
+    * Visual Studio 2015 (Community edition or higher) with the Python and Common Tools for Visual C++ options enabled
+    * OpenCL development kit (NVidia CUDA or Intel OpenCL SDK or the AMD APP SDK)
 * Open a Anaconda shell and type: ``pip install MOT``
 
 
@@ -59,5 +57,5 @@ There are a few caveats and known issues, primarily related to OpenCL:
 
 * Windows support is experimental due to the difficulty of installing PyOpenCL
 * For AMD users with Ubuntu >= 16, the new AMD GPU-Pro driver is still in beta and may not work with all the kernels in MOT.
-  Our recommendation at the moment (October 2016) is to use Ubuntu version 14
-* GPU acceleration is not possible in most virtual machines, due to lack of GPU or PCI-E pass-through
+  Our recommendation at the moment (October 2016) is to use Ubuntu version 14.
+* GPU acceleration is not possible in most virtual machines due to lack of GPU or PCI-E pass-through
