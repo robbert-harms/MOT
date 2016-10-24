@@ -80,25 +80,39 @@ Please substitute ``<filename>`` for your downloaded filename.
 
 Using pip and compilation
 ^^^^^^^^^^^^^^^^^^^^^^^^^
-To install ``pyopencl`` using pip you must first install a version of Visual Studio 2015, with a few specific options enabled. First download the
-Visual Studio 2015 Community edition and open the installer. When asked, choose for "Custom" installation and enable the following features:
+Installing ``pyopencl`` with pip requires Visual Studio 2015 and an OpenCL SDK to be present on your system.
+First, install Visual Studio 2015 with a few specific options enabled (under "Custom" during the installation):
 
 * [] Programming Languages
     * [] Visual C++
         * [X] Common Tools for Visual C++ 2015
     * [X] Python Tools for Visual Studio
 
-If you already have Visual Studio 2015 installed and are unsure if these options are enabled, you can rerun the installer and it will ask you if you
-wish to update your installation with additional options.
+If you already have Visual Studio 2015 installed and are unsure if these options are enabled, you can rerun the installer to update your installation with additional options.
 
-With Visual Studio 2015 installed, installing pyopencl is easy. Open a Anaconda Prompt and type:
+After this installation please download and install an OpenCL software development kit (SDK) matching the vendor of your graphics card or processor:
+
+* For Intel, see https://software.intel.com/en-us/intel-opencl
+* For AMD, see http://developer.amd.com/tools-and-sdks/opencl-zone/amd-accelerated-parallel-processing-app-sdk/
+* For NVidia, see https://developer.nvidia.com/cuda-downloads
+
+With Visual Studio 2015 and an OpenCL SDK installed we can proceed to install PyOpenCL. Open an Anaconda Prompt or a Windows CMD and type:
 
 .. code-block:: none
 
     > pip install pyopencl
 
 
-If all goes well, pyopencl will be compiled and installed to your system.
+If this completes without errors, PyOpenCL is installed. If you get compilation errors, please set the following environment variables according to your system and try again:
+
+.. code-block:: none
+
+    > set INCLUDE=C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v8.0\include
+    > set LIB=C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v8.0\lib\x64
+    > pip install pyopencl
+
+The paths listed here assume an NVidia system. Please adapt the paths to your own system. The ``INCLUDE`` path should contain the file ``CL\cl.h`` and the ``LIB`` path
+should contain ``OpenCL.lib``. If all goes well, pyopencl will be compiled and installed to your system.
 
 
 .. _install_mot:
@@ -119,10 +133,10 @@ Open a Python shell. In Windows you can do this using a the Anaconda Prompt and 
 .. code-block:: python
 
     >>> import mot
-    >>> from mot.cl_environments import CLEnvironmentFactory
-    >>> CLEnvironmentFactory.smart_device_selection()
+    >>> devices = mot.smart_device_selection()
+    >>> list(map(str, devices))
 
-If you get no errors and the output is a list of CL environments, MOT is succesfully installed.
+If you get no errors and the output is a list of CL environments, MOT is successfully installed.
 
 
 
@@ -132,12 +146,12 @@ Upgrading
 Ubuntu / Debian Linux
 ---------------------
 If you used the PPA to install the MOT package, upgrading is easy and is handled automatically by Ubuntu.
-If you used the pip3 installation you can upgrade MOT with ``sudo pip3 install --upgrade MOT``.
+If you used the pip3 installation procedure you can upgrade MOT with ``sudo pip3 install --upgrade MOT``.
 
 
 Windows
 -------
-To upgrade MOT when a new version is out, open an Anaconda Prompt and type:
+To upgrade MOT when a new version is out, open an Anaconda Prompt or Windows CMD and type:
 
 .. code-block:: none
 

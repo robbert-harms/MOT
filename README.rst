@@ -33,7 +33,7 @@ For Ubuntu >= 16 you can use:
 * ``sudo apt-get install python3-mot``
 
 
-For Debian and Ubuntu < 16, please use:
+For Debian users and Ubuntu < 16 users, install MOT with:
 
 * ``sudo apt-get install python3 python3-pip python3-pyopencl``
 * ``sudo pip3 install MOT``
@@ -51,3 +51,13 @@ For Debian and Ubuntu < 16, please use:
 
 
 For more information and for more elaborate installation instructions, please see: https://mot.readthedocs.org
+
+
+Caveats
+^^^^^^^
+There are a few caveats and known issues, primarily related to OpenCL:
+
+* Windows support is experimental due to the difficulty of installing PyOpenCL
+* For AMD users with Ubuntu >= 16, the new AMD GPU-Pro driver is still in beta and may not work with all the kernels in MOT.
+  Our recommendation at the moment (October 2016) is to use Ubuntu version 14
+* GPU acceleration is not possible in most virtual machines, due to lack of GPU or PCI-E pass-through
