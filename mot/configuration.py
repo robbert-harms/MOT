@@ -225,3 +225,11 @@ class RuntimeConfigurationAction(SimpleConfigAction):
 
         if self._load_balancer is not None:
             set_load_balancer(self._load_balancer)
+
+
+class VoidConfigurationAction(ConfigAction):
+
+    def __init__(self):
+        """Does nothing, useful as a default config action.
+        """
+        super(VoidConfigurationAction, self).__init__()

@@ -308,7 +308,9 @@ def initialize_ranlux(cl_context, nmr_instances, ranluxcl_lux=None, seed=None):
         cl_environment (CLEnvironment): the environment to use
         cl_context: the context to use (containing the queue and actual context)
         nmr_instances (int): for how many thread instances we should initialize the ranlux cl tab.
-        ranluxcl_lux (int): the luxury level of the ranluxcl generator. See the ranluxcl.cl source for details.
+        ranluxcl_lux (int): the "luxury value" of the generator, should be 0-4, where 0 is fastest and
+            4 produces the best numbers. It can also be set to >=24, in which case it directly sets the p-value
+            of RANLUXCL.
         seed (int): the seed to use, see the ranluxcl.cl source for details. If not given (is None) we will use
             the seed number defined in the current configuration.
 

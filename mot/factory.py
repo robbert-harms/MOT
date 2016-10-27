@@ -8,7 +8,6 @@ from .cl_routines.optimizing.nmsimplex import NMSimplex
 from .cl_routines.optimizing.powell import Powell
 from .load_balance_strategies import EvenDistribution, RuntimeLoadBalancing, PreferGPU, PreferCPU, \
     PreferSpecificEnvironment
-from mot.cl_routines.optimizing.praxis import PrAxis
 
 __author__ = 'Robbert Harms'
 __date__ = "2015-07-06"
@@ -27,7 +26,7 @@ def get_optimizer_by_name(name):
     Returns:
         class: the class of the optimizer requested
     """
-    optimizers = [LevenbergMarquardt, Powell, NMSimplex, SimulatedAnnealing, PrAxis]
+    optimizers = [LevenbergMarquardt, Powell, NMSimplex, SimulatedAnnealing]
     return _get_item(name, optimizers, 'optimizers')
 
 
