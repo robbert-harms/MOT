@@ -57,20 +57,29 @@ Installing OpenCL
 -----------------
 To run Python OpenCL applications (using PyOpenCL), you need an OpenCL driver for your platform and the Python OpenCL bindings.
 Furthermore to install PyOpenCL you additionally need an OpenCL SDK. First we make sure you can run the application when installed.
-Please download and install the correct OpenCL driver (Intel/AMD/NVidia) for your system. For graphics cards, make sure you are using the
-latest version of your graphics driver. For Intel processors download the drivers from https://software.intel.com/en-us/articles/opencl-drivers. This is only needed
-if you want to run OpenCL on your CPU.
+Please download and install the correct device driver (Intel/AMD/NVidia) for your device and system with support for OpenCL 1.2 or higher. For graphics cards, make sure you are using the
+latest version of your graphics driver. For Intel processors download the OpenCL runtime from https://software.intel.com/en-us/articles/opencl-drivers
+(OpenCL™ Runtime for Intel® Core™ and Intel® Xeon® Processors; towards the end). Note that this is needed
+if you want to run OpenCL on your CPUs as well as your GPUs.
 
 With the drivers installed and everything up to date, we can now proceed with installing the Python PyOpenCL bindings.
-This package, ``pyopencl``, can either be installed from a downloadable binary, or be compiled from source.
-Using the binary is easiest since compilation is more difficult.
+This is often the most problematic step and errors later on (e.g. in testing MOT) often come down to an incomplete (failed)
+or incompatible (successful but not working) pyopencl package install.
+This package, ``pyopencl``, can either be installed from a downloadable binary or be compiled from source. Using the binary is easiest since compilation is more difficult.
+
 
 Using the binary OpenCL package
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Christoph Gohlke, hosts a website (http://www.lfd.uci.edu/~gohlke/pythonlibs/#pyopencl) containing binary packages of various Python libraries.
-These packages may not work with the Anaconda distribution, yet it if works it is the fastest way to get started.
-First download the correct binary from Gohlke's website, for example, download ``pyopencl-2016.2-cp35-cp35m-win_amd64.whl``.
-After the download, open an Anaconda Prompt (or a normal Windows command line) and
+Installing a precompiled binary wheel (.whl) is the easiest way to install PyOpenCL, but this leads to incompatibility issues
+if the wheel is not compiled for your specific Python implementation.
+The wheel compatible with most Python and Windows versions is hosted here: <todo>. This is mirrored from a wheel previously available from Christoph Gohlke website,
+http://www.lfd.uci.edu/~gohlke/pythonlibs/#pyopencl, containing binary packages of various Python libraries.
+We found that some newer binary wheels compiled against the cpython ABI (e.g. cp35m) are incompatible with the Anaconda Python distribution referenced to in this install guide.
+In Windows 7, with Anaconda Python v3.5, the ``pyopencl-2015.2.4-cp35-none-win_amd64.whl`` works because it was compiled for a general ABI.
+However, for another Python implementation (or another OS version, e.g. Windows 10) you can download the latest PyOpenCL binary from Gohlke's website matching your system.
+For example, download ``pyopencl-2016.2-cp35-cp35m-win_amd64.whl``.
+
+After the download, open an Anaconda Prompt (or a normal Windows cmd) and
 change directory to where you downloaded the ``.whl`` file and install the binary using pip:
 
 .. code-block:: none
@@ -78,18 +87,26 @@ change directory to where you downloaded the ``.whl`` file and install the binar
     > cd %UserProfile%\Downloads
     > pip install <filename>.whl
 
-Please substitute ``<filename>`` for your downloaded filename. To test if this binary package works for you, open a Python shell and type:
+Please substitute ``<filename>`` for your downloaded filename.
+
+To test if this binary package works, open a Python shell and type:
 
 .. code-block:: python
 
     >>> import pyopencl
 
-If that works without messages about missing dll's and cffi problems, you are good to go.
+If that works without messages about missing dll's and cffi problems, you are good to go. If you encounter an error that ends on something like:
+
+.. code-block:: none
+
+    > ImportError: DLL load failed: The specified procedure could not be found.
+
+Then the binary package (.whl file) is not compatible with your OS version and/or Python installation. Either try a different wheel, or try the compilation procedure below.
 
 
 Compile PyOpenCL with Visual Studio 15
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Installing ``pyopencl`` with pip requires Visual Studio 2015 and an OpenCL SDK to be present on your system.
+Installing ``pyopencl`` with pip requires Visual Studio 2015 and an OpenCL SDK (this is different from a runtime, the SDK includes compilation header files) to be present on your system.
 First, install Visual Studio 2015 with a few specific options enabled (under "Custom" during the installation):
 
 * [] Programming Languages
@@ -112,7 +129,7 @@ With Visual Studio 2015 and an OpenCL SDK installed we can proceed to install Py
     > pip install pyopencl
 
 
-If this completes without errors, PyOpenCL is installed. If you get compilation errors, please set the following environment variables according to your system and try again:
+If this completes without errors, PyOpenCL is installed. If you get compilation errors, please set the INCLUDE and LIB environment variables according to your system and try again, e.g. for the CUDA 8 SDK use:
 
 .. code-block:: none
 
@@ -120,10 +137,10 @@ If this completes without errors, PyOpenCL is installed. If you get compilation 
     > set LIB=C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v8.0\lib\x64
     > pip install pyopencl
 
-The paths listed here assume an NVidia system. Please adapt the paths to your own system. The ``INCLUDE`` path should contain the file ``CL\cl.h`` and the ``LIB`` path
-should contain ``OpenCL.lib``. If all goes well, PyOpenCL will be compiled and installed to your system.
+The paths listed here assume an NVidia system. Please adapt the paths to your own system and device SDK (e.g. ATI). Important is that the ``INCLUDE`` path should contain
+the file ``CL\cl.h`` and the ``LIB`` path should contain ``OpenCL.lib``. Find these directories if needed. If all goes well, PyOpenCL will be compiled and installed to your system.
 
-If this still does not work, you can try one of the installation walkthroughs on https://wiki.tiker.net/PyOpenCL/Installation/Windows.
+If this still does not work, you can try one of the installation guides on https://wiki.tiker.net/PyOpenCL/Installation/Windows.
 
 
 .. _install_mot:

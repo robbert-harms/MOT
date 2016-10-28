@@ -36,14 +36,6 @@ mot.cl_routines.optimizing.powell module
     :undoc-members:
     :show-inheritance:
 
-mot.cl_routines.optimizing.praxis module
-----------------------------------------
-
-.. automodule:: mot.cl_routines.optimizing.praxis
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
 mot.cl_routines.optimizing.simulated_annealing module
 -----------------------------------------------------
 
