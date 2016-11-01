@@ -5,7 +5,8 @@ Maastricht Optimization Toolbox
     :target: http://badge.fury.io/py/mot
 
 
-A library for parallel optimization and sampling using Python and OpenCL.
+The Maastricht Optimization Toolbox, MOT is a library for parallel optimization and sampling using the graphics card for the computations.
+It is programmed in Python and OpenCL, where Python is used for the user interface and OpenCL is used for the computations.
 
 * Free software: LGPL v3 license
 * Full documentation: https://mot.readthedocs.org
