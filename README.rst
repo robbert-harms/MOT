@@ -1,20 +1,31 @@
 Maastricht Optimization Toolbox
 ===============================
+The Maastricht Optimization Toolbox, MOT, is a library for parallel optimization and sampling using the graphics card for the computations.
+It is meant to optimize, in parallel, a large number of smaller problems, in contrast to optimizing one big problem with parallelized parts.
+For example, in diffusion MRI the brain is scanned in a 3d grid where each grid element, a *voxel*, represents its own optimization problem.
+The number of data points per voxel is generally small, ranging from 30 to 500 datapoints, and the models fitted to that data have
+generally somewhere between 6 and 20 parameters.
+Since each of these voxels can be analyzed independently of the others, the computations can be massively parallelized and hence programming
+for the graphics card can allow for a large speed gain.
+This software toolbox was originally built for exactly this use case, yet the algorithms and data structures are generalized such that any scientific field may take advantage of this toolbox.
+For the diffusion MRI package *MDT* to which is referred in this example, please see https://github.com/cbclab/MDT.
 
-.. image:: https://badge.fury.io/py/mot.png
-    :target: http://badge.fury.io/py/mot
+Can MOT help me?
+^^^^^^^^^^^^^^^^
+To recognize if MOT can help you with your use case, try to see if your computations can be parallized in some way.
+If you have just one big optimization problem with 10.000 variables, MOT unfortunately can not help you.
+On the other hand, if you find a way to split your analysis in (a lot of, >10.000) smaller sub-problems, with ~30 parameters or less each, MOT may actually be of help.
 
 
-The Maastricht Optimization Toolbox, MOT is a library for parallel optimization and sampling using the graphics card for the computations.
-It is programmed in Python and OpenCL, where Python is used for the user interface and OpenCL is used for the computations.
-
+Summary
+^^^^^^^
 * Free software: LGPL v3 license
+* Interface in Python, computations in OpenCL
 * Full documentation: https://mot.readthedocs.org
 * Project home: https://github.com/cbclab/MOT
+* PyPi package: `PyPi <http://badge.fury.io/py/mot>`_
 * Uses the `GitLab workflow <https://docs.gitlab.com/ee/workflow/gitlab_flow.html>`_
 * Tags: optimization, parallel, opencl, python
-
-For the diffusion MRI package MDT which builds on top of this, please see https://github.com/cbclab/MDT.
 
 
 Quick installation guide
