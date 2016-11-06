@@ -3,9 +3,9 @@ import time
 import numpy as np
 import pyopencl as cl
 import pyopencl.array as cl_array
-from ...utils import initialize_ranlux, get_ranlux_cl
-from ...cl_routines.base import CLRoutine
-from ...load_balance_strategies import Worker
+from mot.utils import initialize_ranlux, get_ranlux_cl
+from mot.cl_routines.base import CLRoutine
+from mot.load_balance_strategies import Worker
 from pkg_resources import resource_filename
 
 __author__ = 'Robbert Harms'
@@ -137,49 +137,79 @@ class _RanluxRandomWorker(Worker):
         return self._kernel_source
 
 
-class Random123GeneratorBase(object):
+class Random123GeneratorBase(CLRoutine):
 
-    def __init__(self, context, key=None, counter=None, seed=None):
+    def __init__(self, key=None, counter=None, seed=None, cl_environments=None, load_balancer=None):
+        """Create the random123 basis for generating a list of random numbers.
+
+        *From the Random123 documentation:*
+
+        Unlike conventional RNGs, counter-based RNGs are stateless functions (or function classes i.e. functors)
+        whose arguments are a counter, and a key and returns a result of the same type as the counter.
+
+        .. code-block: c
+
+            result = CBRNGname(counter, key)
+
+        The returned result is a deterministic function of the key and counter, i.e. a unique (counter, key)
+        tuple will always produce the same result. The result is highly sensitive to small changes in the inputs,
+        so that the sequence of values produced by simply incrementing the counter (or key) is effectively
+        indistinguishable from a sequence of samples of a uniformly distributed random variable.
+
+        Args:
+            key (list of int): a list of integers to use for the key, the length should be ``key_length - 1``
+                The range of each int should be between the minimum and the maximum allowed integer on this system, you
+                can find these using np.iinfo(np.int32).
+            counter (list of int): a list of integers to use for the counter, of length 4.
+                The range of each int should be between the minimum and the maximum allowed integer on this system, you
+                can find these using np.iinfo(np.int32).
+            seed (int): the seed to use to generate a random key and counter array if these are not provided.
+        """
+        super(Random123GeneratorBase, self).__init__(cl_environments, load_balancer)
+
+        if all(v is not None for v in (seed, key, counter)):
+            raise TypeError("If both counter and key are given, seed can not be given.")
+
         int32_info = np.iinfo(np.int32)
-        from random import Random
-
-        rng = Random(seed)
-
-        if key is not None and counter is not None and seed is not None:
-            raise TypeError("seed is unused and may not be specified "
-                    "if both counter and key are given")
 
         if key is None:
-            key = [
-                    rng.randrange(
-                        int(int32_info.min), int(int32_info.max)+1)
-                    for i in range(self.key_length-1)]
+            key = np.random.randint(int(int32_info.min), high=int(int32_info.max) + 1,
+                                    size=self._get_key_length()-1, dtype=np.int32).tolist()
         if counter is None:
-            counter = [
-                    rng.randrange(
-                        int(int32_info.min), int(int32_info.max)+1)
-                    for i in range(4)]
+            counter = np.random.randint(int(int32_info.min), high=int(int32_info.max)+1,
+                                        size=4, dtype=np.int32).tolist()
 
-        self.context = context
+        self.context = self.cl_environments[0].get_cl_context().context
         self.key = key
         self.counter = counter
 
         self.counter_max = int32_info.max
 
-    def get_gen_kernel(self, dtype, distribution):
+    def _get_key_length(self):
+        """Get the key length of the implementing Random123 generator.
+
+        Returns:
+            int: the key length for the generator in use.
+        """
+        raise NotImplementedError()
+
+    def _get_rng_settings(self, distribution, dtype):
         size_multiplier = 1
         arg_dtype = dtype
 
-        rng_key = (distribution, dtype)
+        if distribution not in ('uniform', 'normal'):
+            raise TypeError("Unknown distribution asked ({}), only "
+                            "uniform and normal are supported.".format(distribution))
 
-        if rng_key in [("uniform", np.float64), ("normal", np.float64)]:
+        if dtype == np.float64:
             c_type = "double"
+
             scale1_const = "((double) %r)" % (1/2**32)
             scale2_const = "((double) %r)" % (1/2**64)
+
+            transform = ''
             if distribution == "normal":
                 transform = "box_muller"
-            else:
-                transform = ""
 
             rng_expr = (
                     "shift + scale * "
@@ -188,26 +218,17 @@ class Random123GeneratorBase(object):
                     % (transform, scale1_const, scale2_const))
 
             counter_multiplier = 2
+            return c_type, rng_expr, counter_multiplier, size_multiplier, arg_dtype
 
-        elif rng_key in [(dist, cmp_dtype)
-                for dist in ["normal", "uniform"]
-                for cmp_dtype in [
-                    np.float32,
-                    cl.array.vec.float2,
-                    cl.array.vec.float3,
-                    cl.array.vec.float4,
-                    ]]:
+        if dtype in [np.float32, cl.array.vec.float2, cl.array.vec.float3, cl.array.vec.float4]:
             c_type = "float"
             scale_const = "((float) %r)" % (1/2**32)
 
-            if distribution == "normal":
-                transform = "box_muller"
-            else:
-                transform = ""
+            transform = ''
+            if distribution == 'normal':
+                transform = 'box_muller'
 
-            rng_expr = (
-                    "shift + scale * %s(%s * convert_float4(gen))"
-                    % (transform, scale_const))
+            rng_expr = ("shift + scale * %s(%s * convert_float4(gen))" % (transform, scale_const))
             counter_multiplier = 1
             arg_dtype = np.float32
             try:
@@ -215,15 +236,18 @@ class Random123GeneratorBase(object):
             except KeyError:
                 pass
 
-        elif rng_key == ("uniform", np.int32):
+            return c_type, rng_expr, counter_multiplier, size_multiplier, arg_dtype
+
+        if distribution == 'uniform' and dtype == np.int32:
             c_type = "int"
             rng_expr = (
                     "shift + convert_int4((convert_long4(gen) * scale) / %s)"
                     % (str(2**32)+"l")
                     )
             counter_multiplier = 1
+            return c_type, rng_expr, counter_multiplier, size_multiplier, arg_dtype
 
-        elif rng_key == ("uniform", np.int64):
+        if distribution == 'uniform' and dtype == np.int64:
             c_type = "long"
             rng_expr = (
                     "shift"
@@ -231,104 +255,114 @@ class Random123GeneratorBase(object):
                     "+ ((convert_long4(gen) * scale) / two32)"
                     .replace("two32", (str(2**32)+"l")))
             counter_multiplier = 2
+            return c_type, rng_expr, counter_multiplier, size_multiplier, arg_dtype
 
-        else:
-            raise TypeError(
-                    "unsupported RNG distribution/data type combination '%s/%s'"
-                    % rng_key)
+        raise TypeError("Unsupported comnbination of distribution and data "
+                        "type given: '{}/{}'".format(distribution, dtype))
 
-        src = open(os.path.abspath(resource_filename('mot', 'data/random123/openclfeatures.h'), ), 'r').read()
-        src += open(os.path.abspath(resource_filename('mot', 'data/random123/array.h'), ), 'r').read()
-        src += open(os.path.abspath(resource_filename('mot', 'data/random123/{}.cl'.format(self.header_name)), ), 'r').read()
+    def _get_kernel_source(self, dtype, distribution):
+        src = open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/openclfeatures.h'), ), 'r').read()
+        src += open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/array.h'), ), 'r').read()
+        src += open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/{}.cl'.format(self.header_name)), ),
+                    'r').read()
 
-        src += """//CL//
-            typedef %(output_t)s output_t;
-            typedef %(output_t)s4 output_vec_t;
-            typedef %(gen_name)s_ctr_t ctr_t;
-            typedef %(gen_name)s_key_t key_t;
+        c_type, rng_expr, counter_multiplier, size_multiplier, arg_dtype = self._get_rng_settings(distribution, dtype)
 
-            uint4 gen_bits(key_t *key, ctr_t *ctr)
-            {
-                union {
-                    ctr_t ctr_el;
-                    uint4 vec_el;
-                } u;
+        src += """
+                    typedef %(output_t)s output_t;
+                    typedef %(output_t)s4 output_vec_t;
+                    typedef %(gen_name)s_ctr_t ctr_t;
+                    typedef %(gen_name)s_key_t key_t;
 
-                u.ctr_el = %(gen_name)s(*ctr, *key);
-                if (++ctr->v[0] == 0)
-                    if (++ctr->v[1] == 0)
-                        ++ctr->v[2];
+                    uint4 gen_bits(key_t *key, ctr_t *ctr)
+                    {
+                        union {
+                            ctr_t ctr_el;
+                            uint4 vec_el;
+                        } u;
 
-                return u.vec_el;
-            }
+                        u.ctr_el = %(gen_name)s(*ctr, *key);
+                        if (++ctr->v[0] == 0)
+                            if (++ctr->v[1] == 0)
+                                ++ctr->v[2];
 
-            #if %(include_box_muller)s
-            output_vec_t box_muller(output_vec_t x)
-            {
-                #define BOX_MULLER(I, COMPA, COMPB) \
-                    output_t r##I = sqrt(-2*log(x.COMPA)); \
-                    output_t c##I; \
-                    output_t s##I = sincos((output_t) (2*M_PI) * x.COMPB, &c##I);
+                        return u.vec_el;
+                    }
 
-                BOX_MULLER(0, x, y);
-                BOX_MULLER(1, z, w);
-                return (output_vec_t) (r0*c0, r0*s0, r1*c1, r1*s1);
-            }
-            #endif
+                    #if %(include_box_muller)s
+                    output_vec_t box_muller(output_vec_t x)
+                    {
+                        #define BOX_MULLER(I, COMPA, COMPB) \
+                            output_t r##I = sqrt(-2*log(x.COMPA)); \
+                            output_t c##I; \
+                            output_t s##I = sincos((output_t) (2*M_PI) * x.COMPB, &c##I);
 
-            #define GET_RANDOM_NUM(gen) %(rng_expr)s
+                        BOX_MULLER(0, x, y);
+                        BOX_MULLER(1, z, w);
+                        return (output_vec_t) (r0*c0, r0*s0, r1*c1, r1*s1);
+                    }
+                    #endif
 
-            kernel void generate(
-                int k1,
-                #if %(key_length)s > 2
-                int k2, int k3,
-                #endif
-                int c0, int c1, int c2, int c3,
-                global output_t *output,
-                long out_size,
-                output_t scale,
-                output_t shift)
-            {
-                #if %(key_length)s == 2
-                key_t k = {{get_global_id(0), k1}};
-                #else
-                key_t k = {{get_global_id(0), k1, k2, k3}};
-                #endif
+                    #define GET_RANDOM_NUM(gen) %(rng_expr)s
 
-                ctr_t c = {{c0, c1, c2, c3}};
+                    kernel void generate(
+                        int k1,
+                        #if %(key_length)s > 2
+                        int k2, int k3,
+                        #endif
+                        int c0, int c1, int c2, int c3,
+                        global output_t *output,
+                        long out_size,
+                        output_t scale,
+                        output_t shift)
+                    {
+                        #if %(key_length)s == 2
+                        key_t k = {{get_global_id(0), k1}};
+                        #else
+                        key_t k = {{get_global_id(0), k1, k2, k3}};
+                        #endif
 
-                // output bulk
-                unsigned long idx = get_global_id(0)*4;
-                while (idx + 4 < out_size)
-                {
-                    *(global output_vec_t *) (output + idx) =
-                        GET_RANDOM_NUM(gen_bits(&k, &c));
-                    idx += 4*get_global_size(0);
-                }
+                        ctr_t c = {{c0, c1, c2, c3}};
 
-                // output tail
-                output_vec_t tail_ran = GET_RANDOM_NUM(gen_bits(&k, &c));
-                if (idx < out_size)
-                  output[idx] = tail_ran.x;
-                if (idx+1 < out_size)
-                  output[idx+1] = tail_ran.y;
-                if (idx+2 < out_size)
-                  output[idx+2] = tail_ran.z;
-                if (idx+3 < out_size)
-                  output[idx+3] = tail_ran.w;
-            }
-            """ % {
-                "gen_name": self.generator_name,
-                "output_t": c_type,
-                "key_length": self.key_length,
-                "include_box_muller": int(distribution == "normal"),
-                "rng_expr": rng_expr
-                }
+                        // output bulk
+                        unsigned long idx = get_global_id(0)*4;
+                        while (idx + 4 < out_size)
+                        {
+                            *(global output_vec_t *) (output + idx) =
+                                GET_RANDOM_NUM(gen_bits(&k, &c));
+                            idx += 4*get_global_size(0);
+                        }
+
+                        // output tail
+                        output_vec_t tail_ran = GET_RANDOM_NUM(gen_bits(&k, &c));
+                        if (idx < out_size)
+                          output[idx] = tail_ran.x;
+                        if (idx+1 < out_size)
+                          output[idx+1] = tail_ran.y;
+                        if (idx+2 < out_size)
+                          output[idx+2] = tail_ran.z;
+                        if (idx+3 < out_size)
+                          output[idx+3] = tail_ran.w;
+                    }
+                    """ % {
+            "gen_name": self.generator_name,
+            "output_t": c_type,
+            "key_length": self._get_key_length(),
+            "include_box_muller": int(distribution == "normal"),
+            "rng_expr": rng_expr
+        }
+
+        return src
+
+    def get_gen_kernel(self, dtype, distribution):
+        c_type, rng_expr, counter_multiplier, size_multiplier, arg_dtype = self._get_rng_settings(distribution, dtype)
+
+        src = self._get_kernel_source(dtype, distribution)
 
         prg = cl.Program(self.context, src).build()
         knl = prg.generate
         knl.set_scalar_arg_dtypes(
-                [np.int32] * (self.key_length - 1 + 4)
+                [np.int32] * (self._get_key_length() - 1 + 4)
                 + [None, np.int64, arg_dtype, arg_dtype])
 
         return knl, counter_multiplier, size_multiplier
@@ -401,58 +435,48 @@ class Random123GeneratorBase(object):
         return result
 
 
+class Random123SourceBuilder(object):
+
+    def __init__(self, dtype, distribution):
+        """Construct a random generator meant to generate random numbers for the given data type and distribution type.
+
+        The distributions supported are 'normal' and 'uniform', and with 'normal' only supported for floating point
+        data types.
+
+        Args:
+            dtype (np.dtype): the numpy datatype we wish our samples to be in
+
+        """
+
+
 class PhiloxGenerator(Random123GeneratorBase):
-    __doc__ = Random123GeneratorBase.__doc__
 
     header_name = "philox"
     generator_name = "philox4x32"
-    key_length = 2
+
+    def _get_key_length(self):
+        return 2
 
 
 class ThreefryGenerator(Random123GeneratorBase):
-    __doc__ = Random123GeneratorBase.__doc__
 
     header_name = "threefry"
     generator_name = "threefry4x32"
-    key_length = 4
+
+    def _get_key_length(self):
+        return 4
 
 
-def _get_generator(context):
-    if context.devices[0].type & cl.device_type.CPU:
-        gen = PhiloxGenerator(context)
+def rand(cl_environments, shape, dtype, start=0, stop=1):
+    """Return an array of `shape` filled with random values of `dtype` in the range [start, stop).
+    """
+    if cl_environments[0].is_cpu:
+        gen = PhiloxGenerator(cl_environments=cl_environments)
     else:
-        gen = ThreefryGenerator(context)
-
-    return gen
-
-
-def fill_rand(result, queue=None, luxury=None, a=0, b=1):
-    """Fill *result* with random values of `dtype` in the range [0,1).
-    """
-    if luxury is not None:
-        from warnings import warn
-        warn("Specifying the 'luxury' argument is deprecated and will stop being "
-                "supported in PyOpenCL 2018.x", stacklevel=2)
-
-    if queue is None:
-        queue = result.queue
-    gen = _get_generator(queue.context)
-    gen.fill_uniform(result, a=a, b=b)
-
-
-def rand(queue, shape, dtype, luxury=None, a=0, b=1):
-    """Return an array of `shape` filled with random values of `dtype`
-    in the range [a,b).
-    """
-
-    if luxury is not None:
-        from warnings import warn
-        warn("Specifying the 'luxury' argument is deprecated and will stop being "
-                "supported in PyOpenCL 2018.x", stacklevel=2)
+        gen = ThreefryGenerator(cl_environments=cl_environments)
 
     from pyopencl.array import Array
-    gen = _get_generator(queue.context)
-    result = Array(queue, shape, dtype)
-    result.add_event(
-            gen.fill_uniform(result, a=a, b=b))
-    return result
+    result = Array(cl_environments[0].get_cl_context().queue, shape, dtype)
+    # result.add_event(gen.fill_uniform(result, a=start, b=stop))
+    result.add_event(gen.fill_normal(result))
+    return result.get()

@@ -44,14 +44,6 @@ mot.cl_routines.mapping.final_parameters_transformer module
     :undoc-members:
     :show-inheritance:
 
-mot.cl_routines.mapping.generate_random module
-----------------------------------------------
-
-.. automodule:: mot.cl_routines.mapping.generate_random
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
 mot.cl_routines.mapping.loglikelihood_calculator module
 -------------------------------------------------------
 

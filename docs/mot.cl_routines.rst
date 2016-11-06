@@ -22,6 +22,14 @@ mot.cl_routines.base module
     :undoc-members:
     :show-inheritance:
 
+mot.cl_routines.generate_random module
+--------------------------------------
+
+.. automodule:: mot.cl_routines.generate_random
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 
 Module contents
 ---------------

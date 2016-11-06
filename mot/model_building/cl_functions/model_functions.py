@@ -34,12 +34,12 @@ class Scalar(ModelFunction):
 
     def get_cl_header(self):
         """See base class for details"""
-        path = resource_filename('mot', 'data/opencl/modelFunctions/Scalar.h')
+        path = resource_filename('mot', 'data/opencl/model_functions/Scalar.h')
         return self._get_cl_dependency_headers() + "\n" + open(os.path.abspath(path), 'r').read()
 
     def get_cl_code(self):
         """See base class for details"""
-        path = resource_filename('mot', 'data/opencl/modelFunctions/Scalar.cl')
+        path = resource_filename('mot', 'data/opencl/model_functions/Scalar.cl')
         return self._get_cl_dependency_code() + "\n" + open(os.path.abspath(path), 'r').read()
 
 
