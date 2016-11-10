@@ -242,7 +242,7 @@ class Worker(object):
         """
         kernel_source = self._get_kernel_source()
         from mot import configuration
-        if configuration.ignore_kernel_compile_warnings:
+        if configuration.should_ignore_kernel_compile_warnings():
             warnings.simplefilter("ignore")
         return cl.Program(self._cl_run_context.context, kernel_source).build(' '.join(compile_flags))
 

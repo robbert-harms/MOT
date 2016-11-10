@@ -43,11 +43,18 @@ _config = {
     'ranlux': {
         'seed': 1,
         'lux_factor': 4
-    }
+    },
+    'ignore_kernel_compile_warnings': True
 }
 
-"""If we ignore kernel warnings or not"""
-ignore_kernel_compile_warnings = True
+
+def should_ignore_kernel_compile_warnings():
+    """Check if we should ignore kernel compile warnings or not.
+
+    Returns:
+        boolean: True if we should ignore the kernel compile warnings, false if not.
+    """
+    return _config['ignore_kernel_compile_warnings']
 
 
 def get_cl_environments():
@@ -225,3 +232,11 @@ class RuntimeConfigurationAction(SimpleConfigAction):
 
         if self._load_balancer is not None:
             set_load_balancer(self._load_balancer)
+
+
+class VoidConfigurationAction(ConfigAction):
+
+    def __init__(self):
+        """Does nothing, useful as a default config action.
+        """
+        super(VoidConfigurationAction, self).__init__()
