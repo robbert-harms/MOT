@@ -11,8 +11,8 @@ For **Ubuntu >= 16** the MOT package can be installed with a Personal Package Ar
 .. code-block:: bash
 
     $ sudo add-apt-repository ppa:robbert-harms/cbclab
-    $ sudo apt-get update
-    $ sudo apt-get install python3-mot
+    $ sudo apt update
+    $ sudo apt install python3-mot
 
 Using such a PPA ensures that your Ubuntu system can update the MOT package automatically whenever a new version is out.
 For **Debian**, and **Ubuntu < 16**, using a PPA is not possible and we need a more manual installation.
@@ -20,7 +20,7 @@ Please install the dependencies (*python3*, *pip3* and *pyopencl*) first:
 
 .. code-block:: bash
 
-    $ sudo apt-get install python3 python3-pip python3-pyopencl
+    $ sudo apt install python3 python3-pip python3-pyopencl
 
 and then install MOT with:
 
