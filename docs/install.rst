@@ -1,6 +1,6 @@
+************
 Installation
 ************
-
 
 Ubuntu / Debian Linux
 =====================
@@ -26,7 +26,7 @@ and then install MOT with:
 
 .. code-block:: bash
 
-    $ sudo pip3 install MOT
+    $ sudo pip3 install mot
 
 
 After installation please continue with testing the installation below.

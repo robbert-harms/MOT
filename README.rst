@@ -33,7 +33,7 @@ Quick installation guide
 The basic requirements for MOT are:
 
 * Python 3.x (recommended) or Python 2.7
-* OpenCL 1.2 (or higher) supper in GPU driver or CPU runtime
+* OpenCL 1.2 (or higher) support in GPU driver or CPU runtime
 
 
 **Linux**
@@ -48,7 +48,7 @@ For Ubuntu >= 16 you can use:
 For Debian users and Ubuntu < 16 users, install MOT with:
 
 * ``sudo apt-get install python3 python3-pip python3-pyopencl``
-* ``sudo pip3 install MOT``
+* ``sudo pip3 install mot``
 
 
 **Windows**
