@@ -1,5 +1,3 @@
-import numbers
-
 __author__ = 'Robbert Harms'
 __date__ = "2014-06-20"
 __license__ = "LGPL v3"
