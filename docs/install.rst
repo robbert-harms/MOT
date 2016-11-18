@@ -1,8 +1,11 @@
+############
 Installation
-************
+############
 
+
+*********************
 Ubuntu / Debian Linux
-=====================
+*********************
 Using the package manager, installation in Ubuntu and Debian is easy.
 
 For **Ubuntu >= 16** the MOT package can be installed with a Personal Package Archive (PPA) using:
@@ -31,8 +34,9 @@ and then install MOT with:
 After installation please continue with testing the installation below.
 
 
+*******
 Windows
-=======
+*******
 The installation on Windows is a little bit more convoluted due to the lack of a package manager. The installation is a three step procedure:
 
 1. Installing a :ref:`Python interpreter <install_python>`
@@ -43,7 +47,7 @@ The installation on Windows is a little bit more convoluted due to the lack of a
 .. _install_python:
 
 Installing Python
------------------
+=================
 Since MOT is a Python package we need to install a Python interpreter. Considering that Python2 is soon end of life, we focus here on installing Python3.
 The easiest way to install Python3 is with the Anaconda Python distribution.
 Please download and install the Python3.x 64 bit version 4.2 or higher distribution from `Anaconda <https://www.continuum.io/downloads>`_ and install it with the default settings.
@@ -57,7 +61,7 @@ After installation type in the Windows start bar ``anaconda`` and start the ``an
 .. _install_opencl:
 
 Installing OpenCL
------------------
+=================
 To run Python OpenCL applications (using PyOpenCL), you need an OpenCL driver for your platform and the Python OpenCL bindings.
 Furthermore to install PyOpenCL you additionally need an OpenCL SDK. First we make sure you can run the application when installed.
 Please download and install the correct device driver (Intel/AMD/NVidia) for your device and system with support for OpenCL 1.2 or higher. For graphics cards, make sure you are using the
@@ -149,16 +153,16 @@ If this still does not work, you can try one of the installation guides on https
 .. _install_mot:
 
 Installing MOT
---------------
+==============
 With Python and OpenCL installed you can now install MOT. Open an Anaconda Prompt and type:
 
 .. code-block:: none
 
     > pip install mot
 
-
+************************
 Testing the installation
-========================
+************************
 Open a Python shell. In Windows you can do this using a the Anaconda Prompt and type ``python``. On Linux, use in Bash the ``python3`` command. In the prompt type:
 
 .. code-block:: python
@@ -170,17 +174,18 @@ Open a Python shell. In Windows you can do this using a the Anaconda Prompt and 
 If you get no errors and the output is a list of CL environments, MOT is successfully installed.
 
 
+*********
 Upgrading
-=========
+*********
 
 Ubuntu / Debian Linux
----------------------
+=====================
 If you used the PPA to install the MOT package, upgrading is easy and is handled automatically by Ubuntu.
 If you used the pip3 installation procedure you can upgrade MOT with ``sudo pip3 install --upgrade MOT``.
 
 
 Windows
--------
+=======
 To upgrade MOT when a new version is out, open an Anaconda Prompt or Windows CMD and type:
 
 .. code-block:: none

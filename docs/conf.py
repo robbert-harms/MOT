@@ -132,7 +132,7 @@ exclude_patterns = ['_build']
 #default_role = None
 
 # If true, '()' will be appended to :func: etc. cross-reference text.
-#add_function_parentheses = True
+add_function_parentheses = True
 
 # If true, the current module name will be prepended to all description
 # unit titles (such as .. function::).
@@ -254,10 +254,10 @@ htmlhelp_basename = 'motdoc'
 
 latex_elements = {
     # The paper size ('letterpaper' or 'a4paper').
-    #'papersize': 'letterpaper',
+    'papersize': 'a4paper',
 
     # The font size ('10pt', '11pt' or '12pt').
-    #'pointsize': '10pt',
+    'pointsize': '10pt',
 
     # Additional stuff for the LaTeX preamble.
     #'preamble': '',
@@ -267,9 +267,10 @@ latex_elements = {
 # (source start file, target name, title, author, documentclass
 # [howto/manual]).
 latex_documents = [
-    ('index', 'mot.tex',
+    ('index_latex', 'mot.tex',
      u'Maastricht Optimization Toolbox',
-     u'Robbert Harms', 'manual'),
+     u'Robbert Harms',
+     'manual'),
 ]
 
 # The name of an image file (relative to this directory) to place at
@@ -298,7 +299,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    ('index', 'mot',
+    ('index_man', 'mot',
      u'Maastricht Optimization Toolbox',
      [u'Robbert Harms'], 1)
 ]
@@ -313,8 +314,8 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-    ('index', 'mot',
-     u'Maastricht Optimization Toolbox Documentation',
+    ('index_latex', 'mot',
+     u'Maastricht Optimization Toolbox',
      u'Robbert Harms',
      'mot',
      'One line description of project.',
