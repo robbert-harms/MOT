@@ -47,7 +47,11 @@ Installing Python
 -----------------
 Since MOT is a Python package we need to install a Python interpreter. Considering that Python2 is soon end of life, we focus here on installing Python3.
 The easiest way to install Python3 is with the Anaconda Python distribution.
-Please download and install the Python3.x 64 bit distribution from `Anaconda <https://www.continuum.io/downloads>`_ and install it with the default settings.
+Please download and install the Python3.x 64 bit version 4.2 or higher distribution from `Anaconda <https://www.continuum.io/downloads>`_ and install it with the default settings.
+(Anaconda versions prior to 4.2 have the (deprecated) PyQt4 as its Qt library.
+This is not a problem for MOT per se.
+However if you want to go and install MDT, or more generally want to use Qt5 and packages that depend on Qt5, you will find benefit from installing Anaconda > 4.2 with PyQt5.
+If you insist on using an older Anaconda environment, note that this is possible, but you will have to install a PyQt5 package yourself, such as the m-labs PyQt5 Anaconda package and deal with its version conflict, e.g. python version <= 3.4)
 After installation type in the Windows start bar ``anaconda`` and start the ``anaconda prompt``.
 
 
