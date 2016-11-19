@@ -3,7 +3,7 @@ Maastricht Optimization Toolbox
 ###############################
 The Maastricht Optimization Toolbox, MOT, is a library for parallel optimization and sampling using the graphics card for the computations.
 It is meant to optimize, in parallel, a large number of smaller problems, in contrast to optimizing one big problem with parallelized parts.
-For example, in diffusion MRI the brain is scanned in a 3d grid where each grid element, a *voxel*, represents its own optimization problem.
+For example, in diffusion MRI the brain is scanned in a 3D grid where each grid element, a *voxel*, represents its own optimization problem.
 The number of data points per voxel is generally small, ranging from 30 to 500 datapoints, and the models fitted to that data have
 generally somewhere between 6 and 20 parameters.
 Since each of these voxels can be analyzed independently of the others, the computations can be massively parallelized and hence programming
@@ -17,7 +17,7 @@ Can MOT help me?
 ****************
 To recognize if MOT can help you with your use case, try to see if your computations can be parallized in some way.
 If you have just one big optimization problem with 10.000 variables, MOT unfortunately can not help you.
-On the other hand, if you find a way to split your analysis in (a lot of, >10.000) smaller sub-problems, with ~30 parameters or less each, MOT may actually be of help.
+On the other hand, if you find a way to split your analysis in (a lot of; >10.000) smaller sub-problems, with ~30 parameters or less each, MOT may actually be of help.
 
 
 *******
@@ -75,6 +75,6 @@ There are a few caveats and known issues, primarily related to OpenCL:
 
 * Windows support is experimental due to the difficulty of installing PyOpenCL, hopefully installing PyOpenCL will get easier on Windows soon.
 * For AMD users with Ubuntu >= 16, the new AMD GPU-Pro driver is still in beta and may not work with all the kernels in MOT.
-  Our recommendation at the moment (October 2016) is to use Ubuntu version 14.
+  Our recommendation at the moment (October 2016) is to use Ubuntu version 14 when using AMD hardware.
 * GPU acceleration is not possible in most virtual machines due to lack of GPU or PCI-E pass-through, this will change whenever virtual machines vendors program this feature.
-  Our recommendation is to install neurodebian on your machine and run it on that.
+  Our recommendation is to install Linux on your machine directly.

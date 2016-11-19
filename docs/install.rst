@@ -66,24 +66,25 @@ After installation type in the Windows start bar ``anaconda`` and start the ``an
 Installing OpenCL
 =================
 To run Python OpenCL applications (using PyOpenCL), you need an OpenCL driver for your platform and the Python OpenCL bindings.
-Furthermore to install PyOpenCL you additionally need an OpenCL SDK. First we make sure you can run the application when installed.
-Please download and install the correct device driver (Intel/AMD/NVidia) for your device and system with support for OpenCL 1.2 or higher. For graphics cards, make sure you are using the
-latest version of your graphics driver. For Intel processors download the OpenCL runtime from https://software.intel.com/en-us/articles/opencl-drivers
-(OpenCL Runtime for Intel Core and Intel Xeon Processors; towards the end). Note that this is needed
-if you want to run OpenCL on your CPUs as well as your GPUs.
+Furthermore, to install PyOpenCL you additionally need an OpenCL SDK.
+First, for running OpenCL applications download and install the correct device driver (Intel/AMD/NVidia) for your device with support for OpenCL 1.2 or higher.
+For graphics cards, make sure you are using the latest version of your graphics driver.
+For Intel processors download the OpenCL runtime from https://software.intel.com/en-us/articles/opencl-drivers
+(OpenCL Runtime for Intel Core and Intel Xeon Processors; towards the end).
+Note that this is only needed if you want to run OpenCL on your CPUs as well as your GPUs.
 
-With the drivers installed and everything up to date, we can now proceed with installing the Python PyOpenCL bindings.
-This is often the most problematic step and errors later on (e.g. in testing MOT) often come down to an incomplete (failed)
-or incompatible (successful but not working) pyopencl package install.
-This package, ``pyopencl``, can either be installed from a downloadable binary or be compiled from source. Using the binary is easiest since compilation is more difficult.
+With the drivers installed and everything up to date, we can now proceed with installing the Python PyOpenCL bindings, ``pyopencl``.
+This is often the most problematic step and errors later on (e.g. in testing MOT) often come down to an incomplete (failed) or incompatible (successful but not working) pyopencl package install.
+PyOpenCL can either be installed from a downloadable binary or be compiled from source.
+Using the binary is easiest since manual compilation is more difficult.
 
 
 Using the binary OpenCL package
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Installing a precompiled binary wheel (.whl) is the easiest way to install PyOpenCL, but this leads to incompatibility issues
 if the wheel is not compiled for your specific Python implementation.
-The wheel compatible with most Python and Windows versions is hosted here: :download:`pyopencl-2015.2.4-cp35-none-win_amd64 <./_downloads/pyopencl-2015.2.4-cp35-none-win_amd64.whl>`. This is mirrored from a wheel previously available from Christoph Gohlke website,
-http://www.lfd.uci.edu/~gohlke/pythonlibs/#pyopencl, containing binary packages of various Python libraries.
+The wheel compatible with most Python and Windows versions is hosted here: :download:`pyopencl-2015.2.4-cp35-none-win_amd64 <./_downloads/pyopencl-2015.2.4-cp35-none-win_amd64.whl>`.
+This is mirrored from a wheel previously available from Christoph Gohlke website, http://www.lfd.uci.edu/~gohlke/pythonlibs/#pyopencl, containing binary packages of various Python libraries.
 We found that some newer binary wheels compiled against the cpython ABI (e.g. cp35m) are incompatible with the Anaconda Python distribution referenced to in this install guide.
 In Windows 7, with Anaconda Python v3.5, the ``pyopencl-2015.2.4-cp35-none-win_amd64.whl`` works because it was compiled for a general ABI.
 However, for another Python implementation (or another OS version, e.g. Windows 10) you can download the latest PyOpenCL binary from Gohlke's website matching your system.
@@ -97,7 +98,7 @@ change directory to where you downloaded the ``.whl`` file and install the binar
     > cd %UserProfile%\Downloads
     > pip install <filename>.whl
 
-Please substitute ``<filename>`` for your downloaded filename.
+Please substitute ``<filename>`` for your downloaded filename and let the directory match the directory where you downloaded the ``.whl`` file.
 
 To test if this binary package works, open a Python shell and type:
 
