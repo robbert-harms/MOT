@@ -12,8 +12,7 @@ class SimulatedAnnealing(AbstractParallelOptimizer):
 
     default_patience = 500
 
-    def __init__(self, cl_environments=None, load_balancer=None, use_param_codec=False, patience=None,
-                 optimizer_options=None, **kwargs):
+    def __init__(self, patience=None, optimizer_settings=None, **kwargs):
         """Use Simulated Annealing to calculate the optimum.
 
         This does not use the parameter codec, even if set to True. This because the priors (should) already
@@ -25,14 +24,14 @@ class SimulatedAnnealing(AbstractParallelOptimizer):
         Args:
             patience (int):
                 Used to set the maximum number of samples to patience*(number_of_parameters+1)
-            optimizer_options (dict): the optimization options. Contains:
+            optimizer_settings (dict): the optimization options. Contains:
                 - proposal_update_intervals (int): the interval by which we update the proposal std.
 
         """
         patience = patience or self.default_patience
-        super(SimulatedAnnealing, self).__init__(cl_environments, load_balancer, False, patience=patience, **kwargs)
-        optimizer_options = optimizer_options or {}
-        self.proposal_update_intervals = optimizer_options.get('proposal_update_intervals', 50)
+        super(SimulatedAnnealing, self).__init__(use_param_codec=False, patience=patience, **kwargs)
+        optimizer_settings = optimizer_settings or {}
+        self.proposal_update_intervals = optimizer_settings.get('proposal_update_intervals', 50)
         self._annealing_schedule = ExponentialCoolingSchedule()
         self._initial_temperature_strategy = SimpleInitialTemperatureStrategy()
 

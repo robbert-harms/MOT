@@ -17,18 +17,19 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class MetropolisHastings(AbstractSampler):
 
-    def __init__(self, cl_environments=None, load_balancer=None, nmr_samples=500, burn_length=500,
-                 sample_intervals=5, proposal_update_intervals=50, **kwargs):
+    def __init__(self, cl_environments=None, load_balancer=None, nmr_samples=None, burn_length=None,
+                 sample_intervals=None, proposal_update_intervals=None, **kwargs):
         """An CL implementation of Metropolis Hastings.
 
         Args:
             cl_environments: a list with the cl environments to use
             load_balancer: the load balance strategy to use
-            nmr_samples (int): The length of the (returned) chain per voxel
+            nmr_samples (int): The length of the (returned) chain per voxel, defaults to 500
             burn_length (int): The length of the burn in (per voxel), these are extra samples,
                 jump is set to 1 (no thinning)
-            sample_intervals (int): how many samples we wait before we take,
-                this will draw extra samples (chain_length * sample_intervals)
+            sample_intervals (int): how many sample we wait before storing one.
+                This will draw extra samples (chain_length * sample_intervals). If set to zero we
+                store every sample after the burn in.
             proposal_update_intervals (int): after how many samples we would like to update the proposals
                 This is during burning and sampling. A value of 1 means update after every jump.
 
@@ -42,10 +43,22 @@ class MetropolisHastings(AbstractSampler):
                 This is during burning and sampling. A value of 1 means update after every jump.
         """
         super(MetropolisHastings, self).__init__(cl_environments=cl_environments, load_balancer=load_balancer, **kwargs)
-        self._nmr_samples = nmr_samples or 1
-        self.burn_length = burn_length
-        self.sample_intervals = sample_intervals
-        self.proposal_update_intervals = proposal_update_intervals
+        self._nmr_samples = nmr_samples or 500
+        self.burn_length = burn_length or 500
+        self.sample_intervals = sample_intervals or 5
+        self.proposal_update_intervals = proposal_update_intervals or 50
+
+        if self.burn_length < 0:
+            raise ValueError('The burn length can not be smaller than 0, {} given'.format(self.burn_length))
+        if self.sample_intervals < 0:
+            raise ValueError('The sampling interval can not be smaller than 0, {} given'.format(self.sample_intervals))
+        if self.proposal_update_intervals < 0:
+            raise ValueError('The proposal update interval can not be smaller '
+                             'than 0, {} given'.format(self.proposal_update_intervals))
+        if self._nmr_samples < 1:
+            raise ValueError('The number of samples to draw can '
+                             'not be smaller than 1, {} given'.format(self._nmr_samples))
+
 
     @property
     def nmr_samples(self):
@@ -119,7 +132,7 @@ class MetropolisHastings(AbstractSampler):
                           'sample_intervals: {sample_intervals}, '
                           'proposal_update_intervals: {proposal_update_intervals}. '.format(**sample_settings))
 
-        samples_drawn = dict(samples_drawn=(self.burn_length + self.sample_intervals * self.nmr_samples),
+        samples_drawn = dict(samples_drawn=(self.burn_length + (self.sample_intervals + 1) * self.nmr_samples),
                              samples_returned=self.nmr_samples)
         self._logger.info('Total samples drawn: {samples_drawn}, total samples returned: '
                           '{samples_returned} (per problem).'.format(**samples_drawn))
@@ -293,12 +306,13 @@ class _MHWorker(Worker):
                 uint gid = get_global_id(0);
                 mot_float_type x_saved[''' + str(self._nmr_params) + '''];
 
-                for(i = 0; i < ''' + str(self._nmr_samples * self._sample_intervals + self._burn_length) + '''; i++){
+                for(i = 0; i < ''' + str(self._nmr_samples * (self._sample_intervals + 1)
+                                         + self._burn_length) + '''; i++){
                     _update_state(x, ranluxclstate, current_likelihood, current_prior,
                                   data, proposal_state, ac_between_proposal_updates);
                     _update_proposals(proposal_state, ac_between_proposal_updates, proposal_update_count);
 
-                    if(i >= ''' + str(self._burn_length) + ''' && i % ''' + str(self._sample_intervals) + ''' == 0){
+                    if(i >= ''' + str(self._burn_length) + ''' && i % ''' + str(self._sample_intervals + 1) + ''' == 0){
                         for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
                             x_saved[j] = x[j];
                         }
@@ -307,7 +321,7 @@ class _MHWorker(Worker):
 
                         for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
                             samples[(uint)((i - ''' + str(self._burn_length) + ''')
-                                            / ''' + str(self._sample_intervals) + ''')
+                                            / ''' + str(self._sample_intervals + 1) + ''')
                                     + j * ''' + str(self._nmr_samples) + '''
                                     + gid * ''' + str(self._nmr_params) + ''' * ''' + str(self._nmr_samples) + ''']
                                         = x_saved[j];

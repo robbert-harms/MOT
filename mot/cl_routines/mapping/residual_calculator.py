@@ -68,6 +68,9 @@ class _ResidualCalculatorWorker(Worker):
         self._all_buffers, self._residuals_buffer = self._create_buffers()
         self._kernel = self._build_kernel(compile_flags)
 
+    def __del__(self):
+        list(buffer.release() for buffer in self._all_buffers)
+
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
         event = self._kernel.get_errors(self._cl_run_context.queue, (int(nmr_problems), ), None, *self._all_buffers,

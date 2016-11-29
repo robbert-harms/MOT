@@ -1,3 +1,5 @@
+from mot.cl_routines.optimizing.grid_search import GridSearch
+from mot.cl_routines.optimizing.multi_step_optimizer import MultiStepOptimizer
 from mot.cl_routines.sampling.metropolis_hastings import MetropolisHastings
 from .cl_routines.optimizing.simulated_annealing import SimulatedAnnealing
 from .cl_routines.optimizing.levenberg_marquardt import LevenbergMarquardt
@@ -15,6 +17,12 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
+optimizers = [LevenbergMarquardt, Powell, NMSimplex, SimulatedAnnealing, MultiStepOptimizer, GridSearch]
+samplers = [MetropolisHastings]
+filters = [GaussianFilter, MeanFilter, MedianFilter]
+load_balance_strategies = [EvenDistribution, RuntimeLoadBalancing, PreferGPU, PreferCPU, PreferSpecificEnvironment]
+
+
 def get_optimizer_by_name(name):
     """ Get the class by the given name.
 
@@ -26,7 +34,6 @@ def get_optimizer_by_name(name):
     Returns:
         class: the class of the optimizer requested
     """
-    optimizers = [LevenbergMarquardt, Powell, NMSimplex, SimulatedAnnealing]
     return _get_item(name, optimizers, 'optimizers')
 
 
@@ -41,7 +48,6 @@ def get_sampler_by_name(name):
     Returns:
         class: the class of the sampler requested
     """
-    samplers = [MetropolisHastings]
     return _get_item(name, samplers, 'samplers')
 
 
@@ -56,7 +62,6 @@ def get_filter_by_name(name):
     Returns:
         class: the class of the filter routine requested
     """
-    filters = [GaussianFilter, MeanFilter, MedianFilter]
     return _get_item(name, filters, 'smoothers')
 
 
@@ -71,8 +76,7 @@ def get_load_balance_strategy_by_name(name):
     Returns:
         class: the class of the load balance strategy requested
     """
-    lb = [EvenDistribution, RuntimeLoadBalancing, PreferGPU, PreferCPU, PreferSpecificEnvironment]
-    return _get_item(name, lb, 'load balancers')
+    return _get_item(name, load_balance_strategies, 'load balancers')
 
 
 def _get_item(name, item_list, factory_type):

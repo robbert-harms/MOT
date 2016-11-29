@@ -16,12 +16,16 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class ObjectiveListCalculator(CLRoutine):
 
-    def __init__(self, cl_environments=None, load_balancer=None):
+    def __init__(self, **kwargs):
         """Calculate the objective list, that is it can compute the get_objective_list_function of the given model.
+
+        This evaluates the model and compares it to the problem data to get objective values. This returns
+        objective values per observation, for a complete objective function summarized over the observations use
+        the :class:`~.objective_calculator.ObjectiveCalculator`.
 
         This returns a value per problem instance per data point.
         """
-        super(ObjectiveListCalculator, self).__init__(cl_environments=cl_environments, load_balancer=load_balancer)
+        super(ObjectiveListCalculator, self).__init__(**kwargs)
 
     def calculate(self, model, parameters):
         """Calculate and return the objective lists.
@@ -74,6 +78,9 @@ class _ObjectiveListCalculatorWorker(Worker):
 
         self._all_buffers, self._residuals_buffer = self._create_buffers()
         self._kernel = self._build_kernel(compile_flags)
+
+    def __del__(self):
+        list(buffer.release() for buffer in self._all_buffers)
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start

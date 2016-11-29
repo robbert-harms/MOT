@@ -19,6 +19,8 @@
  *
  * Copyright (c) 1997-2011 <Michael F. Hutt>
  *
+ * (Licence: X11 license)
+ *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files (the
  * "Software"), to deal in the Software without restriction, including
@@ -47,7 +49,10 @@
  * Fixed memory leak.
  *
  * Mar. 1, 2011
- * Added constraints. (Which were removed by Robbert in 2014, since we already have parameter transforms.)
+ * Added constraints.
+ *
+ * 2014
+ * Removed constraints since MOT features parameter transformations
  */
 
 #define PATIENCE %(PATIENCE)r                  /* Used to set the maximum number of iterations

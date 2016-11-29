@@ -196,7 +196,6 @@ class Worker(object):
         """
         self._cl_environment = cl_environment
         self._cl_run_context = self._cl_environment.get_cl_context()
-        self._constant_buffers = []
 
     @property
     def cl_environment(self):

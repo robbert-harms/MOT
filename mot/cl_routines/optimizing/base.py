@@ -37,7 +37,7 @@ return_code_labels = {
 class AbstractOptimizer(CLRoutine):
 
     def __init__(self, cl_environments=None, load_balancer=None, use_param_codec=True, patience=1,
-                 optimizer_options=None, **kwargs):
+                 optimizer_settings=None, **kwargs):
         """Create a new optimizer that will minimize the given model with the given codec using the given environments.
 
         If the codec is None it is not used, if the environment is None, a suitable default environment should be
@@ -52,11 +52,18 @@ class AbstractOptimizer(CLRoutine):
             optimizer_options (dict): extra options one can set for the optimization routine. These are routine
                 dependent.
         """
+        self._optimizer_settings = optimizer_settings or {}
+        if not isinstance(self._optimizer_settings, dict):
+            raise ValueError('The given optimizer settings is not a dictionary.')
+
         self._use_param_codec = use_param_codec
         self.patience = patience or 1
 
+        if 'patience' in self._optimizer_settings:
+            self.patience = self._optimizer_settings['patience']
+        self._optimizer_settings['patience'] = self.patience
+
         super(AbstractOptimizer, self).__init__(cl_environments, load_balancer, **kwargs)
-        self._optimizer_options = optimizer_options or {}
 
     @property
     def use_param_codec(self):
@@ -76,6 +83,18 @@ class AbstractOptimizer(CLRoutine):
         """
         self._use_param_codec = use_param_codec
 
+    @property
+    def optimizer_settings(self):
+        """Get the optimization flags and settings set to the optimizer.
+
+        This ordinarily should contain all the extra flags and options set to the optimization routine. Even those
+        set additionally in the constructor.
+
+        Returns:
+            dict: the optimization options (settings)
+        """
+        return self._optimizer_settings
+
     def minimize(self, model, init_params=None, full_output=False):
         """Minimize the given model with the given codec using the given environments.
 
@@ -94,10 +113,13 @@ class AbstractOptimizer(CLRoutine):
 
 class AbstractParallelOptimizer(AbstractOptimizer):
 
-    def __init__(self, cl_environments=None, load_balancer=None, use_param_codec=True, patience=1,
-                 optimizer_options=None, **kwargs):
-        super(AbstractParallelOptimizer, self).__init__(cl_environments, load_balancer, use_param_codec, patience,
-                                                        optimizer_options=optimizer_options, **kwargs)
+    def __init__(self, **kwargs):
+        """
+        Args:
+            optimizer_settings (dict): extra options one can set for the optimization routine. These are routine
+                dependent.
+        """
+        super(AbstractParallelOptimizer, self).__init__(**kwargs)
         self._logger = logging.getLogger(__name__)
 
     def minimize(self, model, init_params=None, full_output=False):
@@ -109,9 +131,9 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         self._logger.debug('Using compile flags: {}'.format(self.get_compile_flags_list()))
         self._logger.info('The parameters we will optimize are: {0}'.format(model.get_optimized_param_names()))
         self._logger.info('We will use the optimizer {} '
-                          'with patience {} and optimizer options {}'.format(self.__class__.__name__,
+                          'with optimizer settings {}'.format(self.__class__.__name__,
                                                                              self.patience,
-                                                                             self._optimizer_options))
+                                                                             self._optimizer_settings))
 
         self._logger.info('Starting optimization preliminaries')
 
@@ -140,8 +162,9 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         workers = self._create_workers(self._get_worker_generator(self, model, starting_points,
                                                                   var_data_dict, protocol_data_dict, model_data_dict,
                                                                   nmr_params, return_codes,
-                                                                  self._optimizer_options))
+                                                                  self._optimizer_settings))
         self.load_balancer.process(workers, model.get_nmr_problems())
+        del workers
 
         self._logger.info('Finished optimization')
 
@@ -182,10 +205,10 @@ class AbstractParallelOptimizerWorker(Worker):
 
     def __init__(self, cl_environment, parent_optimizer, model, starting_points,
                  var_data_dict, protocol_data_dict, model_data_dict, nmr_params, return_codes,
-                 optimizer_options=None):
+                 optimizer_settings=None):
         super(AbstractParallelOptimizerWorker, self).__init__(cl_environment)
 
-        self._optimizer_options = optimizer_options
+        self._optimizer_settings = optimizer_settings
 
         self._parent_optimizer = parent_optimizer
 
@@ -203,6 +226,9 @@ class AbstractParallelOptimizerWorker(Worker):
         self._starting_points = starting_points
         self._all_buffers, self._params_buffer, self._return_code_buffer = self._create_buffers()
         self._kernel = self._build_kernel(self._parent_optimizer.get_compile_flags_list())
+
+    def __del__(self):
+        list(buffer.release() for buffer in self._all_buffers)
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
@@ -257,15 +283,6 @@ class AbstractParallelOptimizerWorker(Worker):
                                                   self._protocol_data_dict,
                                                   self._model_data_dict)
 
-        kernel_param_names = ['global mot_float_type* params',
-                              'global char* return_codes']
-        kernel_param_names.extend(param_code_gen.get_kernel_param_names())
-
-        if self._uses_random_numbers():
-            kernel_param_names.append('global ranluxcl_state_t* ranluxcltab')
-
-        optimizer_call_args = 'x, (const void*) &data'
-
         kernel_source = ''
         kernel_source += get_float_type_def(self._double_precision)
         kernel_source += str(param_code_gen.get_data_struct())
@@ -278,7 +295,7 @@ class AbstractParallelOptimizerWorker(Worker):
         kernel_source += self._get_optimizer_cl_code()
         kernel_source += '''
             __kernel void minimize(
-                ''' + ",\n".join(kernel_param_names) + '''
+                ''' + ",\n".join(self._get_kernel_param_names(param_code_gen)) + '''
                 ){
                     int gid = get_global_id(0);
         '''
@@ -288,7 +305,6 @@ class AbstractParallelOptimizerWorker(Worker):
                     ranluxcl_state_t ranluxclstate;
                     ranluxcl_download_seed(&ranluxclstate, ranluxcltab);
             '''
-            optimizer_call_args += ', (void*) &ranluxclstate'
 
         kernel_source += '''
                     mot_float_type x[''' + str(nmr_params) + '''];
@@ -297,7 +313,7 @@ class AbstractParallelOptimizerWorker(Worker):
                     }
 
                     ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
-                    return_codes[gid] = (char) ''' + self._get_optimizer_call_name() + '''(''' + optimizer_call_args + ''');
+                    return_codes[gid] = (char) ''' + self._get_optimizer_call_name() + '''(''' + ', '.join(self._get_optimizer_call_args()) + ''');
 
                     ''' + ('decodeParameters(x);' if self._use_param_codec else '') + '''
 
@@ -307,6 +323,39 @@ class AbstractParallelOptimizerWorker(Worker):
                 }
         '''
         return kernel_source
+
+    def _get_kernel_param_names(self, param_code_gen):
+        """Get the list of kernel parameter names.
+
+        This is useful if a subclass extended the buffers with an additional buffer.
+
+        Args:
+            param_code_gen (ParameterCLCodeGenerator): the kernel parameter code generator for the model kernel params.
+
+        Returns:
+            list of str: the list of kernel parameter names
+        """
+        kernel_param_names = ['global mot_float_type* params',
+                              'global char* return_codes']
+        kernel_param_names.extend(param_code_gen.get_kernel_param_names())
+
+        if self._uses_random_numbers():
+            kernel_param_names.append('global ranluxcl_state_t* ranluxcltab')
+
+        return kernel_param_names
+
+    def _get_optimizer_call_args(self):
+        """Get the optimizer calling arguments.
+
+        This is useful if a subclass extended the buffers with an additional buffer.
+
+        Returns:
+            list of str: the list of optimizer call arguments
+        """
+        call_args = ['x', '(const void*) &data']
+        if self._uses_random_numbers():
+            call_args.append('(void*) &ranluxclstate')
+        return call_args
 
     def _get_optimizer_cl_code(self):
         """Get the optimization CL code that is called during optimization for each voxel.

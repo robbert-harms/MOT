@@ -13,24 +13,33 @@ class NMSimplex(AbstractParallelOptimizer):
 
     default_patience = 200
 
-    def __init__(self, cl_environments=None, load_balancer=None, use_param_codec=True, patience=None,
-                 optimizer_options=None, **kwargs):
+    def __init__(self, patience=None, optimizer_settings=None, **kwargs):
         """Use the Nelder-Mead simplex method to calculate the optimimum.
 
         Args:
             patience (int):
                 Used to set the maximum number of iterations to patience*(number_of_parameters+1)
-            optimizer_options (dict): the optimization settings, you can use the following:
-                - scale (double): the scale of the initial simplex
-                - alpha (double): reflection coefficient
-                - beta (double): contraction coefficient
-                - gamma (double); expansion coefficient
-
-                For the defaults please see NMSimplexFunc.
+            optimizer_settings (dict): the optimization settings, you can use the following:
+                - scale (double): the scale of the initial simplex, default 1.0
+                - alpha (double): reflection coefficient, default 1.0
+                - beta (double): contraction coefficient, default 0.5
+                - gamma (double); expansion coefficient, default 2.0
         """
         patience = patience or self.default_patience
-        super(NMSimplex, self).__init__(cl_environments, load_balancer, use_param_codec, patience=patience,
-                                        optimizer_options=optimizer_options, **kwargs)
+
+        optimizer_settings = optimizer_settings or {}
+        option_defaults = {'alpha': 1.0, 'beta': 0.5, 'gamma': 2.0, 'delta': 0.5, 'scale': 1.0}
+
+        def get_value(option_name, default):
+            value = optimizer_settings.get(option_name, None)
+            if value is None:
+                return default
+            return value
+
+        for option, default in option_defaults.items():
+            optimizer_settings.update({option: get_value(option, default)})
+
+        super(NMSimplex, self).__init__(patience=patience, optimizer_settings=optimizer_settings, **kwargs)
 
     def _get_worker_generator(self, *args):
         return lambda cl_environment: NMSimplexWorker(cl_environment, *args)
@@ -41,14 +50,11 @@ class NMSimplexWorker(AbstractParallelOptimizerWorker):
     def _get_optimization_function(self):
         params = {'NMR_PARAMS': self._nmr_params, 'PATIENCE': self._parent_optimizer.patience}
 
-        optimizer_options = self._optimizer_options or {}
-        option_defaults = {'alpha': 1.0, 'beta': 0.5, 'gamma': 2.0, 'delta': 0.5, 'scale': 1.0}
-
-        for option, default in option_defaults.items():
+        for option, value in self._optimizer_settings.items():
             if option == 'scale':
-                params['INITIAL_SIMPLEX_SCALES'] = '{' + ', '.join([str(default)] * self._nmr_params) + '}'
+                params['INITIAL_SIMPLEX_SCALES'] = '{' + ', '.join([str(value)] * self._nmr_params) + '}'
             else:
-                params.update({option.upper(): optimizer_options.get(option, default)})
+                params.update({option.upper(): value})
 
         body = open(os.path.abspath(resource_filename('mot', 'data/opencl/nmsimplex.pcl')), 'r').read()
         if params:

@@ -19,6 +19,9 @@ class CalculateModelEstimates(CLRoutine):
     def calculate(self, model, parameters):
         """Evaluate the model for every problem and every observation and return the estimates.
 
+        This only evaluates the model at the given data points. It does not use the problem data to calculate
+        objective values.
+
         Args:
             model (AbstractModel): The model to evaluate.
             parameters (dict or ndarray): The parameters to use in the evaluation of the model
@@ -66,6 +69,9 @@ class _EvaluateModelWorker(Worker):
 
         self._all_buffers, self._evaluations_buffer = self._create_buffers()
         self._kernel = self._build_kernel(compile_flags)
+
+    def __del__(self):
+        list(buffer.release() for buffer in self._all_buffers)
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start

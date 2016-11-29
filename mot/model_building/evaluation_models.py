@@ -240,7 +240,7 @@ class GaussianEvaluationModel(EvaluationModel):
     def get_objective_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
         """Get the Gaussian objective function.
 
-        This omits the constant terms for speed reasons. Ommitted terms are:
+        This omits the constant terms for speed reasons. Omitted terms are:
 
          .. code-block:: c
 
@@ -336,7 +336,7 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
     def get_objective_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
         """Get the Offset Gaussian objective function.
 
-        This omits the constant terms for speed reasons. Ommitted terms are:
+        This omits the constant terms for speed reasons. Omitted terms are:
 
          .. code-block:: c
 
@@ -442,7 +442,7 @@ class RicianEvaluationModel(EvaluationModel):
     def get_objective_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
         """Get the Rician objective function.
 
-        This omits the constant terms for speed reasons. Ommitted terms are:
+        This omits the constant terms for speed reasons. Omitted terms are:
 
          .. code-block:: c
 

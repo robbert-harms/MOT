@@ -14,32 +14,33 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class LogLikelihoodCalculator(CLRoutine):
+class ObjectiveCalculator(CLRoutine):
 
-    def calculate(self, model, parameters, evaluation_model=None):
-        """Calculate and return the log likelihood of the given model under the given parameters.
+    def calculate(self, model, parameters):
+        """Calculate and return the objective function of the given model for the given parameters.
+
+        This evaluates the model and compares it to the problem data to get objective values. This returns
+        the objective value per problem instance, for an objective function value per observation per problem use
+        the :class:`~.objective_list_calculator.ObjectiveListCalculator`.
 
         Args:
-            model (AbstractModel): The model to calculate the full log likelihood for.
+            model (AbstractModel): The model to calculate the objective function of.
             parameters (dict or ndarray): The parameters to use in the evaluation of the model
                 If a dict is given we assume it is with values for a set of parameters
                 If an ndarray is given we assume that we have data for all parameters.
-            evaluation_model (EvaluationModel): the evaluation model to use for the log likelihood. If not given
-                we use the one defined in the model.
 
         Returns:
-            Return per voxel the log likelihood.
+            Return per voxel the objective function value
         """
         parameters = self._initialize_parameters(parameters, model)
-        log_likelihoods = self._initialize_result_array(model)
+        objective_values = self._initialize_result_array(model)
 
         workers = self._create_workers(
-            lambda cl_environment: _LogLikelihoodCalculatorWorker(cl_environment, self.get_compile_flags_list(),
-                                                                  model, parameters,
-                                                                  log_likelihoods, evaluation_model))
+            lambda cl_environment: _ObjectiveCalculatorWorker(cl_environment, self.get_compile_flags_list(),
+                                                              model, parameters, objective_values))
         self.load_balancer.process(workers, model.get_nmr_problems())
 
-        return log_likelihoods
+        return objective_values
 
     def _initialize_parameters(self, parameters, model):
         np_dtype = np.float32
@@ -59,22 +60,21 @@ class LogLikelihoodCalculator(CLRoutine):
         return np.zeros((nmr_problems,), dtype=np_dtype, order='C')
 
 
-class _LogLikelihoodCalculatorWorker(Worker):
+class _ObjectiveCalculatorWorker(Worker):
 
-    def __init__(self, cl_environment, compile_flags, model, parameters, log_likelihoods, evaluation_model):
-        super(_LogLikelihoodCalculatorWorker, self).__init__(cl_environment)
+    def __init__(self, cl_environment, compile_flags, model, parameters, objective_values):
+        super(_ObjectiveCalculatorWorker, self).__init__(cl_environment)
 
         self._model = model
         self._double_precision = model.double_precision
-        self._log_likelihoods = log_likelihoods
+        self._objective_values = objective_values
         self._parameters = parameters
-        self._evaluation_model = evaluation_model
 
         self._var_data_dict = model.get_problems_var_data()
         self._protocol_data_dict = model.get_problems_protocol_data()
         self._model_data_dict = model.get_model_data()
 
-        self._all_buffers, self._likelihoods_buffer = self._create_buffers()
+        self._all_buffers, self._objective_values_buffer = self._create_buffers()
         self._kernel = self._build_kernel(compile_flags)
 
     def __del__(self):
@@ -84,14 +84,15 @@ class _LogLikelihoodCalculatorWorker(Worker):
         nmr_problems = range_end - range_start
         event = self._kernel.run_kernel(self._cl_run_context.queue, (int(nmr_problems), ), None, *self._all_buffers,
                                         global_offset=(int(range_start),))
-        return [self._enqueue_readout(self._likelihoods_buffer, self._log_likelihoods, range_start, range_end, [event])]
+        return [self._enqueue_readout(self._objective_values_buffer, self._objective_values,
+                                      range_start, range_end, [event])]
 
     def _create_buffers(self):
         constant_buffers = self._generate_constant_buffers(self._protocol_data_dict, self._model_data_dict)
 
-        likelihoods_buffer = cl.Buffer(self._cl_run_context.context,
-                                       cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
-                                       hostbuf=self._log_likelihoods)
+        objective_value_buffer = cl.Buffer(self._cl_run_context.context,
+                                           cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
+                                           hostbuf=self._objective_values)
 
         params_buffer = cl.Buffer(self._cl_run_context.context,
                                   cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR,
@@ -103,25 +104,24 @@ class _LogLikelihoodCalculatorWorker(Worker):
                                               cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR,
                                               hostbuf=data.get_opencl_data()))
 
-        all_buffers = [params_buffer, likelihoods_buffer]
+        all_buffers = [params_buffer, objective_value_buffer]
         all_buffers.extend(var_data_buffers)
         all_buffers.extend(constant_buffers)
 
-        return all_buffers, likelihoods_buffer
+        return all_buffers, objective_value_buffer
 
     def _get_kernel_source(self):
-        cl_func = self._model.get_log_likelihood_function('getLogLikelihood', evaluation_model=self._evaluation_model)
         nmr_params = self._parameters.shape[1]
 
         param_code_gen = ParameterCLCodeGenerator(self._cl_environment.device, self._var_data_dict,
                                                   self._protocol_data_dict, self._model_data_dict)
 
-        kernel_param_names = ['global mot_float_type* params', 'global mot_float_type* log_likelihoods']
+        kernel_param_names = ['global mot_float_type* params', 'global mot_float_type* objective_values']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
         kernel_source = ''
         kernel_source += get_float_type_def(self._double_precision)
         kernel_source += param_code_gen.get_data_struct()
-        kernel_source += cl_func
+        kernel_source += self._model.get_objective_function('calculateObjective')
         kernel_source += '''
             __kernel void run_kernel(
                 ''' + ",\n".join(kernel_param_names) + '''
@@ -134,7 +134,7 @@ class _LogLikelihoodCalculatorWorker(Worker):
                         x[i] = params[gid * ''' + str(nmr_params) + ''' + i];
                     }
 
-                    log_likelihoods[gid] = getLogLikelihood(&data, x);
+                    objective_values[gid] = calculateObjective(&data, x);
             }
         '''
         return kernel_source

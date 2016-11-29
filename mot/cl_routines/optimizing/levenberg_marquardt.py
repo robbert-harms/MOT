@@ -15,8 +15,7 @@ class LevenbergMarquardt(AbstractParallelOptimizer):
 
     default_patience = 250
 
-    def __init__(self, cl_environments=None, load_balancer=None, use_param_codec=True, patience=None,
-                 optimizer_options=None, **kwargs):
+    def __init__(self, patience=None, **kwargs):
         """Use the Levenberg-Marquardt method to calculate the optimimum.
 
         Args:
@@ -24,8 +23,7 @@ class LevenbergMarquardt(AbstractParallelOptimizer):
                 Used to set the maximum number of iterations to patience*(number_of_parameters+1)
         """
         patience = patience or self.default_patience
-        super(LevenbergMarquardt, self).__init__(cl_environments, load_balancer, use_param_codec, patience=patience,
-                                                 optimizer_options=optimizer_options, **kwargs)
+        super(LevenbergMarquardt, self).__init__(patience=patience, **kwargs)
 
     def _get_worker_generator(self, *args):
         return lambda cl_environment: LevenbergMarquardtWorker(cl_environment, *args)
@@ -143,12 +141,12 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
                   'PATIENCE': self._parent_optimizer.patience,
                   'NMR_INST_PER_PROBLEM': self._model.get_nmr_inst_per_problem()}
 
-        optimizer_options = self._optimizer_options or {}
+        optimizer_settings = self._optimizer_settings or {}
         option_defaults = {'step_bound': 100.0, 'scale_diag': 1}
         option_converters = {'scale_diag': lambda val: int(bool(val))}
 
         for option, default in option_defaults.items():
-            v = optimizer_options.get(option, default)
+            v = optimizer_settings.get(option, default)
             if option in option_converters:
                 v = option_converters[option](v)
             params.update({option.upper(): v})

@@ -60,6 +60,14 @@ mot.cl_routines.mapping.loglikelihood_calculator module
     :undoc-members:
     :show-inheritance:
 
+mot.cl_routines.mapping.objective_calculator module
+---------------------------------------------------
+
+.. automodule:: mot.cl_routines.mapping.objective_calculator
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 mot.cl_routines.mapping.objective_list_calculator module
 --------------------------------------------------------
 

@@ -11,22 +11,37 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class Powell(AbstractParallelOptimizer):
 
-    default_patience = 5
+    default_patience = 2
 
-    def __init__(self, cl_environments=None, load_balancer=None, use_param_codec=True, patience=None,
-                 optimizer_options=None, **kwargs):
+    def __init__(self, bracket_gold=None, glimit=None, reset_method=None, patience=None, **kwargs):
         """Use the Powell method to calculate the optimum.
 
         Args:
             patience (int):
                 Used to set the maximum number of iterations to patience*(number_of_parameters+1)
-            optimizer_options (dict): the optimization settings, you can use the following:
-                bracket_gold (double): the default ratio by which successive intervals are magnified in Bracketing
-                glimit (double): the maximum magnification allowed for a parabolic-fit step in Bracketing
+            bracket_gold (double): the default ratio by which successive intervals are magnified in Bracketing
+            glimit (double): the maximum magnification allowed for a parabolic-fit step in Bracketing
+            reset_method (str): one of 'EXTRAPOLATED_POINT' or 'EVERY_N' lower case or upper case.
         """
         patience = patience or self.default_patience
-        super(Powell, self).__init__(cl_environments, load_balancer, use_param_codec, patience=patience,
-                                     optimizer_options=optimizer_options, **kwargs)
+
+        optimizer_settings = kwargs.pop('optimizer_settings', {})
+        optimizer_settings['bracket_gold'] = bracket_gold
+        optimizer_settings['glimit'] = glimit
+        optimizer_settings['reset_method'] = reset_method
+
+        option_defaults = {'bracket_gold': 1.618034, 'glimit': 100.0, 'reset_method': 'extrapolated_point'}
+
+        def get_value(option_name, default):
+            value = optimizer_settings.get(option_name, None)
+            if value is None:
+                return default
+            return value
+
+        for option, default in option_defaults.items():
+            optimizer_settings.update({option: get_value(option, default)})
+
+        super(Powell, self).__init__(patience=patience, optimizer_settings=optimizer_settings, **kwargs)
 
     def _get_worker_generator(self, *args):
         return lambda cl_environment: PowellWorker(cl_environment, *args)
@@ -37,11 +52,9 @@ class PowellWorker(AbstractParallelOptimizerWorker):
     def _get_optimization_function(self):
         params = {'NMR_PARAMS': self._nmr_params, 'PATIENCE': self._parent_optimizer.patience}
 
-        optimizer_options = self._optimizer_options or {}
-        option_defaults = {'bracket_gold': 1.618034, 'glimit': 100.0}
-
-        for option, default in option_defaults.items():
-            params.update({option.upper(): optimizer_options.get(option, default)})
+        for option, value in self._optimizer_settings.items():
+            params.update({option.upper(): value})
+        params['RESET_METHOD'] = 'POWELL_RESET_METHOD_' + params['RESET_METHOD'].upper()
 
         body = open(os.path.abspath(resource_filename('mot', 'data/opencl/powell.pcl')), 'r').read()
         if params:
