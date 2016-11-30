@@ -108,9 +108,10 @@ class CosSqrClampTransform(AbstractTransformation):
     """The clamp transformation limits the parameter between its lower and upper bound using a cos(sqr()) transform."""
 
     def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):
-        return 'acos(sqrt(fabs((' + parameter_name + ' - ' + \
-               str(parameter.lower_bound) + ') / ' + \
-               '(' + str(parameter.upper_bound) + ' - ' + str(parameter.lower_bound) + ')' + ')));'
+        template = 'acos(clamp(sqrt(fabs( ({param_name} - {lower_bound}) / ({upper_bound} - {lower_bound}) )), ' \
+                   '    (mot_float_type)-1, (mot_float_type)1));'
+        return template.format(param_name=parameter_name, lower_bound=parameter.lower_bound,
+                             upper_bound=parameter.upper_bound)
 
     def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
         return 'pown(cos(' + parameter_name + '), 2) * ' + \
@@ -122,9 +123,10 @@ class SinSqrClampTransform(AbstractTransformation):
     """The clamp transformation limits the parameter between its lower and upper bound using a sin(sqr()) transform."""
 
     def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):
-        return 'asin(sqrt(fabs((' + parameter_name + ' - ' + \
-               str(parameter.lower_bound) + ') / ' + \
-               '(' + str(parameter.upper_bound) + ' - ' + str(parameter.lower_bound) + ')' + ')));'
+        template = 'asin(clamp(sqrt(fabs( ({param_name} - {lower_bound}) / ({upper_bound} - {lower_bound}) )), ' \
+                   '    (mot_float_type)-1, (mot_float_type)1));'
+        return template.format(param_name=parameter_name, lower_bound=parameter.lower_bound,
+                               upper_bound=parameter.upper_bound)
 
     def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
         return 'pown(sin(' + parameter_name + '), 2) * ' + \
