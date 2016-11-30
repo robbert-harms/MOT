@@ -167,12 +167,12 @@ class StartingPointFromKeyAndCounter(Random123StartingPoint):
         """Creates a starting point for the Random123 generator using a provided key and counter.
 
         Args:
-            key (list of int): a list of integers to use for the key, the length should be ``key_length - 1``
+            key (list of int): a list of integers to use for the key, the length should be ``key_length - 2``
                 The range of each int should be between the minimum and the maximum allowed integer on this system, you
-                can find these using np.iinfo(np.int32).
+                can find these using np.iinfo(np.uint32).
             counter (list of int): a list of integers to use for the counter, of length 4.
                 The range of each int should be between the minimum and the maximum allowed integer on this system, you
-                can find these using np.iinfo(np.int32).
+                can find these using np.iinfo(np.uint32).
         """
         self._key = key
         self._counter = counter
@@ -196,17 +196,17 @@ class StartingPointFromSeed(Random123StartingPoint):
 
     def get_key(self, key_length):
         rng = Random(self._seed)
-        int32_info = np.iinfo(np.int32)
+        uint32_info = np.iinfo(np.uint32)
 
-        key = [rng.randrange(int(int32_info.min), int(int32_info.max) + 1) for _ in range(key_length - 1)]
+        key = [rng.randrange(int(uint32_info.min), int(uint32_info.max) + 1) for _ in range(key_length - 2)]
 
         return key
 
     def get_counter(self, key_length):
         rng = Random(self._seed)
-        int32_info = np.iinfo(np.int32)
+        uint32_info = np.iinfo(np.uint32)
 
-        counter = [rng.randrange(int(int32_info.min), int(int32_info.max) + 1) for _ in range(4)]
+        counter = [rng.randrange(int(uint32_info.min), int(uint32_info.max) + 1) for _ in range(4)]
 
         return counter
 
@@ -241,7 +241,7 @@ class Random123GeneratorBase(CLRoutine):
         self.context = self.cl_environments[0].get_cl_context().context
         self.key = starting_point.get_key(self._get_key_length())
         self.counter = starting_point.get_counter(self._get_key_length())
-        self.counter_max = np.iinfo(np.int32).max
+        self.counter_max = np.iinfo(np.uint32).max
 
     def _get_key_length(self):
         """Get the key length of the implementing Random123 generator.
@@ -280,7 +280,6 @@ class Random123GeneratorBase(CLRoutine):
             counter_multiplier = 1
             return c_type, 'rand123_{}_float4'.format(distribution), counter_multiplier, size_multiplier
 
-
     def _get_kernel_source(self, dtype, distribution):
         src = open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/openclfeatures.h'), ), 'r').read()
         src += open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/array.h'), ), 'r').read()
@@ -291,119 +290,151 @@ class Random123GeneratorBase(CLRoutine):
         c_type, rng_expr, counter_multiplier, size_multiplier = self._get_rng_settings(distribution, dtype)
 
         src += """
-                    typedef %(output_t)s output_t;
-                    typedef %(output_t)s4 output_vec_t;
-                    typedef %(gen_name)s_ctr_t ctr_t;
-                    typedef %(gen_name)s_key_t key_t;
+                /**
+                 * The information needed by the random functions to generate unique random numbers.
+                 */
+                typedef struct{
+                    %(gen_name)s_ctr_t counter;
+                    %(gen_name)s_key_t key;
+                } rand123_data;
 
-                    uint4 gen_bits(key_t* key, ctr_t* ctr)
+                /**
+                 * Generates the random bits used by the random functions
+                 */
+                uint4 gen_bits(rand123_data* rng_data){
+
+                    %(gen_name)s_ctr_t* ctr = &rng_data->counter;
+                    %(gen_name)s_key_t* key = &rng_data->key;
+
+                    union {
+                        %(gen_name)s_ctr_t ctr_el;
+                        uint4 vec_el;
+                    } u;
+
+                    u.ctr_el = %(gen_name)s(*ctr, *key);
+                    return u.vec_el;
+                }
+
+                /**
+                 * Initializes the rand123_data structure using a length 2 key.
+                 *
+                 * The first element in the key is automatically set to the global id of the kernel,
+                 * and the second element is set by default to 0. We therefore need to give no key data.
+                 */
+                rand123_data rand123_initialize_data_2key(uint counter[4]){
+                    %(gen_name)s_ctr_t k = {{get_global_id(0), 0}};
+                    %(gen_name)s_key_t c = {(uint32_t)*counter};
+
+                    rand123_data rng_data = {c, k};
+                    return rng_data;
+                }
+
+                /**
+                 * Initializes the rand123_data structure using a length 4 key.
+                 *
+                 * The first element in the key is automatically set to the global id of the kernel,
+                 * and the second element is set by default to 0. We therefore need only to set the other two
+                 * key elements.
+                 */
+                rand123_data rand123_initialize_data_4key(uint counter[4], uint key[2]){
+                    %(gen_name)s_ctr_t k = {{get_global_id(0), 0, key[0], key[1]}};
+                    %(gen_name)s_key_t c = {(uint32_t)*counter};
+
+                    rand123_data rng_data = {c, k};
+                    return rng_data;
+                }
+
+                /**
+                 * Sets the second element of the key to the given counter.
+                 *
+                 * One needs to call this function after every call to a random number generating function
+                 * to ensure the next number will be different.
+                 */
+                void rand123_set_loop_key(rand123_data* rng_data, int key){
+                    rng_data->key.v[1] = key;
+                }
+
+                /**
+                 * Applies the Box-Muller transformation on four uniformly distributed random numbers.
+                 *
+                 * This transforms uniform random numbers into Normal distributed random numbers.
+                 */
+                double4 rand123_box_muller_double4(double4 x){
+                    double r0 = sqrt(-2 * log(x.x));
+                    double c0;
+                    double s0 = sincos(((double) 2 * M_PI) * x.y, &c0);
+
+                    double r1 = sqrt(-2 * log(x.z));
+                    double c1;
+                    double s1 = sincos(((double) 2 * M_PI) * x.w, &c1);
+
+                    return (double4) (r0*c0, r0*s0, r1*c1, r1*s1);
+                }
+
+                float4 rand123_box_muller_float4(float4 x){
+                    float r0 = sqrt(-2 * log(x.x));
+                    float c0;
+                    float s0 = sincos(((double) 2 * M_PI) * x.y, &c0);
+
+                    float r1 = sqrt(-2 * log(x.z));
+                    float c1;
+                    float s1 = sincos(((double) 2 * M_PI) * x.w, &c1);
+
+                    return (float4) (r0*c0, r0*s0, r1*c1, r1*s1);
+                }
+                /** end of Box Muller transforms */
+
+                /** Random number generating functions */
+                double4 rand123_uniform_double4(rand123_data* rng_data){
+                    uint4 generated_bits = gen_bits(rng_data);
+                    return ((double) (1/pown(2.0, 32))) * convert_double4(generated_bits) +
+                        ((double) (1/pown(2.0, 64))) * convert_double4(generated_bits);
+                }
+
+                double4 rand123_normal_double4(rand123_data* rng_data){
+                    return rand123_box_muller_double4(rand123_uniform_double4(rng_data));
+                }
+
+                float4 rand123_uniform_float4(rand123_data* rng_data){
+                    uint4 generated_bits = gen_bits(rng_data);
+                    return (float)(1/pown(2.0, 32)) * convert_float4(generated_bits);
+                }
+
+                float4 rand123_normal_float4(rand123_data* rng_data){
+                    return rand123_box_muller_float4(rand123_uniform_float4(rng_data));
+                }
+                /** End of the random number generating functions */
+
+                kernel void generate(
+                    constant uint* rand123_key,
+                    constant uint* rand123_counter,
+                    global %(output_t)s *output,
+                    long out_size)
+                {
+                    rand123_data rng_data = rand123_initialize_data_4key(
+                        (uint []){rand123_counter[0], rand123_counter[1], rand123_counter[2], rand123_counter[3]},
+                        (uint []){rand123_key[0], rand123_key[1]});
+                    rand123_set_loop_key(&rng_data, 0);
+
+                    // output bulk
+                    unsigned long idx = get_global_id(0)*4;
+                    while (idx + 4 < out_size)
                     {
-                        union {
-                            ctr_t ctr_el;
-                            uint4 vec_el;
-                        } u;
-
-                        u.ctr_el = %(gen_name)s(*ctr, *key);
-                        if (++ctr->v[0] == 0)
-                            if (++ctr->v[1] == 0)
-                                ++ctr->v[2];
-
-                        return u.vec_el;
+                        *(global %(output_t)s4 *) (output + idx) = %(rng_expr)s(&rng_data);
+                        idx += 4*get_global_size(0);
                     }
 
-                    /**
-                     * Applies the Box-Muller transformation on the four given uniformly distributed random numbers.
-                     *
-                     * This transformation transforms uniform random numbers into Normal distributed random numbers.
-                     */
-                    double4 box_muller_double4(double4 x){
-                        double r0 = sqrt(-2 * log(x.x));
-                        double c0;
-                        double s0 = sincos(((double) 2 * M_PI) * x.y, &c0);
-
-                        double r1 = sqrt(-2 * log(x.z));
-                        double c1;
-                        double s1 = sincos(((double) 2 * M_PI) * x.w, &c1);
-
-                        return (double4) (r0*c0, r0*s0, r1*c1, r1*s1);
-                    }
-
-                    /**
-                     * Applies the Box-Muller transformation on the four given uniformly distributed random numbers.
-                     *
-                     * This transformation transforms uniform random numbers into Normal distributed random numbers.
-                     */
-                    float4 box_muller_float4(float4 x){
-                        float r0 = sqrt(-2 * log(x.x));
-                        float c0;
-                        float s0 = sincos(((double) 2 * M_PI) * x.y, &c0);
-
-                        float r1 = sqrt(-2 * log(x.z));
-                        float c1;
-                        float s1 = sincos(((double) 2 * M_PI) * x.w, &c1);
-
-                        return (float4) (r0*c0, r0*s0, r1*c1, r1*s1);
-                    }
-
-                    double4 rand123_uniform_double4(key_t* k, ctr_t* c){
-                        uint4 generated_bits = gen_bits(k, c);
-
-                        return ((double) (1/pown(2.0, 32))) * convert_double4(generated_bits) +
-                            ((double) (1/pown(2.0, 64))) * convert_double4(generated_bits);
-                    }
-
-                    double4 rand123_normal_double4(key_t* k, ctr_t* c){
-                        return box_muller_double4(rand123_uniform_double4(k, c));
-
-                    }
-
-                    float4 rand123_uniform_float4(key_t* k, ctr_t* c){
-                        uint4 generated_bits = gen_bits(k, c);
-
-                        return (float)(1/pown(2.0, 32)) * convert_float4(generated_bits);
-                    }
-
-                    float4 rand123_normal_float4(key_t* k, ctr_t* c){
-                        return box_muller_float4(rand123_uniform_float4(k, c));
-                    }
-
-
-                    kernel void generate(
-                        int k1,
-                        #if %(key_length)s > 2
-                        int k2, int k3,
-                        #endif
-                        int c0, int c1, int c2, int c3,
-                        global output_t *output,
-                        long out_size)
-                    {
-                        #if %(key_length)s == 2
-                        key_t k = {{get_global_id(0), k1}};
-                        #else
-                        key_t k = {{get_global_id(0), k1, k2, k3}};
-                        #endif
-
-                        ctr_t c = {{c0, c1, c2, c3}};
-
-                        // output bulk
-                        unsigned long idx = get_global_id(0)*4;
-                        while (idx + 4 < out_size)
-                        {
-                            *(global output_vec_t *) (output + idx) = %(rng_expr)s(&k, &c);
-                            idx += 4*get_global_size(0);
-                        }
-
-                        // output tail
-                        output_vec_t tail_ran = %(rng_expr)s(&k, &c);
-                        if (idx < out_size)
-                          output[idx] = tail_ran.x;
-                        if (idx+1 < out_size)
-                          output[idx+1] = tail_ran.y;
-                        if (idx+2 < out_size)
-                          output[idx+2] = tail_ran.z;
-                        if (idx+3 < out_size)
-                          output[idx+3] = tail_ran.w;
-                    }
+                    // output tail
+                    %(output_t)s4 tail_ran = %(rng_expr)s(&rng_data);
+                    if (idx < out_size)
+                      output[idx] = tail_ran.x;
+                    if (idx+1 < out_size)
+                      output[idx+1] = tail_ran.y;
+                    if (idx+2 < out_size)
+                      output[idx+2] = tail_ran.z;
+                    if (idx+3 < out_size)
+                      output[idx+3] = tail_ran.w;
+                }
                     """ % {
             "gen_name": self._get_generator_function_name(),
             "output_t": c_type,
@@ -420,9 +451,7 @@ class Random123GeneratorBase(CLRoutine):
 
         prg = cl.Program(self.context, src).build()
         knl = prg.generate
-        knl.set_scalar_arg_dtypes(
-                [np.int32] * (self._get_key_length() - 1 + 4)
-                + [None, np.int64])
+        knl.set_scalar_arg_dtypes([None, None, None, np.int64])
 
         return knl, counter_multiplier, size_multiplier
 
@@ -439,7 +468,15 @@ class Random123GeneratorBase(CLRoutine):
         knl, counter_multiplier, size_multiplier = \
                 self.get_gen_kernel(ary.dtype, distribution)
 
-        args = self.key + self.counter + [ary.data, ary.size*size_multiplier]
+        key_buffer = cl.Buffer(self.context,
+                               cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
+                               hostbuf=np.array(self.key, dtype=np.uint32))
+
+        counter_buffer = cl.Buffer(self.context,
+                                      cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
+                                      hostbuf=np.array(self.counter, dtype=np.uint32))
+
+        args = [key_buffer, counter_buffer, ary.data, ary.size*size_multiplier]
 
         n = ary.size
         from pyopencl.array import splay
@@ -539,6 +576,6 @@ def rand(cl_environments, shape, dtype, start=0, stop=1):
 
     from pyopencl.array import Array
     result = Array(cl_environments[0].get_cl_context().queue, shape, dtype)
-    result.add_event(gen.fill_uniform(result))
-    # result.add_event(gen.fill_normal(result))
+    # result.add_event(gen.fill_uniform(result))
+    result.add_event(gen.fill_normal(result))
     return result.get()
