@@ -6,7 +6,7 @@ from mot.cl_data_type import CLDataType
 from mot.model_building.cl_functions.base import ModelFunction
 from mot.model_building.cl_functions.parameters import FreeParameter
 from mot.model_building.parameter_functions.proposals import GaussianProposal
-from mot.model_building.parameter_functions.transformations import ClampTransform, CosSqrTransform
+from mot.model_building.parameter_functions.transformations import ClampTransform, CosSqrClampTransform
 
 __author__ = 'Robbert Harms'
 __date__ = "2016-10-03"
@@ -60,7 +60,7 @@ class Weight(Scalar):
         """
         super(Weight, self).__init__(name=name, value=value, lower_bound=lower_bound, upper_bound=upper_bound)
         self.parameter_list[0].name = 'w'
-        self.parameter_list[0].parameter_transform = CosSqrTransform()
+        self.parameter_list[0].parameter_transform = CosSqrClampTransform()
         self.parameter_list[0].sampling_proposal = GaussianProposal(0.01)
         self.parameter_list[0].perturbation_function = lambda v: np.clip(
             v + np.random.normal(scale=0.05, size=v.shape), 0, 1)
