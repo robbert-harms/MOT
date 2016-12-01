@@ -22,7 +22,7 @@ Please install the dependencies (*python3*, *pip3* and *pyopencl*) first:
 
 .. code-block:: bash
 
-    $ sudo apt install python3 python3-pip python3-pyopencl
+    $ sudo apt install python3 python3-pip python3-pyopencl python3-devel
 
 and then install MOT with:
 
