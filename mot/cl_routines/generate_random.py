@@ -3,7 +3,7 @@ import time
 import numpy as np
 import pyopencl as cl
 import pyopencl.array as cl_array
-from mot.utils import initialize_ranlux, get_ranlux_cl
+from mot.utils import initialize_ranlux, get_ranlux_cl, get_random123_cl_code
 from mot.cl_routines.base import CLRoutine
 from mot.load_balance_strategies import Worker
 from pkg_resources import resource_filename
@@ -140,80 +140,62 @@ class _RanluxRandomWorker(Worker):
 
 class Random123StartingPoint():
 
-    def get_key(self, key_length):
+    def get_key(self, dtype):
         """Gets the key used as starting point for the Random123 generator.
 
+        This should either return 2 or 4 keys depending on the desired precision.
+
         Args:
-            key_length (int): the length of the Random123 key used
+            dtype (np.dtype): the datatype to use for the key
 
         Returns:
             list: the key used as starting point in the Random123 generator
         """
 
-    def get_counter(self, key_length):
+    def get_counter(self, dtype, length):
         """Gets the counter used as starting point for the Random123 generator.
 
         Args:
-            key_length (int): the length of the Random123 key used
+            dtype (np.dtype): the datatype to use
+            length (int): the length of the returned list
 
         Returns:
             list: the counter used as starting point in the Random123 generator
         """
 
 
-class StartingPointFromKeyAndCounter(Random123StartingPoint):
-
-    def __init__(self, key, counter):
-        """Creates a starting point for the Random123 generator using a provided key and counter.
-
-        Args:
-            key (list of int): a list of integers to use for the key, the length should be ``key_length - 2``
-                The range of each int should be between the minimum and the maximum allowed integer on this system, you
-                can find these using np.iinfo(np.uint32).
-            counter (list of int): a list of integers to use for the counter, of length 4.
-                The range of each int should be between the minimum and the maximum allowed integer on this system, you
-                can find these using np.iinfo(np.uint32).
-        """
-        self._key = key
-        self._counter = counter
-
-    def get_key(self, key_length):
-        return self._key
-
-    def get_counter(self, key_length):
-        return self._counter
-
-
 class StartingPointFromSeed(Random123StartingPoint):
 
-    def __init__(self, seed):
+    def __init__(self, seed, key_length=None):
         """Generates the key and counter from the given seed.
 
         Args:
             seed (int): the seed used to generate a starting point for the Random123 RNG.
+            key_length (int): the length of the key, either 2 or 4 depending on the desired precision.
         """
         self._seed = seed
+        self._key_length = key_length
+        if self._key_length not in (2, 4):
+            self._key_length = 4
 
-    def get_key(self, key_length):
+    def get_key(self, dtype):
         rng = Random(self._seed)
-        uint32_info = np.iinfo(np.uint32)
-
-        key = [rng.randrange(int(uint32_info.min), int(uint32_info.max) + 1) for _ in range(key_length - 2)]
-
+        dtype_info = np.iinfo(dtype)
+        key = [rng.randrange(dtype_info.min, dtype_info.max + 1) for _ in range(self._key_length - 2)]
         return key
 
-    def get_counter(self, key_length):
+    def get_counter(self, dtype, length):
         rng = Random(self._seed)
-        uint32_info = np.iinfo(np.uint32)
+        dtype_info = np.iinfo(dtype)
 
-        counter = [rng.randrange(int(uint32_info.min), int(uint32_info.max) + 1) for _ in range(4)]
+        counter = [rng.randrange(dtype_info.min, dtype_info.max + 1) for _ in range(length)]
 
         return counter
 
 
 class Random123GeneratorBase(CLRoutine):
 
-    def __init__(self, starting_point=None, **kwargs):
+    def __init__(self, starting_point=None, generator_name=None, nmr_words=None, word_bitsize=None, **kwargs):
         """Create the random123 basis for generating a list of random numbers.
 
         *From the Random123 documentation:*
@@ -230,230 +212,107 @@ class Random123GeneratorBase(CLRoutine):
         so that the sequence of values produced by simply incrementing the counter (or key) is effectively
         indistinguishable from a sequence of samples of a uniformly distributed random variable.
 
+        All the Random123 generators are counter-based RNGs that use integer multiplication, xor and permutation
+        of W-bit words to scramble its N-word input key.
+
         Args:
             starting_point (Random123StartingPoint): object that provides the generator with the starting points
                 (key, counter) tuple. If None is given we will use the ``StartingPointFromSeed`` with a seed of 0.
+            generator_name (str): the generator to use, either 'threefry' or 'philox'. Defaults to 'threefry'.
+            nmr_words (int): the number of words used in the input key and counter. Defaults to 4.
+            word_bitsize (int): the size of the bit-words used as key and counter input, either 32 or 64.
+                Defaults to 32.
         """
         super(Random123GeneratorBase, self).__init__(**kwargs)
 
         starting_point = starting_point or StartingPointFromSeed(0)
 
         self.context = self.cl_environments[0].get_cl_context().context
-        self.key = starting_point.get_key(self._get_key_length())
-        self.counter = starting_point.get_counter(self._get_key_length())
-        self.counter_max = np.iinfo(np.uint32).max
 
-    def _get_key_length(self):
-        """Get the key length of the implementing Random123 generator.
+        self._generator_name = generator_name or 'threefry'
+        self._nmr_words = nmr_words or 4
+        self._word_bitsize = word_bitsize or 32
 
-        Returns:
-            int: the key length for the generator in use.
-        """
-        raise NotImplementedError
+        if self._nmr_words not in (2, 4):
+            raise ValueError('The number of words should be either 2 or 4, {} given.'.format(self._nmr_words))
 
-    def _get_generator_header_name(self):
-        """Get the name of the header file to include for this RNG.
+        if self._word_bitsize not in (32, 64):
+            raise ValueError('The word bitsize should be either 32 or 64, {} given.'.format(self._word_bitsize))
 
-        Returns:
-            str: the name of the header file
-        """
-        raise NotImplementedError
+        if self._word_bitsize == 32:
+            dtype = np.uint32
+        else:
+            dtype = np.uint64
 
-    def _get_generator_function_name(self):
-        """Get the CL function name of the generator
+        self._key = np.array(starting_point.get_key(dtype), dtype=dtype)
+        self._key_length = len(self._key) + 2
+        self._counter = np.array(starting_point.get_counter(dtype, self._nmr_words), dtype=dtype)
 
-        Returns:
-            str: the CL function name of the generator
-        """
-        raise NotImplementedError
+    def _get_uniform_kernel(self, min_val, max_val, c_type):
+        src = get_random123_cl_code(self._generator_name, self._nmr_words, self._word_bitsize)
+        src += '''
+            __kernel void generate(constant uint* rand123_counter,
+                                   ''' + ('constant uint* rand123_key,' if self._key_length > 2 else '') + '''
+                                   global ''' + c_type + '''* samples){
 
-    def _get_rng_settings(self, distribution, dtype):
-        size_multiplier = 1
+                rand123_data rng_data = ''' + \
+                        ('rand123_initialize_data_4key_constmem(rand123_counter, rand123_key)' if self._key_length > 2
+                         else 'rand123_initialize_data_2key_constmem(rand123_counter)') + ''';
+                rand123_set_loop_key(&rng_data, 0);
 
-        if dtype == np.float64:
-            c_type = "double"
-            counter_multiplier = 2
-            return c_type, 'rand123_{}_double4'.format(distribution), counter_multiplier, size_multiplier
+                ''' + c_type + '''4 randomnr =  rand123_uniform_''' + c_type + '''4(&rng_data);
 
-        if dtype == np.float32:
-            c_type = "float"
-            counter_multiplier = 1
-            return c_type, 'rand123_{}_float4'.format(distribution), counter_multiplier, size_multiplier
+                int gid = get_global_id(0);
 
-    def _get_kernel_source(self, dtype, distribution):
-        src = open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/openclfeatures.h'), ), 'r').read()
-        src += open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/array.h'), ), 'r').read()
-        src += open(os.path.abspath(
-            resource_filename('mot', 'data/opencl/random123/{}.cl'.format(self._get_generator_header_name())), ),
-            'r').read()
-
-        c_type, rng_expr, counter_multiplier, size_multiplier = self._get_rng_settings(distribution, dtype)
-
-        src += """
-                /**
-                 * The information needed by the random functions to generate unique random numbers.
-                 */
-                typedef struct{
-                    %(gen_name)s_ctr_t counter;
-                    %(gen_name)s_key_t key;
-                } rand123_data;
-
-                /**
-                 * Generates the random bits used by the random functions
-                 */
-                uint4 gen_bits(rand123_data* rng_data){
-
-                    %(gen_name)s_ctr_t* ctr = &rng_data->counter;
-                    %(gen_name)s_key_t* key = &rng_data->key;
-
-                    union {
-                        %(gen_name)s_ctr_t ctr_el;
-                        uint4 vec_el;
-                    } u;
-
-                    u.ctr_el = %(gen_name)s(*ctr, *key);
-                    return u.vec_el;
-                }
-
-                /**
-                 * Initializes the rand123_data structure using a length 2 key.
-                 *
-                 * The first element in the key is automatically set to the global id of the kernel,
-                 * and the second element is set by default to 0. We therefore need to give no key data.
-                 */
-                rand123_data rand123_initialize_data_2key(uint counter[4]){
-                    %(gen_name)s_ctr_t k = {{get_global_id(0), 0}};
-                    %(gen_name)s_key_t c = {(uint32_t)*counter};
-
-                    rand123_data rng_data = {c, k};
-                    return rng_data;
-                }
-
-                /**
-                 * Initializes the rand123_data structure using a length 4 key.
-                 *
-                 * The first element in the key is automatically set to the global id of the kernel,
-                 * and the second element is set by default to 0. We therefore need only to set the other two
-                 * key elements.
-                 */
-                rand123_data rand123_initialize_data_4key(uint counter[4], uint key[2]){
-                    %(gen_name)s_ctr_t k = {{get_global_id(0), 0, key[0], key[1]}};
-                    %(gen_name)s_key_t c = {(uint32_t)*counter};
-
-                    rand123_data rng_data = {c, k};
-                    return rng_data;
-                }
-
-                /**
-                 * Sets the second element of the key to the given counter.
-                 *
-                 * One needs to call this function after every call to a random number generating function
-                 * to ensure the next number will be different.
-                 */
-                void rand123_set_loop_key(rand123_data* rng_data, int key){
-                    rng_data->key.v[1] = key;
-                }
-
-                /**
-                 * Applies the Box-Muller transformation on four uniformly distributed random numbers.
-                 *
-                 * This transforms uniform random numbers into Normal distributed random numbers.
-                 */
-                double4 rand123_box_muller_double4(double4 x){
-                    double r0 = sqrt(-2 * log(x.x));
-                    double c0;
-                    double s0 = sincos(((double) 2 * M_PI) * x.y, &c0);
-
-                    double r1 = sqrt(-2 * log(x.z));
-                    double c1;
-                    double s1 = sincos(((double) 2 * M_PI) * x.w, &c1);
-
-                    return (double4) (r0*c0, r0*s0, r1*c1, r1*s1);
-                }
-
-                float4 rand123_box_muller_float4(float4 x){
-                    float r0 = sqrt(-2 * log(x.x));
-                    float c0;
-                    float s0 = sincos(((double) 2 * M_PI) * x.y, &c0);
-
-                    float r1 = sqrt(-2 * log(x.z));
-                    float c1;
-                    float s1 = sincos(((double) 2 * M_PI) * x.w, &c1);
-
-                    return (float4) (r0*c0, r0*s0, r1*c1, r1*s1);
-                }
-                /** end of Box Muller transforms */
-
-                /** Random number generating functions */
-                double4 rand123_uniform_double4(rand123_data* rng_data){
-                    uint4 generated_bits = gen_bits(rng_data);
-                    return ((double) (1/pown(2.0, 32))) * convert_double4(generated_bits) +
-                        ((double) (1/pown(2.0, 64))) * convert_double4(generated_bits);
-                }
-
-                double4 rand123_normal_double4(rand123_data* rng_data){
-                    return rand123_box_muller_double4(rand123_uniform_double4(rng_data));
-                }
-
-                float4 rand123_uniform_float4(rand123_data* rng_data){
-                    uint4 generated_bits = gen_bits(rng_data);
-                    return (float)(1/pown(2.0, 32)) * convert_float4(generated_bits);
-                }
-
-                float4 rand123_normal_float4(rand123_data* rng_data){
-                    return rand123_box_muller_float4(rand123_uniform_float4(rng_data));
-                }
-                /** End of the random number generating functions */
-
-                kernel void generate(
-                    constant uint* rand123_key,
-                    constant uint* rand123_counter,
-                    global %(output_t)s *output,
-                    long out_size)
-                {
-                    rand123_data rng_data = rand123_initialize_data_4key(
-                        (uint []){rand123_counter[0], rand123_counter[1], rand123_counter[2], rand123_counter[3]},
-                        (uint []){rand123_key[0], rand123_key[1]});
-                    rand123_set_loop_key(&rng_data, 0);
-
-                    // output bulk
-                    unsigned long idx = get_global_id(0)*4;
-                    while (idx + 4 < out_size)
-                    {
-                        *(global %(output_t)s4 *) (output + idx) = %(rng_expr)s(&rng_data);
-                        idx += 4*get_global_size(0);
-                    }
-
-                    // output tail
-                    %(output_t)s4 tail_ran = %(rng_expr)s(&rng_data);
-                    if (idx < out_size)
-                      output[idx] = tail_ran.x;
-                    if (idx+1 < out_size)
-                      output[idx+1] = tail_ran.y;
-                    if (idx+2 < out_size)
-                      output[idx+2] = tail_ran.z;
-                    if (idx+3 < out_size)
-                      output[idx+3] = tail_ran.w;
-                }
-                    """ % {
-            "gen_name": self._get_generator_function_name(),
-            "output_t": c_type,
-            "key_length": self._get_key_length(),
-            "rng_expr": rng_expr
-        }
-
+                samples[gid * 4] = ''' + str(min_val) + ''' + randomnr.x * ''' + str(max_val - min_val) + ''';
+                samples[gid * 4 + 1] = ''' + str(min_val) + ''' + randomnr.y * ''' + str(max_val - min_val) + ''';
+                samples[gid * 4 + 2] = ''' + str(min_val) + ''' + randomnr.z * ''' + str(max_val - min_val) + ''';
+                samples[gid * 4 + 3] = ''' + str(min_val) + ''' + randomnr.w * ''' + str(max_val - min_val) + ''';
+            }
+        '''
         return src
 
-    def get_gen_kernel(self, dtype, distribution):
-        c_type, rng_expr, counter_multiplier, size_multiplier = self._get_rng_settings(distribution, dtype)
+    def _get_gaussian_kernel(self, mean, std, c_type):
+        src = get_random123_cl_code(self._generator_name, self._nmr_words, self._word_bitsize)
+        src += '''
+            __kernel void generate(constant uint* rand123_counter,
+                                   ''' + ('constant uint* rand123_key,' if self._key_length > 2 else '') + '''
+                                   global ''' + c_type + '''* samples){
 
+                rand123_data rng_data = ''' + \
+                        ('rand123_initialize_data_4key_constmem(rand123_counter, rand123_key)' if self._key_length > 2
+                         else 'rand123_initialize_data_2key_constmem(rand123_counter)') + ''';
+                rand123_set_loop_key(&rng_data, 0);
+
+                ''' + c_type + '''4 randomnr =  rand123_normal_''' + c_type + '''4(&rng_data);
+
+                int gid = get_global_id(0);
+
+                samples[gid * 4] = ''' + str(mean) + ''' + randomnr.x * ''' + str(std) + ''';
+                samples[gid * 4 + 1] = ''' + str(mean) + ''' + randomnr.y * ''' + str(std) + ''';
+                samples[gid * 4 + 2] = ''' + str(mean) + ''' + randomnr.z * ''' + str(std) + ''';
+                samples[gid * 4 + 3] = ''' + str(mean) + ''' + randomnr.w * ''' + str(std) + ''';
+            }
+        '''
+        return src
+
+    def _get_kernel_source(self, dtype, distribution):
+        c_type = 'float'
+        if dtype == np.float64:
+            c_type = "double"
+
+        if distribution == 'normal':
+            return self._get_gaussian_kernel(0, 1, c_type)
+        else:
+            return self._get_uniform_kernel(0, 1, c_type)
+
+    def get_gen_kernel(self, dtype, distribution):
         src = self._get_kernel_source(dtype, distribution)
 
         prg = cl.Program(self.context, src).build()
         knl = prg.generate
-        knl.set_scalar_arg_dtypes([None, None, None, np.int64])
 
-        return knl, counter_multiplier, size_multiplier
+        return knl
 
     def _fill(self, distribution, ary, queue=None):
         """Fill *ary* with uniformly distributed random numbers in the interval
@@ -461,37 +320,26 @@ class Random123GeneratorBase(CLRoutine):
 
         :return: a :class:`pyopencl.Event`
         """
-
         if queue is None:
             queue = ary.queue
 
-        knl, counter_multiplier, size_multiplier = \
-                self.get_gen_kernel(ary.dtype, distribution)
-
-        key_buffer = cl.Buffer(self.context,
-                               cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
-                               hostbuf=np.array(self.key, dtype=np.uint32))
+        knl = self.get_gen_kernel(ary.dtype, distribution)
+        args = []
 
         counter_buffer = cl.Buffer(self.context,
-                                      cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
-                                      hostbuf=np.array(self.counter, dtype=np.uint32))
+                                   cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
+                                   hostbuf=self._counter)
 
-        args = [key_buffer, counter_buffer, ary.data, ary.size*size_multiplier]
+        args.append(counter_buffer)
 
-        n = ary.size
-        from pyopencl.array import splay
-        gsize, lsize = splay(queue, ary.size)
+        if self._key_length > 2:
+            key_buffer = cl.Buffer(self.context,
+                                   cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
+                                   hostbuf=self._key)
+            args.append(key_buffer)
 
-        evt = knl(queue, gsize, lsize, *args)
-
-        self.counter[0] += n * counter_multiplier
-        c1_incr, self.counter[0] = divmod(self.counter[0], self.counter_max)
-        if c1_incr:
-            self.counter[1] += c1_incr
-            c2_incr, self.counter[1] = divmod(self.counter[1], self.counter_max)
-            self.counter[2] += c2_incr
-
-        return evt
+        args.append(ary.data)
+        return knl(queue, (ary.shape[0]//4,), None, *args)
 
     def fill_uniform(self, ary, queue=None):
         return self._fill("uniform", ary, queue=queue)
@@ -499,80 +347,29 @@ class Random123GeneratorBase(CLRoutine):
     def uniform(self, *args, **kwargs):
         """Make a new empty array, apply :meth:`fill_uniform` to it.
         """
-        a = kwargs.pop("a", 0)
-        b = kwargs.pop("b", 1)
-
         result = cl_array.empty(*args, **kwargs)
-
-        result.add_event(
-                self.fill_uniform(result, queue=result.queue))
+        result.add_event(self.fill_uniform(result, queue=result.queue))
         return result
 
-    def fill_normal(self, ary, mu=0, sigma=1, queue=None):
+    def fill_normal(self, ary, queue=None):
         """Fill *ary* with normally distributed numbers with mean *mu* and
         standard deviation *sigma*.
         """
-
         return self._fill("normal", ary, queue=queue)
 
     def normal(self, *args, **kwargs):
         """Make a new empty array, apply :meth:`fill_normal` to it.
         """
-        mu = kwargs.pop("mu", 0)
-        sigma = kwargs.pop("sigma", 1)
-
         result = cl_array.empty(*args, **kwargs)
-
-        result.add_event(
-                self.fill_normal(result, queue=result.queue, mu=mu, sigma=sigma))
+        result.add_event(self.fill_normal(result, queue=result.queue))
         return result
-
-
-class Random123SourceBuilder(object):
-
-    def __init__(self, dtype, distribution):
-        """Construct a random generator meant to generate random numbers for the given data type and distribution type.
-
-        The distributions supported are 'normal' and 'uniform', and with 'normal' only supported for floating point
-        data types.
-
-        Args:
-            dtype (np.dtype): the numpy datatype we wish our samples to be in
-
-        """
-
-
-class PhiloxGenerator(Random123GeneratorBase):
-
-    def _get_generator_header_name(self):
-        return 'philox'
-
-    def _get_generator_function_name(self):
-        return 'philox4x32'
-
-    def _get_key_length(self):
-        return 2
-
-
-class ThreefryGenerator(Random123GeneratorBase):
-
-    def _get_generator_header_name(self):
-        return 'threefry'
-
-    def _get_generator_function_name(self):
-        return 'threefry4x32'
-
-    def _get_key_length(self):
-        return 4
 
 
 def rand(cl_environments, shape, dtype, start=0, stop=1):
     """Return an array of `shape` filled with random values of `dtype` in the range [start, stop).
     """
-    if cl_environments[0].is_cpu:
-        gen = PhiloxGenerator(cl_environments=cl_environments)
-    else:
-        gen = ThreefryGenerator(cl_environments=cl_environments)
+
+    gen = Random123GeneratorBase(cl_environments=cl_environments)
 
     from pyopencl.array import Array
     result = Array(cl_environments[0].get_cl_context().queue, shape, dtype)
