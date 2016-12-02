@@ -9,7 +9,7 @@ from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
 from ...cl_routines.mapping.final_parameters_transformer import FinalParametersTransformer
 from ...cl_routines.mapping.codec_runner import CodecRunner
-
+from ...__version__ import __version__
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-05-18"
@@ -124,6 +124,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
 
     def minimize(self, model, init_params=None, full_output=False):
         self._logger.info('Entered optimization routine.')
+        self._logger.info('Using MOT version {}'.format(__version__))
         self._logger.info('We will use a {} precision float type for the calculations.'.format(
             'double' if model.double_precision else 'single'))
         for env in self.load_balancer.get_used_cl_environments(self.cl_environments):
