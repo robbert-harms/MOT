@@ -1,4 +1,4 @@
-from mot.utils import get_ranlux_cl
+from mot.utils import get_random123_cl_code
 from .base import AbstractParallelOptimizer, AbstractParallelOptimizerWorker
 
 __author__ = 'Robbert Harms'
@@ -57,8 +57,7 @@ class SimulatedAnnealingWorker(AbstractParallelOptimizerWorker):
     def _get_optimizer_cl_code(self):
         kernel_source = self._get_evaluate_function()
 
-        kernel_source += '#define RANLUXCL_LUX 4' + "\n"
-        kernel_source += get_ranlux_cl()
+        kernel_source += get_random123_cl_code()
 
         kernel_source += self._model.get_log_prior_function('getLogPrior')
         kernel_source += self._model.get_proposal_function('getProposal')

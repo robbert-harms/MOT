@@ -3,7 +3,7 @@ import numpy as np
 from mot.cl_routines.mapping.error_measures import ErrorMeasures
 from mot.cl_routines.mapping.residual_calculator import ResidualCalculator
 from ...utils import results_to_dict, \
-    ParameterCLCodeGenerator, initialize_ranlux, get_float_type_def, get_ranlux_cl
+    ParameterCLCodeGenerator, get_float_type_def
 from ...load_balance_strategies import Worker
 from ...cl_routines.sampling.base import AbstractSampler
 

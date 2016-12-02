@@ -1,12 +1,8 @@
-import os
-import time
 import numpy as np
 import pyopencl as cl
-import pyopencl.array as cl_array
-from mot.utils import initialize_ranlux, get_ranlux_cl, get_random123_cl_code
+from mot.utils import get_random123_cl_code
 from mot.cl_routines.base import CLRoutine
 from mot.load_balance_strategies import Worker
-from pkg_resources import resource_filename
 from random import Random
 
 __author__ = 'Robbert Harms'
@@ -16,129 +12,7 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class RanluxRandom(CLRoutine):
-
-    def __init__(self, cl_environments, load_balancer):
-        """Generate random numbers using the Ranlux RNG.
-        """
-        super(RanluxRandom, self).__init__(cl_environments, load_balancer)
-
-    def generate_uniform(self, nmr_samples, minimum=0, maximum=1, seed=None):
-        """Draw random samples from the uniform distribution.
-
-        Args:
-            nmr_samples (int): The number of samples to draw
-            minimum (double): The minimum value of the random numbers
-            maximum (double): The minimum value of the random numbers
-            seed (int): the seed to use, defaults to the number of samples / current time.
-
-        Returns:
-            ndarray: A numpy array with nmr_samples random samples drawn from the uniform distribution.
-        """
-        seed = seed or (nmr_samples / time.time()) * 1e10
-        return self._generate_samples(nmr_samples, self._get_uniform_kernel(minimum, maximum), seed)
-
-    def generate_gaussian(self, nmr_samples, mean=0, std=1, seed=None):
-        """Draw random samples from the Gaussian distribution.
-
-        Args:
-            nmr_samples (int): The number of samples to draw
-            mean (double): The mean of the distribution
-            std (double): The standard deviation or the distribution
-            seed (int): the seed to use, defaults to the number of samples / current time.
-
-        Returns:
-            ndarray: A numpy array with nmr_samples random samples drawn from the Gaussian distribution.
-        """
-        seed = seed or (nmr_samples / time.time()) * 1e10
-        return self._generate_samples(nmr_samples, self._get_gaussian_kernel(mean, std), seed)
-
-    def _generate_samples(self, nmr_samples, kernel_source, seed):
-        padding = (4 - (nmr_samples % 4)) % 4
-        nmr_samples += padding
-        samples = np.zeros((nmr_samples + padding,), dtype=np.float32)
-
-        workers = self._create_workers(lambda cl_environment: _RanluxRandomWorker(cl_environment, samples,
-                                                                                  nmr_samples, kernel_source, seed))
-        self.load_balancer.process(workers, nmr_samples / 4)
-
-        if padding:
-            return samples[:nmr_samples-padding]
-        return samples
-
-    def _get_uniform_kernel(self, min_val, max_val):
-        kernel_source = '#define RANLUXCL_LUX 4' + "\n"
-        kernel_source += get_ranlux_cl()
-        kernel_source += '''
-            __kernel void sample(global ranluxcl_state_t *ranluxcltab, global float *samples){
-                ranluxcl_state_t ranluxclstate;
-                ranluxcl_download_seed(&ranluxclstate, ranluxcltab);
-
-                float4 randomnr = ranluxcl32(&ranluxclstate);
-
-                int gid = get_global_id(0);
-
-                samples[gid * 4] = ''' + str(min_val) + ''' + randomnr.x * ''' + str(max_val - min_val) + ''';
-                samples[gid * 4 + 1] = ''' + str(min_val) + ''' + randomnr.y * ''' + str(max_val - min_val) + ''';
-                samples[gid * 4 + 2] = ''' + str(min_val) + ''' + randomnr.z * ''' + str(max_val - min_val) + ''';
-                samples[gid * 4 + 3] = ''' + str(min_val) + ''' + randomnr.w * ''' + str(max_val - min_val) + ''';
-
-                ranluxcl_upload_seed(&ranluxclstate, ranluxcltab);
-            }
-        '''
-        return kernel_source
-
-    def _get_gaussian_kernel(self, mean, std):
-        kernel_source = '#define RANLUXCL_LUX 4' + "\n"
-        kernel_source += get_ranlux_cl()
-        kernel_source += '''
-            __kernel void sample(global ranluxcl_state_t *ranluxcltab, global float *samples){
-                ranluxcl_state_t ranluxclstate;
-                ranluxcl_download_seed(&ranluxclstate, ranluxcltab);
-
-                float4 randomnr = ranluxcl_gaussian4(&ranluxclstate);
-
-                int gid = get_global_id(0);
-
-                samples[gid * 4] = ''' + str(mean) + ''' + randomnr.x * ''' + str(std) + ''';
-                samples[gid * 4 + 1] = ''' + str(mean) + ''' + randomnr.y * ''' + str(std) + ''';
-                samples[gid * 4 + 2] = ''' + str(mean) + ''' + randomnr.z * ''' + str(std) + ''';
-                samples[gid * 4 + 3] = ''' + str(mean) + ''' + randomnr.w * ''' + str(std) + ''';
-
-                ranluxcl_upload_seed(&ranluxclstate, ranluxcltab);
-            }
-        '''
-        return kernel_source
-
-
-class _RanluxRandomWorker(Worker):
-
-    def __init__(self, cl_environment, samples, nmr_samples, kernel_source, seed):
-        super(_RanluxRandomWorker, self).__init__(cl_environment)
-        self._samples = samples
-        self._nmr_samples = nmr_samples
-        self._kernel_source = kernel_source
-        self._seed = seed
-
-        self._ranluxcltab_buffer = initialize_ranlux(self._cl_run_context, self._nmr_samples, seed=self._seed)
-
-        self._samples_buf = cl.Buffer(self._cl_run_context.context, cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
-                                      hostbuf=self._samples)
-
-        self._kernel = self._build_kernel()
-
-    def calculate(self, range_start, range_end):
-        nmr_problems = range_end - range_start
-
-        event = self._kernel.sample(self._cl_run_context.queue, (int(nmr_problems), ), None,
-                                    self._ranluxcltab_buffer, self._samples_buf, global_offset=(range_start,))
-        return [self._enqueue_readout(self._samples_buf, self._samples, range_start * 4, range_end * 4, [event])]
-
-    def _get_kernel_source(self):
-        return self._kernel_source
-
-
-class Random123StartingPoint():
+class Random123StartingPoint(object):
 
     def get_key(self, dtype):
         """Gets the key used as starting point for the Random123 generator.
@@ -174,9 +48,9 @@ class StartingPointFromSeed(Random123StartingPoint):
             key_length (int): the length of the key, either 2 or 4 depending on the desired precision.
         """
         self._seed = seed
-        self._key_length = key_length
+        self._key_length = key_length or 4
         if self._key_length not in (2, 4):
-            self._key_length = 4
+            raise ValueError('The key length should be either 2 or 4, {} given.'.format(key_length))
 
     def get_key(self, dtype):
         rng = Random(self._seed)
@@ -185,7 +59,7 @@ class StartingPointFromSeed(Random123StartingPoint):
         return key
 
     def get_counter(self, dtype, length):
-        rng = Random(self._seed)
+        rng = Random(self._seed + 1)
         dtype_info = np.iinfo(dtype)
 
         counter = [rng.randrange(dtype_info.min, dtype_info.max + 1) for _ in range(length)]
@@ -217,7 +91,7 @@ class Random123GeneratorBase(CLRoutine):
 
         Args:
             starting_point (Random123StartingPoint): object that provides the generator with the starting points
-                (key, counter) tuple. If None is given we will use the ``StartingPointFromSeed`` with a seed of 0.
+                (key, counter) tuple. If None is given we will use the ``StartingPointFromSeed`` with a random seed.
             generator_name (str): the generator to use, either 'threefry' or 'philox'. Defaults to 'threefry'.
             nmr_words (int): the number of words used in the input key and counter. Defaults to 4.
             word_bitsize (int): the size of the bit-words used as key and counter input, either 32 or 64.
@@ -225,7 +99,7 @@ class Random123GeneratorBase(CLRoutine):
         """
         super(Random123GeneratorBase, self).__init__(**kwargs)
 
-        starting_point = starting_point or StartingPointFromSeed(0)
+        starting_point = starting_point or StartingPointFromSeed(Random().randint(0, 1e6))
 
         self.context = self.cl_environments[0].get_cl_context().context
 
@@ -248,6 +122,71 @@ class Random123GeneratorBase(CLRoutine):
         self._key_length = len(self._key) + 2
         self._counter = np.array(starting_point.get_counter(dtype, self._nmr_words), dtype=dtype)
 
+    def generate_uniform(self, nmr_samples, minimum=0, maximum=1, dtype=None):
+        """Draw random samples from the uniform distribution.
+
+        Args:
+            nmr_samples (int): The number of samples to draw
+            minimum (double): The minimum value of the random numbers
+            maximum (double): The minimum value of the random numbers
+            dtype (np.dtype): the numpy datatype, either one of float32 (default) or float64.
+
+        Returns:
+            ndarray: A numpy array with nmr_samples random samples drawn from the uniform distribution.
+        """
+        dtype = dtype or np.float32
+        if dtype not in (np.float32, np.float64):
+            raise ValueError('The given dtype should be either float32 or float64, {} given.'.format(
+                dtype.__class__.__name__))
+
+        c_type = 'float'
+        if dtype == np.float64:
+            c_type = "double"
+
+        return self._generate_samples(nmr_samples, self._get_uniform_kernel(minimum, maximum, c_type))
+
+    def generate_gaussian(self, nmr_samples, mean=0, std=1, dtype=None):
+        """Draw random samples from the Gaussian distribution.
+
+        Args:
+            nmr_samples (int): The number of samples to draw
+            mean (double): The mean of the distribution
+            std (double): The standard deviation or the distribution
+            dtype (np.dtype): the numpy datatype, either one of float32 (default) or float64.
+
+        Returns:
+            ndarray: A numpy array with nmr_samples random samples drawn from the Gaussian distribution.
+        """
+        dtype = dtype or np.float32
+        if dtype not in (np.float32, np.float64):
+            raise ValueError('The given dtype should be either float32 or float64, {} given.'.format(
+                dtype.__class__.__name__))
+
+        c_type = 'float'
+        if dtype == np.float64:
+            c_type = "double"
+
+        return self._generate_samples(nmr_samples, self._get_gaussian_kernel(mean, std, c_type))
+
+    def _generate_samples(self, nmr_samples, kernel_source):
+        padding = (-nmr_samples) % 4
+        nmr_samples += padding
+        samples = np.zeros((nmr_samples,), dtype=np.float32)
+
+        workers = self._create_workers(lambda cl_environment: _Random123Worker(cl_environment, samples,
+                                                                               kernel_source, self._key, self._counter))
+        self.load_balancer.process(workers, nmr_samples // 4)
+
+        if padding:
+            return samples[:-padding]
+        return samples
+
+    def _get_rand123_init_cl_code(self):
+        if self._key_length > 2:
+            return 'rand123_initialize_data_4key_constmem(rand123_counter, rand123_key)'
+        else:
+            return 'rand123_initialize_data_2key_constmem(rand123_counter)'
+
     def _get_uniform_kernel(self, min_val, max_val, c_type):
         src = get_random123_cl_code(self._generator_name, self._nmr_words, self._word_bitsize)
         src += '''
@@ -255,9 +194,7 @@ class Random123GeneratorBase(CLRoutine):
                                    ''' + ('constant uint* rand123_key,' if self._key_length > 2 else '') + '''
                                    global ''' + c_type + '''* samples){
 
-                rand123_data rng_data = ''' + \
-                        ('rand123_initialize_data_4key_constmem(rand123_counter, rand123_key)' if self._key_length > 2
-                         else 'rand123_initialize_data_2key_constmem(rand123_counter)') + ''';
+                rand123_data rng_data = ''' + self._get_rand123_init_cl_code() + ''';
                 rand123_set_loop_key(&rng_data, 0);
 
                 ''' + c_type + '''4 randomnr =  rand123_uniform_''' + c_type + '''4(&rng_data);
@@ -279,9 +216,7 @@ class Random123GeneratorBase(CLRoutine):
                                    ''' + ('constant uint* rand123_key,' if self._key_length > 2 else '') + '''
                                    global ''' + c_type + '''* samples){
 
-                rand123_data rng_data = ''' + \
-                        ('rand123_initialize_data_4key_constmem(rand123_counter, rand123_key)' if self._key_length > 2
-                         else 'rand123_initialize_data_2key_constmem(rand123_counter)') + ''';
+                rand123_data rng_data = ''' + self._get_rand123_init_cl_code() + ''';
                 rand123_set_loop_key(&rng_data, 0);
 
                 ''' + c_type + '''4 randomnr =  rand123_normal_''' + c_type + '''4(&rng_data);
@@ -296,83 +231,40 @@ class Random123GeneratorBase(CLRoutine):
         '''
         return src
 
-    def _get_kernel_source(self, dtype, distribution):
-        c_type = 'float'
-        if dtype == np.float64:
-            c_type = "double"
 
-        if distribution == 'normal':
-            return self._get_gaussian_kernel(0, 1, c_type)
-        else:
-            return self._get_uniform_kernel(0, 1, c_type)
+class _Random123Worker(Worker):
 
-    def get_gen_kernel(self, dtype, distribution):
-        src = self._get_kernel_source(dtype, distribution)
+    def __init__(self, cl_environment, samples, kernel_source, key, counter):
+        super(_Random123Worker, self).__init__(cl_environment)
+        self._samples = samples
+        self._nmr_samples = self._samples.shape[0]
+        self._kernel_source = kernel_source
+        self._key = key
+        self._counter = counter
 
-        prg = cl.Program(self.context, src).build()
-        knl = prg.generate
+        self._samples_buf = cl.Buffer(self._cl_run_context.context, cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
+                                      hostbuf=self._samples)
 
-        return knl
+        self._counter_buffer = cl.Buffer(self._cl_run_context.context,
+                                         cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=self._counter)
 
-    def _fill(self, distribution, ary, queue=None):
-        """Fill *ary* with uniformly distributed random numbers in the interval
-        *(a, b)*, endpoints excluded.
+        if len(self._key):
+            self._key_buffer = cl.Buffer(self._cl_run_context.context,
+                                         cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=self._key)
 
-        :return: a :class:`pyopencl.Event`
-        """
-        if queue is None:
-            queue = ary.queue
+        self._kernel = self._build_kernel()
 
-        knl = self.get_gen_kernel(ary.dtype, distribution)
-        args = []
+    def calculate(self, range_start, range_end):
+        nmr_problems = range_end - range_start
 
-        counter_buffer = cl.Buffer(self.context,
-                                   cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
-                                   hostbuf=self._counter)
+        kernel_args = [self._counter_buffer]
+        if len(self._key):
+            kernel_args.append(self._key_buffer)
+        kernel_args.append(self._samples_buf)
 
-        args.append(counter_buffer)
+        event = self._kernel.generate(self._cl_run_context.queue, (int(nmr_problems), ), None,
+                                      *kernel_args, global_offset=(range_start,))
+        return [self._enqueue_readout(self._samples_buf, self._samples, range_start * 4, range_end * 4, [event])]
 
-        if self._key_length > 2:
-            key_buffer = cl.Buffer(self.context,
-                                   cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
-                                   hostbuf=self._key)
-            args.append(key_buffer)
-
-        args.append(ary.data)
-        return knl(queue, (ary.shape[0]//4,), None, *args)
-
-    def fill_uniform(self, ary, queue=None):
-        return self._fill("uniform", ary, queue=queue)
-
-    def uniform(self, *args, **kwargs):
-        """Make a new empty array, apply :meth:`fill_uniform` to it.
-        """
-        result = cl_array.empty(*args, **kwargs)
-        result.add_event(self.fill_uniform(result, queue=result.queue))
-        return result
-
-    def fill_normal(self, ary, queue=None):
-        """Fill *ary* with normally distributed numbers with mean *mu* and
-        standard deviation *sigma*.
-        """
-        return self._fill("normal", ary, queue=queue)
-
-    def normal(self, *args, **kwargs):
-        """Make a new empty array, apply :meth:`fill_normal` to it.
-        """
-        result = cl_array.empty(*args, **kwargs)
-        result.add_event(self.fill_normal(result, queue=result.queue))
-        return result
-
-
-def rand(cl_environments, shape, dtype, start=0, stop=1):
-    """Return an array of `shape` filled with random values of `dtype` in the range [start, stop).
-    """
-
-    gen = Random123GeneratorBase(cl_environments=cl_environments)
-
-    from pyopencl.array import Array
-    result = Array(cl_environments[0].get_cl_context().queue, shape, dtype)
-    # result.add_event(gen.fill_uniform(result))
-    result.add_event(gen.fill_normal(result))
-    return result.get()
+    def _get_kernel_source(self):
+        return self._kernel_source
