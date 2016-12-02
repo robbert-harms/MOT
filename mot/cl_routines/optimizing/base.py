@@ -3,8 +3,7 @@ import numpy as np
 import pyopencl as cl
 from mot.cl_routines.mapping.error_measures import ErrorMeasures
 from mot.cl_routines.mapping.residual_calculator import ResidualCalculator
-from ...utils import results_to_dict, ParameterCLCodeGenerator, \
-    get_float_type_def, initialize_ranlux, get_ranlux_cl
+from ...utils import results_to_dict, ParameterCLCodeGenerator, get_float_type_def
 from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
 from ...cl_routines.mapping.final_parameters_transformer import FinalParametersTransformer
@@ -234,9 +233,6 @@ class AbstractParallelOptimizerWorker(Worker):
 
         all_buffers.extend(self._generate_constant_buffers(self._protocol_data_dict, self._model_data_dict))
 
-        if self._uses_random_numbers():
-            all_buffers.append(initialize_ranlux(self._cl_run_context, self._starting_points.shape[0]))
-
         return all_buffers, parameters_buffer, return_code_buffer
 
     def _get_kernel_source(self):
@@ -261,9 +257,6 @@ class AbstractParallelOptimizerWorker(Worker):
                               'global char* return_codes']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
-        if self._uses_random_numbers():
-            kernel_param_names.append('global ranluxcl_state_t* ranluxcltab')
-
         optimizer_call_args = 'x, (const void*) &data'
 
         kernel_source = ''
@@ -282,13 +275,6 @@ class AbstractParallelOptimizerWorker(Worker):
                 ){
                     int gid = get_global_id(0);
         '''
-
-        if self._uses_random_numbers():
-            kernel_source += '''
-                    ranluxcl_state_t ranluxclstate;
-                    ranluxcl_download_seed(&ranluxclstate, ranluxcltab);
-            '''
-            optimizer_call_args += ', (void*) &ranluxclstate'
 
         kernel_source += '''
                     mot_float_type x[''' + str(nmr_params) + '''];
@@ -321,10 +307,6 @@ class AbstractParallelOptimizerWorker(Worker):
             str: The kernel source for the optimization routine.
         """
         kernel_source = self._get_evaluate_function()
-
-        if self._uses_random_numbers():
-            kernel_source += get_ranlux_cl(ranluxcl_lux=4)
-
         kernel_source += self._get_optimization_function()
         return kernel_source
 
@@ -375,17 +357,3 @@ class AbstractParallelOptimizerWorker(Worker):
             str: The function name of the optimization function.
         """
         return ''
-
-    def _uses_random_numbers(self):
-        """Defines if the optimizer needs random numbers or not.
-
-        This should be overwritten by the base class if it needs random numbers. If so, this class will
-        take care of providing a rand() function.
-
-        If this is set to True, this base class will provide a rand function and will pass an additional argument
-        to the call of the optimizer 'void * rand_settings' containing the settings for the random number generator.
-
-        Returns:
-            boolean: if the optimizer needs a random number generator or not.
-        """
-        return False

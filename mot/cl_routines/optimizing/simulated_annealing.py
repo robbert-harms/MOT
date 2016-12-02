@@ -12,15 +12,14 @@ class SimulatedAnnealing(AbstractParallelOptimizer):
 
     default_patience = 500
 
-    def __init__(self, cl_environments=None, load_balancer=None, use_param_codec=False, patience=None,
-                 optimizer_options=None, **kwargs):
+    def __init__(self, **kwargs):
         """Use Simulated Annealing to calculate the optimum.
 
         This does not use the parameter codec, even if set to True. This because the priors (should) already
         cover the bounds.
 
-        This implementation uses an adapted Metropolis Hasting algorithm to find the optimum. This being a sampling
-        routine it does require that the model is a implementation of SampleModelInterface.
+        This implementation uses an adapted Metropolis Hasting algorithm to find the optimum, hence, this requires
+        that the model is a implementation of SampleModelInterface.
 
         Args:
             patience (int):
@@ -29,10 +28,12 @@ class SimulatedAnnealing(AbstractParallelOptimizer):
                 - proposal_update_intervals (int): the interval by which we update the proposal std.
 
         """
-        patience = patience or self.default_patience
-        super(SimulatedAnnealing, self).__init__(cl_environments, load_balancer, False, patience=patience, **kwargs)
-        optimizer_options = optimizer_options or {}
-        self.proposal_update_intervals = optimizer_options.get('proposal_update_intervals', 50)
+        kwargs['patience'] = kwargs.get('patience', self.default_patience) or self.default_patience
+        kwargs['use_param_codec'] = False
+        super(SimulatedAnnealing, self).__init__(**kwargs)
+        kwargs['optimizer_options'] = kwargs.get('optimizer_options', {}) or {}
+        self.proposal_update_intervals = kwargs['optimizer_options'].get('proposal_update_intervals', 50) or 50
+
         self._annealing_schedule = ExponentialCoolingSchedule()
         self._initial_temperature_strategy = SimpleInitialTemperatureStrategy()
 

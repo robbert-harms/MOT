@@ -92,6 +92,18 @@ void rand123_set_loop_key(rand123_data* rng_data, int key){
 }
 
 /**
+ * Increments the value in the second key element by one.
+ *
+ * One needs to call this function after every call to a random number generating function
+ * to ensure the next number will be different.
+ */
+void rand123_increment_loop_key(rand123_data* rng_data){
+    rng_data->key.v[1]++;
+}
+
+
+
+/**
  * Applies the Box-Muller transformation on four uniformly distributed random numbers.
  *
  * This transforms uniform random numbers into Normal distributed random numbers.
@@ -121,7 +133,7 @@ float4 rand123_box_muller_float4(float4 x){
 }
 /** end of Box Muller transforms */
 
-/** Random number generating functions */
+/** Random number generating functions in the Rand123 space */
 double4 rand123_uniform_double4(rand123_data* rng_data){
     uint4 generated_bits = rand123_generate_bits(rng_data);
     return ((double) (1/pown(2.0, 32))) * convert_double4(generated_bits) +
