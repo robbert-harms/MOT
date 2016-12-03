@@ -283,7 +283,8 @@ class AbstractParallelOptimizerWorker(Worker):
                     }
 
                     ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
-                    return_codes[gid] = (char) ''' + self._get_optimizer_call_name() + '''(''' + optimizer_call_args + ''');
+                    return_codes[gid] = (char) ''' + self._get_optimizer_call_name() \
+                        + '''(''' + optimizer_call_args + ''');
 
                     ''' + ('decodeParameters(x);' if self._use_param_codec else '') + '''
 

@@ -1,3 +1,6 @@
+#ifndef _RAND123_DOT_CL
+#define _RAND123_DOT_CL
+
 /**
  * The following are the functions that one should actually use in MOT applications.
  *
@@ -32,12 +35,12 @@ uint4 rand123_generate_bits(rand123_data* rng_data){
 }
 
 /**
- * Initializes the rand123_data structure using a length 2 key.
+ * Initializes the rand123_data structure without an external key.
  *
  * The first element in the key is automatically set to the global id of the kernel,
  * and the second element is set by default to 0. We therefore need to give no key data.
  */
-rand123_data rand123_initialize_data_2key(uint counter[4]){
+rand123_data rand123_initialize_data(uint counter[4]){
     %(GENERATOR_FUNCTION)s_ctr_t k = {{get_global_id(0), 0}};
     %(GENERATOR_FUNCTION)s_key_t c = {(uint32_t)*counter};
 
@@ -46,23 +49,23 @@ rand123_data rand123_initialize_data_2key(uint counter[4]){
 }
 
 /**
- * Initializes the rand123_data structure using a length 2 key from constant memory.
+ * Initializes the rand123_data structure using constant memory without an external key.
  *
- * The same function as ``rand123_initialize_data_2key`` but this accepts ``constant`` memory pointers.
+ * The same function as ``rand123_initialize_data`` but this accepts ``constant`` memory pointers.
  */
-rand123_data rand123_initialize_data_2key_constmem(constant uint counter[4]){
-    return rand123_initialize_data_2key((uint []){counter[0], counter[1], counter[2], counter[3]});
+rand123_data rand123_initialize_data_constmem(constant uint counter[4]){
+    return rand123_initialize_data((uint []){counter[0], counter[1], counter[2], counter[3]});
 }
 
 
 /**
- * Initializes the rand123_data structure using a length 4 key.
+ * Initializes the rand123_data structure with additional precision (extra key).
  *
  * The first element in the key is automatically set to the global id of the kernel,
  * and the second element is set by default to 0. We therefore need only to set the other two
  * key elements.
  */
-rand123_data rand123_initialize_data_4key(uint counter[4], uint key[2]){
+rand123_data rand123_initialize_data_extra_precision(uint counter[4], uint key[2]){
     %(GENERATOR_FUNCTION)s_ctr_t k = {{get_global_id(0), 0, key[0], key[1]}};
     %(GENERATOR_FUNCTION)s_key_t c = {(uint32_t)*counter};
 
@@ -71,12 +74,12 @@ rand123_data rand123_initialize_data_4key(uint counter[4], uint key[2]){
 }
 
 /**
- * Initializes the rand123_data structure using a length 4 key.
+ * Initializes the rand123_data structure with additional precision (extra key) using constant memory pointers.
  *
- * The same function as ``rand123_initialize_data_4key`` but this accepts ``constant`` memory pointers.
+ * The same function as ``rand123_initialize_data_extra_precision`` but this accepts ``constant`` memory pointers.
  */
-rand123_data rand123_initialize_data_4key_constmem(constant uint counter[4], constant uint key[2]){
-    return rand123_initialize_data_4key(
+rand123_data rand123_initialize_data_extra_precision_constmem(constant uint counter[4], constant uint key[2]){
+    return rand123_initialize_data_extra_precision(
         (uint []){counter[0], counter[1], counter[2], counter[3]},
         (uint []){key[0], key[1]});
 }
@@ -153,3 +156,47 @@ float4 rand123_normal_float4(rand123_data* rng_data){
     return rand123_box_muller_float4(rand123_uniform_float4(rng_data));
 }
 /** End of the random number generating functions */
+
+
+/** Implementations of the random.h header */
+double4 rand4(void* rng_data){
+    double4 val = rand123_uniform_double4((rand123_data*)rng_data);
+    rand123_increment_loop_key((rand123_data*)rng_data);
+    return val;
+}
+
+double4 randn4(void* rng_data){
+    double4 val = rand123_normal_double4((rand123_data*)rng_data);
+    rand123_increment_loop_key((rand123_data*)rng_data);
+    return val;
+}
+
+float4 frand4(void* rng_data){
+    float4 val = rand123_uniform_float4((rand123_data*)rng_data);
+    rand123_increment_loop_key((rand123_data*)rng_data);
+    return val;
+}
+
+float4 frandn4(void* rng_data){
+    float4 val = rand123_normal_float4((rand123_data*)rng_data);
+    rand123_increment_loop_key((rand123_data*)rng_data);
+    return val;
+}
+
+double rand(void* rng_data){
+    return rand4(rng_data).x;
+}
+
+double randn(void* rng_data){
+    return randn4(rng_data).x;
+}
+
+float frand(void* rng_data){
+    return frand4(rng_data).x;
+}
+
+float frandn(void* rng_data){
+    return frandn4(rng_data).x;
+}
+
+#endif // _RAND123_DOT_CL

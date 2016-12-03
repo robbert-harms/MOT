@@ -1,11 +1,7 @@
-import pyopencl.array as cl_array
+from functools import reduce
+
 import numpy as np
 import pyopencl as cl
-from functools import reduce
-from pkg_resources import resource_filename
-import os
-from .data_adapters  import DataAdapter
-
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-05-13"
@@ -313,40 +309,3 @@ def is_scalar(value):
         boolean: if the given value is a scalar or not
     """
     return np.isscalar(value) or (isinstance(value, np.ndarray) and (len(np.squeeze(value).shape) == 0))
-
-
-def get_random123_cl_code(generator=None, nmr_words=None, word_bitsize=None):
-    """Get the source code needed for working with the Rand123 RNG.
-
-    All the Random123 generators are counter-based RNGs that use integer multiplication, xor and permutation
-    of W-bit words to scramble its N-word input key.
-
-    Args:
-        generator (str): the name of the generator function to use. Either 'philox' or 'threefry'.
-            Defaults to 'threefry'
-        nmr_words (int): the number of words used in the input key and counter, either 2 or 4, defaults to 4.
-        word_bitsize (int): the size of the bit-words used as key and counter input, either 32 or 64, defaults to 32.
-
-    Returns:
-        str: the CL code for the Rand123 RNG
-    """
-    generator = generator or 'threefry'
-    nmr_words = nmr_words or 4
-    word_bitsize = word_bitsize or 32
-
-    if nmr_words not in (2, 4):
-        raise ValueError('The number of words should be either 2 or 4, {} given.'.format(nmr_words))
-
-    if word_bitsize not in (32, 64):
-        raise ValueError('The word bitsize should be either 32 or 64, {} given.'.format(word_bitsize))
-
-    src = open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/openclfeatures.h'), ), 'r').read()
-    src += open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/array.h'), ), 'r').read()
-    src += open(os.path.abspath(
-        resource_filename('mot', 'data/opencl/random123/{}.h'.format(generator)), ),
-        'r').read()
-    src += (open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/rand123.cl'), ), 'r').read() % {
-       'GENERATOR_FUNCTION': (generator + str(nmr_words) + 'x' + str(word_bitsize))
-    })
-
-    return src

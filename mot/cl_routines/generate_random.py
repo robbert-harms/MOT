@@ -1,9 +1,9 @@
 import numpy as np
 import pyopencl as cl
-from mot.utils import get_random123_cl_code
+
 from mot.cl_routines.base import CLRoutine
 from mot.load_balance_strategies import Worker
-from random import Random
+from mot.random123 import RandomStartingPoint, get_random123_cl_code
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-10-29"
@@ -12,64 +12,9 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class Random123StartingPoint(object):
-
-    def get_key(self, dtype):
-        """Gets the key used as starting point for the Random123 generator.
-
-        This should either return 2 or 4 keys depending on the desired precision.
-
-        Args:
-            dtype (np.dtype): the datatype to use for the key
-
-        Returns:
-            list: the key used as starting point in the Random123 generator
-        """
-
-    def get_counter(self, dtype, length):
-        """Gets the counter used as starting point for the Random123 generator.
-
-        Args:
-            dtype (np.dtype): the datatype to use
-            length (int): the length of the returned list
-
-        Returns:
-            list: the counter used as starting point in the Random123 generator
-        """
-
-
-class StartingPointFromSeed(Random123StartingPoint):
-
-    def __init__(self, seed, key_length=None):
-        """Generates the key and counter from the given seed.
-
-        Args:
-            seed (int): the seed used to generate a starting point for the Random123 RNG.
-            key_length (int): the length of the key, either 2 or 4 depending on the desired precision.
-        """
-        self._seed = seed
-        self._key_length = key_length or 4
-        if self._key_length not in (2, 4):
-            raise ValueError('The key length should be either 2 or 4, {} given.'.format(key_length))
-
-    def get_key(self, dtype):
-        rng = Random(self._seed)
-        dtype_info = np.iinfo(dtype)
-        key = [rng.randrange(dtype_info.min, dtype_info.max + 1) for _ in range(self._key_length - 2)]
-        return key
-
-    def get_counter(self, dtype, length):
-        rng = Random(self._seed + 1)
-        dtype_info = np.iinfo(dtype)
-
-        counter = [rng.randrange(dtype_info.min, dtype_info.max + 1) for _ in range(length)]
-
-        return counter
-
-
 class Random123GeneratorBase(CLRoutine):
 
-    def __init__(self, starting_point=None, generator_name=None, nmr_words=None, word_bitsize=None, **kwargs):
+    def __init__(self, starting_point=None, **kwargs):
         """Create the random123 basis for generating a list of random numbers.
 
         *From the Random123 documentation:*
@@ -90,37 +35,18 @@ class Random123GeneratorBase(CLRoutine):
         of W-bit words to scramble its N-word input key.
 
         Args:
-            starting_point (Random123StartingPoint): object that provides the generator with the starting points
-                (key, counter) tuple. If None is given we will use the ``StartingPointFromSeed`` with a random seed.
-            generator_name (str): the generator to use, either 'threefry' or 'philox'. Defaults to 'threefry'.
-            nmr_words (int): the number of words used in the input key and counter. Defaults to 4.
-            word_bitsize (int): the size of the bit-words used as key and counter input, either 32 or 64.
-                Defaults to 32.
+            starting_point (mot.random123.Random123StartingPoint): object that provides the generator
+                with the starting points (key, counter) tuple. If None is given we will use the
+                ``RandomStartingPoint``.
         """
         super(Random123GeneratorBase, self).__init__(**kwargs)
 
-        starting_point = starting_point or StartingPointFromSeed(Random().randint(0, 1e6))
+        starting_point = starting_point or RandomStartingPoint()
 
         self.context = self.cl_environments[0].get_cl_context().context
 
-        self._generator_name = generator_name or 'threefry'
-        self._nmr_words = nmr_words or 4
-        self._word_bitsize = word_bitsize or 32
-
-        if self._nmr_words not in (2, 4):
-            raise ValueError('The number of words should be either 2 or 4, {} given.'.format(self._nmr_words))
-
-        if self._word_bitsize not in (32, 64):
-            raise ValueError('The word bitsize should be either 32 or 64, {} given.'.format(self._word_bitsize))
-
-        if self._word_bitsize == 32:
-            dtype = np.uint32
-        else:
-            dtype = np.uint64
-
-        self._key = np.array(starting_point.get_key(dtype), dtype=dtype)
-        self._key_length = len(self._key) + 2
-        self._counter = np.array(starting_point.get_counter(dtype, self._nmr_words), dtype=dtype)
+        self._key = starting_point.get_key()
+        self._counter = starting_point.get_counter()
 
     def generate_uniform(self, nmr_samples, minimum=0, maximum=1, dtype=None):
         """Draw random samples from the uniform distribution.
@@ -182,20 +108,19 @@ class Random123GeneratorBase(CLRoutine):
         return samples
 
     def _get_rand123_init_cl_code(self):
-        if self._key_length > 2:
-            return 'rand123_initialize_data_4key_constmem(rand123_counter, rand123_key)'
+        if len(self._key):
+            return 'rand123_initialize_data_extra_precision_constmem(rand123_counter, rand123_key)'
         else:
-            return 'rand123_initialize_data_2key_constmem(rand123_counter)'
+            return 'rand123_initialize_data_constmem(rand123_counter)'
 
     def _get_uniform_kernel(self, min_val, max_val, c_type):
-        src = get_random123_cl_code(self._generator_name, self._nmr_words, self._word_bitsize)
+        src = get_random123_cl_code()
         src += '''
             __kernel void generate(constant uint* rand123_counter,
-                                   ''' + ('constant uint* rand123_key,' if self._key_length > 2 else '') + '''
+                                   ''' + ('constant uint* rand123_key,' if len(self._key) else '') + '''
                                    global ''' + c_type + '''* samples){
 
                 rand123_data rng_data = ''' + self._get_rand123_init_cl_code() + ''';
-                rand123_set_loop_key(&rng_data, 0);
 
                 ''' + c_type + '''4 randomnr =  rand123_uniform_''' + c_type + '''4(&rng_data);
 
@@ -210,14 +135,13 @@ class Random123GeneratorBase(CLRoutine):
         return src
 
     def _get_gaussian_kernel(self, mean, std, c_type):
-        src = get_random123_cl_code(self._generator_name, self._nmr_words, self._word_bitsize)
+        src = get_random123_cl_code()
         src += '''
             __kernel void generate(constant uint* rand123_counter,
-                                   ''' + ('constant uint* rand123_key,' if self._key_length > 2 else '') + '''
+                                   ''' + ('constant uint* rand123_key,' if len(self._key) else '') + '''
                                    global ''' + c_type + '''* samples){
 
                 rand123_data rng_data = ''' + self._get_rand123_init_cl_code() + ''';
-                rand123_set_loop_key(&rng_data, 0);
 
                 ''' + c_type + '''4 randomnr =  rand123_normal_''' + c_type + '''4(&rng_data);
 

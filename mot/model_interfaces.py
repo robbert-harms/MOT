@@ -389,7 +389,7 @@ class SampleModelInterface(OptimizeModelInterface):
             str: A function with the signature:
                 .. code-block:: c
 
-                    mot_float_type <func_name>(const int i, const mot_float_type current, ranluxcl_state_t* ranluxclstate,
+                    mot_float_type <func_name>(const int i, const mot_float_type current, void* rng_data,
                                                mot_float_type* const proposal_state)
 
             Where ``i`` is the index of the parameter for which we want the proposal and ``current`` is the current
@@ -397,7 +397,7 @@ class SampleModelInterface(OptimizeModelInterface):
             One can obtain random numbers with:
             .. code-block:: c
 
-                float4 randomnr = ranluxcl(ranluxclstate);
+                float randomnr = frand(rng_data);
         """
         raise NotImplementedError
 
