@@ -52,7 +52,7 @@ For Ubuntu >= 16 you can use:
 
 For Debian users and Ubuntu < 16 users, install MOT with:
 
-* ``sudo apt install python3 python3-pip python3-pyopencl``
+* ``sudo apt install python3 python3-pip python3-pyopencl python3-devel``
 * ``sudo pip3 install mot``
 
 
