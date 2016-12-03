@@ -330,9 +330,6 @@ class AbstractParallelOptimizerWorker(Worker):
                               'global char* return_codes']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
-        if self._uses_random_numbers():
-            kernel_param_names.append('global ranluxcl_state_t* ranluxcltab')
-
         return kernel_param_names
 
     def _get_optimizer_call_args(self):
@@ -344,8 +341,6 @@ class AbstractParallelOptimizerWorker(Worker):
             list of str: the list of optimizer call arguments
         """
         call_args = ['x', '(const void*) &data']
-        if self._uses_random_numbers():
-            call_args.append('(void*) &ranluxclstate')
         return call_args
 
     def _get_optimizer_cl_code(self):
