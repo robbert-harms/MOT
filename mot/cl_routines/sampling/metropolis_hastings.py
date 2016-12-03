@@ -2,8 +2,8 @@ import pyopencl as cl
 import numpy as np
 from mot.cl_routines.mapping.error_measures import ErrorMeasures
 from mot.cl_routines.mapping.residual_calculator import ResidualCalculator
-from ...utils import results_to_dict, \
-    ParameterCLCodeGenerator, initialize_ranlux, get_float_type_def, get_ranlux_cl
+from mot.random123 import get_random123_cl_code, RandomStartingPoint
+from ...utils import results_to_dict, ParameterCLCodeGenerator, get_float_type_def
 from ...load_balance_strategies import Worker
 from ...cl_routines.sampling.base import AbstractSampler
 
@@ -159,12 +159,13 @@ class _MHWorker(Worker):
         self._sample_intervals = sample_intervals
         self.proposal_update_intervals = proposal_update_intervals
 
+        self._rand123_starting_point = RandomStartingPoint()
+
         self._constant_buffers = self._generate_constant_buffers(self._protocol_data_dict, self._model_data_dict)
         self._kernel = self._build_kernel(compile_flags)
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
-        ranluxcltab_buffer = initialize_ranlux(self._cl_run_context, nmr_problems)
 
         data_buffers = [cl.Buffer(self._cl_run_context.context,
                                   cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR,
@@ -173,7 +174,6 @@ class _MHWorker(Worker):
                                 cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
                                 hostbuf=self._samples[range_start:range_end, ...])
         data_buffers.append(samples_buf)
-        data_buffers.append(ranluxcltab_buffer)
 
         for data in self._var_data_dict.values():
             data_buffers.append(cl.Buffer(self._cl_run_context.context,
@@ -193,8 +193,7 @@ class _MHWorker(Worker):
                                                   self._protocol_data_dict, self._model_data_dict)
 
         kernel_param_names = ['global mot_float_type* params',
-                              'global mot_float_type* samples',
-                              'global ranluxcl_state_t* ranluxcltab']
+                              'global mot_float_type* samples']
         kernel_param_names.extend(param_code_gen.get_kernel_param_names())
 
         proposal_state_size = len(self._model.get_proposal_state())
@@ -204,7 +203,7 @@ class _MHWorker(Worker):
         kernel_source = '''
             #define NMR_INST_PER_PROBLEM ''' + str(self._model.get_nmr_inst_per_problem()) + '''
         '''
-        kernel_source += get_ranlux_cl()
+        kernel_source += get_random123_cl_code()
         kernel_source += get_float_type_def(self._model.double_precision)
         kernel_source += param_code_gen.get_data_struct()
         kernel_source += self._model.get_log_prior_function('getLogPrior')
@@ -239,7 +238,7 @@ class _MHWorker(Worker):
             }
 
             void _update_state(mot_float_type* const x,
-                               ranluxcl_state_t* ranluxclstate,
+                               void* rng_data,
                                double* const current_likelihood,
                                mot_float_type* const current_prior,
                                const optimize_data* const data,
@@ -254,10 +253,10 @@ class _MHWorker(Worker):
 
                 #pragma unroll 1
                 for(int k = 0; k < ''' + str(self._nmr_params) + '''; k++){
-                    randomnmr = ranluxcl32(ranluxclstate);
+                    randomnmr = frand(rng_data);
 
                     old_x = x[k];
-                    x[k] = getProposal(k, x[k], ranluxclstate, proposal_state);
+                    x[k] = getProposal(k, x[k], rng_data, proposal_state);
 
                     new_prior = getLogPrior(x);
 
@@ -293,7 +292,7 @@ class _MHWorker(Worker):
             }
 
             void _sample(mot_float_type* const x,
-                         ranluxcl_state_t* ranluxclstate,
+                         void* rng_data,
                          double* const current_likelihood,
                          mot_float_type* const current_prior,
                          const optimize_data* const data,
@@ -308,7 +307,7 @@ class _MHWorker(Worker):
 
                 for(i = 0; i < ''' + str(self._nmr_samples * (self._sample_intervals + 1)
                                          + self._burn_length) + '''; i++){
-                    _update_state(x, ranluxclstate, current_likelihood, current_prior,
+                    _update_state(x, rng_data, current_likelihood, current_prior,
                                   data, proposal_state, ac_between_proposal_updates);
                     _update_proposals(proposal_state, ac_between_proposal_updates, proposal_update_count);
 
@@ -341,8 +340,8 @@ class _MHWorker(Worker):
 
                     ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
 
-                    ranluxcl_state_t ranluxclstate;
-                    ranluxcl_download_seed(&ranluxclstate, ranluxcltab);
+                    rand123_data rand123_rng_data = ''' + self._get_rand123_init_cl_code() + ''';
+                    void* rng_data = (void*)&rand123_rng_data;
 
                     mot_float_type x[''' + str(self._nmr_params) + '''];
 
@@ -353,11 +352,23 @@ class _MHWorker(Worker):
                     double current_likelihood = getLogLikelihood(&data, x);
                     mot_float_type current_prior = getLogPrior(x);
 
-                    _sample(x, &ranluxclstate, &current_likelihood,
+                    _sample(x, rng_data, &current_likelihood,
                             &current_prior, &data, proposal_state, ac_between_proposal_updates,
                             &proposal_update_count, samples);
-
-                    ranluxcl_upload_seed(&ranluxclstate, ranluxcltab);
             }
         '''
         return kernel_source
+
+    def _get_rand123_init_cl_code(self):
+        key = self._rand123_starting_point.get_key()
+        counter = self._rand123_starting_point.get_counter()
+
+        if len(key):
+            return 'rand123_initialize_data_extra_precision((uint[]){%(c0)r, %(c1)r, %(c2)r, %(c3)r}, ' \
+                   '(uint[]){%(k0)r, %(k1)r})' % {'c0': counter[0], 'c1': counter[1],
+                                                  'c2': counter[2], 'c3': counter[3],
+                                                  'k0': key[0], 'k1': counter[1]}
+        else:
+            return 'rand123_initialize_data((uint[]){%(c0)r, %(c1)r, %(c2)r, %(c3)r})' \
+                   % {'c0': counter[0], 'c1': counter[1], 'c2': counter[2], 'c3': counter[3]}
+

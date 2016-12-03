@@ -29,7 +29,7 @@ class AbstractParameterProposal(object):
         """Get the proposal function as a CL string. This should include include guards (#ifdef's).
 
         This should follow the signature:
-        mot_float_type <proposal_fname>(mot_float_type current, ranluxcl_state_t* ranlux, <additional_parameters>)
+        mot_float_type <proposal_fname>(mot_float_type current, void* rng_data, <additional_parameters>)
 
         That is, it can have more than two parameter, but the first two are obligatory. The additional parameters
         are defined by the get_parameters function of this python class.
@@ -139,9 +139,9 @@ class GaussianProposal(AbstractParameterProposal):
             #define PROP_GAUSSIANPROPOSAL_CL
 
             mot_float_type proposal_gaussianProposal(mot_float_type current,
-                                                     ranluxcl_state_t* const ranluxclstate,
+                                                     void* rng_data,
                                                      mot_float_type std){
-                return fma(std, (mot_float_type)ranluxcl_gaussian(ranluxclstate), current);
+                return fma(std, (mot_float_type)frandn(rng_data), current);
             }
 
             #endif //PROP_GAUSSIANPROPOSAL_CL
@@ -190,9 +190,9 @@ class CircularGaussianProposal(AbstractParameterProposal):
             #define PROP_CIRCULARGAUSSIANPROPOSAL_CL
 
             mot_float_type proposal_circular_gaussianProposal(mot_float_type current,
-                                                              ranluxcl_state_t* const ranluxclstate,
+                                                              void* rng_data,
                                                               mot_float_type std){
-                double x1 = fma(std, (mot_float_type)ranluxcl_gaussian(ranluxclstate), current);
+                double x1 = fma(std, (mot_float_type)frandn(rng_data), current);
                 double x2 = ''' + str(self.modulus) + ''';
                 return (mot_float_type) (x1 - floor(x1 / x2) * x2);
             }

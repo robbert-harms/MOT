@@ -1244,7 +1244,7 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
             return_str += p.sampling_proposal.get_proposal_function()
 
         return_str += "\n" + 'mot_float_type ' + func_name + \
-            '(const int i, const mot_float_type current, ranluxcl_state_t* const ranluxclstate, ' \
+            '(const int i, const mot_float_type current, void* rng_data, ' \
             ' mot_float_type* const proposal_state){'
 
         return_str += "\n\t" + 'switch(i){' + "\n\t\t"
@@ -1254,7 +1254,7 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
             return_str += 'case ' + str(i) + ':' + "\n\t\t\t"
 
             param_proposal = p.sampling_proposal
-            proposal_call = 'return ' + param_proposal.get_proposal_function_name() + '(current, ranluxclstate'
+            proposal_call = 'return ' + param_proposal.get_proposal_function_name() + '(current, rng_data'
 
             for param in param_proposal.get_parameters():
                 if param.adaptable:

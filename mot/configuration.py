@@ -40,10 +40,6 @@ _config = {
         },
         'cl_routine_specific': {}
     },
-    'ranlux': {
-        'seed': 1,
-        'lux_factor': 4
-    },
     'ignore_kernel_compile_warnings': True
 }
 
@@ -112,48 +108,6 @@ def get_compile_flags(cl_routine_name=None):
     if cl_routine_name in _config['compile_flags']['cl_routine_specific']:
         flags.update(_config['compile_flags']['cl_routine_specific'][cl_routine_name])
     return flags
-
-
-def get_ranlux_seed():
-    """Get the default seed to use for all random number generation.
-
-    This can be overwritten by the user when calling the script initialize_ranlux, but normally this is the
-    seed that should be used.
-
-    Returns:
-        int: the seed to use during all RNG with ranlux.
-    """
-    return _config['ranlux']['seed']
-
-
-def get_ranlux_lux_factor():
-    """Get the default lux factor to use for all random number generation with ranlux.
-
-    This can be overwritten by the user when calling the script initialize_ranlux, but normally this is the
-    lux factor that should be used.
-
-    Returns:
-        int: the luxury level of the ranluxcl generator. See the ranluxcl.cl source for details.
-    """
-    return _config['ranlux']['lux_factor']
-
-
-def set_ranlux_seed(seed):
-    """Set the default seed to use for all random number generation.
-
-    Args:
-        int: the seed to use during all RNG with ranlux.
-    """
-    _config['ranlux']['seed'] = seed
-
-
-def set_ranlux_lux_factor(lux_factor):
-    """Set the default lux factor to use for all random number generation with ranlux.
-
-    Args:
-        int: the luxury level of the ranluxcl generator. See the ranluxcl.cl source for details.
-    """
-    _config['ranlux']['lux_factor'] = lux_factor
 
 
 @contextmanager

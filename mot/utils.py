@@ -1,11 +1,7 @@
-import pyopencl.array as cl_array
+from functools import reduce
+
 import numpy as np
 import pyopencl as cl
-from functools import reduce
-from pkg_resources import resource_filename
-import os
-from .data_adapters  import DataAdapter
-
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-05-13"
@@ -301,39 +297,6 @@ class ParameterCLCodeGenerator(object):
         return np.product(array.shape) * np.dtype(dtype).itemsize < self._max_constant_buffer_size
 
 
-def initialize_ranlux(cl_context, nmr_instances, ranluxcl_lux=None, seed=None):
-    """Create an opencl buffer with the initialized RanluxCLTab.
-
-    Args:
-        cl_environment (CLEnvironment): the environment to use
-        cl_context: the context to use (containing the queue and actual context)
-        nmr_instances (int): for how many thread instances we should initialize the ranlux cl tab.
-        ranluxcl_lux (int): the luxury level of the ranluxcl generator. See the ranluxcl.cl source for details.
-        seed (int): the seed to use, see the ranluxcl.cl source for details. If not given (is None) we will use
-            the seed number defined in the current configuration.
-
-    Returns:
-        cl buffer: the buffer containing the initialized ranlux cl tab for use in the given environment/queue.
-    """
-    from mot.configuration import get_ranlux_seed
-
-    if seed is None:
-        seed = get_ranlux_seed()
-
-    kernel_source = get_ranlux_cl(ranluxcl_lux=ranluxcl_lux)
-    kernel_source += '''
-        __kernel void init(global ranluxcl_state_t *ranluxcltab){
-            ranluxcl_initialization(''' + str(seed) + ''', ranluxcltab);
-        }
-    '''
-    ranluxcltab_buffer = cl.Buffer(cl_context.context,
-                                   cl.mem_flags.READ_WRITE | cl.mem_flags.ALLOC_HOST_PTR,
-                                   size=np.dtype(cl_array.vec.float4).itemsize * nmr_instances * 7)
-    kernel = cl.Program(cl_context.context, kernel_source).build()
-    kernel.init(cl_context.queue, (int(nmr_instances), ), None, ranluxcltab_buffer).wait()
-    return ranluxcltab_buffer
-
-
 def is_scalar(value):
     """Test if the given value is a scalar.
 
@@ -346,24 +309,3 @@ def is_scalar(value):
         boolean: if the given value is a scalar or not
     """
     return np.isscalar(value) or (isinstance(value, np.ndarray) and (len(np.squeeze(value).shape) == 0))
-
-
-def get_ranlux_cl(ranluxcl_lux=None):
-    """Get the code for the RanLux generator.
-
-    Args:
-        ranluxcl_lux (int): the luxury level of the ranluxcl generator. See the ranluxcl.cl source for details.
-
-    Returns:
-        str: the CL code string for the complete RanLux RNG.
-    """
-    from mot.configuration import get_ranlux_lux_factor
-
-    if ranluxcl_lux is None:
-        ranluxcl_lux = get_ranlux_lux_factor()
-
-    cl_source = '#define RANLUXCL_LUX ' + str(ranluxcl_lux) + "\n"
-    cl_source += open(os.path.abspath(resource_filename('mot', 'data/opencl/ranluxcl.h'),), 'r').read()
-    cl_source += open(os.path.abspath(resource_filename('mot', 'data/opencl/ranluxcl.cl'), ), 'r').read()
-
-    return cl_source

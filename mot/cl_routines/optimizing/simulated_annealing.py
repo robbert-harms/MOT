@@ -1,4 +1,4 @@
-from mot.utils import get_ranlux_cl
+from mot.random123 import get_random123_cl_code, RandomStartingPoint
 from .base import AbstractParallelOptimizer, AbstractParallelOptimizerWorker
 
 __author__ = 'Robbert Harms'
@@ -12,14 +12,14 @@ class SimulatedAnnealing(AbstractParallelOptimizer):
 
     default_patience = 500
 
-    def __init__(self, patience=None, optimizer_settings=None, **kwargs):
+    def __init__(self, **kwargs):
         """Use Simulated Annealing to calculate the optimum.
 
         This does not use the parameter codec, even if set to True. This because the priors (should) already
         cover the bounds.
 
-        This implementation uses an adapted Metropolis Hasting algorithm to find the optimum. This being a sampling
-        routine it does require that the model is a implementation of SampleModelInterface.
+        This implementation uses an adapted Metropolis Hasting algorithm to find the optimum, hence, this requires
+        that the model is a implementation of SampleModelInterface.
 
         Args:
             patience (int):
@@ -28,10 +28,12 @@ class SimulatedAnnealing(AbstractParallelOptimizer):
                 - proposal_update_intervals (int): the interval by which we update the proposal std.
 
         """
-        patience = patience or self.default_patience
-        super(SimulatedAnnealing, self).__init__(use_param_codec=False, patience=patience, **kwargs)
-        optimizer_settings = optimizer_settings or {}
-        self.proposal_update_intervals = optimizer_settings.get('proposal_update_intervals', 50)
+        kwargs['patience'] = kwargs.get('patience', self.default_patience) or self.default_patience
+        kwargs['use_param_codec'] = False
+        super(SimulatedAnnealing, self).__init__(**kwargs)
+        kwargs['optimizer_options'] = kwargs.get('optimizer_options', {}) or {}
+
+        self.proposal_update_intervals = kwargs['optimizer_options'].get('proposal_update_intervals', 50) or 50
         self._annealing_schedule = ExponentialCoolingSchedule()
         self._initial_temperature_strategy = SimpleInitialTemperatureStrategy()
 
@@ -50,14 +52,15 @@ class SimulatedAnnealingWorker(AbstractParallelOptimizerWorker):
         self._annealing_schedule = kwargs.pop('annealing_schedule')
         self._init_temp_strategy = kwargs.pop('init_temp_strategy')
 
+        self._rand123_starting_point = RandomStartingPoint()
+
         super(SimulatedAnnealingWorker, self).__init__(*args, **kwargs)
         self._use_param_codec = False
 
     def _get_optimizer_cl_code(self):
         kernel_source = self._get_evaluate_function()
 
-        kernel_source += '#define RANLUXCL_LUX 4' + "\n"
-        kernel_source += get_ranlux_cl()
+        kernel_source += get_random123_cl_code()
 
         kernel_source += self._model.get_log_prior_function('getLogPrior')
         kernel_source += self._model.get_proposal_function('getProposal')
@@ -100,7 +103,7 @@ class SimulatedAnnealingWorker(AbstractParallelOptimizerWorker):
             }
 
             void _update_state(mot_float_type* const x,
-                               void* rand_settings,
+                               void* rng_data,
                                double* const current_likelihood,
                                mot_float_type* const current_prior,
                                const optimize_data* const data,
@@ -117,7 +120,7 @@ class SimulatedAnnealingWorker(AbstractParallelOptimizerWorker):
                 for(int k = 0; k < ''' + str(self._nmr_params) + '''; k++){
 
                     old_x = x[k];
-                    x[k] = getProposal(k, x[k], (ranluxcl_state_t*)rand_settings, proposal_state);
+                    x[k] = getProposal(k, x[k], rng_data, proposal_state);
 
                     new_prior = getLogPrior(x);
 
@@ -138,7 +141,7 @@ class SimulatedAnnealingWorker(AbstractParallelOptimizerWorker):
                                           (*current_likelihood + *current_prior + prop_to_x)) / *temperature);
                 '''
         kernel_source += '''
-                        if(new_likelihood > *current_likelihood || rand(rand_settings) < bayesian_f){
+                        if(new_likelihood > *current_likelihood || frand(rng_data) < bayesian_f){
                             *current_likelihood = new_likelihood;
                             *current_prior = new_prior;
                             ac_between_proposal_updates[k]++;
@@ -155,7 +158,10 @@ class SimulatedAnnealingWorker(AbstractParallelOptimizerWorker):
         '''
         kernel_source += self._init_temp_strategy.get_init_temp_cl_function()
         kernel_source += '''
-            int simulated_annealing(mot_float_type* const x, const void* const data, void* rand_settings){
+            int simulated_annealing(mot_float_type* const x, const void* const data){
+                rand123_data rand123_rng_data = ''' + self._get_rand123_init_cl_code() + ''';
+                void* rng_data = (void*)&rand123_rng_data;
+
                 uint proposal_update_count = 0;
 
                 mot_float_type proposal_state[] = ''' + proposal_state + ''';
@@ -164,16 +170,11 @@ class SimulatedAnnealingWorker(AbstractParallelOptimizerWorker):
                 double current_likelihood = getLogLikelihood((optimize_data*)data, x);
                 mot_float_type current_prior = getLogPrior(x);
 
-                double prev_likelihood = current_likelihood;
-                mot_float_type prev_prior = current_prior;
-
-                rand(rand_settings);
-
                 mot_float_type temperature;
                 mot_float_type min_temp;
                 mot_float_type initial_temp;
                 its_get_initial_temperature(&temperature, &min_temp, &initial_temp,
-                                            x, rand_settings, &current_likelihood, &current_prior,
+                                            x, rng_data, &current_likelihood, &current_prior,
                                             data, proposal_state, ac_between_proposal_updates,
                                             &proposal_update_count);
 
@@ -185,7 +186,7 @@ class SimulatedAnnealingWorker(AbstractParallelOptimizerWorker):
                         return 2;
                     }
 
-                    _update_state(x, rand_settings, &current_likelihood, &current_prior,
+                    _update_state(x, rng_data, &current_likelihood, &current_prior,
                                   data, proposal_state, ac_between_proposal_updates, &temperature);
                     _update_proposals(proposal_state, ac_between_proposal_updates, &proposal_update_count);
                 }
@@ -195,8 +196,18 @@ class SimulatedAnnealingWorker(AbstractParallelOptimizerWorker):
         '''
         return kernel_source
 
-    def _uses_random_numbers(self):
-        return True
+    def _get_rand123_init_cl_code(self):
+        key = self._rand123_starting_point.get_key()
+        counter = self._rand123_starting_point.get_counter()
+
+        if len(key):
+            return 'rand123_initialize_data_extra_precision((uint[]){%(c0)r, %(c1)r, %(c2)r, %(c3)r}, ' \
+                   '(uint[]){%(k0)r, %(k1)r})' % {'c0': counter[0], 'c1': counter[1],
+                                                  'c2': counter[2], 'c3': counter[3],
+                                                  'k0': key[0], 'k1': counter[1]}
+        else:
+            return 'rand123_initialize_data((uint[]){%(c0)r, %(c1)r, %(c2)r, %(c3)r})' \
+                   % {'c0': counter[0], 'c1': counter[1], 'c2': counter[2], 'c3': counter[3]}
 
 
 class InitialTemperatureStrategy(object):
@@ -226,7 +237,7 @@ class SimpleInitialTemperatureStrategy(InitialTemperatureStrategy):
                     mot_float_type* min_temp,
                     mot_float_type* initial_temp,
                     mot_float_type* const x,
-                    void* rand_settings,
+                    void* rng_data,
                     double* const current_likelihood,
                     mot_float_type* const current_prior,
                     const optimize_data* const data,
