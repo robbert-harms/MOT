@@ -21,7 +21,7 @@ class Powell(AbstractParallelOptimizer):
                 Used to set the maximum number of iterations to patience*(number_of_parameters+1)
             bracket_gold (double): the default ratio by which successive intervals are magnified in Bracketing
             glimit (double): the maximum magnification allowed for a parabolic-fit step in Bracketing
-            reset_method (str): one of 'EXTRAPOLATED_POINT' or 'EVERY_N' lower case or upper case.
+            reset_method (str): one of 'EXTRAPOLATED_POINT' or 'RESET_TO_IDENTITY' lower case or upper case.
         """
         patience = patience or self.default_patience
 
@@ -30,7 +30,7 @@ class Powell(AbstractParallelOptimizer):
         optimizer_settings['glimit'] = glimit
         optimizer_settings['reset_method'] = reset_method
 
-        option_defaults = {'bracket_gold': 1.618034, 'glimit': 100.0, 'reset_method': 'extrapolated_point'}
+        option_defaults = {'bracket_gold': 1.618034, 'glimit': 100.0, 'reset_method': 'reset_to_identity'}
 
         def get_value(option_name, default):
             value = optimizer_settings.get(option_name, None)

@@ -32,7 +32,7 @@
   * Set one of the reset methods. These are used to reset the search directions after a set number of steps to
   * prevent linear dependence between the search vectors
   */
-#define POWELL_RESET_METHOD_EVERY_N 0 /* Resets the search vectors to the I(nxn) matrix after every cycle of N (N = number of parameters) */
+#define POWELL_RESET_METHOD_RESET_TO_IDENTITY 0 /* Resets the search vectors to the I(nxn) matrix after every cycle of N (N = number of parameters) */
 #define POWELL_RESET_METHOD_EXTRAPOLATED_POINT 1 /* see Numerical Recipes */
 #define POWELL_RESET_METHOD %(RESET_METHOD)s
 
@@ -266,7 +266,7 @@ bool powell_should_exchange_search_directions(
 
 #define SHOULD_EXCHANGE_SEARCH_DIRECTION powell_should_exchange_search_directions(fval_at_start_of_iteration, fval, fval_extrapolated, largest_decrease)
 
-#elif POWELL_RESET_METHOD == POWELL_RESET_METHOD_EVERY_N
+#elif POWELL_RESET_METHOD == POWELL_RESET_METHOD_RESET_TO_IDENTITY
 #define SHOULD_EXCHANGE_SEARCH_DIRECTION true
 #endif
 
@@ -295,7 +295,7 @@ int powell(mot_float_type* model_parameters, const void* const data){
             return 1;
         }
 
-        #if POWELL_RESET_METHOD==POWELL_RESET_METHOD_EXTRAPOLATED_POINT
+        #if POWELL_RESET_METHOD == POWELL_RESET_METHOD_EXTRAPOLATED_POINT
             fval_extrapolated = powell_evaluate_extrapolated(model_parameters, parameters_at_start_of_iteration, data);
         #endif
 
@@ -310,8 +310,8 @@ int powell(mot_float_type* model_parameters, const void* const data){
                     search_directions[i][%(NMR_PARAMS)r-1] = model_parameters[i] - parameters_at_start_of_iteration[i];
                 }
 
-            #elif POWELL_RESET_METHOD == POWELL_RESET_METHOD_EVERY_N
-                if(iteration %% %(NMR_PARAMS)r == 0){
+            #elif POWELL_RESET_METHOD == POWELL_RESET_METHOD_RESET_TO_IDENTITY
+                if((iteration + 1) %% %(NMR_PARAMS)r == 0){
                     powell_init_search_directions(search_directions);
                 }
                 else{
@@ -325,7 +325,7 @@ int powell(mot_float_type* model_parameters, const void* const data){
                 }
             #endif
 
-            // this uses ``parameters_at_start_of_iteration`` to find the last function minimum, saves an array
+            // this uses ``parameters_at_start_of_iteration`` to find the last function minimum, this saves an array
             for(i = 0; i < %(NMR_PARAMS)r; i++){
                 parameters_at_start_of_iteration[i] = model_parameters[i] - parameters_at_start_of_iteration[i];
             }
@@ -521,7 +521,7 @@ mot_float_type bracket_and_brent(mot_float_type* xmin, const void* const eval_da
 #undef EPSILON
 #undef CGOLD
 #undef ZEPS
-#undef POWELL_RESET_METHOD_EVERY_N
+#undef POWELL_RESET_METHOD_RESET_TO_IDENTITY
 #undef POWELL_RESET_METHOD_EXTRAPOLATED_POINT
 #undef POWELL_RESET_METHOD
 #undef SHOULD_EXCHANGE_SEARCH_DIRECTION
