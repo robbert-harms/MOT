@@ -150,7 +150,7 @@ class EvaluationModel(ModelFunction):
 class SumOfSquares(EvaluationModel):
 
     def __init__(self):
-        """Evaluates the distance between the estimated signal and the data using the sum of squared distance.
+        """Evaluates the distance between the estimated signal and the data using the sum of squared differences.
 
         This is implemented as::
 

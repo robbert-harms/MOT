@@ -124,7 +124,7 @@ class ModelFunction(DependentCLFunction):
             parameter_list (list or tuple of CLFunctionParameter): The list of parameters required for this function
             dependency_list (list or tuple of CLFunction): The list of CLFunctions this function is dependent on
         """
-        super(ModelFunction, self).__init__('double', cl_function_name, parameter_list, dependency_list)
+        super(ModelFunction, self).__init__('mot_float_type', cl_function_name, parameter_list, dependency_list)
         self._name = name
 
     @property
@@ -137,10 +137,10 @@ class ModelFunction(DependentCLFunction):
         return self._name
 
     def get_free_parameters(self):
-        """Get all parameters whose state instance is one of the type CLPSFreeState.
+        """Get all the free parameters in this model
 
         Returns:
-            A list of parameters whose type matches the CLPSFreeState state type.
+            list: the list of free parameters in this model
         """
         return self.get_parameters_of_type(FreeParameter)
 
@@ -238,19 +238,6 @@ class ModelFunction(DependentCLFunction):
             return True
         except KeyError:
             return False
-
-    def p(self, param_name):
-        """Get a parameter by name.
-
-        This function is a short for the function get_parameter_by_name()
-
-        Args:
-            param_name (str): The name of the parameter to return
-
-        Returns:
-            ClFunctionParameter: the parameter of the given name
-        """
-        return self.get_parameter_by_name(param_name)
 
     def get_parameter_by_name(self, param_name):
         """Get a parameter by name.

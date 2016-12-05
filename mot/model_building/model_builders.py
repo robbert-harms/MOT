@@ -25,7 +25,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             name (str): the name of the model
             model_tree (CompartmentModelTree): the model tree object
             evaluation_model (EvaluationModel): the evaluation model to use for the resulting complete model
-            signal_noise_model (SignalNoiseModel): the optional signal noise model to use to noise the model prediction
+            signal_noise_model (SignalNoiseModel): the optional signal noise model to use to
+                add noise to the model prediction
             problem_data (ProblemData): the problem data object
 
         Attributes;
