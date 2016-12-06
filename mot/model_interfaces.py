@@ -40,40 +40,11 @@ class OptimizeModelInterface(object):
         """
         return False
 
-    def get_problems_var_data(self):
-        """Get a dict with all the data per problem.
-
-        As an example, suppose per problem instance we have the data named 'observations'.
-        We should then return something like:
-
-        .. code-block:: python
-
-            {'observations': SimpleDataAdapter(ndarray((<nmr_problems>, <number of items>)), ...), ...}
-
-        Returns:
-            dict: A dictionary where each element holds a SimpleDataAdapter from which to get the data
-                The data in the adapter should contain for each problem (first dimension / rows) a
-                number of items (second dimension / columns) that is used in the evaluation function.
-        """
-        raise NotImplementedError
-
-    def get_problems_protocol_data(self):
-        """Get a dict with the data that is constant for each problem, but differs per measurement.
-
-        Returns:
-            dict: A dict where each element holds a SimpleDataAdapter that is used in the evaluation function.
-                In the CL kernel, each key is used as name in the cl data struct.
-        """
-        raise NotImplementedError
-
     def get_model_data(self):
-        """Get a dict with all the model data. This is model data necessary for computations in the model.
-
-        For data that is to large to inline in the kernel this data type may be useful.
+        """Get the model data storage container.
 
         Returns:
-            dict: The dict with all the model data in DataAdapters.
-                The names of the keys are used in the CL cl data structs.
+            mot.model_data.ModelData: the model data to use for the computations
         """
 
     def get_nmr_problems(self):

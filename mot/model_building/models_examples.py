@@ -1,7 +1,7 @@
 import numpy as np
 
 from mot.cl_data_type import CLDataType
-from mot.data_adapters import SimpleDataAdapter
+from mot.model_data import SimpleDataAdapter
 from mot.model_interfaces import OptimizeModelInterface
 
 __author__ = 'Robbert Harms'

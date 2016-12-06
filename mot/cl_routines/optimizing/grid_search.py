@@ -216,8 +216,8 @@ class GridSearchWorker(AbstractParallelOptimizerWorker):
         buffers[0].append(parameters_buffer)
         return buffers
 
-    def _get_kernel_param_names(self, param_code_gen):
-        kernel_param_names = super(GridSearchWorker, self)._get_kernel_param_names(param_code_gen)
+    def _get_kernel_param_names(self):
+        kernel_param_names = super(GridSearchWorker, self)._get_kernel_param_names()
         kernel_param_names.append('global mot_float_type* grid')
         return kernel_param_names
 

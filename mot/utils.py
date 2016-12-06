@@ -165,37 +165,88 @@ class TopologicalSort(object):
         return result
 
 
-class ParameterCLCodeGenerator(object):
+class ModelDataToKernel(object):
 
-    def __init__(self, device, var_data_dict, protocol_data_dict, model_data_dict):
-        """Generate the CL code for all the parameters in the given dictionaries.
-
-        The dictionaries are supposed to contain DataAdapters.
+    def __init__(self, model_data, cl_environment):
+        """Prepares the model data for use in a kernel.
 
         Args:
-            device: the CL device we want to compile the code for
-            var_data_dict (dict[str, CLDataAdapter]): the dictionary with the variable data. That is, the data
-                that is different for every problem (but constant over the measurements).
-            protocol_data_dict (dict[str, CLDataAdapter]): the dictionary with the protocol data. That is, the data
-                that is the same for every problem, but differs per measurement.
-            model_data_dict (dict[str, CLDataAdapter]): the dictionary with the model data. That is, the data
-                that is the same for every problem and every measurement.
+            model_data (ModelData): the model data object
+            cl_environment (mot.cl_environments.CLEnvironment): the CL environment for which to generate the
+                kernel items
         """
-        self._device = device
-        self._max_constant_buffer_size = device.get_info(cl.device_info.MAX_CONSTANT_BUFFER_SIZE)
-        self._max_constant_args = device.get_info(cl.device_info.MAX_CONSTANT_ARGS)
-        self._var_data_dict = var_data_dict
-        self._protocol_data_dict = protocol_data_dict
-        self._model_data_dict = model_data_dict
+        self._model_data = model_data
+        self._cl_environment = cl_environment
+
+        self._max_constant_buffer_size = self._cl_environment.device.get_info(cl.device_info.MAX_CONSTANT_BUFFER_SIZE)
+        self._max_constant_args = self._cl_environment.device.get_info(cl.device_info.MAX_CONSTANT_ARGS)
+
         self._kernel_items = self._get_all_kernel_source_items()
 
-    def get_data_struct(self):
+    def generate_buffers(self):
+        """Generate the buffers for the use in this environment.
+
+        Returns:
+            list: the list of CL buffers containing all the modeling data
+        """
+        buffers = []
+        for data in self._model_data.get_variable_data().values():
+            buffers.append(cl.Buffer(self._cl_environment.get_cl_context().context,
+                                     cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
+                                     hostbuf=data.get_opencl_data()))
+
+        for data in self._model_data.get_protocol_data().values():
+            buffers.append(cl.Buffer(self._cl_environment.get_cl_context().context,
+                                     cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
+                                     hostbuf=data.get_opencl_data()))
+
+        for data in self._model_data.get_static_data().values():
+            buffers.append(cl.Buffer(self._cl_environment.get_cl_context().context,
+                                     cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
+                                     hostbuf=data.get_opencl_data()))
+
+        return buffers
+
+    def get_kernel_data_struct(self):
+        """Get the CL for the data structure in the kernel.
+
+        This generates something like:
+
+        .. code-block: c
+
+            typedef struct{
+                ...
+            } optimize_data;
+
+        with the struct containing all the data needed in the model.
+        """
         return self._kernel_items['data_struct']
 
     def get_kernel_param_names(self):
+        """Get for all the buffers the kernel parameter arguments.
+
+        This returns a list with kernel arguments, for example:
+
+        .. code-block: python
+
+            list = ['global float* observations', ...]
+
+        That is, each element is one of the kernel parameter names.
+
+        Returns:
+            list: the kernel parameter names
+        """
         return self._kernel_items['kernel_param_names']
 
     def get_data_struct_init_assignment(self, variable_name):
+        """The assignment code for the data structure.
+
+        The data structure needs to be generated given the kernel arguments, this function returns
+        the initialization assignment.
+
+        Returns:
+            str: the initialization assignment for the data structure.
+        """
         struct_code = '0'
         if self._kernel_items['data_struct_init']:
             struct_code = ', '.join(self._kernel_items['data_struct_init'])
@@ -209,7 +260,7 @@ class ParameterCLCodeGenerator(object):
         data_struct_init = []
         data_struct_names = []
 
-        for key, data_adapter in self._var_data_dict.items():
+        for key, data_adapter in self._model_data.get_variable_data().items():
             clmemtype = 'global'
 
             cl_data = data_adapter.get_opencl_data()
@@ -235,7 +286,7 @@ class ParameterCLCodeGenerator(object):
                 data_struct_names.append(clmemtype + ' ' + data_type + '* ' + param_name)
                 data_struct_init.append(param_name + ' + gid * ' + str(mult))
 
-        for key, data_adapter in self._protocol_data_dict.items():
+        for key, data_adapter in self._model_data.get_protocol_data().items():
             clmemtype = 'global'
 
             cl_data = data_adapter.get_opencl_data()
@@ -255,7 +306,7 @@ class ParameterCLCodeGenerator(object):
             data_struct_init.append(param_name)
             data_struct_names.append(clmemtype + ' ' + data_type + '* ' + param_name)
 
-        for key, data_adapter in self._model_data_dict.items():
+        for key, data_adapter in self._model_data.get_static_data().items():
             clmemtype = 'global'
             param_name = 'model_data_' + str(key)
             data_type = data_adapter.get_data_type().raw_data_type

@@ -1,5 +1,7 @@
 import pyopencl as cl
-from ...utils import results_to_dict, ParameterCLCodeGenerator, get_float_type_def
+
+from mot.model_data import SimpleModelData
+from ...utils import results_to_dict, get_float_type_def, ModelDataToKernel
 from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
 import numpy as np
@@ -74,19 +76,18 @@ class _CDPWorker(Worker):
                  parameters_listing, dependent_parameter_names, results_list, double_precision):
         super(_CDPWorker, self).__init__(cl_environment)
 
-        self._var_data_dict = var_data_dict
         self._nmr_estimated_params = nmr_estimated_params
         self._parameters_listing = parameters_listing
         self._dependent_parameter_names = dependent_parameter_names
         self._results_list = results_list
         self._double_precision = double_precision
 
+        self._model_data = SimpleModelData(var_data_dict, {}, {})
+        self._model_data_to_kernel = ModelDataToKernel(SimpleModelData(var_data_dict, {}, {}), cl_environment)
+
         self._estimated_parameters = estimated_parameters
         self._all_buffers, self._results_list_buffer = self._create_buffers()
         self._kernel = self._build_kernel(compile_flags)
-
-    def __del__(self):
-        list(buffer.release() for buffer in self._all_buffers)
 
     def calculate(self, range_start, range_end):
         nmr_problems = int(range_end - range_start)
@@ -106,10 +107,7 @@ class _CDPWorker(Worker):
 
         data_buffers = [estimated_parameters_buf, results_buffer]
 
-        for data in self._var_data_dict.values():
-            data_buffers.append(cl.Buffer(self._cl_run_context.context,
-                                          cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
-                                          hostbuf=data.get_opencl_data()))
+        data_buffers.extend(self._model_data_to_kernel.generate_buffers())
 
         return data_buffers, results_buffer
 
@@ -121,20 +119,19 @@ class _CDPWorker(Worker):
             parameter_write_out += 'results[gid * ' + str(len(dependent_parameter_names)) + \
                                    ' + ' + str(i) + '] = ' + p + ";\n"
 
-        param_code_gen = ParameterCLCodeGenerator(self._cl_environment.device, self._var_data_dict, {}, {})
         kernel_param_names = ['global mot_float_type* params', 'global mot_float_type* results']
-        kernel_param_names.extend(param_code_gen.get_kernel_param_names())
+        kernel_param_names.extend(self._model_data_to_kernel.get_kernel_param_names())
 
         kernel_source = ''
         kernel_source += get_float_type_def(self._double_precision)
-        kernel_source += param_code_gen.get_data_struct()
+        kernel_source += self._model_data_to_kernel.get_kernel_data_struct()
         kernel_source += '''
             __kernel void transform(
                 ''' + ",\n".join(kernel_param_names) + '''
                 ){
                     int gid = get_global_id(0);
 
-                    ''' + param_code_gen.get_data_struct_init_assignment('data_var') + '''
+                    ''' + self._model_data_to_kernel.get_data_struct_init_assignment('data_var') + '''
                     optimize_data* data = &data_var;
 
                     mot_float_type x[''' + str(self._nmr_estimated_params) + '''];

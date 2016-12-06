@@ -1,9 +1,10 @@
 import numpy as np
-from mot.data_adapters import SimpleDataAdapter
+from mot.model_data import SimpleDataAdapter
 from mot.cl_data_type import CLDataType
 from mot.model_building.cl_functions.parameters import CurrentObservationParam, StaticMapParameter, ProtocolParameter, \
     ModelDataParameter, FreeParameter
 from mot.cl_routines.mapping.calc_dependent_params import CalculateDependentParameters
+from mot.model_data import SimpleModelData, SimpleDataAdapter
 from mot.utils import TopologicalSort, is_scalar
 from mot.model_building.parameter_functions.codecs import CodecBuilder
 from mot.model_building.parameter_functions.dependencies import SimpleAssignment
@@ -299,50 +300,10 @@ class OptimizeModelBuilder(OptimizeModelInterface):
     def get_nmr_estimable_parameters(self):
         return len(self.get_optimized_param_names())
 
-    def get_problems_var_data(self):
-        """See super class OptimizeModelInterface for details
-
-        When overriding this function, please note that it should adhere to the attribute problems_to_analyze.
-        """
-        var_data_dict = {}
-
-        observations = self._problem_data.observations
-        if observations is not None:
-            if self.problems_to_analyze is not None:
-                observations = observations[self.problems_to_analyze, ...]
-
-            observations = self._transform_observations(observations)
-
-            data_adapter = SimpleDataAdapter(observations, CLDataType.from_string('mot_float_type*'),
-                                             self._get_mot_float_type())
-            var_data_dict.update({'observations': data_adapter})
-
-        var_data_dict.update(self._get_fixed_parameters_as_var_data())
-        var_data_dict.update(self._get_static_parameters_as_var_data())
-
-        return var_data_dict
-
-    def get_problems_protocol_data(self):
-        protocol_info = self._problem_data.protocol
-        return_data = {}
-        for m, p in self._get_model_parameter_list():
-            if isinstance(p, ProtocolParameter):
-                if p.name in protocol_info:
-                    if not self._all_elements_equal(protocol_info[p.name]):
-                        const_d = {p.name: SimpleDataAdapter(protocol_info[p.name],
-                                                             p.data_type, self._get_mot_float_type())}
-                        return_data.update(const_d)
-                else:
-                    exception = 'Protocol parameter "{}" could not be resolved'.format(m.name + '.' + p.name)
-                    raise ParameterResolutionException(exception)
-        return return_data
-
     def get_model_data(self):
-        model_data_dict = {}
-        for m, p in self._get_model_parameter_list():
-            if isinstance(p, ModelDataParameter) and not self._all_elements_equal(p.value):
-                model_data_dict.update({p.name: SimpleDataAdapter(p.value, p.data_type, self._get_mot_float_type())})
-        return model_data_dict
+        return SimpleModelData(self._get_problems_var_data(),
+                               self._get_problems_protocol_data(),
+                               self._get_static_data())
 
     def get_initial_parameters(self, results_dict=None):
         """When overriding this function, please note that it should adhere to the attribute problems_to_analyze.
@@ -1112,6 +1073,51 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             if m.name + '.' + p.name == model_param_name:
                 return m, p
         raise ValueError('The parameter with the given name ({}) could not be found.'.format(model_param_name))
+
+    def _get_problems_var_data(self):
+        """See super class OptimizeModelInterface for details
+
+        When overriding this function, please note that it should adhere to the attribute problems_to_analyze.
+        """
+        var_data_dict = {}
+
+        observations = self._problem_data.observations
+        if observations is not None:
+            if self.problems_to_analyze is not None:
+                observations = observations[self.problems_to_analyze, ...]
+
+            observations = self._transform_observations(observations)
+
+            data_adapter = SimpleDataAdapter(observations, CLDataType.from_string('mot_float_type*'),
+                                             self._get_mot_float_type())
+            var_data_dict.update({'observations': data_adapter})
+
+        var_data_dict.update(self._get_fixed_parameters_as_var_data())
+        var_data_dict.update(self._get_static_parameters_as_var_data())
+
+        return var_data_dict
+
+    def _get_problems_protocol_data(self):
+        protocol_info = self._problem_data.protocol
+        return_data = {}
+        for m, p in self._get_model_parameter_list():
+            if isinstance(p, ProtocolParameter):
+                if p.name in protocol_info:
+                    if not self._all_elements_equal(protocol_info[p.name]):
+                        const_d = {p.name: SimpleDataAdapter(protocol_info[p.name],
+                                                             p.data_type, self._get_mot_float_type())}
+                        return_data.update(const_d)
+                else:
+                    exception = 'Protocol parameter "{}" could not be resolved'.format(m.name + '.' + p.name)
+                    raise ParameterResolutionException(exception)
+        return return_data
+
+    def _get_static_data(self):
+        model_data_dict = {}
+        for m, p in self._get_model_parameter_list():
+            if isinstance(p, ModelDataParameter) and not self._all_elements_equal(p.value):
+                model_data_dict.update({p.name: SimpleDataAdapter(p.value, p.data_type, self._get_mot_float_type())})
+        return model_data_dict
 
     def _get_pre_model_expression_eval_code(self):
         """The code called in the evaluation function.

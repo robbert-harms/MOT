@@ -1,6 +1,6 @@
 import pyopencl as cl
 import numpy as np
-from ...utils import ParameterCLCodeGenerator, get_float_type_def
+from ...utils import get_float_type_def, ModelDataToKernel
 from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
 
@@ -42,14 +42,10 @@ class FinalParametersTransformer(CLRoutine):
             np_dtype = np.float64
 
         parameters = np.require(parameters, np_dtype, requirements=['C', 'A', 'O', 'W'])
-        var_data_dict = model.get_problems_var_data()
-        protocol_data_dict = model.get_problems_protocol_data()
-        model_data_dict = model.get_model_data()
 
         if model.get_final_parameter_transformations():
             workers = self._create_workers(lambda cl_environment: _FPTWorker(
-                cl_environment, self.get_compile_flags_list(), model, parameters,
-                var_data_dict, protocol_data_dict, model_data_dict))
+                cl_environment, self.get_compile_flags_list(), model, parameters, model.get_model_data()))
             self.load_balancer.process(workers, model.get_nmr_problems())
 
         return parameters
@@ -57,22 +53,18 @@ class FinalParametersTransformer(CLRoutine):
 
 class _FPTWorker(Worker):
 
-    def __init__(self, cl_environment, compile_flags, model, parameters, var_data_dict, protocol_data_dict,
-                 model_data_dict):
+    def __init__(self, cl_environment, compile_flags, model, parameters, model_data):
         super(_FPTWorker, self).__init__(cl_environment)
 
         self._parameters = parameters
         self._nmr_params = parameters.shape[1]
         self._model = model
-        self._var_data_dict = var_data_dict
-        self._protocol_data_dict = protocol_data_dict
-        self._model_data_dict = model_data_dict
         self._double_precision = model.double_precision
+
+        self._model_data_to_kernel = ModelDataToKernel(model_data, cl_environment)
+
         self._all_buffers, self._parameters_buffer = self._create_buffers()
         self._kernel = self._build_kernel(compile_flags)
-
-    def __del__(self):
-        list(buffer.release() for buffer in self._all_buffers)
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
@@ -88,32 +80,24 @@ class _FPTWorker(Worker):
                                       hostbuf=self._parameters)
         all_buffers.append(parameters_buffer)
 
-        for data in self._var_data_dict.values():
-            all_buffers.append(cl.Buffer(self._cl_run_context.context,
-                                         cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
-                                         hostbuf=data.get_opencl_data()))
+        all_buffers.extend(self._model_data_to_kernel.generate_buffers())
 
-        constant_buffers = self._generate_constant_buffers(self._protocol_data_dict, self._model_data_dict)
-        all_buffers.extend(constant_buffers)
         return all_buffers, parameters_buffer
 
     def _get_kernel_source(self):
-        param_code_gen = ParameterCLCodeGenerator(self._cl_environment.device,
-                                                  self._var_data_dict, self._protocol_data_dict, self._model_data_dict)
-
         kernel_param_names = ['global mot_float_type* params']
-        kernel_param_names.extend(param_code_gen.get_kernel_param_names())
+        kernel_param_names.extend(self._model_data_to_kernel.get_kernel_param_names())
 
         kernel_source = ''
         kernel_source += get_float_type_def(self._double_precision)
-        kernel_source += param_code_gen.get_data_struct()
+        kernel_source += self._model_data_to_kernel.get_kernel_data_struct()
         kernel_source += self._model.get_final_parameter_transformations('applyFinalParameterTransformations')
         kernel_source += '''
             __kernel void transform(
                 ''' + ",\n".join(kernel_param_names) + '''
                 ){
                     int gid = get_global_id(0);
-                    ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
+                    ''' + self._model_data_to_kernel.get_data_struct_init_assignment('data') + '''
 
                     mot_float_type x[''' + str(self._nmr_params) + '''];
                     for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){

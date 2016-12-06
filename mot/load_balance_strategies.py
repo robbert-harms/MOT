@@ -17,7 +17,7 @@ import warnings
 import numpy as np
 import pyopencl as cl
 from six import string_types
-from mot.data_adapters import DataAdapter
+from mot.model_data import DataAdapter
 from .utils import device_type_from_string
 
 
@@ -251,29 +251,6 @@ class Worker(object):
         Returns:
             str: the kernel
         """
-
-    def _generate_constant_buffers(self, *args):
-        """Generate read only buffers for the given data
-
-        Args:
-            args (list of dicts): The list with dictionaries with the values we want to buffer.
-
-        Returns:
-            list: a list of the same length with read only cl buffers.
-        """
-        buffers = []
-        for data_dict in args:
-            for data in data_dict.values():
-                if isinstance(data, DataAdapter):
-                    data = data.get_opencl_data()
-
-                if isinstance(data, np.ndarray):
-                    buffers.append(cl.Buffer(self._cl_run_context.context,
-                                             cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
-                                             hostbuf=data))
-                else:
-                    buffers.append(data)
-        return buffers
 
     def _enqueue_readout(self, buffer, host_array, range_start, range_end, wait_for):
         """Enqueue a readout for a buffer started with use_host_ptr.

@@ -3,7 +3,7 @@ import numpy as np
 from mot.cl_routines.mapping.error_measures import ErrorMeasures
 from mot.cl_routines.mapping.residual_calculator import ResidualCalculator
 from mot.random123 import get_random123_cl_code, RandomStartingPoint
-from ...utils import results_to_dict, ParameterCLCodeGenerator, get_float_type_def
+from ...utils import results_to_dict, get_float_type_def, ModelDataToKernel
 from ...load_balance_strategies import Worker
 from ...cl_routines.sampling.base import AbstractSampler
 
@@ -76,9 +76,6 @@ class MetropolisHastings(AbstractSampler):
         self._do_initial_logging(model)
 
         parameters = model.get_initial_parameters(init_params)
-        var_data_dict = model.get_problems_var_data()
-        protocol_data_dict = model.get_problems_protocol_data()
-        model_data_dict = model.get_model_data()
 
         samples = np.zeros((model.get_nmr_problems(), parameters.shape[1], self.nmr_samples),
                            dtype=np_dtype, order='C')
@@ -87,7 +84,7 @@ class MetropolisHastings(AbstractSampler):
 
         workers = self._create_workers(lambda cl_environment: _MHWorker(
             cl_environment, self.get_compile_flags_list(), model, parameters, samples,
-            var_data_dict, protocol_data_dict, model_data_dict,
+            model.get_model_data(),
             self.nmr_samples, self.burn_length, self.sample_intervals,
             self.proposal_update_intervals))
         self.load_balancer.process(workers, model.get_nmr_problems())
@@ -141,7 +138,7 @@ class MetropolisHastings(AbstractSampler):
 class _MHWorker(Worker):
 
     def __init__(self, cl_environment, compile_flags, model, parameters, samples,
-                 var_data_dict, protocol_data_dict, model_data_dict, nmr_samples, burn_length, sample_intervals,
+                 model_data, nmr_samples, burn_length, sample_intervals,
                  proposal_update_intervals):
         super(_MHWorker, self).__init__(cl_environment)
 
@@ -150,10 +147,6 @@ class _MHWorker(Worker):
         self._nmr_params = parameters.shape[1]
         self._samples = samples
 
-        self._var_data_dict = var_data_dict
-        self._protocol_data_dict = protocol_data_dict
-        self._model_data_dict = model_data_dict
-
         self._nmr_samples = nmr_samples
         self._burn_length = burn_length
         self._sample_intervals = sample_intervals
@@ -161,7 +154,8 @@ class _MHWorker(Worker):
 
         self._rand123_starting_point = RandomStartingPoint()
 
-        self._constant_buffers = self._generate_constant_buffers(self._protocol_data_dict, self._model_data_dict)
+        self._model_data_to_kernel = ModelDataToKernel(model_data, cl_environment)
+
         self._kernel = self._build_kernel(compile_flags)
 
     def calculate(self, range_start, range_end):
@@ -174,14 +168,7 @@ class _MHWorker(Worker):
                                 cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
                                 hostbuf=self._samples[range_start:range_end, ...])
         data_buffers.append(samples_buf)
-
-        for data in self._var_data_dict.values():
-            data_buffers.append(cl.Buffer(self._cl_run_context.context,
-                                          cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
-                                          hostbuf=data.get_opencl_data()[range_start:range_end, ...]))
-
-        data_buffers.extend(self._constant_buffers)
-
+        data_buffers.extend(self._model_data_to_kernel.generate_buffers())
         kernel_event = self._kernel.sample(self._cl_run_context.queue, (int(nmr_problems), ), None, *data_buffers)
 
         return [self._enqueue_readout(samples_buf, self._samples, 0, nmr_problems, [kernel_event])]
@@ -189,12 +176,9 @@ class _MHWorker(Worker):
     def _get_kernel_source(self):
         cl_final_param_transform = self._model.get_final_parameter_transformations('applyFinalParamTransforms')
 
-        param_code_gen = ParameterCLCodeGenerator(self._cl_environment.device, self._var_data_dict,
-                                                  self._protocol_data_dict, self._model_data_dict)
-
         kernel_param_names = ['global mot_float_type* params',
                               'global mot_float_type* samples']
-        kernel_param_names.extend(param_code_gen.get_kernel_param_names())
+        kernel_param_names.extend(self._model_data_to_kernel.get_kernel_param_names())
 
         proposal_state_size = len(self._model.get_proposal_state())
         proposal_state = '{' + ', '.join(map(str, self._model.get_proposal_state())) + '}'
@@ -205,7 +189,7 @@ class _MHWorker(Worker):
         '''
         kernel_source += get_random123_cl_code()
         kernel_source += get_float_type_def(self._model.double_precision)
-        kernel_source += param_code_gen.get_data_struct()
+        kernel_source += self._model_data_to_kernel.get_kernel_data_struct()
         kernel_source += self._model.get_log_prior_function('getLogPrior')
         kernel_source += self._model.get_proposal_function('getProposal')
         kernel_source += self._model.get_proposal_state_update_function('updateProposalState')
@@ -338,7 +322,7 @@ class _MHWorker(Worker):
                     mot_float_type proposal_state[] = ''' + proposal_state + ''';
                     uint ac_between_proposal_updates[] = ''' + acceptance_counters_between_proposal_updates + ''';
 
-                    ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
+                    ''' + self._model_data_to_kernel.get_data_struct_init_assignment('data') + '''
 
                     rand123_data rand123_rng_data = ''' + self._get_rand123_init_cl_code() + ''';
                     void* rng_data = (void*)&rand123_rng_data;

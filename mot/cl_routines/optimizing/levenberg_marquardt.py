@@ -1,7 +1,7 @@
 import os
 from pkg_resources import resource_filename
 import pyopencl as cl
-from mot.utils import ParameterCLCodeGenerator, get_float_type_def
+from mot.utils import get_float_type_def
 from .base import AbstractParallelOptimizer, AbstractParallelOptimizerWorker
 
 __author__ = 'Robbert Harms'
@@ -58,21 +58,17 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
         in global memory space.
         """
         nmr_params = self._nmr_params
-        param_code_gen = ParameterCLCodeGenerator(self._cl_environment.device,
-                                                  self._var_data_dict,
-                                                  self._protocol_data_dict,
-                                                  self._model_data_dict)
 
         kernel_param_names = ['global mot_float_type* params',
                               'global char* return_codes']
-        kernel_param_names.extend(param_code_gen.get_kernel_param_names())
+        kernel_param_names.extend(self._model_data_to_kernel.get_kernel_param_names())
         kernel_param_names.append('global mot_float_type* fjac_all')
 
         optimizer_call_args = 'x, (const void*) &data'
 
         kernel_source = ''
         kernel_source += get_float_type_def(self._double_precision)
-        kernel_source += str(param_code_gen.get_data_struct())
+        kernel_source += str(self._model_data_to_kernel.get_kernel_data_struct())
 
         if self._use_param_codec:
             param_codec = self._model.get_parameter_codec()
@@ -94,7 +90,7 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
                     global mot_float_type* fjac = fjac_all + gid * ''' \
                          + str(self._nmr_params * self._model.get_nmr_inst_per_problem()) + ''';
 
-                    ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
+                    ''' + self._model_data_to_kernel.get_data_struct_init_assignment('data') + '''
                     return_codes[gid] = (char) ''' + self._get_optimizer_call_name() + '''(''' \
                          + optimizer_call_args + ''', fjac);
 

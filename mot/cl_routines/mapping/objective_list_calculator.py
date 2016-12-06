@@ -2,7 +2,7 @@ from collections import MutableMapping
 
 import pyopencl as cl
 import numpy as np
-from ...utils import ParameterCLCodeGenerator, get_float_type_def
+from ...utils import get_float_type_def, ModelDataToKernel
 from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
 
@@ -72,15 +72,10 @@ class _ObjectiveListCalculatorWorker(Worker):
         self._objectives = objectives
         self._parameters = parameters
 
-        self._var_data_dict = model.get_problems_var_data()
-        self._protocol_data_dict = model.get_problems_protocol_data()
-        self._model_data_dict = model.get_model_data()
+        self._model_data_to_kernel = ModelDataToKernel(model.get_model_data(), cl_environment)
 
         self._all_buffers, self._residuals_buffer = self._create_buffers()
         self._kernel = self._build_kernel(compile_flags)
-
-    def __del__(self):
-        list(buffer.release() for buffer in self._all_buffers)
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
@@ -98,13 +93,7 @@ class _ObjectiveListCalculatorWorker(Worker):
                                  hostbuf=self._parameters),
                        objectives_buffer]
 
-        for data in self._var_data_dict.values():
-            all_buffers.append(cl.Buffer(self._cl_run_context.context,
-                                         cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
-                                         hostbuf=data.get_opencl_data()))
-
-        constant_buffers = self._generate_constant_buffers(self._protocol_data_dict, self._model_data_dict)
-        all_buffers.extend(constant_buffers)
+        all_buffers.extend(self._model_data_to_kernel.generate_buffers())
 
         return all_buffers, objectives_buffer
 
@@ -112,25 +101,22 @@ class _ObjectiveListCalculatorWorker(Worker):
         nmr_inst_per_problem = self._model.get_nmr_inst_per_problem()
         nmr_params = self._parameters.shape[1]
 
-        param_code_gen = ParameterCLCodeGenerator(self._cl_environment.device, self._var_data_dict,
-                                                  self._protocol_data_dict, self._model_data_dict)
-
         kernel_param_names = ['global mot_float_type* params', 'global mot_float_type* objectives']
-        kernel_param_names.extend(param_code_gen.get_kernel_param_names())
+        kernel_param_names.extend(self._model_data_to_kernel.get_kernel_param_names())
 
         kernel_source = '''
             #define NMR_INST_PER_PROBLEM ''' + str(nmr_inst_per_problem) + '''
         '''
 
         kernel_source += get_float_type_def(self._double_precision)
-        kernel_source += param_code_gen.get_data_struct()
+        kernel_source += self._model_data_to_kernel.get_kernel_data_struct()
         kernel_source += self._model.get_objective_list_function('calculateObjectiveList')
         kernel_source += '''
             __kernel void get_objectives(
                 ''' + ",\n".join(kernel_param_names) + '''
                 ){
                     int gid = get_global_id(0);
-                    ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
+                    ''' + self._model_data_to_kernel.get_data_struct_init_assignment('data') + '''
 
                     mot_float_type x[''' + str(nmr_params) + '''];
                     for(int i = 0; i < ''' + str(nmr_params) + '''; i++){

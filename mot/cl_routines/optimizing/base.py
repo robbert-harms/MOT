@@ -3,7 +3,7 @@ import numpy as np
 import pyopencl as cl
 from mot.cl_routines.mapping.error_measures import ErrorMeasures
 from mot.cl_routines.mapping.residual_calculator import ResidualCalculator
-from ...utils import results_to_dict, ParameterCLCodeGenerator, get_float_type_def
+from ...utils import results_to_dict, get_float_type_def, ModelDataToKernel
 from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
 from ...cl_routines.mapping.final_parameters_transformer import FinalParametersTransformer
@@ -145,9 +145,8 @@ class AbstractParallelOptimizer(AbstractOptimizer):
                                      requirements=['C', 'A', 'O', 'W'])
         nmr_params = starting_points.shape[1]
 
-        var_data_dict = model.get_problems_var_data()
-        protocol_data_dict = model.get_problems_protocol_data()
-        model_data_dict = model.get_model_data()
+        model_data = model.get_model_data()
+
         return_codes = np.zeros((starting_points.shape[0],), dtype=np.int8, order='C')
 
         space_transformer = CodecRunner(self.cl_environments, self.load_balancer, model.double_precision)
@@ -160,7 +159,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         self._logger.info('Starting optimization')
 
         workers = self._create_workers(self._get_worker_generator(self, model, starting_points,
-                                                                  var_data_dict, protocol_data_dict, model_data_dict,
+                                                                  model_data,
                                                                   nmr_params, return_codes,
                                                                   self._optimizer_settings))
         self.load_balancer.process(workers, model.get_nmr_problems())
@@ -204,7 +203,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
 class AbstractParallelOptimizerWorker(Worker):
 
     def __init__(self, cl_environment, parent_optimizer, model, starting_points,
-                 var_data_dict, protocol_data_dict, model_data_dict, nmr_params, return_codes,
+                 model_data, nmr_params, return_codes,
                  optimizer_settings=None):
         super(AbstractParallelOptimizerWorker, self).__init__(cl_environment)
 
@@ -215,20 +214,17 @@ class AbstractParallelOptimizerWorker(Worker):
         self._model = model
         self._double_precision = model.double_precision
         self._nmr_params = nmr_params
-        self._var_data_dict = var_data_dict
-        self._protocol_data_dict = protocol_data_dict
-        self._model_data_dict = model_data_dict
+
         self._return_codes = return_codes
 
         param_codec = model.get_parameter_codec()
         self._use_param_codec = self._parent_optimizer.use_param_codec and param_codec
 
+        self._model_data_to_kernel = ModelDataToKernel(model_data, cl_environment)
+
         self._starting_points = starting_points
         self._all_buffers, self._params_buffer, self._return_code_buffer = self._create_buffers()
         self._kernel = self._build_kernel(self._parent_optimizer.get_compile_flags_list())
-
-    def __del__(self):
-        list(buffer.release() for buffer in self._all_buffers)
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
@@ -253,12 +249,7 @@ class AbstractParallelOptimizerWorker(Worker):
                                        hostbuf=self._return_codes)
         all_buffers.append(return_code_buffer)
 
-        for data in self._var_data_dict.values():
-            all_buffers.append(cl.Buffer(self._cl_run_context.context,
-                                         cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
-                                         hostbuf=data.get_opencl_data()))
-
-        all_buffers.extend(self._generate_constant_buffers(self._protocol_data_dict, self._model_data_dict))
+        all_buffers.extend(self._model_data_to_kernel.generate_buffers())
 
         return all_buffers, parameters_buffer, return_code_buffer
 
@@ -275,14 +266,10 @@ class AbstractParallelOptimizerWorker(Worker):
             str: The kernel source for this optimization routine.
         """
         nmr_params = self._nmr_params
-        param_code_gen = ParameterCLCodeGenerator(self._cl_environment.device,
-                                                  self._var_data_dict,
-                                                  self._protocol_data_dict,
-                                                  self._model_data_dict)
 
         kernel_source = ''
         kernel_source += get_float_type_def(self._double_precision)
-        kernel_source += str(param_code_gen.get_data_struct())
+        kernel_source += str(self._model_data_to_kernel.get_kernel_data_struct())
 
         if self._use_param_codec:
             param_codec = self._model.get_parameter_codec()
@@ -292,7 +279,7 @@ class AbstractParallelOptimizerWorker(Worker):
         kernel_source += self._get_optimizer_cl_code()
         kernel_source += '''
             __kernel void minimize(
-                ''' + ",\n".join(self._get_kernel_param_names(param_code_gen)) + '''
+                ''' + ",\n".join(self._get_kernel_param_names()) + '''
                 ){
                     int gid = get_global_id(0);
         '''
@@ -303,7 +290,7 @@ class AbstractParallelOptimizerWorker(Worker):
                         x[i] = params[gid * ''' + str(nmr_params) + ''' + i];
                     }
 
-                    ''' + param_code_gen.get_data_struct_init_assignment('data') + '''
+                    ''' + self._model_data_to_kernel.get_data_struct_init_assignment('data') + '''
                     return_codes[gid] = (char) ''' + self._get_optimizer_call_name() + '''(''' + ', '.join(self._get_optimizer_call_args()) + ''');
 
                     ''' + ('decodeParameters(x);' if self._use_param_codec else '') + '''
@@ -315,20 +302,17 @@ class AbstractParallelOptimizerWorker(Worker):
         '''
         return kernel_source
 
-    def _get_kernel_param_names(self, param_code_gen):
+    def _get_kernel_param_names(self):
         """Get the list of kernel parameter names.
 
         This is useful if a subclass extended the buffers with an additional buffer.
-
-        Args:
-            param_code_gen (ParameterCLCodeGenerator): the kernel parameter code generator for the model kernel params.
 
         Returns:
             list of str: the list of kernel parameter names
         """
         kernel_param_names = ['global mot_float_type* params',
                               'global char* return_codes']
-        kernel_param_names.extend(param_code_gen.get_kernel_param_names())
+        kernel_param_names.extend(self._model_data_to_kernel.get_kernel_param_names())
 
         return kernel_param_names
 
