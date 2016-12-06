@@ -69,6 +69,14 @@ mot.model_interfaces module
     :undoc-members:
     :show-inheritance:
 
+mot.random123 module
+--------------------
+
+.. automodule:: mot.random123
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 mot.utils module
 ----------------
 

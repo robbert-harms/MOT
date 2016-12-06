@@ -52,6 +52,14 @@ mot.cl_routines.optimizing.powell module
     :undoc-members:
     :show-inheritance:
 
+mot.cl_routines.optimizing.random_restart module
+------------------------------------------------
+
+.. automodule:: mot.cl_routines.optimizing.random_restart
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 mot.cl_routines.optimizing.simulated_annealing module
 -----------------------------------------------------
 

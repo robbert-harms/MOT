@@ -37,11 +37,12 @@ After installation please continue with testing the installation below.
 *******
 Windows
 *******
-The installation on Windows is a little bit more convoluted due to the lack of a package manager. The installation is a three step procedure:
+The installation on Windows is a little bit more convoluted due to the lack of a package manager. The installation is a multi-step procedure:
 
 1. Installing a :ref:`Python interpreter <install_python>`
-2. Installing the :ref:`PyOpenCL drivers and Python bindings <install_opencl>`
-3. :ref:`Installing MOT <install_mot>`
+2. Installing the :ref:`OpenCL drivers <install_opencl>`
+3. Installing the :ref:`Python OpenCL bindings PyOpenCL <install_pyopencl>`
+4. :ref:`Installing MOT <install_mot>`
 
 
 .. _install_python:
@@ -65,40 +66,45 @@ After installation type in the Windows start bar ``anaconda`` and start the ``an
 
 Installing OpenCL
 =================
-To run Python OpenCL applications (using PyOpenCL), you need an OpenCL driver for your platform and the Python OpenCL bindings.
-Furthermore, to install PyOpenCL you additionally need an OpenCL SDK.
-First, for running OpenCL applications download and install the correct device driver (Intel/AMD/NVidia) for your device with support for OpenCL 1.2 or higher.
+To run OpenCL applications you need an OpenCL driver for your platform.
+Please download and install the correct device driver (Intel/AMD/NVidia) for your device with support for OpenCL 1.2 or higher.
 For graphics cards, make sure you are using the latest version of your graphics driver.
 For Intel processors download the OpenCL runtime from https://software.intel.com/en-us/articles/opencl-drivers
 (OpenCL Runtime for Intel Core and Intel Xeon Processors; towards the end).
 Note that this is only needed if you want to run OpenCL on your CPUs as well as your GPUs.
 
-With the drivers installed and everything up to date, we can now proceed with installing the Python PyOpenCL bindings, ``pyopencl``.
-This is often the most problematic step and errors later on (e.g. in testing MOT) often come down to an incomplete (failed) or incompatible (successful but not working) pyopencl package install.
+.. _install_pyopencl:
+
+Installing PyOpenCL
+===================
+With the drivers installed and everything up to date, we can now proceed with installing the Python OpenCL bindings, ``pyopencl``.
+This is often the most problematic step and errors later on (e.g. in testing MOT) often come down to an incomplete (failed)
+or incompatible (successful but not working) pyopencl package install.
 PyOpenCL can either be installed from a downloadable binary or be compiled from source.
 Using the binary is easiest since manual compilation is more difficult.
 
 
-Using the binary OpenCL package
+Using a binary PyOpenCL package
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Installing a precompiled binary wheel (.whl) is the easiest way to install PyOpenCL, but this leads to incompatibility issues
-if the wheel is not compiled for your specific Python implementation.
-The wheel compatible with most Python and Windows versions is hosted here: :download:`pyopencl-2015.2.4-cp35-none-win_amd64 <./_downloads/pyopencl-2015.2.4-cp35-none-win_amd64.whl>`.
-This is mirrored from a wheel previously available from Christoph Gohlke website, http://www.lfd.uci.edu/~gohlke/pythonlibs/#pyopencl, containing binary packages of various Python libraries.
-We found that some newer binary wheels compiled against the cpython ABI (e.g. cp35m) are incompatible with the Anaconda Python distribution referenced to in this install guide.
-In Windows 7, with Anaconda Python v3.5, the ``pyopencl-2015.2.4-cp35-none-win_amd64.whl`` works because it was compiled for a general ABI.
-However, for another Python implementation (or another OS version, e.g. Windows 10) you can download the latest PyOpenCL binary from Gohlke's website matching your system.
-For example, download ``pyopencl-2016.2-cp35-cp35m-win_amd64.whl``.
+Installing a precompiled binary wheel (.whl) is the easiest way to install PyOpenCL, but only works if the wheel is compiled for your specific Python implementation.
+At Christoph Gohlke website (http://www.lfd.uci.edu/~gohlke/pythonlibs/#pyopencl) you can find a range of PyOpenCL binary packages, if there is a compatible one for your system,
+download that version.
+You can see if it is compatible if the Python version in the binary name matches that of your installed Python version.
+For example if you have Python 3.5 you need to download the wheel with ``cp35m`` in the name (note the format, ``cp<version>m``, the ``m`` is important).
+(To check which Python version you have you can run ``python --version`` in the command line).
 
-After the download, open an Anaconda Prompt (or a normal Windows cmd) and
-change directory to where you downloaded the ``.whl`` file and install the binary using pip:
+If there is no compatible version for your system to be found on Gohlke's website, here is a mirror of an older version by Gohlke that is compatible with most systems:
+:download:`pyopencl-2015.2.4-cp35-none-win_amd64 <./_downloads/pyopencl-2015.2.4-cp35-none-win_amd64.whl>`.
+
+After the download, open an Anaconda Prompt (or a normal Windows cmd) and change directory to where you downloaded the ``.whl`` file.
+Then, install the binary using pip:
 
 .. code-block:: none
 
     > cd %UserProfile%\Downloads
     > pip install <filename>.whl
 
-Please substitute ``<filename>`` for your downloaded filename and let the directory match the directory where you downloaded the ``.whl`` file.
+Please make sure you are in the right directory and please substitute ``<filename>`` for your downloadeded filename.
 
 To test if this binary package works, open a Python shell and type:
 
@@ -106,13 +112,15 @@ To test if this binary package works, open a Python shell and type:
 
     >>> import pyopencl
 
-If that works without messages about missing dll's and cffi problems, you are good to go. If you encounter an error that ends on something like:
+If that works without messages about missing dll's and cffi problems, you are good to go.
+If you encounter an error that ends on something like:
 
 .. code-block:: none
 
     > ImportError: DLL load failed: The specified procedure could not be found.
 
-Then the binary package (.whl file) is not compatible with your OS version and/or Python installation. Either try a different wheel, or try the compilation procedure below.
+Then the binary package (.whl file) is not compatible with your OS version and/or Python installation.
+Either try a different wheel, or try the compilation procedure below.
 
 
 Compile PyOpenCL with Visual Studio 15
@@ -194,6 +202,7 @@ To upgrade MOT when a new version is out, open an Anaconda Prompt or Windows CMD
 
 .. code-block:: none
 
-    > pip install --upgrade mot
+    > pip uninstall mot
+    > pip install mot
 
 to upgrade MOT to the latest version.
