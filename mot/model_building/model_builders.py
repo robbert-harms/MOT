@@ -188,23 +188,6 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             self._evaluation_model.set_noise_level_std(self._problem_data.noise_std)
         return self
 
-    def cmf(self, model_name):
-        """Get the Compartment Model Function object corresponding to the given model name.
-
-        This may be useful for later fixing or adding items to a specific model.
-
-        Args:
-            model_name (str): the name of the compartment model to get
-
-        Returns:
-            CLFunction: the compartment model function with the given name. None if no matching function found.
-        """
-        models = self._get_model_list()
-        for m in models:
-            if m.name == model_name:
-                return m
-        return None
-
     def add_parameter_dependency(self, parameter_name, dependency):
         """Adds a dependency rule to this model. The dependency is supposed to be a ParameterDependency object.
 
@@ -302,8 +285,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
     def get_data_buffers(self, context):
         buffers = []
 
-        items = [(self._get_problems_var_data(), 'var_', True),
-                 (self._get_problems_protocol_data(), 'prtcl_', False),
+        items = [(self._get_variable_data(), 'var_', True),
+                 (self._get_protocol_data(), 'prtcl_', False),
                  (self._get_static_data(), 'static_', False)]
 
         for data_dict, key_prefix, new_data in items:
@@ -336,7 +319,9 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
     def get_parameter_decode_function(self, fname='decodeParameters'):
         func = '''
-            void ''' + fname + '''(const void* data, mot_float_type* x){'''
+            void ''' + fname + '''(const void* data_void, mot_float_type* x){
+        '''
+        func += self.get_kernel_data_struct_type() + '* data = (' + self.get_kernel_data_struct_type() + '*)data_void;'
         for d in self._get_parameter_transformations()[1]:
             func += "\n" + "\t" * 4 + d.format('x')
         return func + '''
@@ -345,7 +330,9 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
     def get_parameter_encode_function(self, fname='encodeParameters'):
         func = '''
-            void ''' + fname + '''(const void* data, mot_float_type* x){'''
+            void ''' + fname + '''(const void* data_void, mot_float_type* x){
+        '''
+        func += self.get_kernel_data_struct_type() + '* data = (' + self.get_kernel_data_struct_type() + '*)data_void;'
         for d in self._get_parameter_transformations()[0]:
             func += "\n" + "\t" * 4 + d.format('x')
         return func + '''
@@ -616,15 +603,29 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             ind = self._get_parameter_estimable_index(name)
             transform = parameter.parameter_transform
 
-            deps_names = []
+            dependency_names = []
             for dep in transform.dependencies:
                 dep_ind = self._get_parameter_estimable_index(dep[0].name + '.' + dep[1].name)
-                deps_names.append('{0}[' + str(dep_ind) + ']')
+                dependency_names.append('{0}[' + str(dep_ind) + ']')
 
-            s = '{0}[' + str(ind) + '] = ' + transform.get_cl_decode(parameter, '{0}[' + str(ind) + ']', deps_names)
+            if self._all_elements_equal(parameter.lower_bound):
+                lower_bound = str(self._get_single_value(parameter.lower_bound))
+            else:
+                lower_bound = 'data->var_data_lb_' + name.replace('.', '_')
+
+            if self._all_elements_equal(parameter.lower_bound):
+                upper_bound = str(self._get_single_value(parameter.upper_bound))
+            else:
+                upper_bound = 'data->var_data_ub_' + name.replace('.', '_')
+
+            s = '{0}[' + str(ind) + '] = ' + transform.get_cl_decode().create_assignment(
+                '{0}[' + str(ind) + ']', lower_bound, upper_bound, dependency_names) + ';'
+
             dec_func_list.append(s)
 
-            s = '{0}[' + str(ind) + '] = ' + transform.get_cl_encode(parameter, '{0}[' + str(ind) + ']', deps_names)
+            s = '{0}[' + str(ind) + '] = ' + transform.get_cl_decode().create_assignment(
+                '{0}[' + str(ind) + ']', lower_bound, upper_bound, dependency_names) + ';'
+
             enc_func_list.append(s)
 
         return tuple(reversed(enc_func_list)), dec_func_list
@@ -894,6 +895,23 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         return static_data_dict
 
+    def _get_bounds_as_var_data(self):
+        bounds_dict = {}
+
+        for m, p in self._get_free_parameters_list():
+            lower_bound = p.lower_bound
+            upper_bound = p.upper_bound
+
+            if not self._all_elements_equal(lower_bound):
+                data_adapter = SimpleDataAdapter(lower_bound, p.data_type, self._get_mot_float_type())
+                bounds_dict.update({'lb_' + m.name + '_' + p.name: data_adapter})
+
+            if not self._all_elements_equal(upper_bound):
+                data_adapter = SimpleDataAdapter(upper_bound, p.data_type, self._get_mot_float_type())
+                bounds_dict.update({'ub_' + m.name + '_' + p.name: data_adapter})
+
+        return bounds_dict
+
     def _get_static_map_value(self, parameter):
         """Get the map value for the given parameter of the given model.
 
@@ -1124,7 +1142,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 return m, p
         raise ValueError('The parameter with the given name ({}) could not be found.'.format(model_param_name))
 
-    def _get_problems_var_data(self):
+    def _get_variable_data(self):
         """See super class OptimizeModelInterface for details
 
         When overriding this function, please note that it should adhere to the attribute problems_to_analyze.
@@ -1144,10 +1162,11 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         var_data_dict.update(self._get_fixed_parameters_as_var_data())
         var_data_dict.update(self._get_static_parameters_as_var_data())
+        var_data_dict.update(self._get_bounds_as_var_data())
 
         return var_data_dict
 
-    def _get_problems_protocol_data(self):
+    def _get_protocol_data(self):
         protocol_info = self._problem_data.protocol
         return_data = {}
         for m, p in self._get_model_parameter_list():
@@ -1194,7 +1213,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         data_struct_init = []
         data_struct_names = []
 
-        for key, data_adapter in self._get_problems_var_data().items():
+        for key, data_adapter in self._get_variable_data().items():
             clmemtype = 'global'
 
             cl_data = data_adapter.get_opencl_data()
@@ -1220,7 +1239,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 data_struct_names.append(clmemtype + ' ' + data_type + '* ' + param_name)
                 data_struct_init.append(param_name + ' + gid * ' + str(mult))
 
-        for key, data_adapter in self._get_problems_protocol_data().items():
+        for key, data_adapter in self._get_protocol_data().items():
             clmemtype = 'global'
 
             cl_data = data_adapter.get_opencl_data()

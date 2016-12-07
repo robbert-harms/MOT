@@ -13,7 +13,7 @@ class Tree(object):
         """Create a new Tree.
 
         In this tree, every node is a tree object as well. The tree is implemented as a linked list.
-        Each node has a reference to its childrens and to its parent node.
+        Each node has a reference to its children and to its parent node.
 
         Args:
             data (object): The data object

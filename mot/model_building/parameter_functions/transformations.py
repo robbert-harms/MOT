@@ -25,31 +25,19 @@ class AbstractTransformation(object):
         super(AbstractTransformation, self).__init__()
         self._dependencies = dependencies
 
-    def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):
-        """Get the CL encode string
+    def get_cl_encode(self):
+        """Get the CL encode assignment constructor
 
-        Args:
-            parameter (CLFunctionParameter): The parameter used as context for building the encode function.
-            parameter_name (str): The name of this parameter, needed to generate the cl code
-            dependencies_names (list of str): For each dependency (ordered) give the name how it should be used in the
-                cl code.
-
-        Returns:
-            str: The cl code that can encode the parameter.
+        Returns
+            AssignmentConstructor: The cl code assignment constructor for encoding the parameter.
         """
         pass
 
-    def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
-        """Get the CL decode string
-
-        Args:
-            parameter (CLFunctionParameter): The parameter used as context for building the decode function.
-            parameter_name (str): The name of this parameter, needed to generate the cl code
-            dependencies_names (list of str): For each dependency (ordered) give the name how it should be used in the
-                cl code.
+    def get_cl_decode(self):
+        """Get the CL decode assignment constructor
 
         Returns:
-            str: The cl code that can decode the parameter.
+            AssignmentConstructor: The cl code assignment constructor for decoding the parameter.
         """
         pass
 
@@ -58,105 +46,85 @@ class AbstractTransformation(object):
         """Get a list of (CLFunction, CLFunctionParameter) pairs where this transformation depends on
 
         Returns:
-            A list of (CLFunction, CLFunctionParameter) pairs.
+            list of tuple: A list of (CLFunction, CLFunctionParameter) tuples.
         """
         return self._dependencies
 
 
-class SimpleTransformation(AbstractTransformation):
-    def __init__(self, cl_encode, cl_decode):
-        """Adds a simple parameter transformation rule.
+class IdentityTransform(AbstractTransformation):
 
-        This is for one parameter, a simple one-line transformation transformation.
-
-        Args:
-            cl_to_encoded (str): the assignment that transforms the parameter from model space to encoded space.
-                It should contain one {} used for the parameter_name variable.
-            cl_to_model (str): the assignment that transforms the parameter from encoded space to model space.
-                It should contain one {} used for the parameter_name variable.
-        """
-        super(SimpleTransformation, self).__init__()
-        self._cl_encode = cl_encode
-        self._cl_decode = cl_decode
-
-    def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):
-        return self._cl_encode.format(parameter_name)
-
-    def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
-        return self._cl_decode.format(parameter_name)
-
-
-class IdentityTransform(SimpleTransformation):
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         """The identity transform does no transformation and returns the input given."""
-        super(IdentityTransform, self).__init__('{};', '{};')
+        super(IdentityTransform, self).__init__(*args, **kwargs)
+
+    def get_cl_encode(self):
+        return FormatAssignmentConstructor('{parameter_variable}')
+
+    def get_cl_decode(self):
+        return FormatAssignmentConstructor('{parameter_variable}')
 
 
 class ClampTransform(AbstractTransformation):
     """The clamp transformation limits the parameter between its lower and upper bound using the clamp function."""
 
-    def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):
-        return 'clamp((mot_float_type)' + parameter_name + ', (mot_float_type)' + str(parameter.lower_bound) + \
-               ', (mot_float_type)' + str(parameter.upper_bound) + ');'
+    def get_cl_encode(self):
+        return FormatAssignmentConstructor('clamp((mot_float_type){parameter_variable}, '
+                                           '(mot_float_type){lower_bound}, (mot_float_type){upper_bound})')
 
-    def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
-        return 'clamp((mot_float_type)' + parameter_name + ', (mot_float_type)' + str(parameter.lower_bound) + \
-               ', (mot_float_type)' + str(parameter.upper_bound) + ');'
+    def get_cl_decode(self):
+        return FormatAssignmentConstructor('clamp((mot_float_type){parameter_variable}, '
+                                           '(mot_float_type){lower_bound}, '
+                                           '(mot_float_type){upper_bound})')
 
 
 class CosSqrClampTransform(AbstractTransformation):
     """The clamp transformation limits the parameter between its lower and upper bound using a cos(sqr()) transform."""
 
-    def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):
-        template = 'acos(clamp(sqrt(fabs( ({param_name} - {lower_bound}) / ({upper_bound} - {lower_bound}) )), ' \
-                   '    (mot_float_type)-1, (mot_float_type)1));'
-        return template.format(param_name=parameter_name, lower_bound=parameter.lower_bound,
-                             upper_bound=parameter.upper_bound)
+    def get_cl_encode(self):
+        return FormatAssignmentConstructor('acos(clamp(sqrt(fabs( ({parameter_variable} - {lower_bound}) / '
+                                           '                      ({upper_bound} - {lower_bound}) )), '
+                                           '                (mot_float_type)-1, (mot_float_type)1))')
 
-    def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
-        return 'pown(cos(' + parameter_name + '), 2) * ' + \
-               '(' + str(parameter.upper_bound) + ' - ' + str(parameter.lower_bound) + ')' + \
-                ' + ' + str(parameter.lower_bound) + ';'
+    def get_cl_decode(self):
+        return FormatAssignmentConstructor('pown(cos({parameter_variable}), 2) * ' +
+                                           '({upper_bound} - {lower_bound}) + {lower_bound}')
 
 
 class SinSqrClampTransform(AbstractTransformation):
     """The clamp transformation limits the parameter between its lower and upper bound using a sin(sqr()) transform."""
 
-    def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):
-        template = 'asin(clamp(sqrt(fabs( ({param_name} - {lower_bound}) / ({upper_bound} - {lower_bound}) )), ' \
-                   '    (mot_float_type)-1, (mot_float_type)1));'
-        return template.format(param_name=parameter_name, lower_bound=parameter.lower_bound,
-                               upper_bound=parameter.upper_bound)
+    def get_cl_encode(self):
+        return FormatAssignmentConstructor('asin(clamp(sqrt(fabs( ({parameter_variable} - {lower_bound}) / '
+                                           '                      ({upper_bound} - {lower_bound}) )), '
+                                           '                (mot_float_type)-1, (mot_float_type)1))')
 
-    def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
-        return 'pown(sin(' + parameter_name + '), 2) * ' + \
-               '(' + str(parameter.upper_bound) + ' - ' + str(parameter.lower_bound) + ')' + \
-               ' + ' + str(parameter.lower_bound) + ';'
+    def get_cl_decode(self):
+        return FormatAssignmentConstructor('pown(sin({parameter_variable}), 2) * ' +
+                                           '({upper_bound} - {lower_bound}) + {lower_bound}')
 
 
 class SqrClampTransform(AbstractTransformation):
     """The clamp transformation limits the parameter between its lower and upper bound using a sqr() transform."""
 
-    def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):
-        return 'sqrt(' + parameter_name + ');'
+    def get_cl_encode(self):
+        return FormatAssignmentConstructor('sqrt({parameter_variable})')
 
-    def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
-        return 'clamp((mot_float_type)(' + parameter_name + ' * ' + parameter_name + '), (mot_float_type)' + \
-               str(parameter.lower_bound) + ', (mot_float_type)' + str(parameter.upper_bound) + ');'
+    def get_cl_decode(self):
+        return FormatAssignmentConstructor('clamp((mot_float_type)({parameter_variable} * {parameter_variable}), '
+                                           '      (mot_float_type){lower_bound}, '
+                                           '      (mot_float_type){upper_bound})')
 
 
 class SinSqrClampDependentTransform(AbstractTransformation):
     """The clamp transformation limits the parameter between 0 and the given parameter with the sin(sqr()) transform."""
 
-    def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):
-        return 'asin(sqrt(fabs((' + parameter_name + ' - ' + \
-               str(parameter.lower_bound) + ') / (' + \
-               dependencies_names[0] + ' - ' + \
-               str(parameter.lower_bound) + '))));'
+    def get_cl_encode(self):
+        return FormatAssignmentConstructor('asin(sqrt(fabs(({parameter_variable} - {lower_bound}) / '
+                                           '               ({dependency_variable_0} - {lower_bound}))))')
 
-    def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
-        return 'pown(sin(' + parameter_name + '), 2) * ' + dependencies_names[0] + ' + ' \
-                    + str(parameter.lower_bound) + ';'
+    def get_cl_decode(self):
+        return FormatAssignmentConstructor('pown(sin({parameter_variable}), 2) * {dependency_variable_0} '
+                                           '        + {lower_bound}')
 
 
 class AbsModXTransform(AbstractTransformation):
@@ -165,21 +133,13 @@ class AbsModXTransform(AbstractTransformation):
         super(AbsModXTransform, self).__init__(dependencies)
         self._x = x
 
-    def get_cl_encode(self, parameter, parameter_name, dependencies_names=()):
-        return 'fmod((mot_float_type)fabs(' + parameter_name + '), (mot_float_type)' + str(self._x) + ');'
+    def get_cl_encode(self):
+        return FormatAssignmentConstructor('fmod((mot_float_type)fabs({parameter_variable}), '
+                                           '(mot_float_type)' + str(self._x) + ')')
 
-    def get_cl_decode(self, parameter, parameter_name, dependencies_names=()):
-        return 'fmod((mot_float_type)fabs(' + parameter_name + '), (mot_float_type)' + str(self._x) + ');'
-
-
-class CosSqrTransform(SimpleTransformation):
-    def __init__(self):
-        super(CosSqrTransform, self).__init__('acos(sqrt(fabs({})));', 'pown(cos({}), 2);')
-
-
-class SinSqrTransform(SimpleTransformation):
-    def __init__(self):
-        super(SinSqrTransform, self).__init__('asin(sqrt(fabs({})));', 'pown(sin({}), 2);')
+    def get_cl_decode(self):
+        return FormatAssignmentConstructor('fmod((mot_float_type)fabs({parameter_variable}), '
+                                           '(mot_float_type)' + str(self._x) + ')')
 
 
 class AbsModPiTransform(AbsModXTransform):
@@ -187,6 +147,44 @@ class AbsModPiTransform(AbsModXTransform):
         super(AbsModPiTransform, self).__init__('M_PI')
 
 
-class SqrTransform(SimpleTransformation):
-    def __init__(self):
-        super(SqrTransform, self).__init__('sqrt(fabs({}));', 'pown({}, 2);')
+class AssignmentConstructor(object):
+
+    def create_assignment(self, parameter_variable, lower_bound, upper_bound):
+        """Create the assignment string.
+
+        Args:
+            parameter_variable (str): the name of the parameter variable holding the current value in the kernel
+            lower_bound (str): the value or the name of the variable holding the value for the lower bound
+            upper_bound (str): the value or the name of the variable holding the value for the upper bound
+
+        Returns:
+            str: the transformation assignment
+        """
+
+
+class FormatAssignmentConstructor(AssignmentConstructor):
+
+    def __init__(self, assignment):
+        """Assignment constructor that formats the given assignment template.
+
+        This expects that the assignment string has elements like:
+
+        * ``{parameter_variable}``: for the parameter variable
+        * ``{lower_bound}``: for the lower bound
+        * ``{upper_bound}``: for the upper bound
+        * ``{dependency_variable_<n>}: for the dependency variable names
+
+        Args:
+            assignment (str): the string containing the assignment template.
+        """
+        self._assignment = assignment
+
+    def create_assignment(self, parameter_variable, lower_bound, upper_bound, dependency_variables=()):
+        assignment = self._assignment.replace('{parameter_variable}', parameter_variable)
+        assignment = assignment.replace('{lower_bound}', lower_bound)
+        assignment = assignment.replace('{upper_bound}', upper_bound)
+
+        for ind, var_name in enumerate(dependency_variables):
+            assignment = assignment.replace('{dependency_variable_' + str(ind) + '}', var_name)
+
+        return assignment
