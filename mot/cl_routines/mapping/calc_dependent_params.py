@@ -1,7 +1,5 @@
 import pyopencl as cl
-
-from mot.model_data import SimpleModelData
-from ...utils import results_to_dict, get_float_type_def, ModelDataToKernel
+from ...utils import results_to_dict, get_float_type_def
 from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
 import numpy as np
@@ -16,7 +14,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class CalculateDependentParameters(CLRoutine):
 
-    def __init__(self, cl_environments=None, load_balancer=None, compile_flags=None, double_precision=False, **kwargs):
+    def __init__(self, double_precision=False, **kwargs):
         """CL code for calculating the dependent parameters.
 
         Some of the models may contain parameter dependencies. We would like to return the maps for these parameters
@@ -27,20 +25,17 @@ class CalculateDependentParameters(CLRoutine):
             double_precision (boolean): if we will use the double (True) or single floating (False) type
                 for the calculations
         """
-        super(CalculateDependentParameters, self).__init__(cl_environments=cl_environments,
-                                                           load_balancer=load_balancer, **kwargs)
+        super(CalculateDependentParameters, self).__init__(**kwargs)
         self._double_precision = double_precision
 
-    def calculate(self, fixed_param_values, estimated_parameters_list, parameters_listing, dependent_parameter_names):
+    def calculate(self, model, estimated_parameters_list, parameters_listing, dependent_parameter_names):
         """Calculate the dependent parameters
 
         This uses the calculated parameters in the results dictionary to run the parameters_listing in CL to obtain
         the maps for the dependent parameters.
 
         Args:
-            fixed_param_values (dict): The dictionary with fixed parameter values to be used for parameters that are
-                constant. The values are supposed to be DataAdapters. This is interpreted as 'var_data_dict'.
-                Data that is variable per problem instance.
+            model (mot.model_interfaces.OptimizeModelInterface): the model for which to get the dependent parameters
             estimated_parameters_list (list of ndarray): The list with the one-dimensional
                 ndarray of estimated parameters
             parameters_listing (str): The parameters listing in CL
@@ -62,7 +57,7 @@ class CalculateDependentParameters(CLRoutine):
 
         workers = self._create_workers(
             lambda cl_environment: _CDPWorker(cl_environment, self.get_compile_flags_list(),
-                                              fixed_param_values, len(estimated_parameters_list),
+                                              model, len(estimated_parameters_list),
                                               estimated_parameters, parameters_listing,
                                               dependent_parameter_names, results_list, self._double_precision))
         self.load_balancer.process(workers, estimated_parameters_list[0].shape[0])
@@ -72,7 +67,7 @@ class CalculateDependentParameters(CLRoutine):
 
 class _CDPWorker(Worker):
 
-    def __init__(self, cl_environment, compile_flags, var_data_dict, nmr_estimated_params, estimated_parameters,
+    def __init__(self, cl_environment, compile_flags, model, nmr_estimated_params, estimated_parameters,
                  parameters_listing, dependent_parameter_names, results_list, double_precision):
         super(_CDPWorker, self).__init__(cl_environment)
 
@@ -82,8 +77,7 @@ class _CDPWorker(Worker):
         self._results_list = results_list
         self._double_precision = double_precision
 
-        self._model_data = SimpleModelData(var_data_dict, {}, {})
-        self._model_data_to_kernel = ModelDataToKernel(SimpleModelData(var_data_dict, {}, {}), cl_environment)
+        self._model = model
 
         self._estimated_parameters = estimated_parameters
         self._all_buffers, self._results_list_buffer = self._create_buffers()
@@ -107,7 +101,7 @@ class _CDPWorker(Worker):
 
         data_buffers = [estimated_parameters_buf, results_buffer]
 
-        data_buffers.extend(self._model_data_to_kernel.generate_buffers())
+        data_buffers.extend(self._model.get_data_buffers(self._cl_run_context.context))
 
         return data_buffers, results_buffer
 
@@ -120,19 +114,20 @@ class _CDPWorker(Worker):
                                    ' + ' + str(i) + '] = ' + p + ";\n"
 
         kernel_param_names = ['global mot_float_type* params', 'global mot_float_type* results']
-        kernel_param_names.extend(self._model_data_to_kernel.get_kernel_param_names())
+        kernel_param_names.extend(self._model.get_kernel_param_names(self._cl_environment.device))
 
         kernel_source = ''
         kernel_source += get_float_type_def(self._double_precision)
-        kernel_source += self._model_data_to_kernel.get_kernel_data_struct()
+        kernel_source += self._model.get_kernel_data_struct(self._cl_environment.device)
         kernel_source += '''
             __kernel void transform(
                 ''' + ",\n".join(kernel_param_names) + '''
                 ){
                     int gid = get_global_id(0);
 
-                    ''' + self._model_data_to_kernel.get_data_struct_init_assignment('data_var') + '''
-                    optimize_data* data = &data_var;
+                    ''' + self._model.get_kernel_data_struct_initialization(self._cl_environment.device,
+                                                                            'data_var') + '''
+                    ''' + self._model.get_kernel_data_struct_type() + '''* data = &data_var;
 
                     mot_float_type x[''' + str(self._nmr_estimated_params) + '''];
                     int i = 0;

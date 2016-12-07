@@ -37,7 +37,7 @@ class TestRosenbrock(CLRoutineTestCase):
 
     def setUp(self):
         self.model = Rosenbrock(5)
-        self.optimizers = (NMSimplex(), Powell())
+        self.optimizers = (NMSimplex(), Powell(patience=10))
 
     def test_model(self):
         for optimizer in self.optimizers:

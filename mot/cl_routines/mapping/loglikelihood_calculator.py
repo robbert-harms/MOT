@@ -2,7 +2,7 @@ from collections import MutableMapping
 
 import pyopencl as cl
 import numpy as np
-from ...utils import get_float_type_def, ModelDataToKernel
+from ...utils import get_float_type_def
 from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
 
@@ -70,8 +70,6 @@ class _LogLikelihoodCalculatorWorker(Worker):
         self._parameters = parameters
         self._evaluation_model = evaluation_model
 
-        self._model_data_to_kernel = ModelDataToKernel(model.get_model_data(), cl_environment)
-
         self._all_buffers, self._likelihoods_buffer = self._create_buffers()
         self._kernel = self._build_kernel(compile_flags)
 
@@ -91,7 +89,7 @@ class _LogLikelihoodCalculatorWorker(Worker):
                                   hostbuf=self._parameters)
 
         all_buffers = [params_buffer, likelihoods_buffer]
-        all_buffers.extend(self._model_data_to_kernel.generate_buffers())
+        all_buffers.extend(self._model.get_data_buffers(self._cl_run_context.context))
 
         return all_buffers, likelihoods_buffer
 
@@ -100,24 +98,24 @@ class _LogLikelihoodCalculatorWorker(Worker):
         nmr_params = self._parameters.shape[1]
 
         kernel_param_names = ['global mot_float_type* params', 'global mot_float_type* log_likelihoods']
-        kernel_param_names.extend(self._model_data_to_kernel.get_kernel_param_names())
+        kernel_param_names.extend(self._model.get_kernel_param_names(self._cl_environment.device))
         kernel_source = ''
         kernel_source += get_float_type_def(self._double_precision)
-        kernel_source += self._model_data_to_kernel.get_kernel_data_struct()
+        kernel_source += self._model.get_kernel_data_struct(self._cl_environment.device)
         kernel_source += cl_func
         kernel_source += '''
             __kernel void run_kernel(
                 ''' + ",\n".join(kernel_param_names) + '''
                 ){
                     int gid = get_global_id(0);
-                    ''' + self._model_data_to_kernel.get_data_struct_init_assignment('data') + '''
+                    ''' + self._model.get_kernel_data_struct_initialization(self._cl_environment.device, 'data') + '''
 
                     mot_float_type x[''' + str(nmr_params) + '''];
                     for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
                         x[i] = params[gid * ''' + str(nmr_params) + ''' + i];
                     }
 
-                    log_likelihoods[gid] = getLogLikelihood(&data, x);
+                    log_likelihoods[gid] = getLogLikelihood((void*)&data, x);
             }
         '''
         return kernel_source

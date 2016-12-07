@@ -1,8 +1,7 @@
 from collections import MutableMapping
-
 import pyopencl as cl
 import numpy as np
-from ...utils import get_float_type_def, ModelDataToKernel
+from ...utils import get_float_type_def
 from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
 
@@ -63,8 +62,6 @@ class _EvaluateModelWorker(Worker):
         self._evaluations = evaluations
         self._parameters = parameters
 
-        self._model_data_to_kernel = ModelDataToKernel(model.get_model_data(), cl_environment)
-
         self._all_buffers, self._evaluations_buffer = self._create_buffers()
         self._kernel = self._build_kernel(compile_flags)
 
@@ -84,7 +81,7 @@ class _EvaluateModelWorker(Worker):
                                  hostbuf=self._parameters),
                        evaluations_buffer]
 
-        all_buffers.extend(self._model_data_to_kernel.generate_buffers())
+        all_buffers.extend(self._model.get_data_buffers(self._cl_run_context.context))
 
         return all_buffers, evaluations_buffer
 
@@ -93,20 +90,20 @@ class _EvaluateModelWorker(Worker):
         nmr_params = self._parameters.shape[1]
 
         kernel_param_names = ['global mot_float_type* params', 'global mot_float_type* estimates']
-        kernel_param_names.extend(self._model_data_to_kernel.get_kernel_param_names())
+        kernel_param_names.extend(self._model.get_kernel_param_names(self._cl_environment.device))
 
         kernel_source = '''
             #define NMR_INST_PER_PROBLEM ''' + str(self._model.get_nmr_inst_per_problem()) + '''
         '''
         kernel_source += get_float_type_def(self._model.double_precision)
-        kernel_source += self._model_data_to_kernel.get_kernel_data_struct()
+        kernel_source += self._model.get_kernel_data_struct(self._cl_environment.device)
         kernel_source += cl_func
         kernel_source += '''
             __kernel void get_estimates(
                 ''' + ",\n".join(kernel_param_names) + '''
                 ){
                     int gid = get_global_id(0);
-                    ''' + self._model_data_to_kernel.get_data_struct_init_assignment('data') + '''
+                    ''' + self._model.get_kernel_data_struct_initialization(self._cl_environment.device, 'data') + '''
 
                     mot_float_type x[''' + str(nmr_params) + '''];
                     for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
@@ -116,7 +113,7 @@ class _EvaluateModelWorker(Worker):
                     global mot_float_type* result = estimates + gid * NMR_INST_PER_PROBLEM;
 
                     for(int i = 0; i < NMR_INST_PER_PROBLEM; i++){
-                        result[i] = evaluateModel(&data, x, i);
+                        result[i] = evaluateModel((void*)&data, x, i);
                     }
             }
         '''

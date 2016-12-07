@@ -1,7 +1,6 @@
 import numpy as np
-
 from mot.cl_data_type import CLDataType
-from mot.model_data import SimpleDataAdapter
+from mot.model_building.data_adapter import SimpleDataAdapter
 from mot.model_interfaces import OptimizeModelInterface
 
 __author__ = 'Robbert Harms'
@@ -25,21 +24,31 @@ class Rosenbrock(OptimizeModelInterface):
     def name(self):
         return 'rosenbrock'
 
-    def get_problems_var_data(self):
+    def get_data_buffers(self, context):
         return {}
 
-    def get_problems_protocol_data(self):
-        return {}
+    def get_kernel_data_struct(self, device):
+        return '''
+            typedef struct{
+                constant void* place_holder;
+            } ''' + self.get_kernel_data_struct_type() + ''';
+        '''
 
-    def get_model_data(self):
-        return {}
+    def get_kernel_data_struct_type(self):
+        return 'optimize_data'
+
+    def get_kernel_param_names(self, device):
+        return []
+
+    def get_kernel_data_struct_initialization(self, device, variable_name):
+        return self.get_kernel_data_struct_type() + ' ' + variable_name + ' = {0};'
 
     def get_nmr_problems(self):
         return 1
 
     def get_model_eval_function(self, fname='evaluateModel'):
         return '''
-            double ''' + fname + '''(const optimize_data* const data, const double* const x,
+            double ''' + fname + '''(const void* const data, const double* const x,
                                      const int observation_index){
                 double sum = 0;
                 for(int i = 0; i < ''' + str(self.n) + ''' - 1; i++){
@@ -51,7 +60,7 @@ class Rosenbrock(OptimizeModelInterface):
 
     def get_observation_return_function(self, fname='getObservation'):
         return '''
-            double ''' + fname + '''(const optimize_data* const data, const int observation_index){
+            double ''' + fname + '''(const void* const data, const int observation_index){
                 return 0;
             }
         '''
@@ -62,7 +71,7 @@ class Rosenbrock(OptimizeModelInterface):
         func = self.get_model_eval_function(eval_fname)
         func += self.get_observation_return_function(obs_fname)
         return func + '''
-            double ''' + fname + '''(const optimize_data* const data, double* const x){
+            double ''' + fname + '''(const void* const data, double* const x){
                 return ''' + obs_fname + '''(data, 1) -''' + eval_fname + '''(data, x, 1);
             }
         '''
@@ -73,7 +82,7 @@ class Rosenbrock(OptimizeModelInterface):
         func = self.get_model_eval_function(eval_fname)
         func += self.get_observation_return_function(obs_fname)
         return func + '''
-            void ''' + fname + '''(const optimize_data* const data, mot_float_type* const x, mot_float_type* result){
+            void ''' + fname + '''(const void* const data, mot_float_type* const x, mot_float_type* result){
                 result[1] = ''' + obs_fname + '''(data, 1) - ''' + eval_fname + '''(data, x, 1);
             }
         '''
@@ -130,21 +139,31 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
     def name(self):
         return 'matlab_lsqnonlin_example'
 
-    def get_problems_var_data(self):
+    def get_data_buffers(self, context):
         return {}
 
-    def get_problems_protocol_data(self):
-        return {}
+    def get_kernel_data_struct(self, device):
+        return '''
+            typedef struct{
+                constant void* place_holder;
+            } ''' + self.get_kernel_data_struct_type() + ''';
+        '''
 
-    def get_model_data(self):
-        return {}
+    def get_kernel_data_struct_type(self):
+        return 'optimize_data'
+
+    def get_kernel_param_names(self, device):
+        return []
+
+    def get_kernel_data_struct_initialization(self, device, variable_name):
+        return self.get_kernel_data_struct_type() + ' ' + variable_name + ' = {0};'
 
     def get_nmr_problems(self):
         return 1
 
     def get_model_eval_function(self, fname='evaluateModel'):
         return '''
-            double ''' + fname + '''(const optimize_data* const data, const double* const x,
+            double ''' + fname + '''(const void* const data, const double* const x,
                                      const int k){
                 return -(2 + 2 * (k+1) - exp((k+1) * x[0]) - exp((k+1) * x[1]));
             }
@@ -152,7 +171,7 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
 
     def get_observation_return_function(self, fname='getObservation'):
         return '''
-            double ''' + fname + '''(const optimize_data* const data, const int observation_index){
+            double ''' + fname + '''(const void* const data, const int observation_index){
                 return 0;
             }
         '''
@@ -163,7 +182,7 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
         func = self.get_model_eval_function(eval_fname)
         func += self.get_observation_return_function(obs_fname)
         return func + '''
-            double ''' + fname + '''(const optimize_data* const data, double* const x){
+            double ''' + fname + '''(const void* const data, double* const x){
                 double sum = 0;
                 for(int i = 0; i < 10; i++){
                     sum += ''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i);
@@ -178,7 +197,7 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
         func = self.get_model_eval_function(eval_fname)
         func += self.get_observation_return_function(obs_fname)
         return func + '''
-            void ''' + fname + '''(const optimize_data* const data, mot_float_type* const x,
+            void ''' + fname + '''(const void* const data, mot_float_type* const x,
                                      mot_float_type* result){
                 for(int i = 0; i < 10; i++){
                     result[i] = ''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i);

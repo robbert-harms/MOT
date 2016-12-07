@@ -3,7 +3,7 @@ import numpy as np
 from mot.cl_routines.mapping.error_measures import ErrorMeasures
 from mot.cl_routines.mapping.residual_calculator import ResidualCalculator
 from mot.random123 import get_random123_cl_code, RandomStartingPoint
-from ...utils import results_to_dict, get_float_type_def, ModelDataToKernel
+from ...utils import results_to_dict, get_float_type_def
 from ...load_balance_strategies import Worker
 from ...cl_routines.sampling.base import AbstractSampler
 
@@ -84,7 +84,6 @@ class MetropolisHastings(AbstractSampler):
 
         workers = self._create_workers(lambda cl_environment: _MHWorker(
             cl_environment, self.get_compile_flags_list(), model, parameters, samples,
-            model.get_model_data(),
             self.nmr_samples, self.burn_length, self.sample_intervals,
             self.proposal_update_intervals))
         self.load_balancer.process(workers, model.get_nmr_problems())
@@ -138,7 +137,7 @@ class MetropolisHastings(AbstractSampler):
 class _MHWorker(Worker):
 
     def __init__(self, cl_environment, compile_flags, model, parameters, samples,
-                 model_data, nmr_samples, burn_length, sample_intervals,
+                 nmr_samples, burn_length, sample_intervals,
                  proposal_update_intervals):
         super(_MHWorker, self).__init__(cl_environment)
 
@@ -154,8 +153,6 @@ class _MHWorker(Worker):
 
         self._rand123_starting_point = RandomStartingPoint()
 
-        self._model_data_to_kernel = ModelDataToKernel(model_data, cl_environment)
-
         self._kernel = self._build_kernel(compile_flags)
 
     def calculate(self, range_start, range_end):
@@ -168,7 +165,7 @@ class _MHWorker(Worker):
                                 cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
                                 hostbuf=self._samples[range_start:range_end, ...])
         data_buffers.append(samples_buf)
-        data_buffers.extend(self._model_data_to_kernel.generate_buffers())
+        data_buffers.extend(self._model.get_data_buffers(self._cl_run_context.context))
         kernel_event = self._kernel.sample(self._cl_run_context.queue, (int(nmr_problems), ), None, *data_buffers)
 
         return [self._enqueue_readout(samples_buf, self._samples, 0, nmr_problems, [kernel_event])]
@@ -178,7 +175,7 @@ class _MHWorker(Worker):
 
         kernel_param_names = ['global mot_float_type* params',
                               'global mot_float_type* samples']
-        kernel_param_names.extend(self._model_data_to_kernel.get_kernel_param_names())
+        kernel_param_names.extend(self._model.get_kernel_param_names(self._cl_environment.device))
 
         proposal_state_size = len(self._model.get_proposal_state())
         proposal_state = '{' + ', '.join(map(str, self._model.get_proposal_state())) + '}'
@@ -189,7 +186,7 @@ class _MHWorker(Worker):
         '''
         kernel_source += get_random123_cl_code()
         kernel_source += get_float_type_def(self._model.double_precision)
-        kernel_source += self._model_data_to_kernel.get_kernel_data_struct()
+        kernel_source += self._model.get_kernel_data_struct(self._cl_environment.device)
         kernel_source += self._model.get_log_prior_function('getLogPrior')
         kernel_source += self._model.get_proposal_function('getProposal')
         kernel_source += self._model.get_proposal_state_update_function('updateProposalState')
@@ -225,7 +222,7 @@ class _MHWorker(Worker):
                                void* rng_data,
                                double* const current_likelihood,
                                mot_float_type* const current_prior,
-                               const optimize_data* const data,
+                               const void* const data,
                                mot_float_type* const proposal_state,
                                uint * const ac_between_proposal_updates){
 
@@ -279,7 +276,7 @@ class _MHWorker(Worker):
                          void* rng_data,
                          double* const current_likelihood,
                          mot_float_type* const current_prior,
-                         const optimize_data* const data,
+                         const void* const data,
                          mot_float_type* const proposal_state,
                          uint* const ac_between_proposal_updates,
                          uint* const proposal_update_count,
@@ -322,7 +319,7 @@ class _MHWorker(Worker):
                     mot_float_type proposal_state[] = ''' + proposal_state + ''';
                     uint ac_between_proposal_updates[] = ''' + acceptance_counters_between_proposal_updates + ''';
 
-                    ''' + self._model_data_to_kernel.get_data_struct_init_assignment('data') + '''
+                    ''' + self._model.get_kernel_data_struct_initialization(self._cl_environment.device, 'data') + '''
 
                     rand123_data rand123_rng_data = ''' + self._get_rand123_init_cl_code() + ''';
                     void* rng_data = (void*)&rand123_rng_data;
@@ -333,11 +330,11 @@ class _MHWorker(Worker):
                         x[i] = params[gid * ''' + str(self._nmr_params) + ''' + i];
                     }
 
-                    double current_likelihood = getLogLikelihood(&data, x);
+                    double current_likelihood = getLogLikelihood((void*)&data, x);
                     mot_float_type current_prior = getLogPrior(x);
 
                     _sample(x, rng_data, &current_likelihood,
-                            &current_prior, &data, proposal_state, ac_between_proposal_updates,
+                            &current_prior, (void*)&data, proposal_state, ac_between_proposal_updates,
                             &proposal_update_count, samples);
             }
         '''

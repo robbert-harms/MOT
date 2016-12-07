@@ -4,10 +4,8 @@ Since a lot of information about a model is needed to be able to optimize or sam
 information in an interface. Only objects that successful implement the interfaces in this module can be optimized or
 sampled using one of the optimization or sampling routines in MOT.
 
-These interfaces expose data and modelling code. The data is encapsulated in :class:`~mot.data_adapters.DataAdapter`
-and the code should be returned as CL strings. In the future, instead of CL strings we may require returning an
-encapsulating object such that we can run the computations on multiple types of runtime environments
-(CUDA, plain C, ...).
+These interfaces expose data and modeling code. The data is represented in CL buffers that may be memoized for
+future usage. The code should be returned as CL strings.
 """
 
 __author__ = 'Robbert Harms'
@@ -40,12 +38,88 @@ class OptimizeModelInterface(object):
         """
         return False
 
-    def get_model_data(self):
-        """Get the model data storage container.
+    def get_data_buffers(self, context):
+        """Get the buffers for the data this model needs inside the CL kernels.
+
+        Args:
+            context (pyopencl.Context): the context in which to create the buffers
 
         Returns:
-            mot.model_data.ModelData: the model data to use for the computations
+            list of :class:`pyopencl.Buffer`: the pyopencl buffers containing the data this model needs.
         """
+        raise NotImplementedError
+
+    def get_kernel_data_struct(self, device):
+        """Get the CL code for the data structure in the kernel.
+
+        In combination with the :meth:`get_data_buffers`, this returns the data structure matching the buffers.
+
+        This should generates something like:
+
+        .. code-block: c
+
+            typedef struct{
+                ...
+            } <struct_data_type>;
+
+
+        with the struct containing all the data needed in the model. The name can of course be chosen by yourself.
+
+        Args:
+            device (pyopencl.Device): the device for which to generate the data structure
+
+        Returns:
+            str: the kernel data structure CL code
+        """
+        raise NotImplementedError
+
+    def get_kernel_param_names(self, device):
+        """Get for all the data buffers the kernel parameter arguments.
+
+        In combination with the :meth:`get_data_buffers`, this returns a list with kernel arguments for the buffers
+        For example:
+
+        .. code-block: python
+
+            list = ['global float* observations', ...]
+
+        That is, each element is one of the kernel parameter names.
+
+        Args:
+            device (pyopencl.Device): the device for which to generate the data structure
+
+        Returns:
+            list: the kernel parameter names
+        """
+        raise NotImplementedError
+
+    def get_kernel_data_struct_initialization(self, device, variable_name):
+        """The assignment code for the data structure.
+
+        The data structure needs to be generated given the kernel arguments, this function returns
+        the initialization assignment.
+
+        For example:
+
+        .. code-block: c
+            <struct_data_type> <variable_name> = {<buffer_names>};
+
+        Args:
+            device (pyopencl.Device): the device for which to generate the data structure
+            variable_name (str): the name for the generated struct variable
+
+        Returns:
+            str: the initialization assignment for the data structure.
+        """
+        raise NotImplementedError
+
+    def get_kernel_data_struct_type(self):
+        """Get the CL type of the kernel datastruct.
+
+        Returns:
+            str: the CL type of the data struct
+        """
+        raise NotImplementedError
 
     def get_nmr_problems(self):
         """Get the number of problems we need to analyze.
@@ -74,8 +148,8 @@ class OptimizeModelInterface(object):
             str: An CL function with the signature:
                 .. code-block:: c
 
-                    mot_float_type <func_name>(const optimize_data* const data, const mot_float_type* const x,
-                                            const int observation_index);
+                    mot_float_type <func_name>(const void* const data, const mot_float_type* const x,
+                                               const int observation_index);
         """
         raise NotImplementedError
 
@@ -89,7 +163,7 @@ class OptimizeModelInterface(object):
             str: An CL function with the signature:
                 .. code-block:: c
 
-                    mot_float_type <func_name>(const optimize_data* const data, const int observation_index);
+                    mot_float_type <func_name>(const void* const data, const int observation_index);
         """
         raise NotImplementedError
 
@@ -103,7 +177,7 @@ class OptimizeModelInterface(object):
             str: A CL function with signature:
                 .. code-block:: c
 
-                    mot_float_type <func_name>(const optimize_data* const data, mot_float_type* const x);
+                    mot_float_type <func_name>(const void* const data, mot_float_type* const x);
         """
         raise NotImplementedError
 
@@ -120,7 +194,7 @@ class OptimizeModelInterface(object):
             str: A CL function with signature:
                 .. code-block:: c
 
-                    mot_float_type <func_name>(const optimize_data* const data, mot_float_type* const x,
+                    mot_float_type <func_name>(const void* const data, mot_float_type* const x,
                                                mot_float_type* result);
         """
         raise NotImplementedError
@@ -230,7 +304,7 @@ class OptimizeModelInterface(object):
             str or None: Return None if this function is not used, else a function of the kind:
                 .. code-block:: c
 
-                    void <func_name>(const optimize_data* data, mot_float_type* x);
+                    void <func_name>(const void* data, mot_float_type* x);
 
             Which is called for every voxel and must in place edit the x variable.
         """
@@ -314,7 +388,7 @@ class SampleModelInterface(OptimizeModelInterface):
             str: A function of the kind:
                 .. code-block:: c
 
-                    mot_float_type <func_name>(const optimize_data* const data, mot_float_type* const x);
+                    mot_float_type <func_name>(const void* const data, mot_float_type* const x);
         """
         raise NotImplementedError
 

@@ -1,6 +1,6 @@
 import pyopencl as cl
 import numpy as np
-from ...utils import get_float_type_def, ModelDataToKernel
+from ...utils import get_float_type_def
 from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
 
@@ -45,7 +45,7 @@ class FinalParametersTransformer(CLRoutine):
 
         if model.get_final_parameter_transformations():
             workers = self._create_workers(lambda cl_environment: _FPTWorker(
-                cl_environment, self.get_compile_flags_list(), model, parameters, model.get_model_data()))
+                cl_environment, self.get_compile_flags_list(), model, parameters))
             self.load_balancer.process(workers, model.get_nmr_problems())
 
         return parameters
@@ -53,15 +53,13 @@ class FinalParametersTransformer(CLRoutine):
 
 class _FPTWorker(Worker):
 
-    def __init__(self, cl_environment, compile_flags, model, parameters, model_data):
+    def __init__(self, cl_environment, compile_flags, model, parameters):
         super(_FPTWorker, self).__init__(cl_environment)
 
         self._parameters = parameters
         self._nmr_params = parameters.shape[1]
         self._model = model
         self._double_precision = model.double_precision
-
-        self._model_data_to_kernel = ModelDataToKernel(model_data, cl_environment)
 
         self._all_buffers, self._parameters_buffer = self._create_buffers()
         self._kernel = self._build_kernel(compile_flags)
@@ -80,31 +78,31 @@ class _FPTWorker(Worker):
                                       hostbuf=self._parameters)
         all_buffers.append(parameters_buffer)
 
-        all_buffers.extend(self._model_data_to_kernel.generate_buffers())
+        all_buffers.extend(self._model.get_data_buffers(self._cl_run_context.context))
 
         return all_buffers, parameters_buffer
 
     def _get_kernel_source(self):
         kernel_param_names = ['global mot_float_type* params']
-        kernel_param_names.extend(self._model_data_to_kernel.get_kernel_param_names())
+        kernel_param_names.extend(self._model.get_kernel_param_names(self._cl_environment.device))
 
         kernel_source = ''
         kernel_source += get_float_type_def(self._double_precision)
-        kernel_source += self._model_data_to_kernel.get_kernel_data_struct()
+        kernel_source += self._model.get_kernel_data_struct(self._cl_environment.device)
         kernel_source += self._model.get_final_parameter_transformations('applyFinalParameterTransformations')
         kernel_source += '''
             __kernel void transform(
                 ''' + ",\n".join(kernel_param_names) + '''
                 ){
                     int gid = get_global_id(0);
-                    ''' + self._model_data_to_kernel.get_data_struct_init_assignment('data') + '''
+                    ''' + self._model.get_kernel_data_struct_initialization(self._cl_environment.device, 'data') + '''
 
                     mot_float_type x[''' + str(self._nmr_params) + '''];
                     for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                         x[i] = params[gid * ''' + str(self._nmr_params) + ''' + i];
                     }
 
-                    applyFinalParameterTransformations(&data, x);
+                    applyFinalParameterTransformations((void*) &data, x);
 
                     for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                         params[gid * ''' + str(self._nmr_params) + ''' + i] = x[i];

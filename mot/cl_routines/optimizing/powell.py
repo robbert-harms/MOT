@@ -30,7 +30,7 @@ class Powell(AbstractParallelOptimizer):
         optimizer_settings['glimit'] = glimit
         optimizer_settings['reset_method'] = reset_method
 
-        option_defaults = {'bracket_gold': 1.618034, 'glimit': 100.0, 'reset_method': 'reset_to_identity'}
+        option_defaults = {'bracket_gold': 1.618034, 'glimit': 100.0, 'reset_method': 'EXTRAPOLATED_POINT'}
 
         def get_value(option_name, default):
             value = optimizer_settings.get(option_name, None)

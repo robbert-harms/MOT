@@ -1,6 +1,6 @@
 import pyopencl as cl
 import numpy as np
-from ...utils import get_float_type_def, ModelDataToKernel
+from ...utils import get_float_type_def
 from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
 
@@ -61,8 +61,6 @@ class _ResidualCalculatorWorker(Worker):
         self._parameters = parameters
         self._model_estimates = model_estimates
 
-        self._model_data_to_kernel = ModelDataToKernel(model.get_model_data(), cl_environment)
-
         self._all_buffers, self._residuals_buffer = self._create_buffers()
         self._kernel = self._build_kernel(compile_flags)
 
@@ -88,7 +86,7 @@ class _ResidualCalculatorWorker(Worker):
                                      hostbuf=self._model_estimates),
                            errors_buffer]
 
-        all_buffers.extend(self._model_data_to_kernel.generate_buffers())
+        all_buffers.extend(self._model.get_data_buffers(self._cl_run_context.context))
 
         return all_buffers, errors_buffer
 
@@ -101,14 +99,14 @@ class _ResidualCalculatorWorker(Worker):
         else:
             kernel_param_names = ['global mot_float_type* model_estimates', 'global mot_float_type* errors']
 
-        kernel_param_names.extend(self._model_data_to_kernel.get_kernel_param_names())
+        kernel_param_names.extend(self._model.get_kernel_param_names(self._cl_environment.device))
 
         kernel_source = '''
             #define NMR_INST_PER_PROBLEM ''' + str(nmr_inst_per_problem) + '''
         '''
 
         kernel_source += get_float_type_def(self._double_precision)
-        kernel_source += self._model_data_to_kernel.get_kernel_data_struct()
+        kernel_source += self._model.get_kernel_data_struct(self._cl_environment.device)
         kernel_source += self._model.get_observation_return_function('getObservation')
         if self._model_estimates is None:
             kernel_source += self._model.get_model_eval_function('evaluateModel')
@@ -117,7 +115,7 @@ class _ResidualCalculatorWorker(Worker):
                     ''' + ",\n".join(kernel_param_names) + '''
                     ){
                         int gid = get_global_id(0);
-                        ''' + self._model_data_to_kernel.get_data_struct_init_assignment('data') + '''
+                        ''' + self._model.get_kernel_data_struct_initialization(self._cl_environment.device, 'data') + '''
 
                         mot_float_type x[''' + str(nmr_params) + '''];
                         for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
@@ -127,7 +125,7 @@ class _ResidualCalculatorWorker(Worker):
                         global mot_float_type* result = errors + gid * NMR_INST_PER_PROBLEM;
 
                         for(int i = 0; i < NMR_INST_PER_PROBLEM; i++){
-                            result[i] = getObservation(&data, i) - evaluateModel(&data, x, i);
+                            result[i] = getObservation((void*)&data, i) - evaluateModel((void*)&data, x, i);
                         }
                 }
             '''
@@ -137,7 +135,8 @@ class _ResidualCalculatorWorker(Worker):
                     ''' + ",\n".join(kernel_param_names) + '''
                     ){
                         int gid = get_global_id(0);
-                        ''' + self._model_data_to_kernel.get_data_struct_init_assignment('data') + '''
+                        ''' + self._model.get_kernel_data_struct_initialization(self._cl_environment.device,
+                                                                                'data') + '''
 
                         global mot_float_type* result = errors + gid * NMR_INST_PER_PROBLEM;
 

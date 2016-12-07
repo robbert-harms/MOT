@@ -1,10 +1,9 @@
 import numpy as np
-from mot.model_data import SimpleDataAdapter
 from mot.cl_data_type import CLDataType
 from mot.model_building.cl_functions.parameters import CurrentObservationParam, StaticMapParameter, ProtocolParameter, \
     ModelDataParameter, FreeParameter
 from mot.cl_routines.mapping.calc_dependent_params import CalculateDependentParameters
-from mot.model_data import SimpleModelData, SimpleDataAdapter
+from mot.model_building.data_adapter import SimpleDataAdapter
 from mot.utils import TopologicalSort, is_scalar
 from mot.model_building.parameter_functions.codecs import CodecBuilder
 from mot.model_building.parameter_functions.dependencies import SimpleAssignment
@@ -55,6 +54,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         self._check_for_double_model_names()
         self._set_default_dependencies()
+        self._buffer_manager = BufferManager()
 
     @property
     def name(self):
@@ -300,10 +300,40 @@ class OptimizeModelBuilder(OptimizeModelInterface):
     def get_nmr_estimable_parameters(self):
         return len(self.get_optimized_param_names())
 
-    def get_model_data(self):
-        return SimpleModelData(self._get_problems_var_data(),
-                               self._get_problems_protocol_data(),
-                               self._get_static_data())
+    def get_data_buffers(self, context):
+        buffers = []
+
+        items = [(self._get_problems_var_data(), 'var_', True),
+                 (self._get_problems_protocol_data(), 'prtcl_', False),
+                 (self._get_static_data(), 'static_', False)]
+
+        for data_dict, key_prefix, new_data in items:
+            for key, data in data_dict.items():
+                buffers.append(self._buffer_manager.get_buffer(data.get_opencl_data(), context,
+                                                               key_prefix + key, new_data))
+
+        return buffers
+
+    def get_kernel_data_struct(self, device):
+        return self._get_all_kernel_source_items(device)['data_struct']
+
+    def get_kernel_param_names(self, device):
+        return self._get_all_kernel_source_items(device)['kernel_param_names']
+
+    def get_kernel_data_struct_initialization(self, device, variable_name):
+        data_struct_init = self._get_all_kernel_source_items(device)['data_struct_init']
+        struct_code = '0'
+        if data_struct_init:
+            struct_code = ', '.join(data_struct_init)
+        return self.get_kernel_data_struct_type() + ' ' + variable_name + ' = {' + struct_code + '};'
+
+    def get_kernel_data_struct_type(self):
+        """Get the CL type of the kernel datastruct.
+
+        Returns:
+            str: the CL type of the data struct
+        """
+        return 'model_data'
 
     def get_initial_parameters(self, results_dict=None):
         """When overriding this function, please note that it should adhere to the attribute problems_to_analyze.
@@ -404,7 +434,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         Returns:
             str: A function of the kind:
-                void finalParameterTransformations(const optimize_data* data, mot_float_type* x)
+                void finalParameterTransformations(const void* data, mot_float_type* x)
                 Which is called for every voxel and must in place edit the x variable.
         """
         transform_needed = any(dp.has_side_effects or not dp.fixed for dp in
@@ -423,7 +453,9 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         param_listing = self._get_parameters_listing(exclude_list=param_exclude_list)
 
-        func = "\n\t\t\t" + 'void ' + func_name + '(const optimize_data* const data, mot_float_type* const x){' + "\n"
+        func = "\n\t\t\t" + 'void ' + func_name + '(const void* const void_data, mot_float_type* const x){' + "\n"
+        func += "\n\t\t\t\t" + 'const ' + self.get_kernel_data_struct_type() + \
+                '* data = (' + self.get_kernel_data_struct_type() + '*)void_data;'
         func += param_listing + "\n"
 
         for i, (m, p) in enumerate(self._get_parameter_type_lists()['estimable']):
@@ -435,14 +467,15 @@ class OptimizeModelBuilder(OptimizeModelInterface):
     def get_observation_return_function(self, func_name='getObservation'):
         if self._problem_data.observations.shape[1] < 2:
             return '''
-                mot_float_type ''' + func_name + '''(const optimize_data* const data, const int observation_index){
-                    return data->var_data_observations;
+                mot_float_type ''' + func_name + '''(const void* const data, const int observation_index){
+                    return ((''' + self.get_kernel_data_struct_type() + '''*)data)->var_data_observations;
                 }
             '''
 
         return '''
-            mot_float_type ''' + func_name + '''(const optimize_data* const data, const int observation_index){
-                return data->var_data_observations[observation_index];
+            mot_float_type ''' + func_name + '''(const void* const data, const int observation_index){
+                return ((''' + \
+                    self.get_kernel_data_struct_type() + '''*)data)->var_data_observations[observation_index];
             }
         '''
 
@@ -456,7 +489,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         func += '''
             mot_float_type ''' + func_name + \
-                '(const optimize_data* const data, const mot_float_type* const x, const int observation_index){' + "\n"
+                '(const void* const void_data, const mot_float_type* const x, const int observation_index){' + "\n"
+        func += self.get_kernel_data_struct_type() + '* data = (' + self.get_kernel_data_struct_type() + '*)void_data;'
 
         func += self._get_parameters_listing(exclude_list=[m.name + '_' + p.name for (m, p) in
                                                            self._get_non_model_tree_param_listing()])
@@ -574,8 +608,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                                          for m, p in param_lists['dependent']]
 
             cpd = CalculateDependentParameters(double_precision=self.double_precision)
-            dependent_parameters = cpd.calculate(self._get_fixed_parameters_as_var_data(),
-                                                 estimated_parameters, func, dependent_parameter_names)
+            dependent_parameters = cpd.calculate(self, estimated_parameters, func, dependent_parameter_names)
 
             results_dict.update(dependent_parameters)
 
@@ -1119,6 +1152,106 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 model_data_dict.update({p.name: SimpleDataAdapter(p.value, p.data_type, self._get_mot_float_type())})
         return model_data_dict
 
+    def _get_all_kernel_source_items(self, device):
+        """Get the CL strings for the kernel source items for most common CL kernels in this library."""
+        import pyopencl as cl
+
+        max_constant_buffer_size = device.get_info(cl.device_info.MAX_CONSTANT_BUFFER_SIZE)
+        max_constant_args = device.get_info(cl.device_info.MAX_CONSTANT_ARGS)
+
+        def _check_array_fits_constant_buffer(array, dtype):
+            """Check if the given array when casted to the given type can be fit into the given max_size
+
+            Args:
+                array (ndarray): the array we want to fit
+                dtype (np data type): the numpy data type we want to use
+
+            Returns:
+                boolean: if it fits in the constant memory buffer or not
+            """
+            return np.product(array.shape) * np.dtype(dtype).itemsize < max_constant_buffer_size
+
+        constant_args_counter = 0
+
+        kernel_param_names = []
+        data_struct_init = []
+        data_struct_names = []
+
+        for key, data_adapter in self._get_problems_var_data().items():
+            clmemtype = 'global'
+
+            cl_data = data_adapter.get_opencl_data()
+
+            if _check_array_fits_constant_buffer(cl_data, data_adapter.get_opencl_numpy_type()):
+                if constant_args_counter < max_constant_args:
+                    clmemtype = 'constant'
+                    constant_args_counter += 1
+
+            param_name = 'var_data_' + str(key)
+            data_type = data_adapter.get_data_type().raw_data_type
+
+            if data_adapter.get_data_type().is_vector_type:
+                data_type += data_adapter.get_data_type().vector_length
+
+            kernel_param_names.append(clmemtype + ' ' + data_type + '* ' + param_name)
+
+            mult = cl_data.shape[1] if len(cl_data.shape) > 1 else 1
+            if len(cl_data.shape) == 1 or cl_data.shape[1] == 1:
+                data_struct_names.append(data_type + ' ' + param_name)
+                data_struct_init.append(param_name + '[gid * ' + str(mult) + ']')
+            else:
+                data_struct_names.append(clmemtype + ' ' + data_type + '* ' + param_name)
+                data_struct_init.append(param_name + ' + gid * ' + str(mult))
+
+        for key, data_adapter in self._get_problems_protocol_data().items():
+            clmemtype = 'global'
+
+            cl_data = data_adapter.get_opencl_data()
+
+            if _check_array_fits_constant_buffer(cl_data, data_adapter.get_opencl_numpy_type()):
+                if constant_args_counter < max_constant_args:
+                    clmemtype = 'constant'
+                    constant_args_counter += 1
+
+            param_name = 'protocol_data_' + str(key)
+            data_type = data_adapter.get_data_type().raw_data_type
+
+            if data_adapter.get_data_type().is_vector_type:
+                data_type += str(data_adapter.get_data_type().vector_length)
+
+            kernel_param_names.append(clmemtype + ' ' + data_type + '* ' + param_name)
+            data_struct_init.append(param_name)
+            data_struct_names.append(clmemtype + ' ' + data_type + '* ' + param_name)
+
+        for key, data_adapter in self._get_static_data().items():
+            clmemtype = 'global'
+            param_name = 'model_data_' + str(key)
+            data_type = data_adapter.get_data_type().raw_data_type
+
+            if data_adapter.get_data_type().is_vector_type:
+                data_type += data_adapter.get_data_type().vector_length
+
+            data_struct_init.append(param_name)
+
+            if isinstance(data_adapter.get_opencl_data(), np.ndarray):
+                kernel_param_names.append(clmemtype + ' ' + data_type + '* ' + param_name)
+                data_struct_names.append(clmemtype + ' ' + data_type + '* ' + param_name)
+            else:
+                kernel_param_names.append(data_type + ' ' + param_name)
+                data_struct_names.append(data_type + ' ' + param_name)
+
+        data_struct = '''
+            typedef struct{
+                ''' + ('' if data_struct_names else 'constant void* place_holder;') + '''
+                ''' + " ".join((name + ";\n" for name in data_struct_names)) + '''
+            } ''' + self.get_kernel_data_struct_type() + ''';
+        '''
+
+        return {'kernel_param_names': kernel_param_names,
+                'data_struct_names': data_struct_names,
+                'data_struct_init': data_struct_init,
+                'data_struct': data_struct}
+
     def _get_pre_model_expression_eval_code(self):
         """The code called in the evaluation function.
 
@@ -1357,6 +1490,37 @@ class DependencyStore(object):
 
     def get_index(self, param_name):
         return self.names_in_order.index(param_name)
+
+
+class BufferManager(object):
+
+    def __init__(self):
+        self._buffer_storage = {}
+
+    def get_buffer(self, data, context, buffer_name, new_data=False):
+        """Get the buffer for the given data.
+
+        Args:
+            data (ndarray): the data for which to create the buffer
+            context (pyopencl.Context): the context in which to create the buffer
+            buffer_name (str): the name of the buffer, used to memoize the buffer
+            new_data (bool): signals that we have new data for this buffer and we need to recreate it or refill it.
+
+        Returns:
+            pyopencl.Buffer: the pyopencl buffer for this data.
+        """
+        import pyopencl as cl
+
+        key = (buffer_name, context)
+
+        if new_data and key in self._buffer_storage:
+            del self._buffer_storage[key]
+
+        if key not in self._buffer_storage:
+            self._buffer_storage[key] = cl.Buffer(context, cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
+                                                  hostbuf=data)
+
+        return self._buffer_storage[key]
 
 
 class ParameterNameException(Exception):

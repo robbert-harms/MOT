@@ -3,7 +3,7 @@ import numpy as np
 import pyopencl as cl
 from mot.cl_routines.mapping.error_measures import ErrorMeasures
 from mot.cl_routines.mapping.residual_calculator import ResidualCalculator
-from ...utils import results_to_dict, get_float_type_def, ModelDataToKernel
+from ...utils import results_to_dict, get_float_type_def
 from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
 from ...cl_routines.mapping.final_parameters_transformer import FinalParametersTransformer
@@ -145,8 +145,6 @@ class AbstractParallelOptimizer(AbstractOptimizer):
                                      requirements=['C', 'A', 'O', 'W'])
         nmr_params = starting_points.shape[1]
 
-        model_data = model.get_model_data()
-
         return_codes = np.zeros((starting_points.shape[0],), dtype=np.int8, order='C')
 
         space_transformer = CodecRunner(self.cl_environments, self.load_balancer, model.double_precision)
@@ -159,7 +157,6 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         self._logger.info('Starting optimization')
 
         workers = self._create_workers(self._get_worker_generator(self, model, starting_points,
-                                                                  model_data,
                                                                   nmr_params, return_codes,
                                                                   self._optimizer_settings))
         self.load_balancer.process(workers, model.get_nmr_problems())
@@ -203,8 +200,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
 class AbstractParallelOptimizerWorker(Worker):
 
     def __init__(self, cl_environment, parent_optimizer, model, starting_points,
-                 model_data, nmr_params, return_codes,
-                 optimizer_settings=None):
+                 nmr_params, return_codes, optimizer_settings=None):
         super(AbstractParallelOptimizerWorker, self).__init__(cl_environment)
 
         self._optimizer_settings = optimizer_settings
@@ -219,8 +215,6 @@ class AbstractParallelOptimizerWorker(Worker):
 
         param_codec = model.get_parameter_codec()
         self._use_param_codec = self._parent_optimizer.use_param_codec and param_codec
-
-        self._model_data_to_kernel = ModelDataToKernel(model_data, cl_environment)
 
         self._starting_points = starting_points
         self._all_buffers, self._params_buffer, self._return_code_buffer = self._create_buffers()
@@ -249,7 +243,7 @@ class AbstractParallelOptimizerWorker(Worker):
                                        hostbuf=self._return_codes)
         all_buffers.append(return_code_buffer)
 
-        all_buffers.extend(self._model_data_to_kernel.generate_buffers())
+        all_buffers.extend(self._model.get_data_buffers(self._cl_run_context.context))
 
         return all_buffers, parameters_buffer, return_code_buffer
 
@@ -269,7 +263,7 @@ class AbstractParallelOptimizerWorker(Worker):
 
         kernel_source = ''
         kernel_source += get_float_type_def(self._double_precision)
-        kernel_source += str(self._model_data_to_kernel.get_kernel_data_struct())
+        kernel_source += str(self._model.get_kernel_data_struct(self._cl_environment.device))
 
         if self._use_param_codec:
             param_codec = self._model.get_parameter_codec()
@@ -290,8 +284,9 @@ class AbstractParallelOptimizerWorker(Worker):
                         x[i] = params[gid * ''' + str(nmr_params) + ''' + i];
                     }
 
-                    ''' + self._model_data_to_kernel.get_data_struct_init_assignment('data') + '''
-                    return_codes[gid] = (char) ''' + self._get_optimizer_call_name() + '''(''' + ', '.join(self._get_optimizer_call_args()) + ''');
+                    ''' + self._model.get_kernel_data_struct_initialization(self._cl_environment.device, 'data') + '''
+                    return_codes[gid] = (char) ''' + self._get_optimizer_call_name() + \
+                        '''(''' + ', '.join(self._get_optimizer_call_args()) + ''');
 
                     ''' + ('decodeParameters(x);' if self._use_param_codec else '') + '''
 
@@ -312,7 +307,7 @@ class AbstractParallelOptimizerWorker(Worker):
         """
         kernel_param_names = ['global mot_float_type* params',
                               'global char* return_codes']
-        kernel_param_names.extend(self._model_data_to_kernel.get_kernel_param_names())
+        kernel_param_names.extend(self._model.get_kernel_param_names(self._cl_environment.device))
 
         return kernel_param_names
 
@@ -361,13 +356,13 @@ class AbstractParallelOptimizerWorker(Worker):
                         x_model[i] = x[i];
                     }
                     decodeParameters(x_model);
-                    return calculateObjective((optimize_data*)data, x_model);
+                    return calculateObjective(data, x_model);
                 }
             '''
         else:
             kernel_source += '''
                 mot_float_type evaluate(mot_float_type* x, const void* data){
-                    return calculateObjective((optimize_data*)data, x);
+                    return calculateObjective(data, x);
                 }
             '''
         return kernel_source

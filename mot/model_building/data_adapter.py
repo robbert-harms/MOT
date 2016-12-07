@@ -8,64 +8,6 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class ModelData(object):
-
-    def get_variable_data(self):
-        """Get a dict with all the data per problem instance.
-
-        As an example, suppose we have the data named 'observations' per problem instance, we should then return
-        return something like:
-
-        .. code-block:: python
-
-            {'observations': SimpleDataAdapter(ndarray((<nmr_problems>, <number of items>)), ...), ...}
-
-        Returns:
-            dict: A dictionary where each element holds a SimpleDataAdapter from which to get the data
-                The data in the adapter should contain for each problem (first dimension / rows) a
-                number of items (second dimension / columns) that is used in the evaluation function.
-        """
-        raise NotImplementedError
-
-    def get_protocol_data(self):
-        """Get a dict with the data that is constant for each problem, but differs per measurement.
-
-        Returns:
-            dict: A dict where each element holds a SimpleDataAdapter that is used in the evaluation function.
-                In the CL kernel, each key is used as name in the cl data struct.
-        """
-        raise NotImplementedError
-
-    def get_static_data(self):
-        """Get a dict with all the static data, data constant per problem and measurement.
-
-        This is commonly used to store modelling specific data necessary for computations in the model, or for
-        data that is to large to inline in the kernel.
-
-        Returns:
-            dict: The dict with all the model data in DataAdapters.
-                The names of the keys are used in the CL cl data structs.
-        """
-        raise NotImplementedError
-
-
-class SimpleModelData(object):
-
-    def __init__(self, variable_data, protocol_data, static_data):
-        self._variable_data = variable_data
-        self._protocol_data = protocol_data
-        self._static_data = static_data
-
-    def get_variable_data(self):
-        return self._variable_data
-
-    def get_protocol_data(self):
-        return self._protocol_data
-
-    def get_static_data(self):
-        return self._static_data
-
-
 class DataAdapter(object):
     """Create a data adapter for the given data and type.
 

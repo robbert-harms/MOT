@@ -106,7 +106,7 @@ class SimulatedAnnealingWorker(AbstractParallelOptimizerWorker):
                                void* rng_data,
                                double* const current_likelihood,
                                mot_float_type* const current_prior,
-                               const optimize_data* const data,
+                               const void* const data,
                                mot_float_type* const proposal_state,
                                uint* const ac_between_proposal_updates,
                                mot_float_type* temperature){
@@ -167,7 +167,7 @@ class SimulatedAnnealingWorker(AbstractParallelOptimizerWorker):
                 mot_float_type proposal_state[] = ''' + proposal_state + ''';
                 uint ac_between_proposal_updates[] = ''' + acceptance_counters_between_proposal_updates + ''';
 
-                double current_likelihood = getLogLikelihood((optimize_data*)data, x);
+                double current_likelihood = getLogLikelihood(data, x);
                 mot_float_type current_prior = getLogPrior(x);
 
                 mot_float_type temperature;
@@ -240,7 +240,7 @@ class SimpleInitialTemperatureStrategy(InitialTemperatureStrategy):
                     void* rng_data,
                     double* const current_likelihood,
                     mot_float_type* const current_prior,
-                    const optimize_data* const data,
+                    const void* const data,
                     mot_float_type* const proposal_state,
                     uint* const ac_between_proposal_updates,
                     uint* const proposal_update_count){
