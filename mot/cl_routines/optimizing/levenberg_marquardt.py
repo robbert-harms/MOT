@@ -71,9 +71,7 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
         kernel_source += str(self._model.get_kernel_data_struct(self._cl_environment.device))
 
         if self._use_param_codec:
-            param_codec = self._model.get_parameter_codec()
-            decode_func = param_codec.get_cl_decode_function('decodeParameters')
-            kernel_source += decode_func + "\n"
+            kernel_source += self._model.get_parameter_decode_function('decodeParameters') + "\n"
 
         kernel_source += self._get_optimizer_cl_code()
         kernel_source += '''
@@ -94,7 +92,7 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
                     return_codes[gid] = (char) ''' + self._get_optimizer_call_name() + '''(''' \
                          + optimizer_call_args + ''', fjac);
 
-                    ''' + ('decodeParameters(x);' if self._use_param_codec else '') + '''
+                    ''' + ('decodeParameters((void*)&data, x);' if self._use_param_codec else '') + '''
 
                     for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
                         params[gid * ''' + str(nmr_params) + ''' + i] = x[i];
@@ -120,7 +118,7 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
                     for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                         x_model[i] = x[i];
                     }
-                    decodeParameters(x_model);
+                    decodeParameters(data, x_model);
                     calculateObjectiveList(data, x_model, result);
                 }
             '''

@@ -111,8 +111,11 @@ class Rosenbrock(OptimizeModelInterface):
     def get_nmr_estimable_parameters(self):
         return self.n
 
-    def get_parameter_codec(self):
-        return None
+    def get_parameter_decode_function(self, fname='decodeParameters'):
+        return '''void ''' + fname + '''(const void* data, mot_float_type* x){}'''
+
+    def get_parameter_encode_function(self, fname='encodeParameters'):
+        return '''void ''' + fname + '''(const void* data, mot_float_type* x){}'''
 
     def get_final_parameter_transformations(self, fname='applyFinalParameterTransformations'):
         return None
@@ -229,8 +232,11 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
     def get_nmr_estimable_parameters(self):
         return 2
 
-    def get_parameter_codec(self):
-        return None
+    def get_parameter_decode_function(self, fname='decodeParameters'):
+        return '''void ''' + fname + '''(const void* data, mot_float_type* x){}'''
+
+    def get_parameter_encode_function(self, fname='encodeParameters'):
+        return '''void ''' + fname + '''(const void* data, mot_float_type* x){}'''
 
     def get_final_parameter_transformations(self, fname='applyFinalParameterTransformations'):
         return None

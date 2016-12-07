@@ -15,23 +15,21 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class CodecRunner(CLRoutine):
 
-    def __init__(self, cl_environments=None, load_balancer=None, double_precision=False):
-        """This class can run the codecs used to transform the parameters to and from optimization space.
+    def __init__(self, **kwargs):
+        """This class can run the parameter encoding and decoding transformations.
 
-        Args:
-            double_precision (boolean): if we will use the double (True) or single floating (False) type for the calculations
+        These transformations are used to transform the parameters to and from optimization space.
         """
-        super(CodecRunner, self).__init__(cl_environments, load_balancer)
+        super(CodecRunner, self).__init__(**kwargs)
         self._logger = logging.getLogger(__name__)
-        self._double_precision = double_precision
 
-    def decode(self, codec, data):
-        """Decode the parameters.
+    def decode(self, model, data):
+        """Decode the given parameters using the given model.
 
         This transforms the data from optimization space to model space.
 
         Args:
-            codec (AbstractCodec): The codec to use in the transformation.
+            model (mot.model_interfaces.OptimizeModelInterface): The model to use
             data (ndarray): The parameters to transform to model space
 
         Returns:
@@ -42,19 +40,17 @@ class CodecRunner(CLRoutine):
         else:
             from_width = 1
 
-        if from_width != codec.get_nmr_parameters():
-            raise ValueError("The width of the given data does not match the codec expected width.")
+        return self._transform_parameters(model.get_parameter_decode_function('decodeParameters'),
+                                          'decodeParameters', data,
+                                          from_width, model)
 
-        return self._transform_parameters(codec.get_cl_decode_function('decodeParameters'), 'decodeParameters', data,
-                                          codec.get_nmr_parameters())
-
-    def encode(self, codec, data):
-        """Encode the parameters.
+    def encode(self, model, data):
+        """Encode the given parameters using the given model.
 
         This transforms the data from model space to optimization space.
 
         Args:
-            codec (AbstractCodec): The codec to use in the transformation.
+            model (mot.model_interfaces.OptimizeModelInterface): The model to use
             data (ndarray): The parameters to transform to optimization space
 
         Returns:
@@ -65,38 +61,39 @@ class CodecRunner(CLRoutine):
         else:
             from_width = 1
 
-        if from_width != codec.get_nmr_parameters():
-            raise ValueError("The width of the given data does not match the codec expected width.")
+        return self._transform_parameters(model.get_parameter_encode_function('encodeParameters'),
+                                          'encodeParameters', data,
+                                          from_width, model)
 
-        return self._transform_parameters(codec.get_cl_encode_function('encodeParameters'), 'encodeParameters', data,
-                                          codec.get_nmr_parameters())
-
-    def _transform_parameters(self, cl_func, cl_func_name, data, nmr_params):
+    def _transform_parameters(self, cl_func, cl_func_name, data, nmr_params, model):
         np_dtype = np.float32
-        if self._double_precision:
+        if model.double_precision:
             np_dtype = np.float64
+
         data = np.require(data, np_dtype, requirements=['C', 'A', 'O', 'W'])
-        rows = data.shape[0]
+
         workers = self._create_workers(lambda cl_environment: _CodecWorker(cl_environment, self.get_compile_flags_list(),
                                                                            cl_func, cl_func_name, data,
-                                                                           nmr_params, self._double_precision))
-        self.load_balancer.process(workers, rows)
+                                                                           nmr_params, model))
+        self.load_balancer.process(workers, data.shape[0])
         return data
 
 
 class _CodecWorker(Worker):
 
-    def __init__(self, cl_environment, compile_flags, cl_func, cl_func_name, data, nmr_params, double_precision):
+    def __init__(self, cl_environment, compile_flags, cl_func, cl_func_name, data, nmr_params, model):
         super(_CodecWorker, self).__init__(cl_environment)
         self._cl_func = cl_func
         self._cl_func_name = cl_func_name
         self._data = data
         self._nmr_params = nmr_params
-        self._double_precision = double_precision
+        self._model = model
 
         self._param_buf = cl.Buffer(self._cl_run_context.context,
                                     cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR,
                                     hostbuf=self._data)
+        self._all_buffers = [self._param_buf]
+        self._all_buffers.extend(self._model.get_data_buffers(self._cl_run_context.context))
 
         self._kernel = self._build_kernel(compile_flags)
 
@@ -104,17 +101,24 @@ class _CodecWorker(Worker):
         nmr_problems = range_end - range_start
 
         event = self._kernel.transformParameterSpace(self._cl_run_context.queue, (int(nmr_problems), ), None,
-                                                     self._param_buf, global_offset=(int(range_start),))
+                                                     *self._all_buffers, global_offset=(int(range_start),))
 
         return [self._enqueue_readout(self._param_buf, self._data, range_start, range_end, [event])]
 
     def _get_kernel_source(self):
+        kernel_param_names = ['global mot_float_type* x_global'] + \
+                             self._model.get_kernel_param_names(self._cl_environment.device)
+
         kernel_source = ''
-        kernel_source += get_float_type_def(self._double_precision)
+        kernel_source += get_float_type_def(self._model.double_precision)
+        kernel_source += str(self._model.get_kernel_data_struct(self._cl_environment.device))
         kernel_source += self._cl_func
         kernel_source += '''
-            __kernel void transformParameterSpace(global mot_float_type* x_global){
+            __kernel void transformParameterSpace(
+                ''' + ",\n".join(kernel_param_names) + '''){
                 int gid = get_global_id(0);
+
+                ''' + self._model.get_kernel_data_struct_initialization(self._cl_environment.device, 'data') + '''
 
                 mot_float_type x[''' + str(self._nmr_params) + '''];
 
@@ -122,7 +126,7 @@ class _CodecWorker(Worker):
                     x[i] = x_global[gid * ''' + str(self._nmr_params) + ''' + i];
                 }
 
-                ''' + self._cl_func_name + '''(x);
+                ''' + self._cl_func_name + '''((void*)&data, x);
 
                 for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                     x_global[gid * ''' + str(self._nmr_params) + ''' + i] = x[i];

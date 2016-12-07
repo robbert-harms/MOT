@@ -5,7 +5,6 @@ from mot.model_building.cl_functions.parameters import CurrentObservationParam, 
 from mot.cl_routines.mapping.calc_dependent_params import CalculateDependentParameters
 from mot.model_building.data_adapter import SimpleDataAdapter
 from mot.utils import TopologicalSort, is_scalar
-from mot.model_building.parameter_functions.codecs import CodecBuilder
 from mot.model_building.parameter_functions.dependencies import SimpleAssignment
 from mot.model_interfaces import OptimizeModelInterface, SampleModelInterface
 
@@ -333,7 +332,25 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         Returns:
             str: the CL type of the data struct
         """
-        return 'model_data'
+        return '_model_data'
+
+    def get_parameter_decode_function(self, fname='decodeParameters'):
+        func = '''
+            void ''' + fname + '''(const void* data, mot_float_type* x){'''
+        for d in self._get_parameter_transformations()[1]:
+            func += "\n" + "\t" * 4 + d.format('x')
+        return func + '''
+            }
+        '''
+
+    def get_parameter_encode_function(self, fname='encodeParameters'):
+        func = '''
+            void ''' + fname + '''(const void* data, mot_float_type* x){'''
+        for d in self._get_parameter_transformations()[0]:
+            func += "\n" + "\t" * 4 + d.format('x')
+        return func + '''
+            }
+        '''
 
     def get_initial_parameters(self, results_dict=None):
         """When overriding this function, please note that it should adhere to the attribute problems_to_analyze.
@@ -391,37 +408,6 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             if m.name + '.' + p.name in initial_params:
                 p.value = initial_params[m.name + '.' + p.name]
         return self
-
-    def get_parameter_codec(self):
-        dep_list = {}
-        transform_dict = {}
-        for m, p in self._get_estimable_parameters_list():
-            name = m.name + '.' + p.name
-            dep_names = list(dep[0].name + '.' + dep[1].name for dep in p.parameter_transform.dependencies)
-            dep_list.update({name: dep_names})
-            transform_dict.update({name: p})
-
-        dep_list = TopologicalSort(dep_list).get_flattened()
-
-        dec_func_list = []
-        enc_func_list = []
-        for name in dep_list:
-            parameter = transform_dict[name]
-            ind = self._get_parameter_estimable_index(name)
-            transform = parameter.parameter_transform
-
-            deps_names = []
-            for dep in transform.dependencies:
-                dep_ind = self._get_parameter_estimable_index(dep[0].name + '.' + dep[1].name)
-                deps_names.append('{0}[' + str(dep_ind) + ']')
-
-            s = '{0}[' + str(ind) + '] = ' + transform.get_cl_decode(parameter, '{0}[' + str(ind) + ']', deps_names)
-            dec_func_list.append(s)
-
-            s = '{0}[' + str(ind) + '] = ' + transform.get_cl_encode(parameter, '{0}[' + str(ind) + ']', deps_names)
-            enc_func_list.append(s)
-
-        return CodecBuilder(tuple(reversed(enc_func_list)), dec_func_list)
 
     def get_final_parameter_transformations(self, func_name='applyFinalParameterTransformations'):
         """Get the transformations that must be applied at the end of an optimization (or sampling) routine.
@@ -611,6 +597,37 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             dependent_parameters = cpd.calculate(self, estimated_parameters, func, dependent_parameter_names)
 
             results_dict.update(dependent_parameters)
+
+    def _get_parameter_transformations(self):
+        dep_list = {}
+        transform_dict = {}
+        for m, p in self._get_estimable_parameters_list():
+            name = m.name + '.' + p.name
+            dep_names = list(dep[0].name + '.' + dep[1].name for dep in p.parameter_transform.dependencies)
+            dep_list.update({name: dep_names})
+            transform_dict.update({name: p})
+
+        dep_list = TopologicalSort(dep_list).get_flattened()
+
+        dec_func_list = []
+        enc_func_list = []
+        for name in dep_list:
+            parameter = transform_dict[name]
+            ind = self._get_parameter_estimable_index(name)
+            transform = parameter.parameter_transform
+
+            deps_names = []
+            for dep in transform.dependencies:
+                dep_ind = self._get_parameter_estimable_index(dep[0].name + '.' + dep[1].name)
+                deps_names.append('{0}[' + str(dep_ind) + ']')
+
+            s = '{0}[' + str(ind) + '] = ' + transform.get_cl_decode(parameter, '{0}[' + str(ind) + ']', deps_names)
+            dec_func_list.append(s)
+
+            s = '{0}[' + str(ind) + '] = ' + transform.get_cl_encode(parameter, '{0}[' + str(ind) + ']', deps_names)
+            enc_func_list.append(s)
+
+        return tuple(reversed(enc_func_list)), dec_func_list
 
     def _add_finalizing_result_maps(self, results_dict):
         """Add some final results maps to the results dictionary.

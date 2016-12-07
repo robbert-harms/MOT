@@ -227,13 +227,10 @@ class GridSearchWorker(AbstractParallelOptimizerWorker):
         return call_args
 
     def _get_optimization_function(self):
-
-        param_codec = self._model.get_parameter_codec()
         nmr_params = self._nmr_params
 
         kernel_source = ''
-        if param_codec:
-            kernel_source += param_codec.get_cl_encode_function('encodeParameters') + "\n"
+        kernel_source += self._model.get_parameter_encode_function('encodeParameters') + "\n"
 
         kernel_source += '''
             int grid_search(mot_float_type* model_parameters, const void* const data, global mot_float_type* grid){

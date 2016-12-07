@@ -147,10 +147,9 @@ class AbstractParallelOptimizer(AbstractOptimizer):
 
         return_codes = np.zeros((starting_points.shape[0],), dtype=np.int8, order='C')
 
-        space_transformer = CodecRunner(self.cl_environments, self.load_balancer, model.double_precision)
-        param_codec = model.get_parameter_codec()
-        if self.use_param_codec and param_codec:
-            starting_points = space_transformer.encode(param_codec, starting_points)
+        space_transformer = CodecRunner(cl_environments=self.cl_environments, load_balancer=self.load_balancer)
+        if self.use_param_codec:
+            starting_points = space_transformer.encode(model, starting_points)
             starting_points = np.require(starting_points, np_dtype, requirements=['C', 'A', 'O', 'W'])
 
         self._logger.info('Finished optimization preliminaries')
@@ -213,8 +212,7 @@ class AbstractParallelOptimizerWorker(Worker):
 
         self._return_codes = return_codes
 
-        param_codec = model.get_parameter_codec()
-        self._use_param_codec = self._parent_optimizer.use_param_codec and param_codec
+        self._use_param_codec = self._parent_optimizer.use_param_codec
 
         self._starting_points = starting_points
         self._all_buffers, self._params_buffer, self._return_code_buffer = self._create_buffers()
@@ -266,9 +264,7 @@ class AbstractParallelOptimizerWorker(Worker):
         kernel_source += str(self._model.get_kernel_data_struct(self._cl_environment.device))
 
         if self._use_param_codec:
-            param_codec = self._model.get_parameter_codec()
-            decode_func = param_codec.get_cl_decode_function('decodeParameters')
-            kernel_source += decode_func + "\n"
+            kernel_source += self._model.get_parameter_decode_function('decodeParameters') + "\n"
 
         kernel_source += self._get_optimizer_cl_code()
         kernel_source += '''
@@ -288,7 +284,7 @@ class AbstractParallelOptimizerWorker(Worker):
                     return_codes[gid] = (char) ''' + self._get_optimizer_call_name() + \
                         '''(''' + ', '.join(self._get_optimizer_call_args()) + ''');
 
-                    ''' + ('decodeParameters(x);' if self._use_param_codec else '') + '''
+                    ''' + ('decodeParameters((void*)&data, x);' if self._use_param_codec else '') + '''
 
                     for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
                         params[gid * ''' + str(nmr_params) + ''' + i] = x[i];
@@ -355,7 +351,7 @@ class AbstractParallelOptimizerWorker(Worker):
                     for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                         x_model[i] = x[i];
                     }
-                    decodeParameters(x_model);
+                    decodeParameters(data, x_model);
                     return calculateObjective(data, x_model);
                 }
             '''
