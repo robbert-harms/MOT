@@ -93,9 +93,15 @@ class _CodecWorker(Worker):
                                     cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR,
                                     hostbuf=self._data)
         self._all_buffers = [self._param_buf]
-        self._all_buffers.extend(self._model.get_data_buffers(self._cl_run_context.context))
+        for data in self._model.get_data():
+            self._all_buffers.append(cl.Buffer(self._cl_run_context.context,
+                                               cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data))
 
         self._kernel = self._build_kernel(compile_flags)
+
+    def __del__(self):
+        for buffer in self._all_buffers:
+            buffer.release()
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start

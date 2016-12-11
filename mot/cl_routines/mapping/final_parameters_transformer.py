@@ -64,6 +64,10 @@ class _FPTWorker(Worker):
         self._all_buffers, self._parameters_buffer = self._create_buffers()
         self._kernel = self._build_kernel(compile_flags)
 
+    def __del__(self):
+        for buffer in self._all_buffers:
+            buffer.release()
+
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
 
@@ -78,7 +82,9 @@ class _FPTWorker(Worker):
                                       hostbuf=self._parameters)
         all_buffers.append(parameters_buffer)
 
-        all_buffers.extend(self._model.get_data_buffers(self._cl_run_context.context))
+        for data in self._model.get_data():
+            all_buffers.append(cl.Buffer(self._cl_run_context.context,
+                                         cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data))
 
         return all_buffers, parameters_buffer
 

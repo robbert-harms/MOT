@@ -132,8 +132,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         self._logger.info('The parameters we will optimize are: {0}'.format(model.get_optimized_param_names()))
         self._logger.info('We will use the optimizer {} '
                           'with optimizer settings {}'.format(self.__class__.__name__,
-                                                                             self.patience,
-                                                                             self._optimizer_settings))
+                                                              self._optimizer_settings))
 
         self._logger.info('Starting optimization preliminaries')
 
@@ -218,6 +217,10 @@ class AbstractParallelOptimizerWorker(Worker):
         self._all_buffers, self._params_buffer, self._return_code_buffer = self._create_buffers()
         self._kernel = self._build_kernel(self._parent_optimizer.get_compile_flags_list())
 
+    def __del__(self):
+        for buffer in self._all_buffers:
+            buffer.release()
+
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
 
@@ -241,7 +244,9 @@ class AbstractParallelOptimizerWorker(Worker):
                                        hostbuf=self._return_codes)
         all_buffers.append(return_code_buffer)
 
-        all_buffers.extend(self._model.get_data_buffers(self._cl_run_context.context))
+        for data in self._model.get_data():
+            all_buffers.append(cl.Buffer(self._cl_run_context.context,
+                                         cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data))
 
         return all_buffers, parameters_buffer, return_code_buffer
 

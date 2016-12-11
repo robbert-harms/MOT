@@ -165,7 +165,11 @@ class _MHWorker(Worker):
                                 cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
                                 hostbuf=self._samples[range_start:range_end, ...])
         data_buffers.append(samples_buf)
-        data_buffers.extend(self._model.get_data_buffers(self._cl_run_context.context))
+
+        for data in self._model.get_data():
+            data_buffers.append(cl.Buffer(self._cl_run_context.context,
+                                          cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data))
+
         kernel_event = self._kernel.sample(self._cl_run_context.queue, (int(nmr_problems), ), None, *data_buffers)
 
         return [self._enqueue_readout(samples_buf, self._samples, 0, nmr_problems, [kernel_event])]

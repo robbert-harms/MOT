@@ -83,6 +83,10 @@ class _CDPWorker(Worker):
         self._all_buffers, self._results_list_buffer = self._create_buffers()
         self._kernel = self._build_kernel(compile_flags)
 
+    def __del__(self):
+        for buffer in self._all_buffers:
+            buffer.release()
+
     def calculate(self, range_start, range_end):
         nmr_problems = int(range_end - range_start)
 
@@ -101,7 +105,9 @@ class _CDPWorker(Worker):
 
         data_buffers = [estimated_parameters_buf, results_buffer]
 
-        data_buffers.extend(self._model.get_data_buffers(self._cl_run_context.context))
+        for data in self._model.get_data():
+            data_buffers.append(cl.Buffer(self._cl_run_context.context,
+                                          cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data))
 
         return data_buffers, results_buffer
 

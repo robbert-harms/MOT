@@ -126,7 +126,7 @@ class FreeParameter(CLFunctionParameter):
         Args:
             data_type (mot.cl_data_type.CLDataType): the data type expected by this parameter
             name (str): The name of this parameter
-            fixed (boolean): Fix this parameter is fixed to the value given
+            fixed (boolean): If this parameter is fixed to the value given
             value (double or ndarray): A single value for all voxels or a list of values for each voxel
             lower_bound (double): The lower bound of this parameter
             upper_bound (double): The upper bound of this parameter
@@ -157,27 +157,6 @@ class FreeParameter(CLFunctionParameter):
         self.sampling_proposal = sampling_proposal or GaussianProposal(1.0)
         self.sampling_prior = sampling_prior or UniformWithinBoundsPrior()
         self.sampling_statistics = sampling_statistics or GaussianPSS()
-
-    def unfix(self):
-        """Set the boolean fixed to false. Then return self.
-
-        Returns:
-            A reference to self for chaining.
-        """
-        self.fixed = False
-        return self
-
-    def fix_to(self, value):
-        """Set the boolean fixed to True and set the value to the given value.
-
-        Args:
-            value (number or ndarray): The value to fix this state to.
-
-        Returns:
-            A reference to self for chaining.
-        """
-        self.value = value
-        self.fixed = True
 
 
 class LibraryParameter(CLFunctionParameter):

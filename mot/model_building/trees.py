@@ -88,6 +88,16 @@ class CompartmentModelTree(Tree):
         super(CompartmentModelTree, self).__init__()
         self._init_tree(model_lists)
 
+    def get_compartment_models(self):
+        """Get the compartment models that are part of this tree.
+
+        This basically just returns the leaves of the tree.
+
+        Returns:
+            list of ModelFunction: the compartments in this tree
+        """
+        return [n.data for n in self.leaves]
+
     def _init_tree(self, listing):
         if isinstance(listing, (list, tuple)):
             if len(listing) == 1:

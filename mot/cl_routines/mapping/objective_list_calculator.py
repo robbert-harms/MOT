@@ -75,6 +75,10 @@ class _ObjectiveListCalculatorWorker(Worker):
         self._all_buffers, self._residuals_buffer = self._create_buffers()
         self._kernel = self._build_kernel(compile_flags)
 
+    def __del__(self):
+        for buffer in self._all_buffers:
+            buffer.release()
+
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
         event = self._kernel.get_objectives(self._cl_run_context.queue, (int(nmr_problems), ), None, *self._all_buffers,
@@ -91,7 +95,9 @@ class _ObjectiveListCalculatorWorker(Worker):
                                  hostbuf=self._parameters),
                        objectives_buffer]
 
-        all_buffers.extend(self._model.get_data_buffers(self._cl_run_context.context))
+        for data in self._model.get_data():
+            all_buffers.append(cl.Buffer(self._cl_run_context.context,
+                                         cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data))
 
         return all_buffers, objectives_buffer
 

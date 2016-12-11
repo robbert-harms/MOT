@@ -24,7 +24,7 @@ class Rosenbrock(OptimizeModelInterface):
     def name(self):
         return 'rosenbrock'
 
-    def get_data_buffers(self, context):
+    def get_data(self):
         return {}
 
     def get_kernel_data_struct(self, device):
@@ -142,7 +142,7 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
     def name(self):
         return 'matlab_lsqnonlin_example'
 
-    def get_data_buffers(self, context):
+    def get_data(self):
         return {}
 
     def get_kernel_data_struct(self, device):

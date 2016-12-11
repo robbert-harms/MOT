@@ -22,10 +22,11 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         Args:
             name (str): the name of the model
-            model_tree (CompartmentModelTree): the model tree object
-            evaluation_model (EvaluationModel): the evaluation model to use for the resulting complete model
-            signal_noise_model (SignalNoiseModel): the optional signal noise model to use to
-                add noise to the model prediction
+            model_tree (mot.model_building.trees.CompartmentModelTree): the model tree object
+            evaluation_model (mot.model_building.evaluation_models.EvaluationModel): the evaluation model to
+                use for the resulting complete model
+            signal_noise_model (mot.model_building.signal_noise_models.SignalNoiseModel): the optional signal
+                noise model to use to add noise to the model prediction
             problem_data (ProblemData): the problem data object
 
         Attributes;
@@ -34,26 +35,31 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 this attribute to a list of problems indices only those problems will be analyzed.
         """
         super(OptimizeModelBuilder, self).__init__()
+
+        self._dependency_store = DependencyStore()
+        self._model_functions_info = ModelFunctionsInformation(self._dependency_store,
+                                                               model_tree, evaluation_model, signal_noise_model)
+
         self._name = name
         self._double_precision = False
         self._model_tree = model_tree
         self._evaluation_model = evaluation_model
         self._signal_noise_model = signal_noise_model
         self._parameters_dot_to_bar = {}
-        self._dependency_store = DependencyStore()
         self._post_optimization_modifiers = []
         self.problems_to_analyze = None
+
+        self._fixed_parameters = {'{}.{}'.format(m.name, p.name): True for m, p in
+                                  self._model_functions_info.get_free_parameters_list() if p.fixed}
 
         self._problem_data = None
         if problem_data:
             self.set_problem_data(problem_data)
 
-        for m, p in self._get_model_parameter_list():
+        for m, p in self._model_functions_info.get_model_parameter_list():
             self._parameters_dot_to_bar.update({m.name + '.' + p.name: m.name + '_' + p.name})
 
-        self._check_for_double_model_names()
         self._set_default_dependencies()
-        self._buffer_manager = BufferManager()
 
     @property
     def name(self):
@@ -84,8 +90,9 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         Returns:
             Returns self for chainability
         """
-        m, p = self._get_model_parameter_matching(model_param_name)
-        p.fix_to(value)
+        m, p = self._model_functions_info.get_model_parameter_by_name(model_param_name)
+        p.value = value
+        self._fixed_parameters.update({'{}.{}'.format(m.name, p.name): True})
         return self
 
     def init(self, model_param_name, value):
@@ -98,7 +105,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         Returns:
             Returns self for chainability
         """
-        m, p = self._get_model_parameter_matching(model_param_name)
+        m, p = self._model_functions_info.get_model_parameter_by_name(model_param_name)
         p.value = value
         return self
 
@@ -112,7 +119,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         Returns:
             Returns self for chainability
         """
-        m, p = self._get_model_parameter_matching(model_param_name)
+        m, p = self._model_functions_info.get_model_parameter_by_name(model_param_name)
         p.lower_bound = value
         return self
 
@@ -126,7 +133,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         Returns:
             Returns self for chainability
         """
-        m, p = self._get_model_parameter_matching(model_param_name)
+        m, p = self._model_functions_info.get_model_parameter_by_name(model_param_name)
         p.upper_bound = value
         return self
 
@@ -140,7 +147,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         Returns:
             Returns self for chainability
         """
-        m, p = self._get_model_parameter_matching(model_param_name)
+        m, p = self._model_functions_info.get_model_parameter_by_name(model_param_name)
         p.parameter_transform = value
         return self
 
@@ -153,8 +160,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         Returns:
             Returns self for chainability
         """
-        m, p = self._get_model_parameter_matching(model_param_name)
-        p.fixed = False
+        m, p = self._model_functions_info.get_model_parameter_by_name(model_param_name)
+        self._fixed_parameters.update({'{}.{}'.format(m.name, p.name): False})
         return self
 
     def has_parameter(self, model_param_name):
@@ -166,7 +173,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         Returns:
             boolean: true if the parameter is defined in this model, false otherwise.
         """
-        for m, p in self._get_model_parameter_list():
+        for m, p in self._model_functions_info.get_model_parameter_list():
             if m.name + '.' + p.name == model_param_name:
                 return True
         return False
@@ -254,13 +261,13 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         Returns:
             A list of columns names that are to be taken from the protocol data.
         """
-        return list(set([p.name for m, p in self._get_model_parameter_list() if
+        return list(set([p.name for m, p in self._model_functions_info.get_model_parameter_list() if
                          isinstance(p, ProtocolParameter)]))
 
     def get_optimization_output_param_names(self):
         """See super class OptimizeModelInterface for details"""
         items = []
-        for m in self._get_model_list():
+        for m in self._model_functions_info.get_model_list():
             for p in m.get_free_parameters():
                 items.append(m.name + '.' + p.name)
 
@@ -269,7 +276,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         return items
 
     def get_optimized_param_names(self):
-        return [m.name + '.' + p.name for m, p in self._get_estimable_parameters_list()]
+        return [m.name + '.' + p.name for m, p in
+                self._model_functions_info.get_estimable_parameters_list(self._fixed_parameters)]
 
     def get_nmr_problems(self):
         if self.problems_to_analyze is None:
@@ -282,19 +290,12 @@ class OptimizeModelBuilder(OptimizeModelInterface):
     def get_nmr_estimable_parameters(self):
         return len(self.get_optimized_param_names())
 
-    def get_data_buffers(self, context):
-        buffers = []
-
-        items = [(self._get_variable_data(), 'var_', True),
-                 (self._get_protocol_data(), 'prtcl_', False),
-                 (self._get_static_data(), 'static_', False)]
-
-        for data_dict, key_prefix, new_data in items:
-            for key, data in data_dict.items():
-                buffers.append(self._buffer_manager.get_buffer(data.get_opencl_data(), context,
-                                                               key_prefix + key, new_data))
-
-        return buffers
+    def get_data(self):
+        data = []
+        for data_dict in [self._get_variable_data(), self._get_protocol_data(), self._get_static_data()]:
+            for el in data_dict.values():
+                data.append(el.get_opencl_data())
+        return data
 
     def get_kernel_data_struct(self, device):
         return self._get_all_kernel_source_items(device)['data_struct']
@@ -351,7 +352,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             np_dtype = np.float64
 
         starting_points = []
-        for m, p in self._get_estimable_parameters_list():
+        for m, p in self._model_functions_info.get_estimable_parameters_list(self._fixed_parameters):
             if results_dict and (m.name + '.' + p.name) in results_dict:
                 starting_points.append(results_dict[m.name + '.' + p.name])
             elif is_scalar(p.value):
@@ -377,10 +378,10 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         return data_adapter.get_opencl_data()
 
     def get_lower_bounds(self):
-        return np.array([p.lower_bound for m, p in self._get_estimable_parameters_list()])
+        return np.array([p.lower_bound for m, p in self._model_functions_info.get_estimable_parameters_list(self._fixed_parameters)])
 
     def get_upper_bounds(self):
-        return np.array([p.upper_bound for m, p in self._get_estimable_parameters_list()])
+        return np.array([p.upper_bound for m, p in self._model_functions_info.get_estimable_parameters_list(self._fixed_parameters)])
 
     def set_initial_parameters(self, initial_params):
         """Update the initial parameters for this model by the given values.
@@ -391,7 +392,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             initial_params (dict): a dictionary containing as keys full parameter names (<model>_<param>) and as values
                 numbers or arrays to be used as starting point
         """
-        for m, p in self._get_estimable_parameters_list():
+        for m, p in self._model_functions_info.get_estimable_parameters_list(self._fixed_parameters):
             if m.name + '.' + p.name in initial_params:
                 p.value = initial_params[m.name + '.' + p.name]
         return self
@@ -416,7 +417,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         if not self._dependency_store.has_dependencies() or not transform_needed:
             return None
 
-        param_exclude_list = [m.name + '_' + p.name for (m, p) in self._get_non_model_tree_param_listing()]
+        param_exclude_list = [m.name + '_' + p.name for (m, p)
+                              in self._model_functions_info.get_non_model_tree_param_listing()]
         param_lists = self._get_parameter_type_lists()
         depend_param_listing = self._get_dependent_parameters_listing(param_lists['dependent'])
 
@@ -465,8 +467,9 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 '(const void* const void_data, const mot_float_type* const x, const int observation_index){' + "\n"
         func += self.get_kernel_data_struct_type() + '* data = (' + self.get_kernel_data_struct_type() + '*)void_data;'
 
-        func += self._get_parameters_listing(exclude_list=[m.name + '_' + p.name for (m, p) in
-                                                           self._get_non_model_tree_param_listing()])
+        func += self._get_parameters_listing(
+            exclude_list=[m.name + '_' + p.name for (m, p) in
+                          self._model_functions_info.get_non_model_tree_param_listing()])
 
         if self._signal_noise_model:
             noise_params_listing = ''
@@ -540,7 +543,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         self._add_dependent_parameter_maps(results_dict)
         self._add_fixed_parameter_maps(results_dict)
 
-        for model in self._get_model_list():
+        for model in self._model_functions_info.get_model_list():
             results_dict.update(model.get_extra_results_maps(results_dict))
 
         for name, routine in self._post_optimization_modifiers:
@@ -555,7 +558,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         param_lists = self._get_parameter_type_lists()
         fixed_params = param_lists['fixed']
         for (m, p) in fixed_params:
-            if not self._parameter_fixed_to_dependency(m, p):
+            if not self._model_functions_info.is_parameter_fixed_to_dependency(m, p):
                 name = m.name + '.' + p.name
                 if is_scalar(p.value):
                     results_dict.update({name: np.tile(np.array([p.value]), (self.get_nmr_problems(),))})
@@ -588,7 +591,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
     def _get_parameter_transformations(self):
         dep_list = {}
         transform_dict = {}
-        for m, p in self._get_estimable_parameters_list():
+        for m, p in self._model_functions_info.get_estimable_parameters_list(self._fixed_parameters):
             name = m.name + '.' + p.name
             dep_names = list(dep[0].name + '.' + dep[1].name for dep in p.parameter_transform.dependencies)
             dep_list.update({name: dep_names})
@@ -600,12 +603,13 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         enc_func_list = []
         for name in dep_list:
             parameter = transform_dict[name]
-            ind = self._get_parameter_estimable_index(name)
+            ind = self._model_functions_info.get_parameter_estimable_index(name, self._fixed_parameters)
             transform = parameter.parameter_transform
 
             dependency_names = []
             for dep in transform.dependencies:
-                dep_ind = self._get_parameter_estimable_index(dep[0].name + '.' + dep[1].name)
+                dep_ind = self._model_functions_info.get_parameter_estimable_index(dep[0].name + '.' + dep[1].name,
+                                                                                   self._fixed_parameters)
                 dependency_names.append('{0}[' + str(dep_ind) + ']')
 
             if self._all_elements_equal(parameter.lower_bound):
@@ -723,9 +727,9 @@ class OptimizeModelBuilder(OptimizeModelInterface):
     def _get_model_functions_cl_code(self, noise_func_name):
         """Get the model functions CL. This is used in get_model_eval_function()."""
         cl_code = ''
-        for leave in self._model_tree.leaves:
-            cl_code += leave.data.get_cl_header() + "\n"
-            cl_code += leave.data.get_cl_code() + "\n"
+        for compartment_model in self._model_tree.get_compartment_models():
+            cl_code += compartment_model.get_cl_header() + "\n"
+            cl_code += compartment_model.get_cl_code() + "\n"
 
         if self._signal_noise_model:
             cl_code += self._signal_noise_model.get_signal_function(noise_func_name)
@@ -864,7 +868,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             name = m.name + '_' + p.name
             data_type = p.data_type.raw_data_type
 
-            if self._parameter_fixed_to_dependency(m, p):
+            if self._model_functions_info.is_parameter_fixed_to_dependency(m, p):
                 if (m.name + '_' + p.name) not in exclude_list:
                     func += "\t"*4 + data_type + ' ' + name + ' = ' + assignment + ';' + "\n"
             else:
@@ -873,8 +877,9 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
     def _get_fixed_parameters_as_var_data(self):
         var_data_dict = {}
-        for m, p in self._get_free_parameters_list():
-            if p.fixed and not self._all_elements_equal(p.value) and not self._parameter_fixed_to_dependency(m, p):
+        for m, p in self._model_functions_info.get_free_parameters_list():
+            if self._fixed_parameters.get('{}.{}'.format(m.name, p.name), False) \
+                and not self._all_elements_equal(p.value) and not self._model_functions_info.is_parameter_fixed_to_dependency(m, p):
                 value = p.value
                 if self.problems_to_analyze is not None:
                     value = value[self.problems_to_analyze, ...]
@@ -886,7 +891,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
     def _get_static_parameters_as_var_data(self):
         static_data_dict = {}
 
-        for m, p in self._get_static_parameters_list():
+        for m, p in self._model_functions_info.get_static_parameters_list():
             static_map_value = self._get_static_map_value(p)
 
             if not self._all_elements_equal(static_map_value):
@@ -898,7 +903,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
     def _get_bounds_as_var_data(self):
         bounds_dict = {}
 
-        for m, p in self._get_free_parameters_list():
+        for m, p in self._model_functions_info.get_free_parameters_list():
             lower_bound = p.lower_bound
             upper_bound = p.upper_bound
 
@@ -942,17 +947,6 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             return data[self.problems_to_analyze, ...]
         return data
 
-    def _get_non_model_tree_param_listing(self):
-        listing = []
-        for p in self._evaluation_model.parameter_list:
-            listing.append((self._evaluation_model, p))
-
-        if self._signal_noise_model:
-            for p in self._signal_noise_model.parameter_list:
-                listing.append((self._signal_noise_model, p))
-
-        return listing
-
     def _is_non_model_tree_model(self, model):
         return model is self._evaluation_model or (self._signal_noise_model is not None and
                                                    model is self._signal_noise_model)
@@ -970,16 +964,17 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         if isinstance(p, ProtocolParameter):
             assignment = 'data->protocol_data_' + p.name + '[observation_index]'
         elif isinstance(p, FreeParameter):
-            if p.fixed and not self._parameter_has_dependency(m, p):
+            if self._fixed_parameters.get('{}.{}'.format(m.name, p.name), False) \
+                and not self._model_functions_info.parameter_has_dependency(m, p):
                 if self._all_elements_equal(p.value):
                     assignment = '(' + data_type + ')' + str(float(self._get_single_value(p.value)))
                 else:
                     assignment = '(' + data_type + ') data->var_data_' + m.name + '_' + p.name
-            elif not self._parameter_has_dependency(m, p) \
-                or (self._parameter_has_dependency(m, p) and not self._parameter_fixed_to_dependency(m, p)):
-                ind = self._get_parameter_estimable_index(m.name + '.' + p.name)
+            elif not self._model_functions_info.parameter_has_dependency(m, p) \
+                or (self._model_functions_info.parameter_has_dependency(m, p) and not self._model_functions_info.is_parameter_fixed_to_dependency(m, p)):
+                ind = self._model_functions_info.get_parameter_estimable_index(m.name + '.' + p.name, self._fixed_parameters)
                 assignment += 'x[' + str(ind) + ']'
-            if self._parameter_has_dependency(m, p):
+            if self._model_functions_info.parameter_has_dependency(m, p):
                 return self._get_dependent_parameters_listing(((m, p),))
 
         return data_type + ' ' + name + ' = ' + assignment + ';' + "\n"
@@ -994,98 +989,24 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         estimable_parameters = []
         depended_parameters = []
 
-        for m, p in self._get_model_parameter_list():
+        for m, p in self._model_functions_info.get_model_parameter_list():
             if isinstance(p, ProtocolParameter):
                 protocol_parameters.append((m, p))
             elif isinstance(p, FreeParameter):
-                if p.fixed and not self._parameter_has_dependency(m, p):
+                if self._fixed_parameters.get('{}.{}'.format(m.name, p.name), False) \
+                    and not self._model_functions_info.parameter_has_dependency(m, p):
                     fixed_parameters.append((m, p))
-                elif not self._parameter_has_dependency(m, p) or (self._parameter_has_dependency(m, p)
-                                                                  and not self._parameter_fixed_to_dependency(m, p)):
+                elif not self._model_functions_info.parameter_has_dependency(m, p) \
+                    or (self._model_functions_info.parameter_has_dependency(m, p)
+                        and not self._model_functions_info.is_parameter_fixed_to_dependency(m, p)):
                     estimable_parameters.append((m, p))
 
-                if self._parameter_has_dependency(m, p):
+                if self._model_functions_info.parameter_has_dependency(m, p):
                     ind = self._dependency_store.get_index(m.name + '.' + p.name)
                     depended_parameters.insert(ind, (m, p))
 
         return {'protocol': protocol_parameters, 'fixed': fixed_parameters,
                 'estimable': estimable_parameters, 'dependent': depended_parameters}
-
-    def _get_parameter_by_name(self, parameter_name):
-        """Get the parameter object of the given full parameter name in dot format.
-
-        Args:
-            parameter_name (string): the parameter name in dot format: <model>.<param>
-        """
-        models = self._get_model_list()
-        for m in models:
-            for p in m.parameter_list:
-                if (m.name + '.' + p.name) == parameter_name:
-                    return p
-
-    def _get_parameter_estimable_index(self, parameter_name):
-        """Get the index of this parameter in the parameters list
-
-        This returns the position of this parameter in the 'x' vector in the CL kernel.
-
-        Args:
-            parameter_name: the parameter name in dot format. <model>.<param>
-        """
-        estimable_param_counter = 0
-        for m in self._get_model_list():
-            for p in m.parameter_list:
-                if (m.name + '.' + p.name) == parameter_name:
-                    return estimable_param_counter
-
-                if isinstance(p, FreeParameter) \
-                        and not self._parameter_fixed_to_dependency(m, p) \
-                        and not p.fixed:
-                    estimable_param_counter += 1
-
-    def _get_model_list(self):
-        """Get the list of all the Model Functions that play a role in this CompositeModel"""
-        models = [n.data for n in self._model_tree.leaves]
-        models.append(self._evaluation_model)
-        if self._signal_noise_model:
-            models.append(self._signal_noise_model)
-        return models
-
-    def _get_model_parameter_list(self):
-        """Get a list of all model, parameter tuples."""
-        return list((m, p) for m in self._get_model_list() for p in m.parameter_list)
-
-    def _get_free_parameters_list(self):
-        """Gets the free parameters (as model, parameter tuples) from the model listing.
-        This does not incorporate checking for fixed parameters.
-        """
-        return list((m, p) for m in self._get_model_list() for p in m.get_free_parameters())
-
-    def _get_static_parameters_list(self):
-        """Gets the static parameters (as model, parameter tuples) from the model listing."""
-        return list((m, p) for m in self._get_model_list() for p in m.get_parameters_of_type(StaticMapParameter))
-
-    def _get_estimable_parameters_list(self):
-        """Gets a list (as model, parameter tuples) of all parameters that are estimable. """
-        l = []
-        for m in self._get_model_list():
-            for p in m.get_free_parameters():
-                if self._parameter_estimable(m, p):
-                    l.append((m, p))
-        return l
-
-    def _get_model_estimable_parameters(self, model):
-        return list(p for p in model.get_free_parameters() if self._parameter_estimable(model, p))
-
-    def _parameter_estimable(self, m, p):
-        return not p.fixed and not self._parameter_fixed_to_dependency(m, p)
-
-    def _parameter_fixed_to_dependency(self, model, param):
-        return self._parameter_has_dependency(model, param) \
-            and self._dependency_store.get_dependency(model.name + '.' + param.name).fixed
-
-    def _parameter_has_dependency(self, model, param):
-        """Check if the given model and parameter name combo has a dependency."""
-        return self._dependency_store.has_dependency(model.name + '.' + param.name)
 
     def _convert_parameters_dot_to_bar(self, string):
         """Convert a string containing parameters with . to parameter names with _"""
@@ -1096,10 +1017,10 @@ class OptimizeModelBuilder(OptimizeModelInterface):
     def _init_fixed_duplicates_dependencies(self):
         """Find duplicate fixed parameters, and make dependencies of them. This saves data transfer in CL."""
         var_data_dict = {}
-        for m, p in self._get_free_parameters_list():
-            if p.fixed \
+        for m, p in self._model_functions_info.get_free_parameters_list():
+            if self._fixed_parameters.get('{}.{}'.format(m.name, p.name), False) \
                     and not is_scalar(p.value) \
-                    and not self._parameter_fixed_to_dependency(m, p):
+                    and not self._model_functions_info.is_parameter_fixed_to_dependency(m, p):
 
                 duplicate_found = False
                 duplicate_key = None
@@ -1114,33 +1035,6 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                     self.add_parameter_dependency(m.name + '.' + p.name, SimpleAssignment(duplicate_key))
                 else:
                     var_data_dict.update({m.name + '.' + p.name: p.value})
-
-    def _check_for_double_model_names(self):
-        models = self._get_model_list()
-        model_names = []
-        for m in models:
-            if m.name in model_names:
-                raise DoubleModelNameException("Double model name detected in the model tree.", m.name)
-            model_names.append(m.name)
-
-    def _contains_parameter_reference(self, s):
-        """Test if the given string contains a parameter reference to another model.
-        Here s is a string given by the user for a dependency, transformation or other possible string items.
-
-        Args:
-            s: string
-                The string we need to check for possible user referenced parameters
-
-        Returns:
-            Tuple with tuples for each (model, param) referenced in the given string
-        """
-        return list((m, p) for m, p in self._get_model_parameter_list() if m.name + '.' + p.name in s)
-
-    def _get_model_parameter_matching(self, model_param_name):
-        for m, p in self._get_model_parameter_list():
-            if m.name + '.' + p.name == model_param_name:
-                return m, p
-        raise ValueError('The parameter with the given name ({}) could not be found.'.format(model_param_name))
 
     def _get_variable_data(self):
         """See super class OptimizeModelInterface for details
@@ -1169,7 +1063,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
     def _get_protocol_data(self):
         protocol_info = self._problem_data.protocol
         return_data = {}
-        for m, p in self._get_model_parameter_list():
+        for m, p in self._model_functions_info.get_model_parameter_list():
             if isinstance(p, ProtocolParameter):
                 if p.name in protocol_info:
                     if not self._all_elements_equal(protocol_info[p.name]):
@@ -1183,7 +1077,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
     def _get_static_data(self):
         model_data_dict = {}
-        for m, p in self._get_model_parameter_list():
+        for m, p in self._model_functions_info.get_model_parameter_list():
             if isinstance(p, ModelDataParameter) and not self._all_elements_equal(p.value):
                 model_data_dict.update({p.name: SimpleDataAdapter(p.value, p.data_type, self._get_mot_float_type())})
         return model_data_dict
@@ -1366,25 +1260,25 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
     def get_log_prior_function(self, func_name='getLogPrior'):
         prior = 'mot_float_type ' + func_name + '(const mot_float_type* const x){' + "\n"
         prior += "\t" + 'mot_float_type prior = 1.0;' + "\n"
-        for i, (m, p) in enumerate(self._get_estimable_parameters_list()):
+        for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list(self._fixed_parameters)):
             prior += "\t" + 'prior *= ' + p.sampling_prior.get_cl_assignment(p, 'x[' + str(i) + ']') + "\n"
         prior += "\n" + "\t" + 'return log(prior);' + "\n" + '}'
         return prior
 
     def get_proposal_state(self):
         return_list = []
-        for m, p in self._get_estimable_parameters_list():
+        for m, p in self._model_functions_info.get_estimable_parameters_list(self._fixed_parameters):
             for param in p.sampling_proposal.get_parameters():
                 if param.adaptable:
                     return_list.append(param.default_value)
         return return_list
 
     def is_proposal_symmetric(self):
-        return all(p.sampling_proposal.is_symmetric for m, p in self._get_estimable_parameters_list())
+        return all(p.sampling_proposal.is_symmetric for m, p in self._model_functions_info.get_estimable_parameters_list(self._fixed_parameters))
 
     def get_proposal_logpdf(self, func_name='getProposalLogPDF'):
         return_str = ''
-        for _, p in self._get_estimable_parameters_list():
+        for _, p in self._model_functions_info.get_estimable_parameters_list(self._fixed_parameters):
             return_str += p.sampling_proposal.get_proposal_logpdf_function()
 
         return_str += "\n" + 'mot_float_type ' + func_name + \
@@ -1394,7 +1288,7 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         return_str += "\n\t" + 'switch(i){' + "\n\t\t"
 
         adaptable_parameter_count = 0
-        for i, (m, p) in enumerate(self._get_estimable_parameters_list()):
+        for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list(self._fixed_parameters)):
             return_str += 'case ' + str(i) + ':' + "\n\t\t\t"
 
             param_proposal = p.sampling_proposal
@@ -1416,7 +1310,7 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
 
     def get_proposal_function(self, func_name='getProposal'):
         return_str = ''
-        for _, p in self._get_estimable_parameters_list():
+        for _, p in self._model_functions_info.get_estimable_parameters_list(self._fixed_parameters):
             return_str += p.sampling_proposal.get_proposal_function()
 
         return_str += "\n" + 'mot_float_type ' + func_name + \
@@ -1426,7 +1320,7 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         return_str += "\n\t" + 'switch(i){' + "\n\t\t"
 
         adaptable_parameter_count = 0
-        for i, (m, p) in enumerate(self._get_estimable_parameters_list()):
+        for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list(self._fixed_parameters)):
             return_str += 'case ' + str(i) + ':' + "\n\t\t\t"
 
             param_proposal = p.sampling_proposal
@@ -1448,7 +1342,7 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
 
     def get_proposal_state_update_function(self, func_name='updateProposalParameters'):
         return_str = ''
-        for _, p in self._get_estimable_parameters_list():
+        for _, p in self._model_functions_info.get_estimable_parameters_list(self._fixed_parameters):
             for param in p.sampling_proposal.get_parameters():
                 if param.adaptable:
                     return_str += param.get_parameter_update_function()
@@ -1457,7 +1351,7 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
             'const uint proposal_update_intervals, mot_float_type* const proposal_state){' + "\n"
 
         adaptable_parameter_count = 0
-        for i, (m, p) in enumerate(self._get_estimable_parameters_list()):
+        for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list(self._fixed_parameters)):
             param_proposal = p.sampling_proposal
 
             for param in param_proposal.get_parameters():
@@ -1497,7 +1391,7 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
     def samples_to_statistics(self, samples_dict):
         results = {}
         for key, value in samples_dict.items():
-            param = self._get_parameter_by_name(key)
+            _, param = self._model_functions_info.get_model_parameter_by_name(key)
             stat_mod = param.sampling_statistics
             results[key] = stat_mod.get_mean(value)
             results[key + '.std'] = stat_mod.get_std(value)
@@ -1528,35 +1422,194 @@ class DependencyStore(object):
         return self.names_in_order.index(param_name)
 
 
-class BufferManager(object):
+class ModelFunctionsInformation(object):
 
-    def __init__(self):
-        self._buffer_storage = {}
-
-    def get_buffer(self, data, context, buffer_name, new_data=False):
-        """Get the buffer for the given data.
+    def __init__(self, dependency_store, model_tree, evaluation_model, signal_noise_model=None):
+        """Contains centralized information about the model functions in the model builder parent.
 
         Args:
-            data (ndarray): the data for which to create the buffer
-            context (pyopencl.Context): the context in which to create the buffer
-            buffer_name (str): the name of the buffer, used to memoize the buffer
-            new_data (bool): signals that we have new data for this buffer and we need to recreate it or refill it.
+            dependency_store (DependencyStore): the shared dependency store containing information about
+                the parameters that depend on each other
+            model_tree (mot.model_building.trees.CompartmentModelTree): the model tree object
+            evaluation_model (mot.model_building.evaluation_models.EvaluationModel): the evaluation model to
+                use for the resulting complete model
+            signal_noise_model (mot.model_building.signal_noise_models.SignalNoiseModel): the signal
+                noise model to use to add noise to the model prediction
+        """
+        self._dependency_store = dependency_store
+        self._model_tree = model_tree
+        self._evaluation_model = evaluation_model
+        self._signal_noise_model = signal_noise_model
+
+        self._model_list = self._get_model_list()
+        self._model_parameter_list = self._get_model_parameter_list()
+
+        self._check_for_double_model_names()
+
+    def get_model_list(self):
+        """Get the list of all the applicable model functions
 
         Returns:
-            pyopencl.Buffer: the pyopencl buffer for this data.
+            list of mot.model_building.cl_functions.base.ModelFunction: the list of model functions.
         """
-        import pyopencl as cl
+        return self._model_list
 
-        key = (buffer_name, context)
+    def get_model_parameter_list(self):
+        """Get a list of all model, parameter tuples.
 
-        if new_data and key in self._buffer_storage:
-            del self._buffer_storage[key]
+        Returns:
+            list of tuple: the list of tuples containing (model, parameters)
+        """
+        return self._model_parameter_list
 
-        if key not in self._buffer_storage:
-            self._buffer_storage[key] = cl.Buffer(context, cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
-                                                  hostbuf=data)
+    def get_free_parameters_list(self):
+        """Gets the free parameters as (model, parameter) tuples from the model listing.
+        This does not incorporate checking for fixed parameters.
 
-        return self._buffer_storage[key]
+        Returns:
+            list of tuple: the list of tuples containing (model, parameters)
+        """
+        return list((m, p) for m, p in self._model_parameter_list if isinstance(p, FreeParameter))
+
+    def get_static_parameters_list(self):
+        """Gets the static parameters (as model, parameter tuples) from the model listing."""
+        return list((m, p) for m, p in self._model_parameter_list if isinstance(p, StaticMapParameter))
+
+    def get_model_parameter_by_name(self, parameter_name):
+        """Get the parameter object of the given full parameter name in dot format.
+
+        Args:
+            parameter_name (string): the parameter name in dot format: <model>.<param>
+
+        Returns:
+            tuple: containing the (model, parameter) pair for the given parameter name
+        """
+        for m, p in self._model_parameter_list:
+            if '{}.{}'.format(m.name, p.name) == parameter_name:
+                return m, p
+        raise ValueError('The parameter with the name "{}" could not be found in this model.'.format(parameter_name))
+
+    def get_non_model_tree_param_listing(self):
+        """Get the model, parameter tuples for all parameters not in the model tree.
+
+        Basically this returns the parameters of the evaluation and signal noise model.
+
+        Returns:
+            tuple: the (model, parameter) tuple for all non model tree parameters
+        """
+        listing = []
+        for p in self._evaluation_model.parameter_list:
+            listing.append((self._evaluation_model, p))
+
+        if self._signal_noise_model:
+            for p in self._signal_noise_model.parameter_list:
+                listing.append((self._signal_noise_model, p))
+
+        return listing
+
+    def parameter_has_dependency(self, model, param):
+        """Check if the given model and parameter name combo has a dependency.
+
+        Args:
+            model (mot.model_building.cl_functions.base.ModelFunction): the model function
+            param (mot.model_building.cl_functions.parameters.CLFunctionParameter): the parameter
+
+        Returns:
+            boolean: if the given parameter has a dependency
+        """
+        return self._dependency_store.has_dependency(model.name + '.' + param.name)
+
+    def is_parameter_fixed_to_dependency(self, model, param):
+        """Check if the given model and parameter name combo has a dependency.
+
+        Args:
+            model (mot.model_building.cl_functions.base.ModelFunction): the model function
+            param (mot.model_building.cl_functions.parameters.CLFunctionParameter): the parameter
+
+        Returns:
+            boolean: if the given parameter is fixed to a dependency. Returns False if either this parameter
+                has no dependency or if it is not fixed to it.
+        """
+        return self.parameter_has_dependency(model, param) \
+            and self._dependency_store.get_dependency(model.name + '.' + param.name).fixed
+
+    def is_parameter_estimable(self, model, param, fixed_parameters):
+        """Check if the given model parameter is estimable.
+
+        A parameter is estimable if it is free, not fixed to dependencies and not fixed to any static value.
+
+        Args:
+            model (mot.model_building.cl_functions.base.ModelFunction): the model function
+            param (mot.model_building.cl_functions.parameters.CLFunctionParameter): the parameter
+            fixed_parameters (dict): the dictionary with information about the fixed parameters
+
+        Returns:
+            boolean: true if the parameter is estimable, false otherwise
+        """
+        return isinstance(param, FreeParameter) and \
+            not fixed_parameters.get('{}.{}'.format(model.name, param.name), False) and \
+            not self.is_parameter_fixed_to_dependency(model, param)
+
+    def get_estimable_parameters_list(self, fixed_parameters):
+        """Gets a list (as model, parameter tuples) of all parameters that are estimable.
+
+        Args:
+            fixed_parameters (dict): the dictionary with information about the fixed parameters
+
+        Returns:
+            list of tuple: the list of estimable parameters
+        """
+        return [(m, p) for m, p in self._model_parameter_list if self.is_parameter_estimable(m, p, fixed_parameters)]
+
+    def _get_model_parameter_list(self):
+        """Get a list of all model, parameter tuples.
+
+        Returns:
+            list of tuple: the list of tuples containing (model, parameters)
+        """
+        return list((m, p) for m in self._model_list for p in m.parameter_list)
+
+    def get_parameter_estimable_index(self, parameter_name, fixed_parameters):
+        """Get the index of this parameter in the parameters list
+
+        This returns the position of this parameter in the 'x', parameter vector in the CL kernels.
+
+        Args:
+            parameter_name: the parameter name in dot format. <model>.<param>
+            fixed_parameters (dict): the dictionary with information about the fixed parameters
+
+        Returns:
+            int: the index of the requested parameter in the list of optimized parameters
+        """
+        estimable_param_counter = 0
+        for m in self.get_model_list():
+            for p in m.parameter_list:
+                if '{}.{}'.format(m.name, p.name) == parameter_name:
+                    if not self.is_parameter_estimable(m, p, fixed_parameters):
+                        raise ValueError('The requested parameter "{}" is '
+                                         'not an estimable parameter.'.format(parameter_name))
+                    return estimable_param_counter
+
+                if self.is_parameter_estimable(m, p, fixed_parameters):
+                    estimable_param_counter += 1
+
+        raise ValueError('The given parameter "{}" could not be found in this model'.format(parameter_name))
+
+    def _get_model_list(self):
+        """Get the list of all the applicable model functions"""
+        models = list(self._model_tree.get_compartment_models())
+        models.append(self._evaluation_model)
+        if self._signal_noise_model:
+            models.append(self._signal_noise_model)
+        return models
+
+    def _check_for_double_model_names(self):
+        models = self._model_list
+        model_names = []
+        for m in models:
+            if m.name in model_names:
+                raise DoubleModelNameException("Double model name detected in the model tree.", m.name)
+            model_names.append(m.name)
 
 
 class ParameterNameException(Exception):
@@ -1572,3 +1625,4 @@ class ParameterResolutionException(Exception):
 class DoubleModelNameException(Exception):
     """Thrown when there are two models with the same name."""
     pass
+
