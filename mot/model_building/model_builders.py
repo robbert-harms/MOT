@@ -627,7 +627,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
             dec_func_list.append(s)
 
-            s = '{0}[' + str(ind) + '] = ' + transform.get_cl_decode().create_assignment(
+            s = '{0}[' + str(ind) + '] = ' + transform.get_cl_encode().create_assignment(
                 '{0}[' + str(ind) + ']', lower_bound, upper_bound, dependency_names) + ';'
 
             enc_func_list.append(s)
