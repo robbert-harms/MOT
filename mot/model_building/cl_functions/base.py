@@ -156,18 +156,6 @@ class ModelFunction(DependentCLFunction):
         """
         return list([p for p in self.parameter_list if isinstance(p, instance_types)])
 
-    def init(self, param_name, value):
-        """Set the parameter (by the param_name) to the given value (single value or array)
-
-        This generally only works for parameters with the state CLPSFreeState, for all other states it may fail.
-
-        Args:
-            param_name (str): the name of the parameter to initialize
-            value (number or ndarray): the optional value to initialize it to
-        """
-        self.get_parameter_by_name(param_name).value = value
-        return self
-
     def get_parameter_by_name(self, param_name):
         """Get a parameter by name.
 

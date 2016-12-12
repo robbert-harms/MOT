@@ -177,3 +177,43 @@ def is_scalar(value):
         boolean: if the given value is a scalar or not
     """
     return np.isscalar(value) or (isinstance(value, np.ndarray) and (len(np.squeeze(value).shape) == 0))
+
+
+def all_elements_equal(value):
+    """Checks if all elements in the given value are equal to each other.
+
+    If the input is a single value the result is trivial. If not, we compare all the values to see
+    if they are exactly the same.
+
+    Args:
+        value (ndarray or number): a numpy array or a single number.
+
+    Returns:
+        bool: true if all elements are equal to each other, false otherwise
+    """
+    if is_scalar(value):
+        return True
+    return (value == value[0]).all()
+
+
+def get_single_value(value):
+    """Get a single value out of the given value.
+
+    This is meant to be used after a call to :func:`all_elements_equal` that returned True. With this
+    function we return a single number from the input value.
+
+    Args:
+        value (ndarray or number): a numpy array or a single number.
+
+    Returns:
+        number: a single number from the input
+
+    Raises:
+        ValueError: if not all elements are equal
+    """
+    if not all_elements_equal(value):
+        raise ValueError('Not all values are equal to each other.')
+
+    if is_scalar(value):
+        return value
+    return value.item(0)
