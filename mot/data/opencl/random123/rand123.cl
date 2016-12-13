@@ -42,7 +42,7 @@ uint4 rand123_generate_bits(rand123_data* rng_data){
  */
 rand123_data rand123_initialize_data(uint counter[4]){
     %(GENERATOR_FUNCTION)s_ctr_t k = {{get_global_id(0), 0}};
-    %(GENERATOR_FUNCTION)s_key_t c = {(uint32_t)*counter};
+    %(GENERATOR_FUNCTION)s_key_t c = {{(uint32_t)*counter}};
 
     rand123_data rng_data = {c, k};
     return rng_data;
@@ -67,7 +67,7 @@ rand123_data rand123_initialize_data_constmem(constant uint counter[4]){
  */
 rand123_data rand123_initialize_data_extra_precision(uint counter[4], uint key[2]){
     %(GENERATOR_FUNCTION)s_ctr_t k = {{get_global_id(0), 0, key[0], key[1]}};
-    %(GENERATOR_FUNCTION)s_key_t c = {(uint32_t)*counter};
+    %(GENERATOR_FUNCTION)s_key_t c = {{(uint32_t)*counter}};
 
     rand123_data rng_data = {c, k};
     return rng_data;
