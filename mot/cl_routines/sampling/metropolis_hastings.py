@@ -44,9 +44,15 @@ class MetropolisHastings(AbstractSampler):
         """
         super(MetropolisHastings, self).__init__(cl_environments=cl_environments, load_balancer=load_balancer, **kwargs)
         self._nmr_samples = nmr_samples or 500
-        self.burn_length = burn_length or 500
-        self.sample_intervals = sample_intervals or 5
+        self.burn_length = burn_length
+        self.sample_intervals = sample_intervals
         self.proposal_update_intervals = proposal_update_intervals or 50
+
+        if self.burn_length is None:
+            self.burn_length = 500
+
+        if self.sample_intervals is None:
+            self.sample_intervals = 0
 
         if self.burn_length < 0:
             raise ValueError('The burn length can not be smaller than 0, {} given'.format(self.burn_length))
