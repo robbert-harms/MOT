@@ -121,30 +121,13 @@ class EvaluationModel(ModelFunction):
             That is, it always returns a double since the summations may get large.
         """
 
-    def set_noise_level_std(self, noise_std):
-        """Set the estimate of the noise level standard deviation.
-
-        We put this here as a method to make the method work with object oriented polymorphism. That is, not
-        all noiselevels use the same parameter for the noise standard deviation.
-
-        This method makes no assumptions about the state of the parameters affected, they can be fixed or not. This
-        function should just set the right value.
-
-        Args:
-            noise_std (double): the noise standard deviation
+    def get_noise_std_param_name(self):
+        """Get the name of the parameter that is associated with the noise standard deviation in the problem data.
 
         Returns:
-            self: for chaining
+            str: the name of the parameter that is associated with the noise_std in the problem data.
         """
-        return self
-
-    def get_noise_level_std(self):
-        """Get the estimate of the noise level standard deviation.
-
-        Returns:
-            noise_std (double): the noise standard deviation
-        """
-        return 1
+        return 'sigma'
 
 
 class SumOfSquares(EvaluationModel):
@@ -284,13 +267,6 @@ class GaussianEvaluationModel(EvaluationModel):
             }
         '''
 
-    def set_noise_level_std(self, noise_std):
-        self.parameter_list[0].value = noise_std
-        return self
-
-    def get_noise_level_std(self):
-        return self.parameter_list[0].value
-
 
 class OffsetGaussianEvaluationModel(EvaluationModel):
 
@@ -383,13 +359,6 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
                            if full_likelihood else '') + ''';
             }
         '''
-
-    def set_noise_level_std(self, noise_std):
-        self.parameter_list[0].value = noise_std
-        return self
-
-    def get_noise_level_std(self):
-        return self.parameter_list[0].value
 
 
 class RicianEvaluationModel(EvaluationModel):
@@ -503,10 +472,3 @@ class RicianEvaluationModel(EvaluationModel):
                 return sum;
             }
         '''
-
-    def set_noise_level_std(self, noise_std):
-        self.parameter_list[0].value = noise_std
-        return self
-
-    def get_noise_level_std(self):
-        return self.parameter_list[0].value

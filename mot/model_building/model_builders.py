@@ -190,7 +190,9 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         """
         self._problem_data = problem_data
         if self._problem_data.noise_std is not None:
-            self._evaluation_model.set_noise_level_std(self._problem_data.noise_std)
+            self._parameter_values['{}.{}'.format(
+                self._evaluation_model.name,
+                self._evaluation_model.get_noise_std_param_name())] = self._problem_data.noise_std
         return self
 
     def add_parameter_dependency(self, parameter_name, dependency):
