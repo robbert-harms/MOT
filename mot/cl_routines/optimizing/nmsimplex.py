@@ -24,6 +24,14 @@ class NMSimplex(AbstractParallelOptimizer):
                 - alpha (double): reflection coefficient, default 1.0
                 - beta (double): contraction coefficient, default 0.5
                 - gamma (double); expansion coefficient, default 2.0
+                - delta (double); shrinkage coefficient, default 0.5
+
+                They should satisfy the following constraints:
+                    α > 0
+                    0 < β < 1
+                    γ > 1
+                    γ > α
+                    0 < δ < 1
         """
         patience = patience or self.default_patience
 
