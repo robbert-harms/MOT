@@ -13,7 +13,8 @@ class Powell(AbstractParallelOptimizer):
 
     default_patience = 2
 
-    def __init__(self, bracket_gold=None, glimit=None, reset_method=None, patience=None, **kwargs):
+    def __init__(self, bracket_gold=None, glimit=None, reset_method=None, patience=None, optimizer_settings=None,
+                 **kwargs):
         """Use the Powell method to calculate the optimum.
 
         Args:
@@ -25,21 +26,25 @@ class Powell(AbstractParallelOptimizer):
         """
         patience = patience or self.default_patience
 
-        optimizer_settings = kwargs.pop('optimizer_settings', {})
-        optimizer_settings['bracket_gold'] = bracket_gold
-        optimizer_settings['glimit'] = glimit
-        optimizer_settings['reset_method'] = reset_method
+        optimizer_settings = optimizer_settings or {}
+
+        keyword_values = {}
+        keyword_values['bracket_gold'] = bracket_gold
+        keyword_values['glimit'] = glimit
+        keyword_values['reset_method'] = reset_method
 
         option_defaults = {'bracket_gold': 1.618034, 'glimit': 100.0, 'reset_method': 'EXTRAPOLATED_POINT'}
 
-        def get_value(option_name, default):
-            value = optimizer_settings.get(option_name, None)
+        def get_value(option_name):
+            value = keyword_values.get(option_name)
             if value is None:
-                return default
+                value = optimizer_settings.get(option_name)
+            if value is None:
+                value = option_defaults[option_name]
             return value
 
-        for option, default in option_defaults.items():
-            optimizer_settings.update({option: get_value(option, default)})
+        for option in option_defaults:
+            optimizer_settings.update({option: get_value(option)})
 
         super(Powell, self).__init__(patience=patience, optimizer_settings=optimizer_settings, **kwargs)
 

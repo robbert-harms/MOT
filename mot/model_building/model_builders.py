@@ -34,8 +34,12 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             problems_to_analyze (list): the list with problems we want to analyze. Suppose we have a few thousands
                 problems defined in this model, but we want to run the optimization only on a few problems. By setting
                 this attribute to a list of problems indices only those problems will be analyzed.
+            use_parameter_transformations (boolean): set to False to disable the parameter transformations.
+                This basically sets the encode and decode functions to the identity function.
         """
         super(OptimizeModelBuilder, self).__init__()
+
+        self.use_parameter_transformations = True
 
         self._dependency_store = _DependencyStore()
         self._model_functions_info = _ModelFunctionsInformation(self._dependency_store,
@@ -325,9 +329,10 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         func = '''
             void ''' + fname + '''(const void* data_void, mot_float_type* x){
         '''
-        func += self.get_kernel_data_struct_type() + '* data = (' + self.get_kernel_data_struct_type() + '*)data_void;'
-        for d in self._get_parameter_transformations()[1]:
-            func += "\n" + "\t" * 4 + d.format('x')
+        if self.use_parameter_transformations:
+            func += self.get_kernel_data_struct_type() + '* data = (' + self.get_kernel_data_struct_type() + '*)data_void;'
+            for d in self._get_parameter_transformations()[1]:
+                func += "\n" + "\t" * 4 + d.format('x')
         return func + '''
             }
         '''
@@ -336,9 +341,11 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         func = '''
             void ''' + fname + '''(const void* data_void, mot_float_type* x){
         '''
-        func += self.get_kernel_data_struct_type() + '* data = (' + self.get_kernel_data_struct_type() + '*)data_void;'
-        for d in self._get_parameter_transformations()[0]:
-            func += "\n" + "\t" * 4 + d.format('x')
+        if self.use_parameter_transformations:
+            func += self.get_kernel_data_struct_type() + '* data = (' + self.get_kernel_data_struct_type() + '*)data_void;'
+            for d in self._get_parameter_transformations()[0]:
+                func += "\n" + "\t" * 4 + d.format('x')
+
         return func + '''
             }
         '''
