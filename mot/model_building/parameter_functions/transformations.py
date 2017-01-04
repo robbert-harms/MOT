@@ -83,7 +83,7 @@ class CosSqrClampTransform(AbstractTransformation):
     def get_cl_encode(self):
         return FormatAssignmentConstructor('acos(clamp(sqrt(fabs( ({parameter_variable} - {lower_bound}) / '
                                            '                      ({upper_bound} - {lower_bound}) )), '
-                                           '                (mot_float_type)-1, (mot_float_type)1))')
+                                           '                (mot_float_type)0, (mot_float_type)1))')
 
     def get_cl_decode(self):
         return FormatAssignmentConstructor('pown(cos({parameter_variable}), 2) * ' +
@@ -96,7 +96,7 @@ class SinSqrClampTransform(AbstractTransformation):
     def get_cl_encode(self):
         return FormatAssignmentConstructor('asin(clamp(sqrt(fabs( ({parameter_variable} - {lower_bound}) / '
                                            '                      ({upper_bound} - {lower_bound}) )), '
-                                           '                (mot_float_type)-1, (mot_float_type)1))')
+                                           '                (mot_float_type)0, (mot_float_type)1))')
 
     def get_cl_decode(self):
         return FormatAssignmentConstructor('pown(sin({parameter_variable}), 2) * ' +
