@@ -53,8 +53,13 @@ class LinearSpacedGrid(GridGenerator):
         Setting a grid step to 1 or lower disables that dimension from the grid search and the average
         initial parameter value is returned instead.
 
+        If the grid number of steps is not given we use the 'grid_size' argument in the method 'get_grid' for
+        generating the grid (typically set to the patience of the optimizer). The total grid size in that case is then
+        ``grid_size * nmr_parameters``.
+
         Args:
-            grid_nmr_steps (int or list): the number of steps for the generated grid
+            grid_nmr_steps (int or list): the number of steps for the generated grid. If set to None we
+                use the argument 'grid_size' of the method 'get_grid' for generating the grid.
         """
         self._grid_nmr_steps = grid_nmr_steps
 
@@ -188,25 +193,26 @@ class GridSearch(AbstractParallelOptimizer):
         super(GridSearch, self).__init__(patience=patience, **kwargs)
 
     def _get_worker_generator(self, *args):
-        return lambda cl_environment: GridSearchWorker(cl_environment, *args, grid_generator=self._grid_generator)
+        model = args[1]
+        nmr_params = args[3]
+
+        np_dtype = np.float32
+        if model.double_precision:
+            np_dtype = np.float64
+
+        grid = np.require(self._grid_generator.get_grid(
+            model, self.patience * nmr_params), np_dtype, requirements=['C', 'A', 'O'])
+
+        if grid.shape[1] != model.get_nmr_estimable_parameters():
+            raise ValueError('The shape of the generated grid is not compatible with the given model.')
+
+        return lambda cl_environment: GridSearchWorker(cl_environment, *args, grid=grid)
 
 
 class GridSearchWorker(AbstractParallelOptimizerWorker):
 
     def __init__(self, *args, **kwargs):
-        self._parent_optimizer = args[1]
-        self._model = args[2]
-        self._nmr_params = args[7]
-
-        np_dtype = np.float32
-        if self._model.double_precision:
-            np_dtype = np.float64
-        self._grid = np.require(kwargs.pop('grid_generator').get_grid(
-            self._model, self._parent_optimizer.patience * self._nmr_params), np_dtype, requirements=['C', 'A', 'O'])
-
-        if self._grid.shape[1] != self._model.get_nmr_estimable_parameters():
-            raise ValueError('The shape of the generated grid is not compatible with the given model.')
-
+        self._grid = kwargs.pop('grid')
         super(GridSearchWorker, self).__init__(*args, **kwargs)
 
     def _create_buffers(self):
@@ -253,7 +259,7 @@ class GridSearchWorker(AbstractParallelOptimizerWorker):
                         model_parameters[param_ind] = grid[i * ''' + str(nmr_params) + ''' + param_ind];
                     }
 
-                    encodeParameters(model_parameters);
+                    encodeParameters(model_parameters, (void*)&data);
                     error = evaluate(model_parameters, data);
 
                     if(error < lowest_error){

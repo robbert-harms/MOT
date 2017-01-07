@@ -1,6 +1,4 @@
 import os
-
-import numpy as np
 from pkg_resources import resource_filename
 from mot.cl_data_type import CLDataType
 from mot.model_building.cl_functions.base import ModelFunction
@@ -62,5 +60,3 @@ class Weight(Scalar):
         self.parameter_list[0].name = 'w'
         self.parameter_list[0].parameter_transform = CosSqrClampTransform()
         self.parameter_list[0].sampling_proposal = GaussianProposal(0.01)
-        self.parameter_list[0].perturbation_function = lambda v: np.clip(
-            v + np.random.normal(scale=0.05, size=v.shape), 0, 1)
