@@ -30,10 +30,10 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 noise model to use to add noise to the model prediction
             problem_data (ProblemData): the problem data object
 
-        Attributes;
+        Attributes:
             problems_to_analyze (list): the list with problems we want to analyze. Suppose we have a few thousands
                 problems defined in this model, but we want to run the optimization only on a few problems. By setting
-                this attribute to a list of problems indices only those problems will be analyzed.
+                this attribute to a list of problem indices, only those problems will be analyzed.
             use_parameter_transformations (boolean): set to False to disable the parameter transformations.
                 This basically sets the encode and decode functions to the identity function.
         """

@@ -16,7 +16,7 @@ class AbstractProblemData(object):
         The protocol data contains information about the experimental setup. In MRI this is the scanner protocol.
 
         Returns:
-            dict: The protocol data dict.
+            collections.Mapping: The protocol data information mapping.
         """
         return {}
 

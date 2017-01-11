@@ -1,4 +1,4 @@
-from collections import MutableMapping
+from collections import Mapping
 import pyopencl as cl
 import numpy as np
 from ...utils import get_float_type_def
@@ -36,7 +36,7 @@ class CalculateModelEstimates(CLRoutine):
 
         nmr_inst_per_problem = model.get_nmr_inst_per_problem()
 
-        if isinstance(parameters, MutableMapping):
+        if isinstance(parameters, Mapping):
             nmr_problems = model.get_nmr_problems()
             parameters = np.require(model.get_initial_parameters(parameters), np_dtype,
                                     requirements=['C', 'A', 'O'])

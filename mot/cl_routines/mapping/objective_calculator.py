@@ -1,4 +1,4 @@
-from collections import MutableMapping
+from collections import Mapping
 
 import pyopencl as cl
 import numpy as np
@@ -47,7 +47,7 @@ class ObjectiveCalculator(CLRoutine):
         if model.double_precision:
             np_dtype = np.float64
 
-        if isinstance(parameters, MutableMapping):
+        if isinstance(parameters, Mapping):
             return np.require(model.get_initial_parameters(parameters), np_dtype, requirements=['C', 'A', 'O'])
 
         return np.require(parameters, np_dtype, requirements=['C', 'A', 'O'])
