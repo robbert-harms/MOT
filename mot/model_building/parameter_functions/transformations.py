@@ -69,7 +69,8 @@ class ClampTransform(AbstractTransformation):
 
     def get_cl_encode(self):
         return FormatAssignmentConstructor('clamp((mot_float_type){parameter_variable}, '
-                                           '(mot_float_type){lower_bound}, (mot_float_type){upper_bound})')
+                                           '(mot_float_type){lower_bound}, '
+                                           '(mot_float_type){upper_bound})')
 
     def get_cl_decode(self):
         return FormatAssignmentConstructor('clamp((mot_float_type){parameter_variable}, '
@@ -81,9 +82,10 @@ class CosSqrClampTransform(AbstractTransformation):
     """The clamp transformation limits the parameter between its lower and upper bound using a cos(sqr()) transform."""
 
     def get_cl_encode(self):
-        return FormatAssignmentConstructor('acos(clamp(sqrt(fabs( ({parameter_variable} - {lower_bound}) / '
-                                           '                      ({upper_bound} - {lower_bound}) )), '
-                                           '                (mot_float_type)0, (mot_float_type)1))')
+        return FormatAssignmentConstructor(
+            'acos(clamp((mot_float_type)sqrt(fabs( ({parameter_variable} - {lower_bound}) / '
+            '                                      ({upper_bound} - {lower_bound}) )), '
+            '           (mot_float_type)0, (mot_float_type)1))')
 
     def get_cl_decode(self):
         return FormatAssignmentConstructor('pown(cos({parameter_variable}), 2) * ' +
@@ -94,9 +96,10 @@ class SinSqrClampTransform(AbstractTransformation):
     """The clamp transformation limits the parameter between its lower and upper bound using a sin(sqr()) transform."""
 
     def get_cl_encode(self):
-        return FormatAssignmentConstructor('asin(clamp(sqrt(fabs( ({parameter_variable} - {lower_bound}) / '
-                                           '                      ({upper_bound} - {lower_bound}) )), '
-                                           '                (mot_float_type)0, (mot_float_type)1))')
+        return FormatAssignmentConstructor(
+            'asin(clamp((mot_float_type)sqrt(fabs( ({parameter_variable} - {lower_bound}) / '
+            '                                       ({upper_bound} - {lower_bound}) )), '
+            '           (mot_float_type)0, (mot_float_type)1))')
 
     def get_cl_decode(self):
         return FormatAssignmentConstructor('pown(sin({parameter_variable}), 2) * ' +
