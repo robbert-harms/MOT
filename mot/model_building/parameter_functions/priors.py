@@ -11,42 +11,73 @@ class AbstractParameterPrior(object):
     They indicate the a priori information one has about a parameter.
     """
 
-    def get_cl_assignment(self, parameter, parameter_name):
-        """Get the assignment code.
-
-        In CL assignments look like: a = b;
-        This function should return the "b;" part. That is, all that follows after the assignment operator.
-
-        Args:
-            parameter (FreeParameter): the free parameter for which to create a prior
-            parameter_name (str): the name of the parameter for which we create the prior
+    def get_cl_assignment(self):
+        """Get the assignment constructor.
 
         Returns:
-            str: The assignment code for the prior
+            AssignmentConstructor: The assignment construction method for this prior
         """
         return ''
 
 
 class UniformPrior(AbstractParameterPrior):
     """The uniform prior is always 1."""
-    def get_cl_assignment(self, parameter, parameter_name):
-        return '1;'
+    def get_cl_assignment(self):
+        return FormatAssignmentConstructor('1')
 
 
 class UniformWithinBoundsPrior(AbstractParameterPrior):
     """This prior is 1 within the upper and lower bound of the parameter, 0 outside."""
-    def get_cl_assignment(self, parameter, parameter_name):
-        return '((' + parameter_name + ' < ' + str(float(parameter.lower_bound)) + \
-               ' || ' + parameter_name + ' > ' + str(float(parameter.upper_bound)) + ') ? 0.0 : 1.0);'
+    def get_cl_assignment(self):
+        return FormatAssignmentConstructor('(({parameter_variable} < {lower_bound} '
+                                           '  || {parameter_variable} > {upper_bound}) ? 0.0 : 1.0)')
 
 
 class AbsSinPrior(AbstractParameterPrior):
     """The fabs(sin(x)) prior."""
-    def get_cl_assignment(self, parameter, parameter_name):
-        return 'fabs(sin(' + parameter_name + '));'
+    def get_cl_assignment(self):
+        return FormatAssignmentConstructor('fabs(sin({parameter_variable}))')
 
 
 class AbsSinHalfPrior(AbstractParameterPrior):
     """The fabs(sin(x)/2.0) prior. Taken from FSL"""
-    def get_cl_assignment(self, parameter, parameter_name):
-        return 'fabs(sin(' + parameter_name + ')/2.0);'
+    def get_cl_assignment(self):
+        return FormatAssignmentConstructor('fabs(sin({parameter_variable})/2.0)')
+
+
+class AssignmentConstructor(object):
+
+    def create_assignment(self, parameter_variable, lower_bound, upper_bound):
+        """Create the assignment string.
+
+        Args:
+            parameter_variable (str): the name of the parameter variable holding the current value in the kernel
+            lower_bound (str): the value or the name of the variable holding the value for the lower bound
+            upper_bound (str): the value or the name of the variable holding the value for the upper bound
+
+        Returns:
+            str: the prior assignment
+        """
+
+
+class FormatAssignmentConstructor(AssignmentConstructor):
+
+    def __init__(self, assignment):
+        """Assignment constructor that formats the given assignment template.
+
+        This expects that the assignment string has elements like:
+
+        * ``{parameter_variable}``: for the parameter variable
+        * ``{lower_bound}``: for the lower bound
+        * ``{upper_bound}``: for the upper bound
+
+        Args:
+            assignment (str): the string containing the assignment template.
+        """
+        self._assignment = assignment
+
+    def create_assignment(self, parameter_variable, lower_bound, upper_bound):
+        assignment = self._assignment.replace('{parameter_variable}', parameter_variable)
+        assignment = assignment.replace('{lower_bound}', lower_bound)
+        assignment = assignment.replace('{upper_bound}', upper_bound)
+        return assignment

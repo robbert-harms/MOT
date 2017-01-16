@@ -330,7 +330,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             void ''' + fname + '''(const void* data_void, mot_float_type* x){
         '''
         if self.use_parameter_transformations:
-            func += self.get_kernel_data_struct_type() + '* data = (' + self.get_kernel_data_struct_type() + '*)data_void;'
+            func += self.get_kernel_data_struct_type() + \
+                    '* data = (' + self.get_kernel_data_struct_type() + '*)data_void;'
             for d in self._get_parameter_transformations()[1]:
                 func += "\n" + "\t" * 4 + d.format('x')
         return func + '''
@@ -342,7 +343,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             void ''' + fname + '''(const void* data_void, mot_float_type* x){
         '''
         if self.use_parameter_transformations:
-            func += self.get_kernel_data_struct_type() + '* data = (' + self.get_kernel_data_struct_type() + '*)data_void;'
+            func += self.get_kernel_data_struct_type() + \
+                    '* data = (' + self.get_kernel_data_struct_type() + '*)data_void;'
             for d in self._get_parameter_transformations()[0]:
                 func += "\n" + "\t" * 4 + d.format('x')
 
@@ -637,7 +639,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             else:
                 lower_bound = 'data->var_data_lb_' + name.replace('.', '_')
 
-            if all_elements_equal(parameter.lower_bound):
+            if all_elements_equal(parameter.upper_bound):
                 upper_bound = str(get_single_value(parameter.upper_bound))
             else:
                 upper_bound = 'data->var_data_ub_' + name.replace('.', '_')
@@ -1261,11 +1263,30 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
                                                  problem_data)
 
     def get_log_prior_function(self, func_name='getLogPrior'):
-        prior = 'mot_float_type ' + func_name + '(const mot_float_type* const x){' + "\n"
-        prior += "\t" + 'mot_float_type prior = 1.0;' + "\n"
+        prior = 'mot_float_type ' + func_name + '(const void* data_void, const mot_float_type* const x){' + "\n"
+        prior += "\t" + self.get_kernel_data_struct_type() + \
+                    '* data = (' + self.get_kernel_data_struct_type() + '*)data_void;\n'
+        prior += '\tmot_float_type prior = 1.0;\n'
+
         for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
-            prior += "\t" + 'prior *= ' + p.sampling_prior.get_cl_assignment(p, 'x[' + str(i) + ']') + "\n"
-        prior += "\n" + "\t" + 'return log(prior);' + "\n" + '}'
+            name = m.name + '.' + p.name
+
+            if all_elements_equal(p.lower_bound):
+                lower_bound = str(get_single_value(p.lower_bound))
+            else:
+                lower_bound = 'data->var_data_lb_' + name.replace('.', '_')
+
+            if all_elements_equal(p.upper_bound):
+                upper_bound = str(get_single_value(p.upper_bound))
+            else:
+                upper_bound = 'data->var_data_ub_' + name.replace('.', '_')
+
+            assignment_constructor = p.sampling_prior.get_cl_assignment()
+            assignment = assignment_constructor.create_assignment('x[' + str(i) + ']', lower_bound, upper_bound)
+
+            prior += '\tprior *= {};\n'.format(assignment)
+
+        prior += '\n\treturn log(prior);\n}'
         return prior
 
     def get_proposal_state(self):

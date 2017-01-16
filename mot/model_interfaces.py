@@ -499,7 +499,7 @@ class SampleModelInterface(OptimizeModelInterface):
         raise NotImplementedError
 
     def get_log_prior_function(self, func_name='getLogPrior'):
-        """Get the prior function that returns a double representing the prior information about the given parameters.
+        """Get the prior function that returns the prior information about the given parameters.
 
         The prior function must be in log space.
 
@@ -510,7 +510,7 @@ class SampleModelInterface(OptimizeModelInterface):
             str: A function with the signature:
                 .. code-block:: c
 
-                    mot_float_type <func_name>(const mot_float_type* const x);
+                    mot_float_type <func_name>(const void* data_void, const mot_float_type* const x);
 
             Which is called by the sampling routine to calculate the posterior probability.
         """

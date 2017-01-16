@@ -122,7 +122,7 @@ class SimulatedAnnealingWorker(AbstractParallelOptimizerWorker):
                     old_x = x[k];
                     x[k] = getProposal(k, x[k], rng_data, proposal_state);
 
-                    new_prior = getLogPrior(x);
+                    new_prior = getLogPrior(data, x);
 
                     if(exp(new_prior) > 0){
                         new_likelihood = getLogLikelihood(data, x);
@@ -168,7 +168,7 @@ class SimulatedAnnealingWorker(AbstractParallelOptimizerWorker):
                 uint ac_between_proposal_updates[] = ''' + acceptance_counters_between_proposal_updates + ''';
 
                 double current_likelihood = getLogLikelihood(data, x);
-                mot_float_type current_prior = getLogPrior(x);
+                mot_float_type current_prior = getLogPrior(data, x);
 
                 mot_float_type temperature;
                 mot_float_type min_temp;

@@ -249,7 +249,7 @@ class _MHWorker(Worker):
                     old_x = x[k];
                     x[k] = getProposal(k, x[k], rng_data, proposal_state);
 
-                    new_prior = getLogPrior(x);
+                    new_prior = getLogPrior(data, x);
 
                     if(exp(new_prior) > 0){
                         new_likelihood = getLogLikelihood(data, x);
@@ -341,7 +341,7 @@ class _MHWorker(Worker):
                     }
 
                     double current_likelihood = getLogLikelihood((void*)&data, x);
-                    mot_float_type current_prior = getLogPrior(x);
+                    mot_float_type current_prior = getLogPrior((void*)&data, x);
 
                     _sample(x, rng_data, &current_likelihood,
                             &current_prior, (void*)&data, proposal_state, ac_between_proposal_updates,
