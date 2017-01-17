@@ -258,8 +258,8 @@ class OptimizeModelInterface(object):
         """Get for each estimable parameter the lower bounds.
 
         Returns:
-            ndarray: An numpy row with on each column a single value, the lower bound for that parameter. This value
-            can be the literal string '-inf' for infinity.
+            list: For every estimable parameter a scalar or vector with the the lower bound(s) for that parameter.
+                This value can also be the literal string '-inf' for infinity.
         """
         raise NotImplementedError
 
@@ -267,8 +267,8 @@ class OptimizeModelInterface(object):
         """Get for each estimable parameter the upper bounds.
 
         Returns:
-            ndarray: An numpy row with on each column a single value, the upper bound for that parameter. This value
-            can be the literal string 'inf' for infinity.
+            list: For every estimable parameter a scalar or vector with the the upper bound(s) for that parameter.
+                This value can also be the literal string '-inf' for infinity.
         """
         raise NotImplementedError
 

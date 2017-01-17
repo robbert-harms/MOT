@@ -60,6 +60,12 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                                   self._model_functions_info.get_free_parameters_list() +
                                   self._model_functions_info.get_static_parameters_list()}
 
+        self._lower_bounds = {'{}.{}'.format(m.name, p.name): p.lower_bound for m, p in
+                              self._model_functions_info.get_free_parameters_list()}
+
+        self._upper_bounds = {'{}.{}'.format(m.name, p.name): p.upper_bound for m, p in
+                              self._model_functions_info.get_free_parameters_list()}
+
         self._problem_data = None
         if problem_data:
             self.set_problem_data(problem_data)
@@ -125,8 +131,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         Returns:
             Returns self for chainability
         """
-        m, p = self._model_functions_info.get_model_parameter_by_name(model_param_name)
-        p.lower_bound = value
+        self._lower_bounds[model_param_name] = value
         return self
 
     def set_upper_bound(self, model_param_name, value):
@@ -139,8 +144,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         Returns:
             Returns self for chainability
         """
-        m, p = self._model_functions_info.get_model_parameter_by_name(model_param_name)
-        p.upper_bound = value
+        self._upper_bounds[model_param_name] = value
         return self
 
     def set_parameter_transform(self, model_param_name, value):
@@ -394,13 +398,13 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
     def get_lower_bounds(self):
         """See super class for details"""
-        return np.array([p.lower_bound for m, p in
-                         self._model_functions_info.get_estimable_parameters_list()])
+        return list(self._lower_bounds['{}.{}'.format(m.name, p.name)] for m, p in
+                    self._model_functions_info.get_estimable_parameters_list())
 
     def get_upper_bounds(self):
         """See super class for details"""
-        return np.array([p.upper_bound for m, p in
-                         self._model_functions_info.get_estimable_parameters_list()])
+        return list(self._upper_bounds['{}.{}'.format(m.name, p.name)] for m, p in
+                    self._model_functions_info.get_estimable_parameters_list())
 
     def set_initial_parameters(self, initial_params):
         """Update the initial parameters for this model by the given values.
@@ -634,13 +638,13 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 dep_ind = self._model_functions_info.get_parameter_estimable_index(dep[0].name + '.' + dep[1].name)
                 dependency_names.append('{0}[' + str(dep_ind) + ']')
 
-            if all_elements_equal(parameter.lower_bound):
-                lower_bound = str(get_single_value(parameter.lower_bound))
+            if all_elements_equal(self._lower_bounds[name]):
+                lower_bound = str(get_single_value(self._lower_bounds[name]))
             else:
                 lower_bound = 'data->var_data_lb_' + name.replace('.', '_')
 
-            if all_elements_equal(parameter.upper_bound):
-                upper_bound = str(get_single_value(parameter.upper_bound))
+            if all_elements_equal(self._upper_bounds[name]):
+                upper_bound = str(get_single_value(self._upper_bounds[name]))
             else:
                 upper_bound = 'data->var_data_ub_' + name.replace('.', '_')
 
@@ -932,8 +936,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         bounds_dict = {}
 
         for m, p in self._model_functions_info.get_free_parameters_list():
-            lower_bound = p.lower_bound
-            upper_bound = p.upper_bound
+            lower_bound = self._lower_bounds['{}.{}'.format(m.name, p.name)]
+            upper_bound = self._upper_bounds['{}.{}'.format(m.name, p.name)]
 
             if not all_elements_equal(lower_bound):
                 data_adapter = SimpleDataAdapter(lower_bound, p.data_type, self._get_mot_float_type())
@@ -1271,13 +1275,13 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
             name = m.name + '.' + p.name
 
-            if all_elements_equal(p.lower_bound):
-                lower_bound = str(get_single_value(p.lower_bound))
+            if all_elements_equal(self._lower_bounds[name]):
+                lower_bound = str(get_single_value(self._lower_bounds[name]))
             else:
                 lower_bound = 'data->var_data_lb_' + name.replace('.', '_')
 
-            if all_elements_equal(p.upper_bound):
-                upper_bound = str(get_single_value(p.upper_bound))
+            if all_elements_equal(self._upper_bounds[name]):
+                upper_bound = str(get_single_value(self._upper_bounds[name]))
             else:
                 upper_bound = 'data->var_data_ub_' + name.replace('.', '_')
 

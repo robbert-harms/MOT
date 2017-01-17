@@ -99,7 +99,8 @@ class RandomStartingPoint(StartingPointGenerator):
 
         for param_ind, param_name in enumerate(param_names):
             init_dict[param_name] = np.ones(model.get_nmr_problems()) * \
-                                    np.random.uniform(lower_bounds[param_ind], upper_bounds[param_ind])
+                                    np.random.uniform(np.min(lower_bounds[param_ind]),
+                                                      np.max(upper_bounds[param_ind]))
 
         return init_dict
 

@@ -90,7 +90,7 @@ class LinearSpacedGrid(GridGenerator):
                 spacing = 1
                 values = default_params[index]
             else:
-                values = np.linspace(np.mean(lower_bounds[index]), np.mean(upper_bounds[index]), spacing)
+                values = np.linspace(np.min(lower_bounds[index]), np.max(upper_bounds[index]), spacing)
 
             result = np.tile(result, (spacing, 1))
             result[:, index] = np.repeat(values, repeat_mult)
@@ -135,8 +135,8 @@ class UniformRandomGrid(GridGenerator):
         upper_bounds = model.get_upper_bounds()
 
         for param_ind in range(len(lower_bounds)):
-            result[:, param_ind] = np.random.uniform(np.mean(lower_bounds[param_ind]),
-                                                     np.mean(upper_bounds[param_ind]), grid_size)
+            result[:, param_ind] = np.random.uniform(np.min(lower_bounds[param_ind]),
+                                                     np.max(upper_bounds[param_ind]), grid_size)
 
         return result
 
@@ -164,7 +164,7 @@ class GaussianRandomGrid(GridGenerator):
         for param_ind in range(len(lower_bounds)):
             result[:, param_ind] = np.random.normal(
                 default_params[param_ind],
-                (np.mean(upper_bounds[param_ind]) - np.mean(lower_bounds[param_ind])) / 2.0,
+                (np.max(upper_bounds[param_ind]) - np.min(lower_bounds[param_ind])) / 2.0,
                 grid_size)
 
         return result
