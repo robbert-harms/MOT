@@ -55,24 +55,27 @@ Note that MOT is not compatible with Python < 2.7 and that a recent version of P
 
 The easiest way to install Python3 is with the Anaconda Python distribution.
 Please download and install the Python3.x 64 bit distribution, version 4.2 or higher which includes PyQt5, from `Anaconda <https://www.continuum.io/downloads>`_ and install it with the default settings.
-If you are following this guide with the intention of installing MDT afterwards, please note that Anaconda versions prior to 4.2 have the (deprecated) PyQt4 as its Qt library.
+If you are following this guide with the intention of installing `MDT <https://maastrichtdiffusiontoolbox.readthedocs.io/en/latest/index.html>`_ afterwards, please note that Anaconda versions prior to 4.2 have the (deprecated) PyQt4 as its Qt library.
 This is not a problem for MOT per se.
-However if you want to go and install MDT, or more generally want to use Qt5 and packages that depend on Qt5, you will find benefit from installing Anaconda > 4.2 with PyQt5.
-If you insist on using an older Anaconda environment, note that this is possible, but you will have to install a PyQt5 package yourself, such as the m-labs PyQt5 Anaconda package and deal with its version conflict, e.g. python version <= 3.4)
+However if you want to go and install MDT and use its Qt5 GUI, or more generally want to use Qt5 and packages that depend on Qt5, you will find benefit from installing Anaconda > 4.2 with PyQt5.
+If you insist on using an older Anaconda install or environment, note that this is possible, but you will have to install a PyQt5 package yourself, such as the m-labs PyQt5 Anaconda package and deal with its version conflicts, e.g. python version <= 3.4.
 
-After installation type in the Windows start bar ``anaconda`` and start the ``anaconda prompt``.
+
+After installation type ``Anaconda Prompt`` in the Windows start bar and start the Anaconda Prompt command line interface.
 
 
 .. _install_opencl:
 
-Installing OpenCL
-=================
+Installing OpenCL drivers
+=========================
 To run OpenCL applications you need an OpenCL driver for your platform.
 Please download and install the correct device driver (Intel/AMD/NVidia) for your device with support for OpenCL 1.2 or higher.
 For graphics cards, make sure you are using the latest version of your graphics driver.
 For Intel processors download the OpenCL runtime from https://software.intel.com/en-us/articles/opencl-drivers
 (OpenCL Runtime for Intel Core and Intel Xeon Processors; towards the end).
-Note that this is only needed if you want to run OpenCL on your CPUs as well as your GPUs.
+Note that installing the Intel driver is needed if you want to run OpenCL on your Intel CPUs. Is is not needed if you only want to run on your GPUs.
+As a rule, you need to have an OpenCL driver or runtime installed for every device you want to run computations on.
+Most often, having both CPU and GPU available is desirable.
 
 .. _install_pyopencl:
 
