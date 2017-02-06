@@ -6,7 +6,7 @@ Installation
 *********************
 Ubuntu / Debian Linux
 *********************
-Using the package manager, installation in Ubuntu and Debian is easy.
+Using the package manager, installation in Ubuntu and Debian is relatively straightforward.
 
 For **Ubuntu >= 16** the MOT package can be installed with a Personal Package Archive (PPA) using:
 
@@ -49,29 +49,33 @@ The installation on Windows is a little bit more convoluted due to the lack of a
 
 Installing Python
 =================
-Since MOT is a Python package we need to install a Python interpreter. Considering that Python2 is soon end of life, we focus here on installing Python3.
-One can of course use this guide for Python 2 as well by substituting Python version 2 for 3 where stated.
+Since MOT is a Python package we need to install a Python interpreter. Considering that Python2 is soon end-of-life, we focus here on installing Python3.
+One can of course use this guide for Python 2 as well by substituting Python version 2(.7) for 3(.x) where stated.
+Note that MOT is not compatible with Python < 2.7 and that a recent version of Python 3 is recommended.
 
 The easiest way to install Python3 is with the Anaconda Python distribution.
-Please download and install the Python3.x 64 bit version 4.2 or higher distribution from `Anaconda <https://www.continuum.io/downloads>`_ and install it with the default settings.
-If you are following this guide with the intention of installing MDT afterwards, please note that Anaconda versions prior to 4.2 have the (deprecated) PyQt4 as its Qt library.
+Please download and install the Python3.x 64 bit distribution, version 4.2 or higher which includes PyQt5, from `Anaconda <https://www.continuum.io/downloads>`_ and install it with the default settings.
+If you are following this guide with the intention of installing `MDT <https://maastrichtdiffusiontoolbox.readthedocs.io/en/latest/index.html>`_ afterwards, please note that Anaconda versions prior to 4.2 have the (deprecated) PyQt4 as its Qt library.
 This is not a problem for MOT per se.
-However if you want to go and install MDT, or more generally want to use Qt5 and packages that depend on Qt5, you will find benefit from installing Anaconda > 4.2 with PyQt5.
-If you insist on using an older Anaconda environment, note that this is possible, but you will have to install a PyQt5 package yourself, such as the m-labs PyQt5 Anaconda package and deal with its version conflict, e.g. python version <= 3.4)
+However if you want install MDT and use its Qt5 GUI, or more generally want to use Qt5 and packages that depend on Qt5, you will find benefit from installing Anaconda > 4.2 with PyQt5.
+If you insist on using an older Anaconda install or PyQt4 `environment <https://conda.io/docs/using/envs.html>`_ (also consider creating a new PyQt5 compatible env), note that this is possible, but you will have to install a PyQt5 package yourself, such as the m-labs PyQt5 Anaconda package and deal with its version conflicts, e.g. python version <= 3.4.
 
-After installation type in the Windows start bar ``anaconda`` and start the ``anaconda prompt``.
+
+After installation type ``Anaconda Prompt`` in the Windows start bar and start the Anaconda Prompt command line interface.
 
 
 .. _install_opencl:
 
-Installing OpenCL
-=================
+Installing OpenCL drivers
+=========================
 To run OpenCL applications you need an OpenCL driver for your platform.
 Please download and install the correct device driver (Intel/AMD/NVidia) for your device with support for OpenCL 1.2 or higher.
 For graphics cards, make sure you are using the latest version of your graphics driver.
 For Intel processors download the OpenCL runtime from https://software.intel.com/en-us/articles/opencl-drivers
 (OpenCL Runtime for Intel Core and Intel Xeon Processors; towards the end).
-Note that this is only needed if you want to run OpenCL on your CPUs as well as your GPUs.
+Note that installing the Intel driver is needed if you want to run OpenCL on your Intel CPUs. Is is not needed if you only want to run on your GPUs.
+As a rule, you need to have an OpenCL driver or runtime installed for every device you want to run computations on.
+Most often, having both CPU and GPU available is desirable.
 
 .. _install_pyopencl:
 
@@ -84,16 +88,16 @@ PyOpenCL can either be installed from a downloadable binary or be compiled from 
 Using the binary is easiest since manual compilation is more difficult.
 
 
-Using a binary PyOpenCL package
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Alternative 1: Using a binary PyOpenCL package
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Installing a precompiled binary wheel (.whl) is the easiest way to install PyOpenCL, but only works if the wheel is compiled for your specific Python implementation.
-At Christoph Gohlke website (http://www.lfd.uci.edu/~gohlke/pythonlibs/#pyopencl) you can find a range of PyOpenCL binary packages, if there is a compatible one for your system,
-download that version.
+At Christoph Gohlke website (http://www.lfd.uci.edu/~gohlke/pythonlibs/#pyopencl) you can find a range of PyOpenCL binary packages.
+If there is a compatible one for your system, download that version.
 You can see if it is compatible if the Python version in the binary name matches that of your installed Python version.
-For example if you have Python 3.5 you need to download the wheel with ``cp35m`` in the name (note the format, ``cp<version>m``, the ``m`` is important).
+For example if you have 64-bit Windows system with Python 3.5 you need to download the wheel with``win-amd64`` and ``cp35m`` in the name (note the format, ``cp<version>m``, the ``m`` is important).
 (To check which Python version you have you can run ``python --version`` in the command line).
 
-If there is no compatible version for your system to be found on Gohlke's website, here is a mirror of an older version by Gohlke that is compatible with most systems:
+If there is no compatible version for your system to be found on Gohlke's website, here is a mirror of an older version by Gohlke that is compatible with most Python 3.5 systems:
 :download:`pyopencl-2015.2.4-cp35-none-win_amd64 <./_downloads/pyopencl-2015.2.4-cp35-none-win_amd64.whl>`.
 
 After the download, open an Anaconda Prompt (or a normal Windows cmd) and change directory to where you downloaded the ``.whl`` file.
@@ -106,13 +110,13 @@ Then, install the binary using pip:
 
 Please make sure you are in the right directory and please substitute ``<filename>`` for your downloadeded filename.
 
-To test if this binary package works, open a Python shell and type:
+To test if this binary package works, open a Python shell (for instance by typing ``python`` in your open prompt) and type:
 
 .. code-block:: python
 
     >>> import pyopencl
 
-If that works without messages about missing dll's and cffi problems, you are good to go.
+If that works (python ``>>>`` prompt reappears) without messages about missing dll's and cffi problems, you are good to go. (exit the python prompt by typing ``exit()`` or Ctrl-Z then Enter)
 If you encounter an error that ends on something like:
 
 .. code-block:: none
@@ -123,9 +127,9 @@ Then the binary package (.whl file) is not compatible with your OS version and/o
 Either try a different wheel, or try the compilation procedure below.
 
 
-Compile PyOpenCL with Visual Studio 15
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Installing ``pyopencl`` with pip requires Visual Studio 2015 and an OpenCL SDK (this is different from a runtime, the SDK includes compilation header files) to be present on your system.
+Alternative 2: Compile PyOpenCL with Visual Studio 15
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Installing ``pyopencl`` with pip from source code requires Visual Studio 2015 and an OpenCL SDK (this is different from a driver or runtime, the SDK includes compilation header files) to be present on your system.
 First, install Visual Studio 2015 with a few specific options enabled (under "Custom" during the installation):
 
 * [] Programming Languages
@@ -159,7 +163,7 @@ If this completes without errors, PyOpenCL is installed. If you get compilation 
 The paths listed here assume an NVidia system. Please adapt the paths to your own system and device SDK (e.g. ATI). Important is that the ``INCLUDE`` path should contain
 the file ``CL\cl.h`` and the ``LIB`` path should contain ``OpenCL.lib``. Find these directories if needed. If all goes well, PyOpenCL will be compiled and installed to your system.
 
-If this still does not work, you can try one of the installation guides on https://wiki.tiker.net/PyOpenCL/Installation/Windows.
+If this still does not work, you can try one of the installation guides on https://wiki.tiker.net/PyOpenCL/Installation/Windows, or you can consider (re)installing Anaconda, version >=4.2, with Python 3.5 on your 64-bit Windows system and then try the -cp35-none-win_amd64 wheel linked above.
 
 
 .. _install_mot:
