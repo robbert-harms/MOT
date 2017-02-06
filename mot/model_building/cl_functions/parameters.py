@@ -1,3 +1,5 @@
+from copy import copy
+
 from mot.cl_data_type import CLDataType
 from mot.model_building.parameter_functions.priors import UniformWithinBoundsPrior
 from mot.model_building.parameter_functions.proposals import GaussianProposal
@@ -45,6 +47,19 @@ class CLFunctionParameter(object):
             CL vector type with 4 doubles.
         """
         return self._data_type.is_vector_type
+
+    def get_renamed(self, name):
+        """Get a copy of the current parameter but then with a new name.
+
+        Args:
+            name (str): the new name for this parameter
+
+        Returns:
+            cls: a copy of the current type but with a new name
+        """
+        new_param = copy(self)
+        new_param.name = name
+        return new_param
 
 
 class CurrentObservationParam(CLFunctionParameter):
@@ -148,15 +163,47 @@ class FreeParameter(CLFunctionParameter):
                 statistics out of the samples
         """
         super(FreeParameter, self).__init__(data_type, name)
-        self.value = value
-        self.lower_bound = lower_bound
-        self.upper_bound = upper_bound
-        self.fixed = fixed
+        self._value = value
+        self._lower_bound = lower_bound
+        self._upper_bound = upper_bound
+        self._fixed = fixed
 
-        self.parameter_transform = parameter_transform or IdentityTransform()
-        self.sampling_proposal = sampling_proposal or GaussianProposal(1.0)
-        self.sampling_prior = sampling_prior or UniformWithinBoundsPrior()
-        self.sampling_statistics = sampling_statistics or GaussianPSS()
+        self._parameter_transform = parameter_transform or IdentityTransform()
+        self._sampling_proposal = sampling_proposal or GaussianProposal(1.0)
+        self._sampling_prior = sampling_prior or UniformWithinBoundsPrior()
+        self._sampling_statistics = sampling_statistics or GaussianPSS()
+
+    @property
+    def value(self):
+        return self._value
+
+    @property
+    def lower_bound(self):
+        return self._lower_bound
+
+    @property
+    def upper_bound(self):
+        return self._upper_bound
+
+    @property
+    def fixed(self):
+        return self._fixed
+
+    @property
+    def parameter_transform(self):
+        return self._parameter_transform
+
+    @property
+    def sampling_proposal(self):
+        return self._sampling_proposal
+
+    @property
+    def sampling_prior(self):
+        return self._sampling_prior
+
+    @property
+    def sampling_statistics(self):
+        return self._sampling_statistics
 
 
 class LibraryParameter(CLFunctionParameter):

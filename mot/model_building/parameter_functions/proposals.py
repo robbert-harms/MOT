@@ -29,7 +29,10 @@ class AbstractParameterProposal(object):
         """Get the proposal function as a CL string. This should include include guards (#ifdef's).
 
         This should follow the signature:
-        mot_float_type <proposal_fname>(mot_float_type current, void* rng_data, <additional_parameters>)
+
+        .. code-block: c
+
+            mot_float_type <proposal_fname>(mot_float_type current, void* rng_data, <additional_parameters>)
 
         That is, it can have more than two parameter, but the first two are obligatory. The additional parameters
         are defined by the get_parameters function of this python class.
@@ -53,6 +56,9 @@ class AbstractParameterProposal(object):
         This function is used if the proposal is not symmetric. The implementation should include include guards.
 
         This should follow the signature:
+
+        .. code-block: c
+
             mot_float_type <proposal_pdf_fname>(mot_float_type proposal, mot_float_type current,
                                                 <additional_parameters>)
 

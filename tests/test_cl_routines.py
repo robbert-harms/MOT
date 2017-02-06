@@ -28,14 +28,23 @@ class CLRoutineTestCase(unittest.TestCase):
 
     def __init__(self, *args, **kwargs):
         super(CLRoutineTestCase, self).__init__(*args, **kwargs)
+        self._old_config_value = mot.configuration._config['compile_flags']['general']['-cl-single-precision-constant']
+
+    def setUp(self):
         mot.configuration._config['compile_flags']['general'].update({
             '-cl-single-precision-constant': False
+        })
+
+    def tearDown(self):
+        mot.configuration._config['compile_flags']['general'].update({
+            '-cl-single-precision-constant': self._old_config_value
         })
 
 
 class TestRosenbrock(CLRoutineTestCase):
 
     def setUp(self):
+        super(TestRosenbrock, self).setUp()
         self.model = Rosenbrock(5)
         self.optimizers = (NMSimplex(), Powell(patience=10))
 
@@ -49,6 +58,7 @@ class TestRosenbrock(CLRoutineTestCase):
 class TestLSQNonLinExample(CLRoutineTestCase):
 
     def setUp(self):
+        super(TestLSQNonLinExample, self).setUp()
         self.model = MatlabLSQNonlinExample()
         self.optimizers = (LevenbergMarquardt(),)
         self.residual_calc = ResidualCalculator()
@@ -66,6 +76,7 @@ class TestLSQNonLinExample(CLRoutineTestCase):
 class TestFilters(CLRoutineTestCase):
 
     def setUp(self):
+        super(TestFilters, self).setUp()
         self.d1 = np.array([1, 2, 4, 2, 1], dtype=np.float64)
         self.d2 = np.eye(4)
 

@@ -18,7 +18,8 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 class MetropolisHastings(AbstractSampler):
 
     def __init__(self, cl_environments=None, load_balancer=None, nmr_samples=None, burn_length=None,
-                 sample_intervals=None, proposal_update_intervals=None, **kwargs):
+                 sample_intervals=None, proposal_update_intervals=None,
+                 use_adaptive_proposals=True, **kwargs):
         """An CL implementation of Metropolis Hastings.
 
         Args:
@@ -32,6 +33,7 @@ class MetropolisHastings(AbstractSampler):
                 store every sample after the burn in.
             proposal_update_intervals (int): after how many samples we would like to update the proposals
                 This is during burning and sampling. A value of 1 means update after every jump.
+            use_adaptive_proposals (boolean): if we use the adaptive proposals (set to True) or not (set to False).
 
         Attributes:
             nmr_samples (int): The length of the (returned) chain per voxel
@@ -47,6 +49,7 @@ class MetropolisHastings(AbstractSampler):
         self.burn_length = burn_length
         self.sample_intervals = sample_intervals
         self.proposal_update_intervals = proposal_update_intervals or 50
+        self.use_adaptive_proposals = use_adaptive_proposals
 
         if self.burn_length is None:
             self.burn_length = 500
@@ -91,7 +94,8 @@ class MetropolisHastings(AbstractSampler):
         workers = self._create_workers(lambda cl_environment: _MHWorker(
             cl_environment, self.get_compile_flags_list(), model, parameters, samples,
             self.nmr_samples, self.burn_length, self.sample_intervals,
-            self.proposal_update_intervals))
+            self.proposal_update_intervals,
+            self.use_adaptive_proposals))
         self.load_balancer.process(workers, model.get_nmr_problems())
 
         samples_dict = results_to_dict(samples, model.get_optimized_param_names())
@@ -129,10 +133,12 @@ class MetropolisHastings(AbstractSampler):
         sample_settings = dict(nmr_samples=self.nmr_samples,
                                burn_length=self.burn_length,
                                sample_intervals=self.sample_intervals,
-                               proposal_update_intervals=self.proposal_update_intervals)
+                               proposal_update_intervals=self.proposal_update_intervals,
+                               use_adaptive_proposals=self.use_adaptive_proposals)
         self._logger.info('Sample settings: nmr_samples: {nmr_samples}, burn_length: {burn_length}, '
                           'sample_intervals: {sample_intervals}, '
-                          'proposal_update_intervals: {proposal_update_intervals}. '.format(**sample_settings))
+                          'proposal_update_intervals: {proposal_update_intervals}, '
+                          'use_adaptive_proposals: {use_adaptive_proposals}. '.format(**sample_settings))
 
         samples_drawn = dict(samples_drawn=(self.burn_length + (self.sample_intervals + 1) * self.nmr_samples),
                              samples_returned=self.nmr_samples)
@@ -144,7 +150,7 @@ class _MHWorker(Worker):
 
     def __init__(self, cl_environment, compile_flags, model, parameters, samples,
                  nmr_samples, burn_length, sample_intervals,
-                 proposal_update_intervals):
+                 proposal_update_intervals, use_adaptive_proposals):
         super(_MHWorker, self).__init__(cl_environment)
 
         self._model = model
@@ -156,6 +162,7 @@ class _MHWorker(Worker):
         self._burn_length = burn_length
         self._sample_intervals = sample_intervals
         self.proposal_update_intervals = proposal_update_intervals
+        self.use_adaptive_proposals = use_adaptive_proposals
 
         self._rand123_starting_point = RandomStartingPoint()
 
@@ -199,7 +206,9 @@ class _MHWorker(Worker):
         kernel_source += self._model.get_kernel_data_struct(self._cl_environment.device)
         kernel_source += self._model.get_log_prior_function('getLogPrior')
         kernel_source += self._model.get_proposal_function('getProposal')
-        kernel_source += self._model.get_proposal_state_update_function('updateProposalState')
+
+        if self.use_adaptive_proposals:
+            kernel_source += self._model.get_proposal_state_update_function('updateProposalState')
 
         if cl_final_param_transform:
             kernel_source += cl_final_param_transform
@@ -209,25 +218,28 @@ class _MHWorker(Worker):
 
         kernel_source += self._model.get_log_likelihood_function('getLogLikelihood', full_likelihood=False)
 
-        kernel_source += '''
-            void _update_proposals(mot_float_type* const proposal_state, uint* const ac_between_proposal_updates,
-                                   uint* const proposal_update_count){
+        if self.use_adaptive_proposals:
+            kernel_source += '''
+                void _update_proposals(mot_float_type* const proposal_state, uint* const ac_between_proposal_updates,
+                                       uint* const proposal_update_count){
 
-                *proposal_update_count += 1;
+                    *proposal_update_count += 1;
 
-                if(*proposal_update_count == ''' + str(self.proposal_update_intervals) + '''){
-                    updateProposalState(ac_between_proposal_updates,
-                                        ''' + str(self.proposal_update_intervals) + ''',
-                                        proposal_state);
+                    if(*proposal_update_count == ''' + str(self.proposal_update_intervals) + '''){
+                        updateProposalState(ac_between_proposal_updates,
+                                            ''' + str(self.proposal_update_intervals) + ''',
+                                            proposal_state);
 
-                    for(int i = 0; i < ''' + str(proposal_state_size) + '''; i++){
-                        ac_between_proposal_updates[i] = 0;
+                        for(int i = 0; i < ''' + str(proposal_state_size) + '''; i++){
+                            ac_between_proposal_updates[i] = 0;
+                        }
+
+                        *proposal_update_count = 0;
                     }
-
-                    *proposal_update_count = 0;
                 }
-            }
+            '''
 
+        kernel_source += '''
             void _update_state(mot_float_type* const x,
                                void* rng_data,
                                double* const current_likelihood,
@@ -300,7 +312,9 @@ class _MHWorker(Worker):
                                          + self._burn_length) + '''; i++){
                     _update_state(x, rng_data, current_likelihood, current_prior,
                                   data, proposal_state, ac_between_proposal_updates);
-                    _update_proposals(proposal_state, ac_between_proposal_updates, proposal_update_count);
+
+                    ''' + ('_update_proposals(proposal_state, ac_between_proposal_updates, proposal_update_count);'
+                                                    if self.use_adaptive_proposals else '') + '''
 
                     if(i >= ''' + str(self._burn_length) + ''' && i % ''' + str(self._sample_intervals + 1) + ''' == 0){
                         for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){

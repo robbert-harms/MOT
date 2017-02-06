@@ -148,20 +148,15 @@ class TopologicalSort(object):
             raise ValueError('Cyclic dependencies exist among these items: {}'.format(', '.join(repr(x)
                                                                                                 for x in data.items())))
 
-    def get_flattened(self, sort=True):
+    def get_flattened(self):
         """Returns a single flattened list of dependencies.
 
-        Optionally we can sort the list to make the results repeatable.
-
-        Args:
-            sort (boolean): if we want to sort the results list
-
         Returns:
-            list: the list of dependencies in constructure order, optionally sorted
+            tuple: the list of dependencies in constructor order, optionally sorted
         """
         result = []
         for d in self.get_sorted():
-            result.extend((sorted if sort else list)(d))
+            result.extend(tuple(d))
         return result
 
 

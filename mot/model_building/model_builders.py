@@ -1,5 +1,5 @@
 import numpy as np
-
+import copy
 from mot.cl_data_type import CLDataType
 from mot.cl_routines.mapping.calc_dependent_params import CalculateDependentParameters
 from mot.model_building.cl_functions.parameters import CurrentObservationParam, StaticMapParameter, ProtocolParameter, \
@@ -38,18 +38,18 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 This basically sets the encode and decode functions to the identity function.
         """
         super(OptimizeModelBuilder, self).__init__()
-
-        self.use_parameter_transformations = True
-
-        self._dependency_store = _DependencyStore()
-        self._model_functions_info = _ModelFunctionsInformation(self._dependency_store,
-                                                                model_tree, evaluation_model, signal_noise_model)
-
         self._name = name
-        self._double_precision = False
         self._model_tree = model_tree
         self._evaluation_model = evaluation_model
         self._signal_noise_model = signal_noise_model
+
+        self.use_parameter_transformations = True
+        self._double_precision = False
+
+        self._dependency_store = _DependencyStore()
+        self._model_functions_info = self._init_model_information_container(
+            self._dependency_store, model_tree, evaluation_model, signal_noise_model)
+
         self._parameters_dot_to_bar = {}
         self._post_optimization_modifiers = []
         self.problems_to_analyze = None
@@ -74,6 +74,19 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             self._parameters_dot_to_bar.update({m.name + '.' + p.name: m.name + '_' + p.name})
 
         self._set_default_dependencies()
+
+    def _init_model_information_container(self, dependency_store, model_tree, evaluation_model, signal_noise_model):
+        """Get the model information container object.
+
+        This is called in the __init__ to provide the new model with the correct subclass function information
+        object. The rationale is that some subclasses may have additional parameters not present in optimization. For
+        example, in sampling one can have priors with parameters. These parameters must be added to the model and the
+        best point to do that is in the ModelFunctionsInformation object.
+
+        Returns:
+            ModelFunctionsInformation: the model function information object
+        """
+        return ModelFunctionsInformation(dependency_store, model_tree, evaluation_model, signal_noise_model)
 
     @property
     def name(self):
@@ -617,25 +630,22 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
     def _get_parameter_transformations(self):
         dep_list = {}
-        transform_dict = {}
         for m, p in self._model_functions_info.get_estimable_parameters_list():
-            name = m.name + '.' + p.name
-            dep_names = list(dep[0].name + '.' + dep[1].name for dep in p.parameter_transform.dependencies)
-            dep_list.update({name: dep_names})
-            transform_dict.update({name: p})
+            dep_list.update({(m, p): (tuple(dep) for dep in p.parameter_transform.dependencies)})
 
         dep_list = TopologicalSort(dep_list).get_flattened()
 
         dec_func_list = []
         enc_func_list = []
-        for name in dep_list:
-            parameter = transform_dict[name]
-            ind = self._model_functions_info.get_parameter_estimable_index(name)
+        for m, p in dep_list:
+            name = m.name + '.' + p.name
+            parameter = p
+            ind = self._model_functions_info.get_parameter_estimable_index(m, p)
             transform = parameter.parameter_transform
 
             dependency_names = []
             for dep in transform.dependencies:
-                dep_ind = self._model_functions_info.get_parameter_estimable_index(dep[0].name + '.' + dep[1].name)
+                dep_ind = self._model_functions_info.get_parameter_estimable_index(dep[0], dep[1])
                 dependency_names.append('{0}[' + str(dep_ind) + ']')
 
             if all_elements_equal(self._lower_bounds[name]):
@@ -1009,7 +1019,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             elif not self._model_functions_info.parameter_has_dependency(m, p) \
                 or (self._model_functions_info.parameter_has_dependency(m, p)
                     and not self._model_functions_info.is_parameter_fixed_to_dependency(m, p)):
-                ind = self._model_functions_info.get_parameter_estimable_index(m.name + '.' + p.name)
+                ind = self._model_functions_info.get_parameter_estimable_index(m, p)
                 assignment += 'x[' + str(ind) + ']'
             if self._model_functions_info.parameter_has_dependency(m, p):
                 return self._get_dependent_parameters_listing(((m, p),))
@@ -1021,26 +1031,22 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         Parameters may occur in different lists (estimable and dependent for example).
         """
-        protocol_parameters = []
+        protocol_parameters = self._model_functions_info.get_protocol_parameters_list()
         fixed_parameters = []
         estimable_parameters = []
         depended_parameters = []
 
-        for m, p in self._model_functions_info.get_model_parameter_list():
-            if isinstance(p, ProtocolParameter):
-                protocol_parameters.append((m, p))
-            elif isinstance(p, FreeParameter):
-                if self._model_functions_info.is_fixed_to_value('{}.{}'.format(m.name, p.name)) \
-                    and not self._model_functions_info.parameter_has_dependency(m, p):
-                    fixed_parameters.append((m, p))
-                elif not self._model_functions_info.parameter_has_dependency(m, p) \
-                    or (self._model_functions_info.parameter_has_dependency(m, p)
-                        and not self._model_functions_info.is_parameter_fixed_to_dependency(m, p)):
-                    estimable_parameters.append((m, p))
+        for m, p in self._model_functions_info.get_free_parameters_list(exclude_priors=True):
+            if self._model_functions_info.is_fixed_to_value('{}.{}'.format(m.name, p.name)) \
+                and not self._model_functions_info.parameter_has_dependency(m, p):
+                fixed_parameters.append((m, p))
 
-                if self._model_functions_info.parameter_has_dependency(m, p):
-                    ind = self._dependency_store.get_index(m.name + '.' + p.name)
-                    depended_parameters.insert(ind, (m, p))
+            elif self._model_functions_info.is_parameter_estimable(m, p):
+                estimable_parameters.append((m, p))
+
+            if self._model_functions_info.parameter_has_dependency(m, p):
+                ind = self._dependency_store.get_index(m.name + '.' + p.name)
+                depended_parameters.insert(ind, (m, p))
 
         return {'protocol': protocol_parameters, 'fixed': fixed_parameters,
                 'estimable': estimable_parameters, 'dependent': depended_parameters}
@@ -1266,29 +1272,67 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         super(SampleModelBuilder, self).__init__(model_name, model_tree, evaluation_model, signal_noise_model,
                                                  problem_data)
 
+    def _init_model_information_container(self, dependency_store, model_tree, evaluation_model, signal_noise_model):
+        """Get the model information container object.
+
+        This is called in the __init__ to provide the new model with the correct subclass function information
+        object. The rationale is that some subclasses may have additional parameters not present in optimization. For
+        example, in sampling one can have priors with parameters. These parameters must be added to the model and the
+        best point to do that is in the ModelFunctionsInformation object.
+
+        Returns:
+            ModelFunctionsInformation: the model function information object
+        """
+        return ModelFunctionsInformation(dependency_store, model_tree, evaluation_model, signal_noise_model,
+                                         enable_prior_parameters=True)
+
     def get_log_prior_function(self, func_name='getLogPrior'):
-        prior = 'mot_float_type ' + func_name + '(const void* data_void, const mot_float_type* const x){' + "\n"
+        prior = ''
+
+        for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
+            prior += p.sampling_prior.get_prior_function()
+
+        prior += '\nmot_float_type ' + func_name + '(const void* data_void, const mot_float_type* const x){' + "\n"
         prior += "\t" + self.get_kernel_data_struct_type() + \
-                    '* data = (' + self.get_kernel_data_struct_type() + '*)data_void;\n'
-        prior += '\tmot_float_type prior = 1.0;\n'
+                 '* data = (' + self.get_kernel_data_struct_type() + '*)data_void;\n'
+        prior += '\tmot_float_type prior = 1.0;\n\n'
 
         for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
             name = m.name + '.' + p.name
 
             if all_elements_equal(self._lower_bounds[name]):
                 lower_bound = str(get_single_value(self._lower_bounds[name]))
+                if lower_bound == '-inf':
+                    lower_bound = '-INFINITY'
             else:
                 lower_bound = 'data->var_data_lb_' + name.replace('.', '_')
 
             if all_elements_equal(self._upper_bounds[name]):
                 upper_bound = str(get_single_value(self._upper_bounds[name]))
+                if upper_bound == 'inf':
+                    upper_bound = 'INFINITY'
             else:
                 upper_bound = 'data->var_data_ub_' + name.replace('.', '_')
 
-            assignment_constructor = p.sampling_prior.get_cl_assignment()
-            assignment = assignment_constructor.create_assignment('x[' + str(i) + ']', lower_bound, upper_bound)
+            function_name = p.sampling_prior.get_prior_function_name()
 
-            prior += '\tprior *= {};\n'.format(assignment)
+            if m.get_prior_parameters(p):
+                prior_params = []
+                for prior_param in m.get_prior_parameters(p):
+                    if self._model_functions_info.is_parameter_estimable(m, prior_param):
+                        estimable_index = self._model_functions_info.get_parameter_estimable_index(m, prior_param)
+                        prior_params.append('x[{}]'.format(estimable_index))
+                    else:
+                        value = self._parameter_values['{}.{}'.format(m.name, prior_param.name)]
+                        if all_elements_equal(value):
+                            prior_params.append(str(get_single_value(value)))
+                        else:
+                            prior_params.append('data->var_data_' + '{}_{}'.format(m.name, prior_param.name))
+
+                prior += '\tprior *= {}(x[{}], {}, {}, {});\n'.format(function_name, i, lower_bound, upper_bound,
+                                                                      ', '.join(prior_params))
+            else:
+                prior += '\tprior *= {}(x[{}], {}, {});\n'.format(function_name, i, lower_bound, upper_bound)
 
         prior += '\n\treturn log(prior);\n}'
         return prior
@@ -1451,9 +1495,10 @@ class _DependencyStore(object):
         return self.names_in_order.index(param_name)
 
 
-class _ModelFunctionsInformation(object):
+class ModelFunctionsInformation(object):
 
-    def __init__(self, dependency_store, model_tree, evaluation_model, signal_noise_model=None):
+    def __init__(self, dependency_store, model_tree, evaluation_model, signal_noise_model=None,
+                 enable_prior_parameters=False):
         """Contains centralized information about the model functions in the model builder parent.
 
         Args:
@@ -1464,18 +1509,22 @@ class _ModelFunctionsInformation(object):
                 use for the resulting complete model
             signal_noise_model (mot.model_building.signal_noise_models.SignalNoiseModel): the signal
                 noise model to use to add noise to the model prediction
+            enable_prior_parameters (boolean): adds possible prior parameters to the list of parameters in the model
         """
         self._dependency_store = dependency_store
         self._model_tree = model_tree
         self._evaluation_model = evaluation_model
         self._signal_noise_model = signal_noise_model
+        self._enable_prior_parameters = enable_prior_parameters
 
         self._model_list = self._get_model_list()
         self._model_parameter_list = self._get_model_parameter_list()
+        self._prior_parameters_info = self._get_prior_parameters_info()
 
         self._check_for_double_model_names()
 
-        self._fixed_parameters = {'{}.{}'.format(m.name, p.name): p.fixed for m, p in self.get_free_parameters_list()}
+        self._fixed_parameters = {'{}.{}'.format(m.name, p.name): p.fixed for m, p in
+                                  self.get_model_parameter_list() if isinstance(p, FreeParameter)}
 
     def set_fixed_to_value(self, parameter_name, fix_state):
         """Set the given parameter fixed.
@@ -1513,20 +1562,53 @@ class _ModelFunctionsInformation(object):
         Returns:
             list of tuple: the list of tuples containing (model, parameters)
         """
-        return self._model_parameter_list
+        param_list = copy.copy(self._model_parameter_list)
 
-    def get_free_parameters_list(self):
+        if self._enable_prior_parameters:
+            for prior_info in self._prior_parameters_info.values():
+                if prior_info:
+                    param_list.extend(prior_info)
+
+        return param_list
+
+    def get_free_parameters_list(self, exclude_priors=False):
         """Gets the free parameters as (model, parameter) tuples from the model listing.
         This does not incorporate checking for fixed parameters.
+
+        Args:
+            exclude_priors (boolean): if we want to exclude the priors or not
 
         Returns:
             list of tuple: the list of tuples containing (model, parameters)
         """
-        return list((m, p) for m, p in self._model_parameter_list if isinstance(p, FreeParameter))
+        free_params = list((m, p) for m, p in self._model_parameter_list if isinstance(p, FreeParameter))
+
+        if not exclude_priors:
+            if self._enable_prior_parameters:
+                prior_params = []
+                for m, p in free_params:
+                    prior_params.extend((m, prior_p) for prior_p in m.get_prior_parameters(p)
+                                        if self.is_parameter_estimable(m, p) and isinstance(prior_p, FreeParameter))
+                free_params.extend(prior_params)
+
+        return free_params
 
     def get_static_parameters_list(self):
         """Gets the static parameters (as model, parameter tuples) from the model listing."""
-        return list((m, p) for m, p in self._model_parameter_list if isinstance(p, StaticMapParameter))
+        static_params = list((m, p) for m, p in self.get_model_parameter_list() if isinstance(p, StaticMapParameter))
+
+        if self._enable_prior_parameters:
+            prior_params = []
+            for m, p in self.get_estimable_parameters_list():
+                prior_params.extend((m, prior_p) for prior_p in m.get_prior_parameters(p)
+                                    if isinstance(prior_p, FreeParameter))
+            static_params.extend(prior_params)
+
+        return static_params
+
+    def get_protocol_parameters_list(self):
+        """Gets the static parameters (as model, parameter tuples) from the model listing."""
+        return list((m, p) for m, p in self.get_model_parameter_list() if isinstance(p, ProtocolParameter))
 
     def get_model_parameter_by_name(self, parameter_name):
         """Get the parameter object of the given full parameter name in dot format.
@@ -1537,7 +1619,7 @@ class _ModelFunctionsInformation(object):
         Returns:
             tuple: containing the (model, parameter) pair for the given parameter name
         """
-        for m, p in self._model_parameter_list:
+        for m, p in self.get_model_parameter_list():
             if '{}.{}'.format(m.name, p.name) == parameter_name:
                 return m, p
         raise ValueError('The parameter with the name "{}" could not be found in this model.'.format(parameter_name))
@@ -1608,7 +1690,15 @@ class _ModelFunctionsInformation(object):
         Returns:
             list of tuple: the list of estimable parameters
         """
-        return [(m, p) for m, p in self._model_parameter_list if self.is_parameter_estimable(m, p)]
+        estimable_parameters = [(m, p) for m, p in self._model_parameter_list if self.is_parameter_estimable(m, p)]
+
+        if self._enable_prior_parameters:
+            prior_params = []
+            for m, p in estimable_parameters:
+                prior_params.extend((m, prior_p) for prior_p in m.get_prior_parameters(p) if not prior_p.fixed)
+            estimable_parameters.extend(prior_params)
+
+        return estimable_parameters
 
     def _get_model_parameter_list(self):
         """Get a list of all model, parameter tuples.
@@ -1618,30 +1708,42 @@ class _ModelFunctionsInformation(object):
         """
         return list((m, p) for m in self._model_list for p in m.parameter_list)
 
-    def get_parameter_estimable_index(self, parameter_name):
+    def _get_prior_parameters_info(self):
+        """Get a dictionary with the prior parameters for each of the model parameters.
+
+        Returns:
+            dict: lookup dictionary matching model names to parameter lists
+        """
+        prior_lookup_dict = {}
+        for model in self._model_list:
+            for param in model.get_free_parameters():
+                prior_lookup_dict.update({
+                    '{}.{}'.format(model.name, param.name): list((model, p) for p in model.get_prior_parameters(param))
+                })
+        return prior_lookup_dict
+
+    def get_parameter_estimable_index(self, model, param):
         """Get the index of this parameter in the parameters list
 
         This returns the position of this parameter in the 'x', parameter vector in the CL kernels.
 
         Args:
-            parameter_name: the parameter name in dot format. <model>.<param>
+            model (mot.model_building.cl_functions.base.ModelFunction): the model function
+            param (mot.model_building.cl_functions.parameters.CLFunctionParameter): the parameter
 
         Returns:
             int: the index of the requested parameter in the list of optimized parameters
+
+        Raises:
+            ValueError: if the given parameter could not be found as an estimable parameter.
         """
-        estimable_param_counter = 0
-        for m in self.get_model_list():
-            for p in m.parameter_list:
-                if '{}.{}'.format(m.name, p.name) == parameter_name:
-                    if not self.is_parameter_estimable(m, p):
-                        raise ValueError('The requested parameter "{}" is '
-                                         'not an estimable parameter.'.format(parameter_name))
-                    return estimable_param_counter
-
-                if self.is_parameter_estimable(m, p):
-                    estimable_param_counter += 1
-
-        raise ValueError('The given parameter "{}" could not be found in this model'.format(parameter_name))
+        ind = 0
+        for m, p in self.get_estimable_parameters_list():
+            if m.name == model.name and p.name == param.name:
+                return ind
+            ind += 1
+        raise ValueError('The given estimable parameter "{}" could not be found in this model'.format(
+            '{}.{}'.format(model.name, param.name)))
 
     def has_parameter(self, model_param_name):
         """Check to see if the given parameter is defined in this model.

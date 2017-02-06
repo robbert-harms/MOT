@@ -1,5 +1,6 @@
 import os
-from .parameters import FreeParameter
+from .parameters import FreeParameter, CLFunctionParameter
+from six import with_metaclass
 
 __author__ = 'Robbert Harms'
 __date__ = "2016-10-03"
@@ -17,7 +18,8 @@ class CLFunction(object):
         Args:
             return_type (str): Return type of the CL function.
             function_name (string): The name of the CL function
-            parameter_list (list of mot.model_building.cl_functions.parameters.CLFunctionParameter): The list of parameters required for this function
+            parameter_list (list of mot.model_building.cl_functions.parameters.CLFunctionParameter): The list of
+                parameters required for this function
         """
         super(CLFunction, self).__init__()
         self._return_type = return_type
@@ -143,6 +145,31 @@ class ModelFunction(DependentCLFunction):
             list: the list of free parameters in this model
         """
         return self.get_parameters_of_type(FreeParameter)
+
+    def get_prior_parameters(self, parameter):
+        """Get the parameters referred to by the priors of the free parameters.
+
+        This returns a list of all the parameters referenced by the prior parameters, recursively.
+
+        Returns:
+            list of parameters: the list of additional parameters in the prior for the given parameter
+        """
+        def get_prior_parameters(params):
+            return_params = []
+
+            for param in params:
+                prior_params = param.sampling_prior.get_parameters()
+                proxy_prior_params = [prior_param.get_renamed('{}_prior_{}'.format(param.name, prior_param.name))
+                                      for prior_param in prior_params]
+
+                return_params.extend(proxy_prior_params)
+
+                free_prior_params = [p for p in proxy_prior_params if isinstance(p, FreeParameter)]
+                return_params.extend(get_prior_parameters(free_prior_params))
+
+            return return_params
+
+        return get_prior_parameters([parameter])
 
     def get_parameters_of_type(self, instance_types):
         """Get all parameters whose state instance is one of the given types.

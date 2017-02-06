@@ -3,6 +3,7 @@ from pkg_resources import resource_filename
 from mot.cl_data_type import CLDataType
 from mot.model_building.cl_functions.base import ModelFunction
 from mot.model_building.cl_functions.parameters import FreeParameter
+from mot.model_building.parameter_functions.priors import NormalPDF
 from mot.model_building.parameter_functions.proposals import GaussianProposal
 from mot.model_building.parameter_functions.transformations import ClampTransform, CosSqrClampTransform
 
@@ -14,7 +15,8 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class Scalar(ModelFunction):
 
-    def __init__(self, name='Scalar', value=0.0, lower_bound=0.0, upper_bound=float('inf')):
+    def __init__(self, name='Scalar', param_name='s', value=0.0, lower_bound=0.0, upper_bound=float('inf'),
+                 parameter_kwargs=None):
         """A Scalar model function to be used during optimization.
 
         Args:
@@ -22,13 +24,17 @@ class Scalar(ModelFunction):
             value (number or ndarray): The initial value for the single free parameter of this function.
             lower_bound (number or ndarray): The initial lower bound for the single free parameter of this function.
             upper_bound (number or ndarray): The initial upper bound for the single free parameter of this function.
+            parameter_kwargs (dict): additional settings for the parameter initialization
         """
+        parameter_settings = dict(parameter_transform=ClampTransform(),
+                                  sampling_proposal=GaussianProposal(1.0))
+        parameter_settings.update(parameter_kwargs)
+
         super(Scalar, self).__init__(
             name,
             'cmScalar',
-            (FreeParameter(CLDataType.from_string('mot_float_type'), 's', False, value, lower_bound, upper_bound,
-                           parameter_transform=ClampTransform(),
-                           sampling_proposal=GaussianProposal(1.0)),))
+            (FreeParameter(CLDataType.from_string('mot_float_type'), param_name,
+                           False, value, lower_bound, upper_bound, **parameter_settings),))
 
     def get_cl_header(self):
         """See base class for details"""
@@ -48,7 +54,7 @@ class Weight(Scalar):
 
         Some of the code checks for type Weight, be sure to use this model function if you want to represent a Weight.
 
-        A weight is meant to be a model fraction.
+        A weight is meant to be a model volume fraction.
 
         Args:
             name (str): The name of the model
@@ -56,7 +62,8 @@ class Weight(Scalar):
             lower_bound (number or ndarray): The initial lower bound for the single free parameter of this function.
             upper_bound (number or ndarray): The initial upper bound for the single free parameter of this function.
         """
-        super(Weight, self).__init__(name=name, value=value, lower_bound=lower_bound, upper_bound=upper_bound)
-        self.parameter_list[0].name = 'w'
-        self.parameter_list[0].parameter_transform = CosSqrClampTransform()
-        self.parameter_list[0].sampling_proposal = GaussianProposal(0.01)
+        parameter_settings = dict(parameter_transform=CosSqrClampTransform(),
+                                  sampling_proposal=GaussianProposal(0.01))
+
+        super(Weight, self).__init__(name=name, param_name='w', value=value, lower_bound=lower_bound,
+                                     upper_bound=upper_bound, parameter_kwargs=parameter_settings)
