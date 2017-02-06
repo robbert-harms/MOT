@@ -57,8 +57,8 @@ The easiest way to install Python3 is with the Anaconda Python distribution.
 Please download and install the Python3.x 64 bit distribution, version 4.2 or higher which includes PyQt5, from `Anaconda <https://www.continuum.io/downloads>`_ and install it with the default settings.
 If you are following this guide with the intention of installing `MDT <https://maastrichtdiffusiontoolbox.readthedocs.io/en/latest/index.html>`_ afterwards, please note that Anaconda versions prior to 4.2 have the (deprecated) PyQt4 as its Qt library.
 This is not a problem for MOT per se.
-However if you want to go and install MDT and use its Qt5 GUI, or more generally want to use Qt5 and packages that depend on Qt5, you will find benefit from installing Anaconda > 4.2 with PyQt5.
-If you insist on using an older Anaconda install or environment, note that this is possible, but you will have to install a PyQt5 package yourself, such as the m-labs PyQt5 Anaconda package and deal with its version conflicts, e.g. python version <= 3.4.
+However if you want install MDT and use its Qt5 GUI, or more generally want to use Qt5 and packages that depend on Qt5, you will find benefit from installing Anaconda > 4.2 with PyQt5.
+If you insist on using an older Anaconda install or PyQt4 `environment <https://conda.io/docs/using/envs.html>`_ (also consider creating a new PyQt5 compatible env), note that this is possible, but you will have to install a PyQt5 package yourself, such as the m-labs PyQt5 Anaconda package and deal with its version conflicts, e.g. python version <= 3.4.
 
 
 After installation type ``Anaconda Prompt`` in the Windows start bar and start the Anaconda Prompt command line interface.
@@ -163,7 +163,7 @@ If this completes without errors, PyOpenCL is installed. If you get compilation 
 The paths listed here assume an NVidia system. Please adapt the paths to your own system and device SDK (e.g. ATI). Important is that the ``INCLUDE`` path should contain
 the file ``CL\cl.h`` and the ``LIB`` path should contain ``OpenCL.lib``. Find these directories if needed. If all goes well, PyOpenCL will be compiled and installed to your system.
 
-If this still does not work, you can try one of the installation guides on https://wiki.tiker.net/PyOpenCL/Installation/Windows.
+If this still does not work, you can try one of the installation guides on https://wiki.tiker.net/PyOpenCL/Installation/Windows, or you can consider (re)installing Anaconda, version >=4.2, with Python 3.5 on your 64-bit Windows system and then try the -cp35-none-win_amd64 wheel linked above.
 
 
 .. _install_mot:
