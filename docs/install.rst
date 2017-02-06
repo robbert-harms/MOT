@@ -88,16 +88,16 @@ PyOpenCL can either be installed from a downloadable binary or be compiled from 
 Using the binary is easiest since manual compilation is more difficult.
 
 
-Using a binary PyOpenCL package
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Alternative 1: Using a binary PyOpenCL package
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Installing a precompiled binary wheel (.whl) is the easiest way to install PyOpenCL, but only works if the wheel is compiled for your specific Python implementation.
-At Christoph Gohlke website (http://www.lfd.uci.edu/~gohlke/pythonlibs/#pyopencl) you can find a range of PyOpenCL binary packages, if there is a compatible one for your system,
-download that version.
+At Christoph Gohlke website (http://www.lfd.uci.edu/~gohlke/pythonlibs/#pyopencl) you can find a range of PyOpenCL binary packages.
+If there is a compatible one for your system, download that version.
 You can see if it is compatible if the Python version in the binary name matches that of your installed Python version.
-For example if you have Python 3.5 you need to download the wheel with ``cp35m`` in the name (note the format, ``cp<version>m``, the ``m`` is important).
+For example if you have 64-bit Windows system with Python 3.5 you need to download the wheel with``win-amd64`` and ``cp35m`` in the name (note the format, ``cp<version>m``, the ``m`` is important).
 (To check which Python version you have you can run ``python --version`` in the command line).
 
-If there is no compatible version for your system to be found on Gohlke's website, here is a mirror of an older version by Gohlke that is compatible with most systems:
+If there is no compatible version for your system to be found on Gohlke's website, here is a mirror of an older version by Gohlke that is compatible with most Python 3.5 systems:
 :download:`pyopencl-2015.2.4-cp35-none-win_amd64 <./_downloads/pyopencl-2015.2.4-cp35-none-win_amd64.whl>`.
 
 After the download, open an Anaconda Prompt (or a normal Windows cmd) and change directory to where you downloaded the ``.whl`` file.
@@ -110,13 +110,13 @@ Then, install the binary using pip:
 
 Please make sure you are in the right directory and please substitute ``<filename>`` for your downloadeded filename.
 
-To test if this binary package works, open a Python shell and type:
+To test if this binary package works, open a Python shell (for instance by typing ``python`` in your open prompt) and type:
 
 .. code-block:: python
 
     >>> import pyopencl
 
-If that works without messages about missing dll's and cffi problems, you are good to go.
+If that works (python ``>>>`` prompt reappears) without messages about missing dll's and cffi problems, you are good to go. (exit the python prompt by typing ``exit()`` or Ctrl-Z then Enter)
 If you encounter an error that ends on something like:
 
 .. code-block:: none
@@ -127,9 +127,9 @@ Then the binary package (.whl file) is not compatible with your OS version and/o
 Either try a different wheel, or try the compilation procedure below.
 
 
-Compile PyOpenCL with Visual Studio 15
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Installing ``pyopencl`` with pip requires Visual Studio 2015 and an OpenCL SDK (this is different from a runtime, the SDK includes compilation header files) to be present on your system.
+Alternative 2: Compile PyOpenCL with Visual Studio 15
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Installing ``pyopencl`` with pip from source code requires Visual Studio 2015 and an OpenCL SDK (this is different from a driver or runtime, the SDK includes compilation header files) to be present on your system.
 First, install Visual Studio 2015 with a few specific options enabled (under "Custom" during the installation):
 
 * [] Programming Languages
