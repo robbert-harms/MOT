@@ -116,7 +116,7 @@ To test if this binary package works, open a Python shell (for instance by typin
 
     >>> import pyopencl
 
-If that works (python ``>>>`` prompt reappears) without messages about missing dll's and cffi problems, you are good to go. (exit the python prompt by typing ``exit()`` or Ctrl-Z then Enter)
+If that works (python ``>>>`` prompt reappears without messages about missing dll's and cffi problems), you are good to go. (exit the python prompt by typing ``exit()`` or Ctrl-Z then Enter)
 If you encounter an error that ends on something like:
 
 .. code-block:: none
