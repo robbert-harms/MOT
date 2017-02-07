@@ -1,5 +1,6 @@
 import numpy as np
 from mot.cl_data_type import CLDataType
+from mot.model_building.parameter_functions.proposals import GaussianProposal
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-06-19"
@@ -64,7 +65,7 @@ class UniformPrior(AbstractParameterPrior):
             #ifndef PRIOR_UNIFORM
             #define PRIOR_UNIFORM
 
-            mot_float_type prior_uniform_prior(const mot_float_type parameter,
+            mot_float_type prior_uniform_prior(const mot_float_type value,
                                                const mot_float_type lower_bound,
                                                const mot_float_type upper_bound){
                 return 1;
@@ -77,6 +78,30 @@ class UniformPrior(AbstractParameterPrior):
         return 'prior_uniform_prior'
 
 
+class ScalarReferencePrior(AbstractParameterPrior):
+    """The uniform prior is always 1."""
+
+    def get_prior_function(self):
+        return '''
+            #ifndef SCALAR_REFERENCE_PRIOR
+            #define SCALAR_REFERENCE_PRIOR
+
+            mot_float_type scalar_reference_prior(const mot_float_type value,
+                                                  const mot_float_type lower_bound,
+                                                  const mot_float_type upper_bound){
+                if(value <= 0){
+                    return 0;
+                }
+                return 1.0/value;
+            }
+
+            #endif //SCALAR_REFERENCE_PRIOR
+        '''
+
+    def get_prior_function_name(self):
+        return 'scalar_reference_prior'
+
+
 class UniformWithinBoundsPrior(AbstractParameterPrior):
     """This prior is 1 within the upper and lower bound of the parameter, 0 outside."""
 
@@ -85,11 +110,11 @@ class UniformWithinBoundsPrior(AbstractParameterPrior):
             #ifndef PRIOR_UNIFORM_WITHIN_BOUNDS
             #define PRIOR_UNIFORM_WITHIN_BOUNDS
 
-            mot_float_type prior_uniform_within_bounds(const mot_float_type parameter,
+            mot_float_type prior_uniform_within_bounds(const mot_float_type value,
                                                        const mot_float_type lower_bound,
                                                        const mot_float_type upper_bound){
 
-                return (parameter < lower_bound || parameter > upper_bound) ? 0.0 : 1.0;
+                return (value < lower_bound || value > upper_bound) ? 0.0 : 1.0;
             }
 
             #endif //PRIOR_UNIFORM_WITHIN_BOUNDS
@@ -107,10 +132,10 @@ class AbsSinPrior(AbstractParameterPrior):
             #ifndef PRIOR_ABSSIN
             #define PRIOR_ABSSIN
 
-            mot_float_type prior_abs_sin(const mot_float_type parameter,
+            mot_float_type prior_abs_sin(const mot_float_type value,
                                                const mot_float_type lower_bound,
                                                const mot_float_type upper_bound){
-                return fabs(sin(parameter));
+                return fabs(sin(value));
             }
 
             #endif //PRIOR_ABSSIN
@@ -128,10 +153,10 @@ class AbsSinHalfPrior(AbstractParameterPrior):
             #ifndef PRIOR_ABSSIN_HALF
             #define PRIOR_ABSSIN_HALF
 
-            mot_float_type prior_abs_sin_half(const mot_float_type parameter,
+            mot_float_type prior_abs_sin_half(const mot_float_type value,
                                                const mot_float_type lower_bound,
                                                const mot_float_type upper_bound){
-                return fabs(sin(parameter)/2.0);
+                return fabs(sin(value)/2.0);
             }
 
             #endif //PRIOR_ABSSIN_HALF
@@ -155,14 +180,14 @@ class NormalPDF(AbstractParameterPrior):
             #ifndef PRIOR_NORMALPDF
             #define PRIOR_NORMALPDF
 
-            mot_float_type prior_normal_pdf(const mot_float_type parameter,
+            mot_float_type prior_normal_pdf(const mot_float_type value,
                                             const mot_float_type lower_bound,
                                             const mot_float_type upper_bound,
-                                            const mot_float_type prior_mean,
-                                            const mot_float_type prior_sigma){
+                                            const mot_float_type mu,
+                                            const mot_float_type sigma){
 
-                return exp(-pown(parameter - prior_mean, 2) / (2 * pown(prior_sigma, 2)))
-                        / (prior_sigma * sqrt(2 * M_PI));
+                return exp(-pown(value - mu, 2) / (2 * pown(sigma, 2)))
+                        / (sigma * sqrt(2 * M_PI));
 
             }
 
@@ -171,3 +196,39 @@ class NormalPDF(AbstractParameterPrior):
 
     def get_prior_function_name(self):
         return 'prior_normal_pdf'
+
+
+class BetaPDF(AbstractParameterPrior):
+
+    def get_parameters(self):
+        from mot.model_building.cl_functions.parameters import FreeParameter
+        return [FreeParameter(CLDataType.from_string('mot_float_type'), 'alpha', True, 1, 0, np.inf,
+                              sampling_prior=UniformWithinBoundsPrior()),
+                FreeParameter(CLDataType.from_string('mot_float_type'), 'beta', False, 1, 0, 10,
+                              sampling_prior=ScalarReferencePrior(),
+                              sampling_proposal=GaussianProposal(0.01))]
+
+    def get_prior_function(self):
+        return '''
+            #ifndef PRIOR_BETAPDF
+            #define PRIOR_BETAPDF
+
+            mot_float_type prior_beta_pdf(const mot_float_type value,
+                                          const mot_float_type lower_bound,
+                                          const mot_float_type upper_bound,
+                                          const mot_float_type alpha,
+                                          const mot_float_type beta){
+
+                if(value <= 0 || value >= 1){
+                    return 0;
+                }
+
+                return (tgamma(alpha + beta) * pow(1 - value, beta - 1) * pow(value, alpha - 1))
+                            / (tgamma(alpha) * tgamma(beta));
+            }
+
+            #endif //PRIOR_BETAPDF
+        '''
+
+    def get_prior_function_name(self):
+        return 'prior_beta_pdf'

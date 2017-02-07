@@ -3,7 +3,7 @@ from pkg_resources import resource_filename
 from mot.cl_data_type import CLDataType
 from mot.model_building.cl_functions.base import ModelFunction
 from mot.model_building.cl_functions.parameters import FreeParameter
-from mot.model_building.parameter_functions.priors import NormalPDF
+from mot.model_building.parameter_functions.priors import BetaPDF
 from mot.model_building.parameter_functions.proposals import GaussianProposal
 from mot.model_building.parameter_functions.transformations import ClampTransform, CosSqrClampTransform
 
@@ -28,7 +28,7 @@ class Scalar(ModelFunction):
         """
         parameter_settings = dict(parameter_transform=ClampTransform(),
                                   sampling_proposal=GaussianProposal(1.0))
-        parameter_settings.update(parameter_kwargs)
+        parameter_settings.update(parameter_kwargs or {})
 
         super(Scalar, self).__init__(
             name,
@@ -49,7 +49,7 @@ class Scalar(ModelFunction):
 
 class Weight(Scalar):
 
-    def __init__(self, name='Weight', value=0.5, lower_bound=0.0, upper_bound=1.0):
+    def __init__(self, name='Weight', value=0.5, lower_bound=0.0, upper_bound=1.0, parameter_kwargs=None):
         """Implements Scalar model function to add the semantics of representing a Weight.
 
         Some of the code checks for type Weight, be sure to use this model function if you want to represent a Weight.
@@ -64,6 +64,27 @@ class Weight(Scalar):
         """
         parameter_settings = dict(parameter_transform=CosSqrClampTransform(),
                                   sampling_proposal=GaussianProposal(0.01))
+        parameter_settings.update(parameter_kwargs or {})
 
         super(Weight, self).__init__(name=name, param_name='w', value=value, lower_bound=lower_bound,
                                      upper_bound=upper_bound, parameter_kwargs=parameter_settings)
+
+
+class ARD_Beta_Weight(Weight):
+
+    def __init__(self, name='ARD_Beta_Weight', value=0.5, lower_bound=0.0, upper_bound=1.0):
+        """A compartment weight with a Beta prior, to be used in Automatic Relevance Detection
+
+        It is exactly the same as a weight, except that it has a different prior, a Beta distribution prior between
+        [0, 1].
+
+        Args:
+            name (str): The name of the model
+            value (number or ndarray): The initial value for the single free parameter of this function.
+            lower_bound (number or ndarray): The initial lower bound for the single free parameter of this function.
+            upper_bound (number or ndarray): The initial upper bound for the single free parameter of this function.
+        """
+        parameter_settings = dict(sampling_prior=BetaPDF())
+
+        super(ARD_Beta_Weight, self).__init__(name=name, value=value, lower_bound=lower_bound,
+                                              upper_bound=upper_bound, parameter_kwargs=parameter_settings)
