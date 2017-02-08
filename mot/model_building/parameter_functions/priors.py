@@ -204,7 +204,7 @@ class BetaPDF(AbstractParameterPrior):
         from mot.model_building.cl_functions.parameters import FreeParameter
         return [FreeParameter(CLDataType.from_string('mot_float_type'), 'alpha', True, 1, 0, np.inf,
                               sampling_prior=UniformWithinBoundsPrior()),
-                FreeParameter(CLDataType.from_string('mot_float_type'), 'beta', False, 1, 0, 10,
+                FreeParameter(CLDataType.from_string('mot_float_type'), 'beta', False, 0.5, 0, 10,
                               sampling_prior=ScalarReferencePrior(),
                               sampling_proposal=GaussianProposal(0.01))]
 

@@ -27,28 +27,10 @@ class AbstractParameterDependency(object):
         """
         return ''
 
-    @property
-    def fixed(self):
-        """Check if this dependency fixes the parameter to the assigned value, or if it is still estimable.
-
-        Returns:
-            boolean: True if this parameter is now fixed to the dependency, or false if it is not.
-        """
-        return True
-
-    @property
-    def has_side_effects(self):
-        """Check if the pre_transform_code from this parameter dependency has side effects to other parameters.
-
-        Returns:
-            boolean: True if this parameter has side effects (in the pre_transform_code) or does not have side-effects.
-        """
-        return False
-
 
 class SimpleAssignment(AbstractParameterDependency):
 
-    def __init__(self, assignment_code, fixed=True, has_side_effects=False):
+    def __init__(self, assignment_code, fixed=True):
         """Adds a simple parameter dependency rule for the given parameter.
 
         This is for one parameter, a simple one-line transformation dependency.
@@ -56,21 +38,10 @@ class SimpleAssignment(AbstractParameterDependency):
         Args:
             assignment_code (str): the assignment code (in CL) for this parameter
             fixed (boolean): if this parameters fixes to the assigned value or not
-            has_side_effects (boolean): if this parameter changes one of the parameters before it goes into the model
-                functions. Note that these side effects must be idempotent.
         """
         self._assignment = assignment_code
         self._fixed = fixed
-        self._has_side_effects = has_side_effects
 
     @property
     def assignment_code(self):
         return self._assignment
-
-    @property
-    def fixed(self):
-        return self._fixed
-
-    @property
-    def has_side_effects(self):
-        return self._has_side_effects

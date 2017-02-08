@@ -1668,8 +1668,7 @@ class ModelFunctionsInformation(object):
             boolean: if the given parameter is fixed to a dependency. Returns False if either this parameter
                 has no dependency or if it is not fixed to it.
         """
-        return self.parameter_has_dependency(model, param) \
-            and self._dependency_store.get_dependency(model.name + '.' + param.name).fixed
+        return self.parameter_has_dependency(model, param)
 
     def is_parameter_estimable(self, model, param):
         """Check if the given model parameter is estimable.
@@ -1709,7 +1708,12 @@ class ModelFunctionsInformation(object):
         Returns:
             list: the list of compartment models that are a subclass of Weight as (model, parameter) tuples.
         """
-        return [(m, p) for m, p in self._get_model_parameter_list() if isinstance(m, Weight)]
+        weight_models = [m for m in self._model_tree.get_compartment_models() if isinstance(m, Weight)]
+        weights = []
+        for m in weight_models:
+            for p in m.get_free_parameters():
+                weights.append((m, p))
+        return weights
 
     def get_estimable_weights(self):
         """Get all the estimable weights.
@@ -1717,7 +1721,7 @@ class ModelFunctionsInformation(object):
         Returns:
             list of tuples: the list of compartment models/parameter pairs for models that are a subclass of Weight
         """
-        return [(m, p) for m, p in self.get_estimable_parameters_list() if isinstance(m, Weight)]
+        return [(m, p) for m, p in self.get_weights() if self.is_parameter_estimable(m, p)]
 
     def _get_model_parameter_list(self):
         """Get a list of all model, parameter tuples.
