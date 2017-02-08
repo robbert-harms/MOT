@@ -2,6 +2,7 @@ import numpy as np
 import copy
 from mot.cl_data_type import CLDataType
 from mot.cl_routines.mapping.calc_dependent_params import CalculateDependentParameters
+from mot.model_building.cl_functions.model_functions import Weight
 from mot.model_building.cl_functions.parameters import CurrentObservationParam, StaticMapParameter, ProtocolParameter, \
     ModelDataParameter, FreeParameter
 from mot.model_building.data_adapter import SimpleDataAdapter
@@ -18,7 +19,8 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class OptimizeModelBuilder(OptimizeModelInterface):
 
-    def __init__(self, name, model_tree, evaluation_model, signal_noise_model=None, problem_data=None):
+    def __init__(self, name, model_tree, evaluation_model, signal_noise_model=None, problem_data=None,
+                 enforce_weights_sum_to_one=True):
         """Create a new model builder that can construct an optimization model using parts.
 
         Args:
@@ -29,6 +31,9 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             signal_noise_model (mot.model_building.signal_noise_models.SignalNoiseModel): the optional signal
                 noise model to use to add noise to the model prediction
             problem_data (ProblemData): the problem data object
+            enforce_weights_sum_to_one (boolean): if we want to enforce that weights sum to one. This does the
+                following things; it fixes the first weight to the sum of the others and it adds a transformation
+                that ensures that those other weights sum to at most one.
 
         Attributes:
             problems_to_analyze (list): the list with problems we want to analyze. Suppose we have a few thousands
@@ -42,6 +47,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         self._model_tree = model_tree
         self._evaluation_model = evaluation_model
         self._signal_noise_model = signal_noise_model
+
+        self._enforce_weights_sum_to_one = enforce_weights_sum_to_one
 
         self.use_parameter_transformations = True
         self._double_precision = False
@@ -351,6 +358,10 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                     '* data = (' + self.get_kernel_data_struct_type() + '*)data_void;'
             for d in self._get_parameter_transformations()[1]:
                 func += "\n" + "\t" * 4 + d.format('x')
+
+        if self._enforce_weights_sum_to_one:
+            func += self._get_weight_sum_to_one_transformation()
+
         return func + '''
             }
         '''
@@ -359,6 +370,10 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         func = '''
             void ''' + fname + '''(const void* data_void, mot_float_type* x){
         '''
+
+        if self._enforce_weights_sum_to_one:
+            func += self._get_weight_sum_to_one_transformation()
+
         if self.use_parameter_transformations:
             func += self.get_kernel_data_struct_type() + \
                     '* data = (' + self.get_kernel_data_struct_type() + '*)data_void;'
@@ -435,48 +450,6 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 self._parameter_values[param_name] = initial_params[param_name]
 
         return self
-
-    def get_final_parameter_transformations(self, func_name='applyFinalParameterTransformations'):
-        """Get the transformations that must be applied at the end of an optimization (or sampling) routine.
-
-        These transformations must contain all parameter dependencies, as such that all transformation happening in the
-        model function which do not happen in the codec must also go here.
-
-        Args:
-            func_name (str): the CL function name of the returned function
-
-        Returns:
-            str: A function of the kind:
-                void finalParameterTransformations(const void* data, mot_float_type* x)
-                Which is called for every voxel and must in place edit the x variable.
-        """
-        transform_needed = any(dp.has_side_effects or not dp.fixed for dp in
-                               self._dependency_store.dependencies.values())
-
-        if not self._dependency_store.has_dependencies() or not transform_needed:
-            return None
-
-        param_exclude_list = [m.name + '_' + p.name for (m, p)
-                              in self._model_functions_info.get_non_model_tree_param_listing()]
-        param_lists = self._get_parameter_type_lists()
-        depend_param_listing = self._get_dependent_parameters_listing(param_lists['dependent'])
-
-        for m, p in param_lists['fixed'] + param_lists['protocol']:
-            if (m.name + '_' + p.name) not in depend_param_listing:
-                param_exclude_list.append(m.name + '_' + p.name)
-
-        param_listing = self._get_parameters_listing(exclude_list=param_exclude_list)
-
-        func = "\n\t\t\t" + 'void ' + func_name + '(const void* const void_data, mot_float_type* const x){' + "\n"
-        func += "\n\t\t\t\t" + 'const ' + self.get_kernel_data_struct_type() + \
-                '* data = (' + self.get_kernel_data_struct_type() + '*)void_data;'
-        func += param_listing + "\n"
-
-        for i, (m, p) in enumerate(self._get_parameter_type_lists()['estimable']):
-            if not self._is_non_model_tree_model(m):
-                func += "\t"*4 + 'x[' + str(i) + '] = ' + m.name + '_' + p.name + ';' + "\n"
-        func += "\t\t\t" + '}' + "\n"
-        return func
 
     def get_observation_return_function(self, func_name='getObservation'):
         if self._problem_data.observations.shape[1] < 2:
@@ -1255,9 +1228,14 @@ class OptimizeModelBuilder(OptimizeModelInterface):
     def _set_default_dependencies(self):
         """Initialize the default dependencies.
 
-        By default this only adds dependencies for the fixed data that is used in multiple parameters.
+        By default this adds dependencies for the fixed data that is used in multiple parameters.
+        Additionally, if enforce weights sum to one is set, this adds the dependency on the first weight.
         """
         self._init_fixed_duplicates_dependencies()
+        if self._enforce_weights_sum_to_one:
+            names = ['{}.{}'.format(m.name, p.name) for (m, p) in self._model_functions_info.get_weights()]
+            if len(names):
+                self.add_parameter_dependency(names[0], SimpleAssignment('1 - ({})'.format(' + '.join(names[1:]))))
 
     def _get_mot_float_type(self):
         """Get the data type for the mot_float_type"""
@@ -1265,12 +1243,26 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             return CLDataType.from_string('double')
         return CLDataType.from_string('float')
 
+    def _get_weight_sum_to_one_transformation(self):
+        """Returns a snippit of CL for the encode and decode functions to force the sum of the weights to 1"""
+        weight_indices = []
+        for (m, p) in self._model_functions_info.get_estimable_weights():
+            weight_indices.append(self._model_functions_info.get_parameter_estimable_index(m, p))
+
+        return '''
+            mot_float_type _weight_sum = ''' + ' + '.join('x[{}]'.format(index) for index in weight_indices) + ''';
+            if(_weight_sum > 1.0){
+                ''' + '\n'.join('x[{}] /= _weight_sum;'.format(index) for index in weight_indices) + '''
+            }
+        '''
+
 
 class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
 
-    def __init__(self, model_name, model_tree, evaluation_model, signal_noise_model=None, problem_data=None):
+    def __init__(self, model_name, model_tree, evaluation_model, signal_noise_model=None, problem_data=None,
+                 enforce_weights_sum_to_one=True):
         super(SampleModelBuilder, self).__init__(model_name, model_tree, evaluation_model, signal_noise_model,
-                                                 problem_data)
+                                                 problem_data, enforce_weights_sum_to_one=enforce_weights_sum_to_one)
 
     def _init_model_information_container(self, dependency_store, model_tree, evaluation_model, signal_noise_model):
         """Get the model information container object.
@@ -1333,6 +1325,17 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
                                                                       ', '.join(prior_params))
             else:
                 prior += '\tprior *= {}(x[{}], {}, {});\n'.format(function_name, i, lower_bound, upper_bound)
+
+        weight_indices = []
+        for (m, p) in self._model_functions_info.get_estimable_weights():
+            weight_indices.append(self._model_functions_info.get_parameter_estimable_index(m, p))
+
+        prior += '''
+            mot_float_type _weight_sum = ''' + ' + '.join('x[{}]'.format(index) for index in weight_indices) + ''';
+            if(_weight_sum > 1.0){
+                prior *= 0;
+            }
+        '''
 
         prior += '\n\treturn log(prior);\n}'
         return prior
@@ -1699,6 +1702,22 @@ class ModelFunctionsInformation(object):
             estimable_parameters.extend(prior_params)
 
         return estimable_parameters
+
+    def get_weights(self):
+        """Get all the model functions/parameter tuples of the models that are a subclass of Weight
+
+        Returns:
+            list: the list of compartment models that are a subclass of Weight as (model, parameter) tuples.
+        """
+        return [(m, p) for m, p in self._get_model_parameter_list() if isinstance(m, Weight)]
+
+    def get_estimable_weights(self):
+        """Get all the estimable weights.
+
+        Returns:
+            list of tuples: the list of compartment models/parameter pairs for models that are a subclass of Weight
+        """
+        return [(m, p) for m, p in self.get_estimable_parameters_list() if isinstance(m, Weight)]
 
     def _get_model_parameter_list(self):
         """Get a list of all model, parameter tuples.

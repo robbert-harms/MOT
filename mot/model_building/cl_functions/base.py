@@ -1,6 +1,5 @@
 import os
 from .parameters import FreeParameter, CLFunctionParameter
-from six import with_metaclass
 
 __author__ = 'Robbert Harms'
 __date__ = "2016-10-03"

@@ -226,3 +226,59 @@ class CircularGaussianProposal(AbstractParameterProposal):
     def get_proposal_logpdf_function_name(self):
         return 'proposal_circular_gaussianProposalLogPDF'
 
+
+class ClippedGaussianProposal(AbstractParameterProposal):
+
+    def __init__(self, std=1.0, adaptable=True, min_val=0, max_val=1):
+        """Create a new proposal function using a Gaussian distribution with the given scale.
+
+        Args:
+            std (float): The scale of the Gaussian distribution.
+            adaptable (boolean): If this proposal is adaptable during sampling
+            max (float): the maximum value allowed, everything above is clipped to this value
+            min (float): the minimum value allowed, everything above is clipped to this value
+        """
+        self._parameters = [ProposalParameter(std, adaptable)]
+        self.min_val = min_val
+        self.max_val = max_val
+
+    def get_parameters(self):
+        return self._parameters
+
+    def get_proposal_function(self):
+        return '''
+            #ifndef PROP_CLIPPEDGAUSSIANPROPOSAL_CL
+            #define PROP_CLIPPEDGAUSSIANPROPOSAL_CL
+
+            mot_float_type proposal_clippedGaussianProposal(
+                    mot_float_type current,
+                    void* rng_data,
+                    mot_float_type std){
+
+                return clamp(std * frandn(rng_data) + current,
+                             (mot_float_type)''' + str(self.min_val) + ''',
+                             (mot_float_type)''' + str(self.max_val) + ''');
+            }
+
+            #endif //PROP_CLIPPEDGAUSSIANPROPOSAL_CL
+        '''
+
+    def get_proposal_function_name(self):
+        return 'proposal_clippedGaussianProposal'
+
+    def get_proposal_logpdf_function(self):
+        return '''
+            #ifndef PROP_GAUSSIANPROPOSALLOGPDF_CL
+            #define PROP_GAUSSIANPROPOSALLOGPDF_CL
+
+            mot_float_type proposal_gaussianProposalLogPDF(mot_float_type x,
+                                                           mot_float_type mu,
+                                                           mot_float_type std){
+                return log(std * sqrt(2 * M_PI)) - (((x - mu) * (x - mu)) / (2 * std * std));
+            }
+
+            #endif //PROP_GAUSSIANPROPOSALLOGPDF_CL
+        '''
+
+    def get_proposal_logpdf_function_name(self):
+        return 'proposal_gaussianProposalLogPDF'

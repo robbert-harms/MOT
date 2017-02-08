@@ -4,7 +4,7 @@ from mot.cl_data_type import CLDataType
 from mot.model_building.cl_functions.base import ModelFunction
 from mot.model_building.cl_functions.parameters import FreeParameter
 from mot.model_building.parameter_functions.priors import BetaPDF
-from mot.model_building.parameter_functions.proposals import GaussianProposal
+from mot.model_building.parameter_functions.proposals import GaussianProposal, ClippedGaussianProposal
 from mot.model_building.parameter_functions.transformations import ClampTransform, CosSqrClampTransform
 
 __author__ = 'Robbert Harms'
@@ -63,7 +63,7 @@ class Weight(Scalar):
             upper_bound (number or ndarray): The initial upper bound for the single free parameter of this function.
         """
         parameter_settings = dict(parameter_transform=CosSqrClampTransform(),
-                                  sampling_proposal=GaussianProposal(0.01))
+                                  sampling_proposal=ClippedGaussianProposal(0.01, min_val=0, max_val=1))
         parameter_settings.update(parameter_kwargs or {})
 
         super(Weight, self).__init__(name=name, param_name='w', value=value, lower_bound=lower_bound,

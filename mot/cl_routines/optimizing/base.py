@@ -6,7 +6,6 @@ from mot.cl_routines.mapping.residual_calculator import ResidualCalculator
 from ...utils import results_to_dict, get_float_type_def
 from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
-from ...cl_routines.mapping.final_parameters_transformer import FinalParametersTransformer
 from ...cl_routines.mapping.codec_runner import CodecRunner
 from ...__version__ import __version__
 
@@ -162,13 +161,9 @@ class AbstractParallelOptimizer(AbstractOptimizer):
 
         self._logger.info('Finished optimization')
 
-        self._logger.info('Starting post-optimization transformations')
-        results = FinalParametersTransformer(cl_environments=self._cl_environments,
-                                             load_balancer=self.load_balancer).transform(model, starting_points)
-        self._logger.info('Finished post-optimization transformations')
-
         self._logger.info('Calling finalize optimization results in the model')
-        results = model.finalize_optimization_results(results_to_dict(results, model.get_optimized_param_names()))
+        results = model.finalize_optimization_results(results_to_dict(starting_points,
+                                                                      model.get_optimized_param_names()))
 
         self._logger.info('Optimization finished.')
 

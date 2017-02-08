@@ -316,30 +316,6 @@ class OptimizeModelInterface(object):
         """
         raise NotImplementedError
 
-    def get_final_parameter_transformations(self, func_name='applyFinalParameterTransformations'):
-        """Get the transformations that must be applied at the end of an optimization (or sampling) routine.
-
-        These transformations must contain all parameter dependencies, that is, all transformation happening in the
-        model function which do not happen in the codec must be present in this function.
-
-        Suppose an optimization routine finds a set of parameters X to the the optimal set of parameters. In the
-        evaluation function this set of parameters might have been transformed to a new set of parameters X' by the
-        parameter dependencies. Since we, in the end, are interested in the set of parameters X', we have to apply
-        the exact same transformations at the end of the optimization routine as happened in the evaluation function.
-
-        Args:
-            func_name (string): specifies the name of the function.
-
-        Returns:
-            str or None: Return None if this function is not used, else a function of the kind:
-                .. code-block:: c
-
-                    void <func_name>(const void* data, mot_float_type* x);
-
-            Which is called for every voxel and must in place edit the x variable.
-        """
-        raise NotImplementedError
-
     def finalize_optimization_results(self, results_dict):
         """After optimization create the final dictionary with the result maps.
 

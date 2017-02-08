@@ -188,8 +188,6 @@ class _MHWorker(Worker):
         return [self._enqueue_readout(samples_buf, self._samples, 0, nmr_problems, [kernel_event])]
 
     def _get_kernel_source(self):
-        cl_final_param_transform = self._model.get_final_parameter_transformations('applyFinalParamTransforms')
-
         kernel_param_names = ['global mot_float_type* params',
                               'global mot_float_type* samples']
         kernel_param_names.extend(self._model.get_kernel_param_names(self._cl_environment.device))
@@ -209,9 +207,6 @@ class _MHWorker(Worker):
 
         if self.use_adaptive_proposals:
             kernel_source += self._model.get_proposal_state_update_function('updateProposalState')
-
-        if cl_final_param_transform:
-            kernel_source += cl_final_param_transform
 
         if not self._model.is_proposal_symmetric():
             kernel_source += self._model.get_proposal_logpdf('getProposalLogPDF')
@@ -320,8 +315,6 @@ class _MHWorker(Worker):
                         for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
                             x_saved[j] = x[j];
                         }
-
-                        ''' + ('applyFinalParamTransforms(data, x_saved);' if cl_final_param_transform else '') + '''
 
                         for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
                             samples[(uint)((i - ''' + str(self._burn_length) + ''')
