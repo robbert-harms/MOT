@@ -57,178 +57,117 @@ class AbstractParameterPrior(object):
         return []
 
 
-class UniformPrior(AbstractParameterPrior):
-    """The uniform prior is always 1."""
+class SimplePrior(AbstractParameterPrior):
 
-    def get_prior_function(self):
-        return '''
-            #ifndef PRIOR_UNIFORM
-            #define PRIOR_UNIFORM
-
-            mot_float_type prior_uniform_prior(const mot_float_type value,
-                                               const mot_float_type lower_bound,
-                                               const mot_float_type upper_bound){
-                return 1;
-            }
-
-            #endif //PRIOR_UNIFORM
-        '''
-
-    def get_prior_function_name(self):
-        return 'prior_uniform_prior'
-
-
-class ScalarReferencePrior(AbstractParameterPrior):
-    """The uniform prior is always 1."""
-
-    def get_prior_function(self):
-        return '''
-            #ifndef SCALAR_REFERENCE_PRIOR
-            #define SCALAR_REFERENCE_PRIOR
-
-            mot_float_type scalar_reference_prior(const mot_float_type value,
-                                                  const mot_float_type lower_bound,
-                                                  const mot_float_type upper_bound){
-                if(value <= 0){
-                    return 0;
-                }
-                return 1.0/value;
-            }
-
-            #endif //SCALAR_REFERENCE_PRIOR
-        '''
-
-    def get_prior_function_name(self):
-        return 'scalar_reference_prior'
-
-
-class UniformWithinBoundsPrior(AbstractParameterPrior):
-    """This prior is 1 within the upper and lower bound of the parameter, 0 outside."""
-
-    def get_prior_function(self):
-        return '''
-            #ifndef PRIOR_UNIFORM_WITHIN_BOUNDS
-            #define PRIOR_UNIFORM_WITHIN_BOUNDS
-
-            mot_float_type prior_uniform_within_bounds(const mot_float_type value,
-                                                       const mot_float_type lower_bound,
-                                                       const mot_float_type upper_bound){
-
-                return (value < lower_bound || value > upper_bound) ? 0.0 : 1.0;
-            }
-
-            #endif //PRIOR_UNIFORM_WITHIN_BOUNDS
-        '''
-
-    def get_prior_function_name(self):
-        return 'prior_uniform_within_bounds'
-
-
-class AbsSinPrior(AbstractParameterPrior):
-    """The fabs(sin(x)) prior."""
-
-    def get_prior_function(self):
-        return '''
-            #ifndef PRIOR_ABSSIN
-            #define PRIOR_ABSSIN
-
-            mot_float_type prior_abs_sin(const mot_float_type value,
-                                               const mot_float_type lower_bound,
-                                               const mot_float_type upper_bound){
-                return fabs(sin(value));
-            }
-
-            #endif //PRIOR_ABSSIN
-        '''
-
-    def get_prior_function_name(self):
-        return 'prior_abs_sin'
-
-
-class AbsSinHalfPrior(AbstractParameterPrior):
-    """The fabs(sin(x)/2.0) prior."""
-
-    def get_prior_function(self):
-        return '''
-            #ifndef PRIOR_ABSSIN_HALF
-            #define PRIOR_ABSSIN_HALF
-
-            mot_float_type prior_abs_sin_half(const mot_float_type value,
-                                               const mot_float_type lower_bound,
-                                               const mot_float_type upper_bound){
-                return fabs(sin(value)/2.0);
-            }
-
-            #endif //PRIOR_ABSSIN_HALF
-        '''
-
-    def get_prior_function_name(self):
-        return 'prior_abs_sin_half'
-
-
-class NormalPDF(AbstractParameterPrior):
+    def __init__(self, prior_body, prior_name, prior_params=None):
+        self._prior_body = prior_body
+        self._prior_name = prior_name
+        self._prior_params = prior_params or []
 
     def get_parameters(self):
-        from mot.model_building.cl_functions.parameters import FreeParameter
-        return [FreeParameter(CLDataType.from_string('mot_float_type'), 'mu', True, 0, -np.inf, np.inf,
-                              sampling_prior=UniformPrior()),
-                FreeParameter(CLDataType.from_string('mot_float_type'), 'sigma', False, 1, -np.inf, np.inf,
-                              sampling_prior=UniformPrior())]
+        return self._prior_params
 
     def get_prior_function(self):
+        params = ['value', 'lower_bound', 'upper_bound']
+        params.extend(p.name for p in self._prior_params)
+        params = ['const mot_float_type {}'.format(v) for v in params]
+
         return '''
-            #ifndef PRIOR_NORMALPDF
-            #define PRIOR_NORMALPDF
+            #ifndef {include_guard_name}
+            #define {include_guard_name}
 
-            mot_float_type prior_normal_pdf(const mot_float_type value,
-                                            const mot_float_type lower_bound,
-                                            const mot_float_type upper_bound,
-                                            const mot_float_type mu,
-                                            const mot_float_type sigma){
+            mot_float_type {function_name}({params}){{
+                {prior_body}
+            }}
 
-                return exp(-pown(value - mu, 2) / (2 * pown(sigma, 2)))
-                        / (sigma * sqrt(2 * M_PI));
-
-            }
-
-            #endif //PRIOR_NORMALPDF
-        '''
+            #endif //{include_guard_name}
+        '''.format(include_guard_name='PRIOR_{}'.format(self._prior_name.upper()), function_name=self._prior_name,
+                   prior_body=self._prior_body, params=', '.join(params))
 
     def get_prior_function_name(self):
-        return 'prior_normal_pdf'
+        return self._prior_name
 
 
-class BetaPDF(AbstractParameterPrior):
+class AlwaysOne(SimplePrior):
 
-    def get_parameters(self):
+    def __init__(self):
+        """The uniform prior is always 1. ``P(v) = 1`` """
+        super(AlwaysOne, self).__init__('return 1;', 'uniform')
+
+
+class ReciprocalPrior(SimplePrior):
+
+    def __init__(self):
+        """The reciprocal of the current value. ``P(v) = 1/v`` """
+        body = '''
+            if(value <= 0){
+                return 0;
+            }
+            return 1.0/value;
+        '''
+        super(ReciprocalPrior, self).__init__(body, 'reciprocal')
+
+
+class UniformWithinBoundsPrior(SimplePrior):
+
+    def __init__(self):
+        """This prior is 1 within the upper and lower bound of the parameter, 0 outside."""
+        super(UniformWithinBoundsPrior, self).__init__(
+            'return (value < lower_bound || value > upper_bound) ? 0.0 : 1.0;',
+            'uniform_within_bounds')
+
+
+class AbsSinPrior(SimplePrior):
+
+    def __init__(self):
+        """Angular prior: ``P(v) = |sin(v)|``"""
+        super(AbsSinPrior, self).__init__('return fabs(sin(value));', 'abs_sin')
+
+
+class AbsSinHalfPrior(SimplePrior):
+
+    def __init__(self):
+        """Angular prior: ``P(v) = |sin(x)/2.0|``"""
+        super(AbsSinHalfPrior, self).__init__('return fabs(sin(value)/2.0);', 'abs_sin_half')
+
+
+class NormalPDF(SimplePrior):
+
+    def __init__(self):
+        """Normal PDF on the given value: ``P(v) = N(v; mu, sigma)``"""
         from mot.model_building.cl_functions.parameters import FreeParameter
-        return [FreeParameter(CLDataType.from_string('mot_float_type'), 'alpha', True, 1, 0, np.inf,
-                              sampling_prior=UniformWithinBoundsPrior()),
-                FreeParameter(CLDataType.from_string('mot_float_type'), 'beta', False, 0.5, 0, 10,
-                              sampling_prior=ScalarReferencePrior(),
-                              sampling_proposal=GaussianProposal(0.01))]
+        params = [FreeParameter(CLDataType.from_string('mot_float_type'), 'mu', True, 0, -np.inf, np.inf,
+                                sampling_prior=AlwaysOne()),
+                  FreeParameter(CLDataType.from_string('mot_float_type'), 'sigma', False, 1, -np.inf, np.inf,
+                                sampling_prior=AlwaysOne())]
 
-    def get_prior_function(self):
-        return '''
-            #ifndef PRIOR_BETAPDF
-            #define PRIOR_BETAPDF
+        super(NormalPDF, self).__init__(
+            'return exp(-pown(value - mu, 2) / (2 * pown(sigma, 2))) / (sigma * sqrt(2 * M_PI));',
+            'normal_pdf',
+            params)
 
-            mot_float_type prior_beta_pdf(const mot_float_type value,
-                                          const mot_float_type lower_bound,
-                                          const mot_float_type upper_bound,
-                                          const mot_float_type alpha,
-                                          const mot_float_type beta){
 
-                if(value <= 0 || value >= 1){
-                    return 0;
-                }
+class ARDBetaPDF(SimplePrior):
 
-                return (tgamma(alpha + beta) * pow(1 - value, beta - 1) * pow(value, alpha - 1))
-                            / (tgamma(alpha) * tgamma(beta));
+    def __init__(self):
+        """This is a collapsed form of the Beta PDF meant for use in Automatic Relevance Detection sampling.
+
+        In this prior the ``alpha`` parameter of the Beta prior is locked to 1 which simplifies the equation.
+        The beta parameter is still free and can be changed as desired.
+
+        The implemented prior is ``beta * pow(1 - value, beta - 1)``.
+
+        """
+        from mot.model_building.cl_functions.parameters import FreeParameter
+        params = [FreeParameter(CLDataType.from_string('mot_float_type'), 'beta', False, 0.5, 0, 100,
+                                sampling_prior=UniformWithinBoundsPrior(),
+                                sampling_proposal=GaussianProposal(0.01))]
+
+        body = '''
+            if(value <= 0 || value >= 1){
+                return 0;
             }
-
-            #endif //PRIOR_BETAPDF
+            return beta * pow(1 - value, beta - 1);
         '''
 
-    def get_prior_function_name(self):
-        return 'prior_beta_pdf'
+        super(ARDBetaPDF, self).__init__(body, 'ard_beta_pdf', params)

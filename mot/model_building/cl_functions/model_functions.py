@@ -3,7 +3,7 @@ from pkg_resources import resource_filename
 from mot.cl_data_type import CLDataType
 from mot.model_building.cl_functions.base import ModelFunction
 from mot.model_building.cl_functions.parameters import FreeParameter
-from mot.model_building.parameter_functions.priors import BetaPDF, UniformWithinBoundsPrior
+from mot.model_building.parameter_functions.priors import ARDBetaPDF, UniformWithinBoundsPrior
 from mot.model_building.parameter_functions.proposals import GaussianProposal, ClippedGaussianProposal
 from mot.model_building.parameter_functions.transformations import ClampTransform, CosSqrClampTransform
 
@@ -85,7 +85,7 @@ class ARD_Beta_Weight(Weight):
             lower_bound (number or ndarray): The initial lower bound for the single free parameter of this function.
             upper_bound (number or ndarray): The initial upper bound for the single free parameter of this function.
         """
-        parameter_settings = dict(sampling_prior=BetaPDF())
+        parameter_settings = dict(sampling_prior=ARDBetaPDF())
 
         super(ARD_Beta_Weight, self).__init__(name=name, value=value, lower_bound=lower_bound,
                                               upper_bound=upper_bound, parameter_kwargs=parameter_settings)

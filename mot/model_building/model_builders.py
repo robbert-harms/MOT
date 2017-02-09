@@ -1249,12 +1249,14 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         for (m, p) in self._model_functions_info.get_estimable_weights():
             weight_indices.append(self._model_functions_info.get_parameter_estimable_index(m, p))
 
-        return '''
-            mot_float_type _weight_sum = ''' + ' + '.join('x[{}]'.format(index) for index in weight_indices) + ''';
-            if(_weight_sum > 1.0){
-                ''' + '\n'.join('x[{}] /= _weight_sum;'.format(index) for index in weight_indices) + '''
-            }
-        '''
+        if weight_indices:
+            return '''
+                mot_float_type _weight_sum = ''' + ' + '.join('x[{}]'.format(index) for index in weight_indices) + ''';
+                if(_weight_sum > 1.0){
+                    ''' + '\n'.join('x[{}] /= _weight_sum;'.format(index) for index in weight_indices) + '''
+                }
+            '''
+        return ''
 
 
 class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
@@ -1330,12 +1332,13 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         for (m, p) in self._model_functions_info.get_estimable_weights():
             weight_indices.append(self._model_functions_info.get_parameter_estimable_index(m, p))
 
-        prior += '''
-            mot_float_type _weight_sum = ''' + ' + '.join('x[{}]'.format(index) for index in weight_indices) + ''';
-            if(_weight_sum > 1.0){
-                prior *= 0;
-            }
-        '''
+        if weight_indices:
+            prior += '''
+                mot_float_type _weight_sum = ''' + ' + '.join('x[{}]'.format(index) for index in weight_indices) + ''';
+                if(_weight_sum > 1.0){
+                    prior *= 0;
+                }
+            '''
 
         prior += '\n\treturn log(prior);\n}'
         return prior
