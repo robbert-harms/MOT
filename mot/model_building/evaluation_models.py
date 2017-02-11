@@ -52,14 +52,12 @@ class EvaluationModel(ModelFunction):
             That is, it always returns a double since the summations may get large.
         """
 
-    def get_objective_list_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
-        """Get the cl code for the objective function list under the given noise model.
+    def get_objective_per_observation_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
+        """Get the cl code for the objective function for a given instance under the given noise model.
 
         This function is used by some evaluation routines (like for example LevenbergMarquardt) that need
         a list of objective values (one per instance point), instead of a single objective function scalar.
-
-        The returned CL function should accept a result vector in which the results per instance point ought
-        to be placed.
+        This function provides the information to build that list.
 
         Args:
             fname (str): the name of the resulting function
@@ -80,11 +78,11 @@ class EvaluationModel(ModelFunction):
             param_listing (str): the parameter listings for the parameters of the noise model
 
         Returns:
-            str: The objective function under this noise model, its signature is:
+            str: The objective function for the given observation index under this noise model, its signature is:
 
                 .. code-block:: c
 
-                    void (const void* const data, mot_float_type* const x, mot_float_type* result);
+                    mot_float_type (const void* const data, mot_float_type* const x, const int observation_index);
         """
 
     def get_log_likelihood_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing,
@@ -166,13 +164,13 @@ class SumOfSquares(EvaluationModel):
             }
         '''
 
-    def get_objective_list_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
+    def get_objective_per_observation_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
         return '''
-            void ''' + fname + '''(const void* const data, mot_float_type* const x, mot_float_type* result){
+            mot_float_type ''' + fname + '''(const void* const data, mot_float_type* const x,
+                                             const int observation_index){
                 ''' + param_listing + '''
-                for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
-                    result[i] = ''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i);
-                }
+                return ''' + obs_fname + '''(data, observation_index) -
+                        ''' + eval_fname + '''(data, x, observation_index);
             }
         '''
 
@@ -241,13 +239,13 @@ class GaussianEvaluationModel(EvaluationModel):
             }
         '''
 
-    def get_objective_list_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
+    def get_objective_per_observation_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
         return '''
-            void ''' + fname + '''(const void* const data, mot_float_type* const x, mot_float_type* result){
+            mot_float_type ''' + fname + '''(const void* const data, mot_float_type* const x,
+                                             const int observation_index){
                 ''' + param_listing + '''
-                for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
-                    result[i] = ''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i);
-                }
+                return ''' + obs_fname + '''(data, observation_index) -
+                        ''' + eval_fname + '''(data, x, observation_index);
             }
         '''
 
@@ -331,15 +329,14 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
             }
         '''
 
-    def get_objective_list_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
+    def get_objective_per_observation_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
         return '''
-            void ''' + fname + '''(const void* const data, mot_float_type* const x, mot_float_type* result){
+            mot_float_type ''' + fname + '''(const void* const data, mot_float_type* const x,
+                                             const int observation_index){
                 ''' + param_listing + '''
-                for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
-                    result[i] = ''' + obs_fname + '''(data, i) -
-                                    sqrt(pown(''' + eval_fname + '''(data, x, i), 2)
-                                            + (OffsetGaussianNoise_sigma * OffsetGaussianNoise_sigma));
-                }
+                return ''' + obs_fname + '''(data, observation_index) -
+                         sqrt(pown(''' + eval_fname + '''(data, x, observation_index), 2)
+                                + (OffsetGaussianNoise_sigma * OffsetGaussianNoise_sigma));
             }
         '''
 
@@ -436,19 +433,17 @@ class RicianEvaluationModel(EvaluationModel):
             }
         '''
 
-    def get_objective_list_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
+    def get_objective_per_observation_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
         return '''
-            void ''' + fname + '''(const void* const data, mot_float_type* const x, mot_float_type* result){
+            mot_float_type ''' + fname + '''(const void* const data, mot_float_type* const x,
+                                             const int observation_index){
                 ''' + param_listing + '''
-                double observation;
-                double evaluation;
-                for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
-                    observation = (double)''' + obs_fname + '''(data, i);
-                    evaluation = (double)''' + eval_fname + '''(data, x, i);
 
-                    result[i] = - ((evaluation * evaluation) / (2 * RicianNoise_sigma * RicianNoise_sigma))
-                                + log_bessel_i0((observation * evaluation) / (RicianNoise_sigma * RicianNoise_sigma));
-                }
+                double observation = (double)''' + obs_fname + '''(data, observation_index);
+                double evaluation = (double)''' + eval_fname + '''(data, x, observation_index);
+
+                return - ((evaluation * evaluation) / (2 * RicianNoise_sigma * RicianNoise_sigma))
+                            + log_bessel_i0((observation * evaluation) / (RicianNoise_sigma * RicianNoise_sigma));
             }
         '''
 

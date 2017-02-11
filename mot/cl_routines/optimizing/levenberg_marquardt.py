@@ -110,7 +110,7 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
             str: the evaluation function.
         """
         kernel_source = ''
-        kernel_source += self._model.get_objective_list_function('calculateObjectiveList')
+        kernel_source += self._model.get_objective_per_observation_function('getObjectiveInstanceValue')
         if self._use_param_codec:
             kernel_source += '''
                 void evaluate(mot_float_type* x, const void* data, mot_float_type* result){
@@ -119,13 +119,18 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
                         x_model[i] = x[i];
                     }
                     decodeParameters(data, x_model);
-                    calculateObjectiveList(data, x_model, result);
+
+                    for(int i = 0; i < ''' + str(self._model.get_nmr_inst_per_problem()) + '''; i++){
+                        result[i] = getObjectiveInstanceValue(data, x_model, i);
+                    }
                 }
             '''
         else:
             kernel_source += '''
                 void evaluate(mot_float_type* x, const void* data, mot_float_type* result){
-                    calculateObjectiveList(data, x, result);
+                    for(int i = 0; i < ''' + str(self._model.get_nmr_inst_per_problem()) + '''; i++){
+                        result[i] = getObjectiveInstanceValue(data, x_model, i);
+                    }
                 }
             '''
         return kernel_source

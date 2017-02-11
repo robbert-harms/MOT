@@ -114,7 +114,7 @@ class _ObjectiveListCalculatorWorker(Worker):
 
         kernel_source += get_float_type_def(self._double_precision)
         kernel_source += self._model.get_kernel_data_struct(self._cl_environment.device)
-        kernel_source += self._model.get_objective_list_function('calculateObjectiveList')
+        kernel_source += self._model.get_objective_per_observation_function('getObjectiveInstanceValue')
         kernel_source += '''
             __kernel void get_objectives(
                 ''' + ",\n".join(kernel_param_names) + '''
@@ -127,12 +127,9 @@ class _ObjectiveListCalculatorWorker(Worker):
                         x[i] = params[gid * ''' + str(nmr_params) + ''' + i];
                     }
 
-                    mot_float_type tmp_results[NMR_INST_PER_PROBLEM];
-                    calculateObjectiveList((void*)&data, x, tmp_results);
-
                     global mot_float_type* result = objectives + gid * NMR_INST_PER_PROBLEM;
                     for(int i = 0; i < NMR_INST_PER_PROBLEM; i++){
-                        result[i] = tmp_results[i];
+                        result[i] = getObjectiveInstanceValue((void*)&data, x, i);
                     }
             }
         '''

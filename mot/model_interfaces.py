@@ -220,21 +220,23 @@ class OptimizeModelInterface(object):
         """
         raise NotImplementedError
 
-    def get_objective_list_function(self, func_name="calculateObjectiveList"):
-        """Get the objective function returning a list with the objective functions per instance point.
+    def get_objective_per_observation_function(self, func_name="getObjectiveInstanceValue"):
+        """Get the objective function that returns the objective value at the given instance point.
 
         This function is used by some evaluation routines (like for example LevenbergMarquardt) that need
         a list of objective values (one per instance point), instead of a single objective function scalar.
+
+        This function is called with the index of the observation index to evaluate.
 
         Args:
             func_name (str): the name of the function
 
         Returns:
             str: A CL function with signature:
+
                 .. code-block:: c
 
-                    mot_float_type <func_name>(const void* const data, mot_float_type* const x,
-                                               mot_float_type* result);
+                    mot_float_type <func_name>(const void* const data, mot_float_type* const x, int observation_index);
         """
         raise NotImplementedError
 

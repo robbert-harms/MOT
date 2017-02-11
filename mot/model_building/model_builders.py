@@ -517,7 +517,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                                                                   obs_func_name, param_listing))
         return str(func)
 
-    def get_objective_list_function(self, func_name="calculateObjectiveList"):
+    def get_objective_per_observation_function(self, func_name="getObjectiveInstanceValue"):
         inst_per_problem = self.get_nmr_inst_per_problem()
         eval_func_name = func_name + '_evaluateModel'
         obs_func_name = func_name + '_getObservation'
@@ -532,8 +532,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         func += self.get_model_eval_function(eval_func_name)
         func += self.get_observation_return_function(obs_func_name)
-        func += str(self._evaluation_model.get_objective_list_function(func_name, inst_per_problem, eval_func_name,
-                                                                       obs_func_name, param_listing))
+        func += str(self._evaluation_model.get_objective_per_observation_function(
+            func_name, inst_per_problem, eval_func_name, obs_func_name, param_listing))
         return str(func)
 
     def finalize_optimization_results(self, results_dict):

@@ -159,8 +159,8 @@ class ARDBetaPDF(SimplePrior):
 
         """
         from mot.model_building.cl_functions.parameters import FreeParameter
-        params = [FreeParameter(CLDataType.from_string('mot_float_type'), 'beta', False, 0.5, 0, 100,
-                                sampling_prior=UniformWithinBoundsPrior(),
+        params = [FreeParameter(CLDataType.from_string('mot_float_type'), 'beta', False, 1, 1, 1000,
+                                sampling_prior=ReciprocalPrior(),
                                 sampling_proposal=GaussianProposal(0.01))]
 
         body = '''
