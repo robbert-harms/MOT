@@ -119,6 +119,39 @@ class EvaluationModel(ModelFunction):
             That is, it always returns a double since the summations may get large.
         """
 
+    def get_log_likelihood_per_observation_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing,
+                                                    full_likelihood=True):
+        """Get the cl code for the log likelihood function under the given noise model for the given observation index.
+
+        Args:
+            fname (str): the name of the resulting function
+            inst_per_problem (int): the number of instances per problem
+            eval_fname (str): the name of the function that can be called to get the evaluation, its signature is:
+
+                .. code-block:: c
+
+                    mot_float_type <fname>(const void* data, const mot_float_type* x,
+                                           const int observation_index);
+
+            obs_fname (str): the name of the function that can be called for the observed data, its signature is:
+
+                .. code-block:: c
+
+                    mot_float_type <fname>(const void* data, const int observation_index);
+
+            param_listing (str): the parameter listings for the parameters of the noise model
+            full_likelihood (boolean): if we want the complete likelihood, or if we can drop the constant terms.
+                The default is the complete likelihood. Disable for speed.
+
+        Returns:
+            str: the objective function under this noise model, its signature is:
+
+                .. code-block:: c
+
+                    mot_float_type <fname>(const void* const data, mot_float_type* const x,
+                                           const int observation_index);
+        """
+
     def get_noise_std_param_name(self):
         """Get the name of the parameter that is associated with the noise standard deviation in the problem data.
 
@@ -151,6 +184,16 @@ class SumOfSquares(EvaluationModel):
             }
         '''
 
+    def get_objective_per_observation_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
+        return '''
+            mot_float_type ''' + fname + '''(const void* const data, mot_float_type* const x,
+                                             const int observation_index){
+                ''' + param_listing + '''
+                return ''' + obs_fname + '''(data, observation_index) -
+                        ''' + eval_fname + '''(data, x, observation_index);
+            }
+        '''
+
     def get_log_likelihood_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing,
                                     full_likelihood=True):
         return '''
@@ -164,13 +207,14 @@ class SumOfSquares(EvaluationModel):
             }
         '''
 
-    def get_objective_per_observation_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
+    def get_log_likelihood_per_observation_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing,
+                                                    full_likelihood=True):
         return '''
-            mot_float_type ''' + fname + '''(const void* const data, mot_float_type* const x,
+            mot_float_type ''' + fname + '''(const void* const data, const mot_float_type* const x,
                                              const int observation_index){
                 ''' + param_listing + '''
-                return ''' + obs_fname + '''(data, observation_index) -
-                        ''' + eval_fname + '''(data, x, observation_index);
+                return - (pown(''' + obs_fname + '''(data, observation_index)
+                            - ''' + eval_fname + '''(data, x, observation_index), 2));
             }
         '''
 
@@ -265,6 +309,20 @@ class GaussianEvaluationModel(EvaluationModel):
             }
         '''
 
+    def get_log_likelihood_per_observation_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing,
+                                                    full_likelihood=True):
+        return '''
+            mot_float_type ''' + fname + '''(const void* const data, const mot_float_type* const x,
+                                             const int observation_index){
+                ''' + param_listing + '''
+                return - (pown(''' + obs_fname + '''(data, observation_index)
+                          - ''' + eval_fname + '''(data, x, observation_index), 2))
+                    / (2 * GaussianNoise_sigma * GaussianNoise_sigma)
+                    ''' + ('+' + str(inst_per_problem) + ' * log(GaussianNoise_sigma * sqrt(2 * M_PI))'
+                           if full_likelihood else '') + ''';
+            }
+        '''
+
 
 class OffsetGaussianEvaluationModel(EvaluationModel):
 
@@ -352,6 +410,20 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
                                     (OffsetGaussianNoise_sigma * OffsetGaussianNoise_sigma)), 2);
                 }
                 return - sum / (2 * pown(OffsetGaussianNoise_sigma, 2))
+                    ''' + ('+' + str(inst_per_problem) + ' * log(OffsetGaussianNoise_sigma * sqrt(2 * M_PI))'
+                           if full_likelihood else '') + ''';
+            }
+        '''
+
+    def get_log_likelihood_per_observation_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing,
+                                                    full_likelihood=True):
+        return '''
+            mot_float_type ''' + fname + '''(const void* const data, mot_float_type* const x, const int observation_index){
+                ''' + param_listing + '''
+                return - (pown(''' + obs_fname + '''(data, observation_index) -
+                                sqrt(pown(''' + eval_fname + '''(data, x, observation_index), 2) +
+                                    (OffsetGaussianNoise_sigma * OffsetGaussianNoise_sigma)), 2)) /
+                            (2 * pown(OffsetGaussianNoise_sigma, 2))
                     ''' + ('+' + str(inst_per_problem) + ' * log(OffsetGaussianNoise_sigma * sqrt(2 * M_PI))'
                            if full_likelihood else '') + ''';
             }
@@ -465,5 +537,21 @@ class RicianEvaluationModel(EvaluationModel):
                             + log_bessel_i0((observation * evaluation) / (RicianNoise_sigma * RicianNoise_sigma));
                 }
                 return sum;
+            }
+        '''
+
+    def get_log_likelihood_per_observation_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing,
+                                                    full_likelihood=True):
+        return '''
+            mot_float_type ''' + fname + '''(const void* const data, const mot_float_type* const x,
+                                             const int observation_index){
+                ''' + param_listing + '''
+                double observation = (double)''' + obs_fname + '''(data, observation_index);
+                double evaluation = (double)''' + eval_fname + '''(data, x, observation_index);
+
+                return log(observation / (RicianNoise_sigma * RicianNoise_sigma))
+                        - ((observation * observation) / (2 * RicianNoise_sigma * RicianNoise_sigma))
+                        - ((evaluation * evaluation) / (2 * RicianNoise_sigma * RicianNoise_sigma))
+                        + log_bessel_i0((observation * evaluation) / (RicianNoise_sigma * RicianNoise_sigma));
             }
         '''

@@ -211,8 +211,6 @@ class _MHWorker(Worker):
         if not self._model.is_proposal_symmetric():
             kernel_source += self._model.get_proposal_logpdf('getProposalLogPDF')
 
-        kernel_source += self._model.get_log_likelihood_function('getLogLikelihood', full_likelihood=False)
-
         if self.use_adaptive_proposals:
             kernel_source += '''
                 void _update_proposals(mot_float_type* const proposal_state, uint* const ac_between_proposal_updates,
@@ -233,6 +231,25 @@ class _MHWorker(Worker):
                     }
                 }
             '''
+
+        kernel_source += self._model.get_log_likelihood_function('getLogLikelihood', full_likelihood=False)
+        kernel_source += '''
+            double _get_log_likelihood(const void* const data, mot_float_type* const x){
+                return getLogLikelihood(data, x);
+            }
+        '''
+
+        # kernel_source += self._model.get_log_likelihood_per_observation_function('getLogLikelihoodPerObservation',
+        #                                                                          full_likelihood=False)
+        # kernel_source += '''
+        #     double _get_log_likelihood(const void* const data, mot_float_type* const x){
+        #         double sum = 0.0;
+        #         for(int i = 0; i < NMR_INST_PER_PROBLEM; i++){
+        #             sum += getLogLikelihoodPerObservation(data, x, i);
+        #         }
+        #         return sum;
+        #     }
+        # '''
 
         kernel_source += '''
             void _update_state(mot_float_type* const x,
@@ -259,7 +276,7 @@ class _MHWorker(Worker):
                     new_prior = getLogPrior(data, x);
 
                     if(exp(new_prior) > 0){
-                        new_likelihood = getLogLikelihood(data, x);
+                        new_likelihood = _get_log_likelihood(data, x);
         '''
         if self._model.is_proposal_symmetric():
             kernel_source += '''
@@ -347,7 +364,7 @@ class _MHWorker(Worker):
                         x[i] = params[gid * ''' + str(self._nmr_params) + ''' + i];
                     }
 
-                    double current_likelihood = getLogLikelihood((void*)&data, x);
+                    double current_likelihood = _get_log_likelihood((void*)&data, x);
                     mot_float_type current_prior = getLogPrior((void*)&data, x);
 
                     _sample(x, rng_data, &current_likelihood,

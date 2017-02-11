@@ -96,7 +96,7 @@ class OptimizeModelInterface(object):
         """
         raise NotImplementedError
 
-    def get_kernel_data_struct_initialization(self, device, variable_name):
+    def get_kernel_data_struct_initialization(self, device, variable_name, problem_id_name):
         """The assignment code for the data structure.
 
         The data structure needs to be generated given the kernel arguments, this function returns
@@ -110,6 +110,7 @@ class OptimizeModelInterface(object):
         Args:
             device (pyopencl.Device): the device for which to generate the data structure
             variable_name (str): the name for the generated struct variable
+            problem_id_name (str): the name of the variable holding the problem id, commonly set to get_global_id()
 
         Returns:
             str: the initialization assignment for the data structure.
@@ -397,6 +398,26 @@ class SampleModelInterface(OptimizeModelInterface):
                 .. code-block:: c
 
                     mot_float_type <func_name>(const void* const data, mot_float_type* const x);
+        """
+        raise NotImplementedError
+
+    def get_log_likelihood_per_observation_function(self, func_name="getLogLikelihoodPerObservation",
+                                                    evaluation_model=None, full_likelihood=True):
+        """Get the CL Log Likelihood function that evaluates the given instance under a noise model.
+
+        Args:
+            func_name (string): specifies the name of the function.
+            evaluation_model (EvaluationModel): the evaluation model to use for the log likelihood. If not given
+                we use the one defined in the model.
+            full_likelihood (boolean): if we want the complete likelihood, or if we can drop the constant terms.
+                The default is the complete likelihood. Disable for speed.
+
+        Returns:
+            str: A function of the kind:
+                .. code-block:: c
+
+                    mot_float_type <fname>(const void* const data, mot_float_type* const x,
+                                           const int observation_index);
         """
         raise NotImplementedError
 

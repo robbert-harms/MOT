@@ -333,9 +333,9 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         """See super class for details"""
         return self._get_all_kernel_source_items(device)['kernel_param_names']
 
-    def get_kernel_data_struct_initialization(self, device, variable_name):
+    def get_kernel_data_struct_initialization(self, device, variable_name, problem_id_name='gid'):
         """See super class for details"""
-        data_struct_init = self._get_all_kernel_source_items(device)['data_struct_init']
+        data_struct_init = self._get_all_kernel_source_items(device, problem_id_name)['data_struct_init']
         struct_code = '0'
         if data_struct_init:
             struct_code = ', '.join(data_struct_init)
@@ -1102,7 +1102,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                     model_data_dict.update({p.name: SimpleDataAdapter(value, p.data_type, self._get_mot_float_type())})
         return model_data_dict
 
-    def _get_all_kernel_source_items(self, device):
+    def _get_all_kernel_source_items(self, device, problem_id_name='gid'):
         """Get the CL strings for the kernel source items for most common CL kernels in this library."""
         import pyopencl as cl
 
@@ -1148,10 +1148,10 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             mult = cl_data.shape[1] if len(cl_data.shape) > 1 else 1
             if len(cl_data.shape) == 1 or cl_data.shape[1] == 1:
                 data_struct_names.append(data_type + ' ' + param_name)
-                data_struct_init.append(param_name + '[gid * ' + str(mult) + ']')
+                data_struct_init.append(param_name + '[{} * {}]'.format(problem_id_name, mult))
             else:
                 data_struct_names.append(clmemtype + ' ' + data_type + '* ' + param_name)
-                data_struct_init.append(param_name + ' + gid * ' + str(mult))
+                data_struct_init.append(param_name + ' + {} * {}'.format(problem_id_name, mult))
 
         for key, data_adapter in self._get_protocol_data().items():
             clmemtype = 'global'
@@ -1465,6 +1465,30 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         func += evaluation_model.get_log_likelihood_function(func_name, inst_per_problem, eval_func_name,
                                                              obs_func_name, param_listing,
                                                              full_likelihood=full_likelihood)
+        return func
+
+    def get_log_likelihood_per_observation_function(self, func_name="getLogLikelihoodPerObservation",
+                                                    evaluation_model=None, full_likelihood=True):
+        evaluation_model = evaluation_model or self._evaluation_model
+
+        inst_per_problem = self.get_nmr_inst_per_problem()
+        eval_func_name = func_name + '_evaluateModel'
+        obs_func_name = func_name + '_getObservation'
+
+        param_listing = ''
+        for p in evaluation_model.get_free_parameters():
+            param_listing += self._get_param_listing_for_param(evaluation_model, p)
+
+        func = ''
+        func += evaluation_model.get_cl_dependency_headers()
+        func += evaluation_model.get_cl_dependency_code()
+
+        func += self.get_model_eval_function(eval_func_name)
+        func += self.get_observation_return_function(obs_func_name)
+        func += evaluation_model.get_log_likelihood_per_observation_function(
+            func_name, inst_per_problem, eval_func_name,
+            obs_func_name, param_listing,
+            full_likelihood=full_likelihood)
         return func
 
     def samples_to_statistics(self, samples_dict):
