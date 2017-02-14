@@ -243,26 +243,34 @@ class ModelFunction(DependentCLFunction):
 
 class LibraryFunction(DependentCLFunction):
 
-    def __init__(self, return_type, function_name, parameter_list, cl_header_file,
-                 cl_code_file, var_replace_dict, dependency_list):
+    def __init__(self, return_type, cl_function_name, parameter_list, dependency_list):
         """Create a CL function for a library function.
 
         These functions are not meant to be optimized, but can be used a helper functions for the models.
 
         Args:
             return_type (str): Return type of the CL function.
-            function_name (str): The name of the CL function
-            cl_header_file (str): The location of the header file .h or .ph
-            cl_code_file (str): The location of the code file .c or .pcl
-            var_replace_dict (dict): In the cl_header and cl_code file these replacements will be made
-                (using the % format function of Python)
-            parameter_list (list or tuple of mot.model_building.cl_functions.parameters.CLFunctionParameter): The list of parameters required for this function
-            dependency_list (list or tuple of mot.model_building.cl_functions.base.CLFunction): The list of CLFunctions this function is dependent on
+            cl_function_name (str): The name of the CL function
+            parameter_list (list or tuple of mot.model_building.cl_functions.parameters.CLFunctionParameter): The
+                list of parameters required for this function
+            dependency_list (list or tuple of mot.model_building.cl_functions.base.CLFunction): The list of
+                CLFunctions this function is dependent on
         """
-        super(LibraryFunction, self).__init__(return_type, function_name, parameter_list, dependency_list)
-        self._cl_header_file = cl_header_file
-        self._cl_code_file = cl_code_file
-        self._var_replace_dict = var_replace_dict
+        super(LibraryFunction, self).__init__(return_type, cl_function_name, parameter_list, dependency_list)
+
+
+class SimpleLibraryFunction(LibraryFunction):
+
+    def __init__(self, return_type, cl_function_name, parameter_list, dependency_list, cl_header, cl_code):
+        """Extends the default LibraryFunction by adding the cl code to the constructor.
+
+        Args:
+            cl_header (str): the header function, this does not need the dependencies and include guards
+            cl_code (str): the CL code, this does not need the dependencies and include guards
+        """
+        super(SimpleLibraryFunction, self).__init__(return_type, cl_function_name, parameter_list, dependency_list)
+        self._cl_header = cl_header
+        self._cl_code = cl_code
 
     def get_cl_header(self):
         """Get the CL header for this function and all its dependencies.
@@ -270,22 +278,54 @@ class LibraryFunction(DependentCLFunction):
         Returns:
             str: The CL code for the header
         """
-        header = self._get_cl_dependency_headers()
-        header += "\n"
-        body = open(os.path.abspath(self._cl_header_file), 'r').read()
-        if self._var_replace_dict:
-            body = body % self._var_replace_dict
-        return header + "\n" + body
+        return '''
+            {dependencies}
+            #ifndef {inclusion_guard_name}
+            #define {inclusion_guard_name}
+            {header}
+            #endif // {inclusion_guard_name}
+        '''.format(dependencies=self._get_cl_dependency_headers(),
+                   inclusion_guard_name='LIBRARY_FUNCTION_{}_H'.format(self.cl_function_name),
+                   header=self._cl_header)
 
     def get_cl_code(self):
-        """Get the CL code for this function and all its dependencies.
+        return '''
+            {dependencies}
+            #ifndef {inclusion_guard_name}
+            #define {inclusion_guard_name}
+            {code}
+            #endif // {inclusion_guard_name}
+        '''.format(dependencies=self._get_cl_dependency_code(),
+                   inclusion_guard_name='LIBRARY_FUNCTION_{}_CL'.format(self.cl_function_name),
+                   code=self._cl_code)
 
-        Returns:
-            str: The CL code for the body of the function
+
+class SimpleLibraryFunctionFromFile(SimpleLibraryFunction):
+
+    def __init__(self, return_type, cl_function_name, parameter_list, dependency_list, cl_header_file,
+                 cl_code_file, var_replace_dict):
+        """Create a CL function for a library function.
+
+        These functions are not meant to be optimized, but can be used a helper functions in models.
+
+        Args:
+            return_type (str): Return type of the CL function.
+            cl_function_name (str): The name of the CL function
+            parameter_list (list or tuple of mot.model_building.cl_functions.parameters.CLFunctionParameter): The list
+                of parameters required for this function
+            dependency_list (list or tuple of mot.model_building.cl_functions.base.CLFunction): The list of CLFunctions
+                this function is dependent on
+            cl_header_file (str): The location of the header file .h or .ph
+            cl_code_file (str): The location of the code file .c or .pcl
+            var_replace_dict (dict): In the cl_header and cl_code file these replacements will be made
+                (using the % format function of Python)
         """
-        code = self._get_cl_dependency_code()
-        code += "\n"
-        body = open(os.path.abspath(self._cl_code_file), 'r').read()
-        if self._var_replace_dict:
-            body = body % self._var_replace_dict
-        return code + "\n" + body
+        code = open(os.path.abspath(cl_code_file), 'r').read()
+        header = open(os.path.abspath(cl_header_file), 'r').read()
+
+        if var_replace_dict:
+            code = code % var_replace_dict
+            header = header % var_replace_dict
+
+        super(SimpleLibraryFunctionFromFile, self).__init__(return_type, cl_function_name,
+                                                            parameter_list, dependency_list, header, code)
