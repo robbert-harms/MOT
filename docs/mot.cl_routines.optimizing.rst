@@ -60,14 +60,6 @@ mot.cl_routines.optimizing.random_restart module
     :undoc-members:
     :show-inheritance:
 
-mot.cl_routines.optimizing.simulated_annealing module
------------------------------------------------------
-
-.. automodule:: mot.cl_routines.optimizing.simulated_annealing
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
 
 Module contents
 ---------------

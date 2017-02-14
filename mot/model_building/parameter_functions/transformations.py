@@ -175,7 +175,7 @@ class FormatAssignmentConstructor(AssignmentConstructor):
         * ``{parameter_variable}``: for the parameter variable
         * ``{lower_bound}``: for the lower bound
         * ``{upper_bound}``: for the upper bound
-        * ``{dependency_variable_<n>}: for the dependency variable names
+        * ``{dependency_variable_<n>}``: for the dependency variable names
 
         Args:
             assignment (str): the string containing the assignment template.

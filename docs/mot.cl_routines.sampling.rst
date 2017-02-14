@@ -20,6 +20,14 @@ mot.cl_routines.sampling.metropolis_hastings module
     :undoc-members:
     :show-inheritance:
 
+mot.cl_routines.sampling.metropolis_hastings2 module
+----------------------------------------------------
+
+.. automodule:: mot.cl_routines.sampling.metropolis_hastings2
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 
 Module contents
 ---------------

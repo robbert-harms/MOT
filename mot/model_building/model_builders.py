@@ -167,20 +167,6 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         self._upper_bounds[model_param_name] = value
         return self
 
-    def set_parameter_transform(self, model_param_name, value):
-        """Set the parameter transform for the given parameter to the given transformation.
-
-        Args:
-            model_param_name (string): A model.param name like 'Ball.d'
-            value (AbstractTransformation): The parameter transform to use
-
-        Returns:
-            Returns self for chainability
-        """
-        m, p = self._model_functions_info.get_model_parameter_by_name(model_param_name)
-        p.parameter_transform = value
-        return self
-
     def unfix(self, model_param_name):
         """Unfix the given model.param
 
@@ -1280,16 +1266,21 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         return ModelFunctionsInformation(dependency_store, model_tree, evaluation_model, signal_noise_model,
                                          enable_prior_parameters=True)
 
-    def get_log_prior_function(self, func_name='getLogPrior'):
+    def get_log_prior_function(self, func_name='getLogPrior', address_space_parameter_vector='private'):
         prior = ''
 
         for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
             prior += p.sampling_prior.get_prior_function()
 
-        prior += '\nmot_float_type ' + func_name + '(const void* data_void, const mot_float_type* const x){' + "\n"
-        prior += "\t" + self.get_kernel_data_struct_type() + \
-                 '* data = (' + self.get_kernel_data_struct_type() + '*)data_void;\n'
-        prior += '\tmot_float_type prior = 1.0;\n\n'
+        prior += '''
+            mot_float_type {func_name}(const void* data_void,
+                                       {address_space_parameter_vector} const mot_float_type* const x){{
+
+                {kernel_data_struct_type}* data = ({kernel_data_struct_type}*)data_void;
+                mot_float_type prior = 1.0;
+
+            '''.format(func_name=func_name, address_space_parameter_vector=address_space_parameter_vector,
+                       kernel_data_struct_type=self.get_kernel_data_struct_type())
 
         for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
             name = m.name + '.' + p.name
@@ -1352,19 +1343,23 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         return return_list
 
     def is_proposal_symmetric(self):
-        return all(p.sampling_proposal.is_symmetric for m, p in
+        return all(p.sampling_proposal.is_symmetric() for m, p in
                    self._model_functions_info.get_estimable_parameters_list())
 
-    def get_proposal_logpdf(self, func_name='getProposalLogPDF'):
+    def get_proposal_logpdf(self, func_name='getProposalLogPDF', address_space_proposal_state='private'):
         return_str = ''
         for _, p in self._model_functions_info.get_estimable_parameters_list():
             return_str += p.sampling_proposal.get_proposal_logpdf_function()
 
-        return_str += "\n" + 'mot_float_type ' + func_name + \
-            '(const int i, const mot_float_type proposal, const mot_float_type current, ' \
-            ' mot_float_type* const proposal_state){' + "\n\t"
+        return_str += '''
+            mot_float_type {func_name}(
+                const int i,
+                const mot_float_type proposal,
+                const mot_float_type current,
+                {address_space_proposal_state} mot_float_type* const proposal_state){{
 
-        return_str += "\n\t" + 'switch(i){' + "\n\t\t"
+                switch(i){{
+        '''.format(func_name=func_name, address_space_proposal_state=address_space_proposal_state)
 
         adaptable_parameter_count = 0
         for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
@@ -1387,16 +1382,20 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         return_str += '}'
         return return_str
 
-    def get_proposal_function(self, func_name='getProposal'):
+    def get_proposal_function(self, func_name='getProposal', address_space_proposal_state='private'):
         return_str = ''
         for _, p in self._model_functions_info.get_estimable_parameters_list():
             return_str += p.sampling_proposal.get_proposal_function()
 
-        return_str += "\n" + 'mot_float_type ' + func_name + \
-            '(const int i, const mot_float_type current, void* rng_data, ' \
-            ' mot_float_type* const proposal_state){'
+        return_str += '''
+            mot_float_type {func_name}(
+                const int i,
+                const mot_float_type current,
+                void* rng_data,
+                {address_space_proposal_state} mot_float_type* const proposal_state){{
 
-        return_str += "\n\t" + 'switch(i){' + "\n\t\t"
+                switch(i){{
+        '''.format(func_name=func_name, address_space_proposal_state=address_space_proposal_state)
 
         adaptable_parameter_count = 0
         for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
@@ -1419,28 +1418,35 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         return_str += '}'
         return return_str
 
-    def get_proposal_state_update_function(self, func_name='updateProposalParameters'):
+    def get_proposal_state_update_function(self, func_name='updateProposalState', address_space='private'):
         return_str = ''
         for _, p in self._model_functions_info.get_estimable_parameters_list():
-            for param in p.sampling_proposal.get_parameters():
-                if param.adaptable:
-                    return_str += param.get_parameter_update_function()
+            return_str += p.sampling_proposal.get_proposal_update_function(address_space=address_space)
 
-        return_str += 'void ' + func_name + '(uint* const ac_between_proposal_updates, ' + \
-            'const uint proposal_update_intervals, mot_float_type* const proposal_state){' + "\n"
+        return_str += '''
+            void {func_name}({address_space} mot_float_type* const proposal_state,
+                             {address_space} uint* const sampling_counter,
+                             {address_space} uint* const acceptance_counter){{
+        '''.format(func_name=func_name, address_space=address_space)
 
         adaptable_parameter_count = 0
         for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
             param_proposal = p.sampling_proposal
 
+            state_params = []
+
             for param in param_proposal.get_parameters():
                 if param.adaptable:
-                    return_str += "\t" * 3
-                    return_str += 'proposal_state[' + str(adaptable_parameter_count) + '] = '
-                    return_str += param.get_parameter_update_function_name() + '(' +\
-                        'proposal_state[' + str(adaptable_parameter_count) + '], ' + \
-                        'ac_between_proposal_updates[' + str(i) + '], proposal_update_intervals);' + "\n"
+                    state_params.append('proposal_state + {}'.format(adaptable_parameter_count))
                     adaptable_parameter_count += 1
+
+            if state_params:
+                state_params.extend(['sampling_counter + {}'.format(i), 'acceptance_counter + {}'.format(i)])
+
+                return_str += '''
+                    {update_func_name}({params});
+                '''.format(update_func_name=param_proposal.get_proposal_update_function_name(),
+                           params=', '.join(state_params))
 
         return_str += '}'
         return return_str

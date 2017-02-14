@@ -12,6 +12,14 @@ Subpackages
 Submodules
 ----------
 
+mot.model_building.data_adapter module
+--------------------------------------
+
+.. automodule:: mot.model_building.data_adapter
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 mot.model_building.evaluation_models module
 -------------------------------------------
 

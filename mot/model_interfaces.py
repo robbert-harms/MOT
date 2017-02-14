@@ -429,20 +429,23 @@ class SampleModelInterface(OptimizeModelInterface):
         """
         raise NotImplementedError
 
-    def get_proposal_logpdf(self, func_name='getProposalLogPDF'):
+    def get_proposal_logpdf(self, func_name='getProposalLogPDF', address_space_proposal_state='private'):
         """Get the probability density function of the proposal in log space (as a CL string).
 
         This density function is used if the proposal is not symmetric.
 
         Args:
             func_name (str): the CL function name of the returned function
+            address_space_proposal_state (str): the CL address space of the proposal state vector.
+                Defaults to ``private``.
 
         Returns:
             str: A function with the signature:
                 .. code-block:: c
 
                     mot_float_type <func_name>(const int i, const mot_float_type proposal,
-                                               const mot_float_type current, mot_float_type* const proposal_state)
+                                               const mot_float_type current,
+                                               <address_space_proposal_state> mot_float_type* const proposal_state)
 
             Where ``i`` is the index of the parameter we would like to get the proposal from, ``current`` is the current
             value of that parameter and ``proposal`` the proposal value of the parameter. The final argument
@@ -453,18 +456,23 @@ class SampleModelInterface(OptimizeModelInterface):
         """
         raise NotImplementedError
 
-    def get_proposal_function(self, func_name='getProposal'):
+    def get_proposal_function(self, func_name='getProposal', address_space_proposal_state='private'):
         """Get a proposal function that returns proposals for a requested parameter.
 
         Args:
             func_name (str): the CL function name of the returned function
+            address_space_proposal_state (str): the CL address space of the proposal state vector.
+                Defaults to ``private``.
 
         Returns:
             str: A function with the signature:
                 .. code-block:: c
 
-                    mot_float_type <func_name>(const int i, const mot_float_type current, void* rng_data,
-                                               mot_float_type* const proposal_state)
+                    mot_float_type <func_name>(
+                        const int i,
+                        const mot_float_type current,
+                        void* rng_data,
+                        <address_space_proposal_state> mot_float_type* const proposal_state)
 
             Where ``i`` is the index of the parameter for which we want the proposal and ``current`` is the current
             value of that parameter. The argument ``proposal_state`` is the state of the proposal distribution.
@@ -475,41 +483,47 @@ class SampleModelInterface(OptimizeModelInterface):
         """
         raise NotImplementedError
 
-    def get_proposal_state_update_function(self, func_name='updateProposalState'):
-        """Get a function that can update the parameters of the proposals
+    def get_proposal_state_update_function(self, func_name='updateProposalState', address_space='private'):
+        """Get the function to update the proposal parameters
 
         Args:
             func_name (str): the CL function name of the returned function
+            address_space (str): the address space of (all) the given arguments, defaults to ``private``
 
         Returns:
             str: A function with the signature:
                 .. code-block:: c
 
-                    void <func_name>(uint* const ac_between_proposal_updates, const uint proposal_update_intervals,
-                                     mot_float_type* const proposal_state);
+                    void <func_name>(<address_space> mot_float_type* const proposal_state,
+                                     <address_space> uint* const sampling_counter,
+                                     <address_space> uint* const acceptance_counter);
 
-            Where ``ac_between_proposal_updates`` is the acceptance count in between proposal updates,
-            ``proposal_update_intervals`` is the interval at which we update the proposals and ``proposal_state``
-            is the current list of proposal parameters (to be updated in place). Please note that
-            ``ac_between_proposal_updates`` is per sampled parameter while ``proposal_state`` is
-            per proposal parameter. If the number of parameters of a proposal function is not 1, than the
-            two arrays do not share the same indices.
+                The ``proposal_state`` holds the current value of all the adaptable proposal parameters and is
+                of length equal to the number of adaptable parameters. The ``sampling_counter`` holds the number of
+                samples drawn since last update (per parameter) and ``acceptance_counter`` holds the number of samples
+                that where accepted since the last update. Both are of length equal to the total number of parameters
+                in the model (!). The implementing function is free to overwrite the values in each array.
         """
         raise NotImplementedError
 
-    def get_log_prior_function(self, func_name='getLogPrior'):
+    def get_log_prior_function(self, func_name='getLogPrior', address_space_parameter_vector='private'):
         """Get the prior function that returns the prior information about the given parameters.
 
         The prior function must be in log space.
 
         Args:
             func_name (str): the CL function name of the returned function
+            address_space_parameter_vector (str): the address space to use for the parameter vector
+                by default this is set to ``private``.
 
         Returns:
             str: A function with the signature:
                 .. code-block:: c
 
-                    mot_float_type <func_name>(const void* data_void, const mot_float_type* const x);
+                    mot_float_type <func_name>(
+                        const void* data_void,
+                        <address_space_parameter_vector> const mot_float_type* const x
+                    );
 
             Which is called by the sampling routine to calculate the posterior probability.
         """

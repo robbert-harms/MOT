@@ -186,7 +186,7 @@ class GridSearch(AbstractParallelOptimizer):
         For generating the grid we use an instance of an :class:`ParameterGrid`.
 
         Args:
-            grid_generator (:ref:`ParameterGrid`): the parameter grid to use
+            grid_generator (:class:`GridGenerator`): the parameter grid to use
         """
         self._grid_generator = grid_generator
         patience = patience or self.default_patience

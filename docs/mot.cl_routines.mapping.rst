@@ -36,14 +36,6 @@ mot.cl_routines.mapping.error_measures module
     :undoc-members:
     :show-inheritance:
 
-mot.cl_routines.mapping.final_parameters_transformer module
------------------------------------------------------------
-
-.. automodule:: mot.cl_routines.mapping.final_parameters_transformer
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
 mot.cl_routines.mapping.loglikelihood_calculator module
 -------------------------------------------------------
 

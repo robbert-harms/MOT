@@ -4,14 +4,6 @@ mot.model_building.parameter_functions package
 Submodules
 ----------
 
-mot.model_building.parameter_functions.codecs module
-----------------------------------------------------
-
-.. automodule:: mot.model_building.parameter_functions.codecs
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
 mot.model_building.parameter_functions.dependencies module
 ----------------------------------------------------------
 

@@ -37,14 +37,6 @@ mot.configuration module
     :undoc-members:
     :show-inheritance:
 
-mot.data_adapters module
-------------------------
-
-.. automodule:: mot.data_adapters
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
 mot.factory module
 ------------------
 
