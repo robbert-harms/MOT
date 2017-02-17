@@ -383,6 +383,15 @@ class SampleModelInterface(OptimizeModelInterface):
         """
         raise NotImplementedError
 
+    def get_proposal_state_names(self):
+        """Get a list of names for the adaptable proposal parameters.
+
+        Returns:
+            list: list of str with the name for each of the adaptable proposal parameters.
+                This is used by the sampler to create a dictionary of final proposal states.
+        """
+        raise NotImplementedError
+
     def get_log_likelihood_function(self, func_name="getLogLikelihood", evaluation_model=None, full_likelihood=True):
         """Get the CL Log Likelihood function that evaluates the entire problem instance under a noise model
 

@@ -1,6 +1,6 @@
 import numpy as np
 from mot.cl_data_type import CLDataType
-from mot.model_building.parameter_functions.proposals import GaussianProposal
+from mot.model_building.parameter_functions.proposals import GaussianProposal, ClippedGaussianProposal
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-06-19"
@@ -91,14 +91,14 @@ class SimplePrior(AbstractParameterPrior):
 class AlwaysOne(SimplePrior):
 
     def __init__(self):
-        """The uniform prior is always 1. ``P(v) = 1`` """
+        """The uniform prior is always 1. :math:`P(v) = 1` """
         super(AlwaysOne, self).__init__('return 1;', 'uniform')
 
 
 class ReciprocalPrior(SimplePrior):
 
     def __init__(self):
-        """The reciprocal of the current value. ``P(v) = 1/v`` """
+        """The reciprocal of the current value. :math:`P(v) = 1/v` """
         body = '''
             if(value <= 0){
                 return 0;
@@ -120,21 +120,56 @@ class UniformWithinBoundsPrior(SimplePrior):
 class AbsSinPrior(SimplePrior):
 
     def __init__(self):
-        """Angular prior: ``P(v) = |sin(v)|``"""
+        """Angular prior: :math:`P(v) = |\\sin(v)|`"""
         super(AbsSinPrior, self).__init__('return fabs(sin(value));', 'abs_sin')
 
 
 class AbsSinHalfPrior(SimplePrior):
 
     def __init__(self):
-        """Angular prior: ``P(v) = |sin(x)/2.0|``"""
+        """Angular prior: :math:`P(v) = |\\sin(x)/2.0|`"""
         super(AbsSinHalfPrior, self).__init__('return fabs(sin(value)/2.0);', 'abs_sin_half')
+
+
+class VagueGammaPrior(SimplePrior):
+
+    def __init__(self):
+        """The vague gamma prior is meant as a proper uniform prior.
+
+        Lee & Wagenmakers:
+
+            The practice of assigning Gamma(0.001, 0.001) priors on precision parameters is theoretically motivated by
+            scale invariance arguments, meaning that priors are chosen so that changing the measurement
+            scale of the data does not affect inference.
+            The invariant prior on precision λ corresponds to a uniform distribution on log σ,
+            that is, p (σ2) ∝ 1/σ2, or a Gamma(a → 0, b → 0) distribution.
+            This invariant prior distribution, however, is improper (i.e., the area under the curve is unbounded),
+            which means it is not really a distribution, but the limit of a sequence of distributions
+            (see Jaynes, 2003). WinBUGS requires the use of proper distributions,
+            and the Gamma(0.001, 0.001) prior is intended as a proper approximation to the theoretically
+            motivated improper prior. This raises the issue of whether inference is sensitive to the essentially
+            arbitrary value 0.001, and it is sometimes the case that using other small values such as 0.01 or 0.1
+            leads to more stable sampling
+            in WinBUGS.
+
+            -- Lee & Wagenmakers, Bayesian Cognitive Modeling, 2014, Chapter 4, Box 4.1
+
+        While this is not WinBUGS and improper priors are allowed in MOT, it is still useful to have this prior
+        in case people desire proper priors.
+        """
+        body = '''
+            float kappa = 0.001;
+            float theta = 1/0.001;
+
+            return (1.0 / (tgamma(kappa) * pow(theta, kappa))) * pow(value, kappa - 1) * exp(- value / theta);
+        '''
+        super(VagueGammaPrior, self).__init__(body, 'vague_gamma_prior', [])
 
 
 class NormalPDF(SimplePrior):
 
     def __init__(self):
-        """Normal PDF on the given value: ``P(v) = N(v; mu, sigma)``"""
+        """Normal PDF on the given value: :math:`P(v) = N(v; \\mu, \\sigma)`"""
         from mot.model_building.cl_functions.parameters import FreeParameter
         params = [FreeParameter(CLDataType.from_string('mot_float_type'), 'mu', True, 0, -np.inf, np.inf,
                                 sampling_prior=AlwaysOne()),
@@ -147,27 +182,49 @@ class NormalPDF(SimplePrior):
             params)
 
 
-class ARDBetaPDF(SimplePrior):
+class ARDBeta(SimplePrior):
 
     def __init__(self):
         """This is a collapsed form of the Beta PDF meant for use in Automatic Relevance Detection sampling.
 
-        In this prior the ``alpha`` parameter of the Beta prior is locked to 1 which simplifies the equation.
-        The beta parameter is still free and can be changed as desired.
+        In this prior the ``alpha`` parameter of the Beta prior is set to 1 which simplifies the equation.
+        The parameter ``beta`` is still free and can be changed as desired.
 
-        The implemented prior is ``beta * pow(1 - value, beta - 1)``.
+        The implemented prior is :math:`B(x; 1, \\beta) = \\beta * (1 - x)^{\\beta - 1}`
 
         """
         from mot.model_building.cl_functions.parameters import FreeParameter
-        params = [FreeParameter(CLDataType.from_string('mot_float_type'), 'beta', False, 1, 1, 1000,
+        params = [FreeParameter(CLDataType.from_string('mot_float_type'), 'beta', False, 1, 1e-4, 1000,
                                 sampling_prior=ReciprocalPrior(),
                                 sampling_proposal=GaussianProposal(0.01))]
 
         body = '''
-            if(value <= 0 || value >= 1){
+            if(value < 0 || value > 1){
                 return 0;
             }
             return beta * pow(1 - value, beta - 1);
         '''
+        super(ARDBeta, self).__init__(body, 'ard_beta_pdf', params)
 
-        super(ARDBetaPDF, self).__init__(body, 'ard_beta_pdf', params)
+
+class ARDGaussian(SimplePrior):
+
+    def __init__(self):
+        """This is a Gaussian prior meant for use in Automatic Relevance Detection sampling.
+
+        This uses a Gaussian prior with mean at zero and a standard deviation determined by the ``alpha`` parameter
+        with the relationship :math:`\sigma = 1/\\sqrt(\\alpha)`.
+        """
+        from mot.model_building.cl_functions.parameters import FreeParameter
+        params = [FreeParameter(CLDataType.from_string('mot_float_type'), 'alpha', False, 8, 1e-5, 1e3,
+                                sampling_prior=UniformWithinBoundsPrior(),
+                                sampling_proposal=GaussianProposal(20))]
+
+        body = '''
+            if(value < 0 || value > 1){
+                return 0;
+            }
+            mot_float_type sigma = 1.0/sqrt(alpha);
+            return exp(-pown(value, 2) / (2 * pown(sigma, 2))) / (sigma * sqrt(2 * M_PI));
+        '''
+        super(ARDGaussian, self).__init__(body, 'ard_beta_pdf', params)

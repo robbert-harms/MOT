@@ -389,7 +389,10 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             if results_dict and param_name in results_dict:
                 starting_points.append(results_dict[m.name + '.' + p.name])
             elif is_scalar(value):
-                starting_points.append(np.full((self.get_nmr_problems(), 1), value, dtype=np_dtype))
+                if self.get_nmr_problems() == 0:
+                    starting_points.append(np.full((1, 1), value, dtype=np_dtype))
+                else:
+                    starting_points.append(np.full((self.get_nmr_problems(), 1), value, dtype=np_dtype))
             else:
                 if len(value.shape) < 2:
                     value = np.transpose(np.asarray([value]))
@@ -1342,6 +1345,14 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
                     return_list.append(param.default_value)
         return return_list
 
+    def get_proposal_state_names(self):
+        return_list = []
+        for m, p in self._model_functions_info.get_estimable_parameters_list():
+            for param in p.sampling_proposal.get_parameters():
+                if param.adaptable:
+                    return_list.append('{}.{}.proposal.{}'.format(m.name, p.name, param.name))
+        return return_list
+
     def is_proposal_symmetric(self):
         return all(p.sampling_proposal.is_symmetric() for m, p in
                    self._model_functions_info.get_estimable_parameters_list())
@@ -1421,17 +1432,20 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
     def get_proposal_state_update_function(self, func_name='updateProposalState', address_space='private'):
         return_str = ''
         for _, p in self._model_functions_info.get_estimable_parameters_list():
-            return_str += p.sampling_proposal.get_proposal_update_function(address_space=address_space)
+            return_str += p.sampling_proposal.get_proposal_update_function().get_update_function(
+                p.sampling_proposal.get_parameters(), address_space=address_space)
 
         return_str += '''
             void {func_name}({address_space} mot_float_type* const proposal_state,
                              {address_space} uint* const sampling_counter,
-                             {address_space} uint* const acceptance_counter){{
+                             {address_space} uint* const acceptance_counter,
+                             {address_space} mot_float_type* const parameter_variance){{
         '''.format(func_name=func_name, address_space=address_space)
 
         adaptable_parameter_count = 0
         for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
             param_proposal = p.sampling_proposal
+            proposal_update_function = param_proposal.get_proposal_update_function()
 
             state_params = []
 
@@ -1441,12 +1455,18 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
                     adaptable_parameter_count += 1
 
             if state_params:
-                state_params.extend(['sampling_counter + {}'.format(i), 'acceptance_counter + {}'.format(i)])
+                if proposal_update_function.uses_jump_counters():
+                    state_params.extend(['sampling_counter + {}'.format(i),
+                                         'acceptance_counter + {}'.format(i)])
+
+                if proposal_update_function.uses_parameter_variance():
+                    state_params.append('parameter_variance[{}]'.format(i))
 
                 return_str += '''
+                    // {param_name}
                     {update_func_name}({params});
-                '''.format(update_func_name=param_proposal.get_proposal_update_function_name(),
-                           params=', '.join(state_params))
+                '''.format(update_func_name=proposal_update_function.get_function_name(param_proposal.get_parameters()),
+                           params=', '.join(state_params), param_name='{}.{}'.format(m.name, p.name))
 
         return_str += '}'
         return return_str

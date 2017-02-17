@@ -20,10 +20,11 @@ class AbstractSampler(CLRoutine):
         Args:
             model (SampleModelInterface): the model to minimize
             init_params (dict): a dictionary containing the results of a previous run, provides the starting point
-            full_output (boolean): If true, also return other output parameters:
-                (samples, other_output_maps). Else only return the samples.
+            full_output (boolean): If true, also return other output parameters. It will then return a tuple like
+                (samples, other_output_maps, proposal_state). If False, we only return the samples.
 
         Returns:
-            if full output is False return only the samples in a dictionary. If full output is true it returns a list
-            with as first elements the samples dict and as second an output map dict.
+            dict or tuple: if full output is False we return only the samples in a dictionary.
+                If full output is true it returns a tuple with as first elements the samples dict, as second
+                an volumetric map dictionary and as last element a dictionary with the adaptive proposal values.
         """

@@ -83,10 +83,13 @@ class MetropolisHastings(AbstractSampler):
         samples = np.zeros((model.get_nmr_problems(), parameters.shape[1], self.nmr_samples),
                            dtype=np_dtype, order='C')
 
+        proposal_state = np.zeros((model.get_nmr_problems(), len(model.get_proposal_state())),
+                                  dtype=np_dtype, order='C')
+
         self._logger.info('Starting sampling with method {0}'.format(self.__class__.__name__))
 
         workers = self._create_workers(lambda cl_environment: _MHWorker(
-            cl_environment, self.get_compile_flags_list(), model, parameters, samples,
+            cl_environment, self.get_compile_flags_list(), model, parameters, samples, proposal_state,
             self.nmr_samples, self.burn_length, self.sample_intervals, self.use_adaptive_proposals))
         self.load_balancer.process(workers, model.get_nmr_problems())
 
@@ -106,7 +109,10 @@ class MetropolisHastings(AbstractSampler):
                                            model.double_precision).calculate(errors)
             volume_maps.update(error_measures)
             self._logger.info('Done calculating errors measures')
-            return samples_dict, volume_maps
+
+            proposal_state_dict = results_to_dict(proposal_state, model.get_proposal_state_names())
+
+            return samples_dict, volume_maps, proposal_state_dict
 
         return samples_dict
 
@@ -138,7 +144,7 @@ class MetropolisHastings(AbstractSampler):
 
 class _MHWorker(Worker):
 
-    def __init__(self, cl_environment, compile_flags, model, parameters, samples,
+    def __init__(self, cl_environment, compile_flags, model, parameters, samples, proposal_state,
                  nmr_samples, burn_length, sample_intervals, use_adaptive_proposals):
         super(_MHWorker, self).__init__(cl_environment)
 
@@ -146,13 +152,14 @@ class _MHWorker(Worker):
         self._parameters = parameters
         self._nmr_params = parameters.shape[1]
         self._samples = samples
+        self._proposal_state = proposal_state
 
         self._nmr_samples = nmr_samples
         self._burn_length = burn_length
         self._sample_intervals = sample_intervals
         self.use_adaptive_proposals = use_adaptive_proposals
 
-        self._workgroup_size = min(cl_environment.device.max_work_group_size,
+        self._workgroup_size = min(cl_environment.device.max_work_group_size // 4,
                                    max(1, 2**math.floor(math.log(self._model.get_nmr_inst_per_problem(), 2))))
 
         self._rand123_starting_point = RandomStartingPoint()
@@ -170,6 +177,11 @@ class _MHWorker(Worker):
                                 hostbuf=self._samples[range_start:range_end, ...])
         data_buffers.append(samples_buf)
 
+        proposal_buffer = cl.Buffer(self._cl_run_context.context,
+                                    cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
+                                    hostbuf=self._proposal_state[range_start:range_end, ...])
+        data_buffers.append(proposal_buffer)
+
         for data in self._model.get_data():
             data_buffers.append(cl.Buffer(self._cl_run_context.context,
                                           cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data))
@@ -179,11 +191,13 @@ class _MHWorker(Worker):
                                            (int(self._workgroup_size),),
                                            *data_buffers)
 
-        return [self._enqueue_readout(samples_buf, self._samples, 0, nmr_problems, [kernel_event])]
+        return [self._enqueue_readout(samples_buf, self._samples, 0, nmr_problems, [kernel_event]),
+                self._enqueue_readout(proposal_buffer, self._proposal_state, 0, nmr_problems, [kernel_event])]
 
     def _get_kernel_source(self):
         kernel_param_names = ['global mot_float_type* params',
-                              'global mot_float_type* samples']
+                              'global mot_float_type* samples',
+                              'global mot_float_type* final_proposal_state']
         kernel_param_names.extend(self._model.get_kernel_param_names(self._cl_environment.device))
 
         proposal_state_size = len(self._model.get_proposal_state())
@@ -226,7 +240,8 @@ class _MHWorker(Worker):
                     observation_ind = i * ''' + str(self._workgroup_size) + ''' + local_id;
 
                     if(observation_ind < NMR_INST_PER_PROBLEM){
-                        log_likelihood_tmp[local_id] += getLogLikelihoodPerObservation(data, x_private, observation_ind);
+                        log_likelihood_tmp[local_id] += getLogLikelihoodPerObservation(
+                            data, x_private, observation_ind);
                     }
                 }
 
@@ -324,12 +339,22 @@ class _MHWorker(Worker):
                          local mot_float_type* const proposal_state,
                          local uint* const sampling_counter,
                          local uint* const acceptance_counter,
+                         local mot_float_type* parameter_mean,
+                         local mot_float_type* parameter_variance,
+                         local mot_float_type* parameter_m2,
                          global mot_float_type* samples,
                          local double* log_likelihood_tmp){
 
                 uint i, j;
-                uint voxel_ind = get_group_id(0);
+                uint problem_ind = get_group_id(0);
                 bool is_first_work_item = get_local_id(0) == 0;
+                mot_float_type previous_mean;
+
+                for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
+                    parameter_mean[j] = x_local[j];
+                    parameter_variance[j] = 0;
+                    parameter_m2[j] = 0;
+                }
 
                 for(i = 0; i < ''' + str(self._nmr_samples * (self._sample_intervals + 1)
                                          + self._burn_length) + '''; i++){
@@ -343,8 +368,30 @@ class _MHWorker(Worker):
                             sampling_counter[j]++;
                         }
 
-                        ''' + ('updateProposalState(proposal_state, sampling_counter, acceptance_counter);'
+                        ''' + ('updateProposalState(proposal_state, sampling_counter, acceptance_counter, '
+                               'parameter_variance);'
                                if self.use_adaptive_proposals else '') + '''
+
+                        if(i > 0){
+                            for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
+                                // online variance, algorithm by Welford
+                                //  B. P. Welford (1962)."Note on a method for calculating corrected sums of squares
+                                //      and products". Technometrics 4(3):419–420.
+                                //
+                                // and studied in:
+                                // Chan, Tony F.; Golub, Gene H.; LeVeque, Randall J. (1983).
+                                //      Algorithms for Computing the Sample Variance: Analysis and Recommendations.
+                                //      The American Statistician 37, 242-247. http://www.jstor.org/stable/2683386
+
+                                previous_mean = parameter_mean[j];
+                                parameter_mean[j] += (x_local[j] - parameter_mean[j]) / (i + 1);
+                                parameter_m2[j] += (x_local[j] - previous_mean) * (x_local[j] - parameter_mean[j]);
+
+                                if(i > 1){
+                                    parameter_variance[j] = parameter_m2[j] / (i - 1);
+                                }
+                            }
+                        }
 
                         if(i >= ''' + str(self._burn_length) + '''
                            && i % ''' + str(self._sample_intervals + 1) + ''' == 0){
@@ -353,7 +400,7 @@ class _MHWorker(Worker):
                                 samples[(uint)((i - ''' + str(self._burn_length) + ''') // remove the burn-in
                                                 / ''' + str(self._sample_intervals + 1) + ''') // remove the interval
                                         + j * ''' + str(self._nmr_samples) + '''  // parameter index
-                                        + voxel_ind * ''' + str(self._nmr_params * self._nmr_samples) + ''']
+                                        + problem_ind * ''' + str(self._nmr_params * self._nmr_samples) + ''']
                                             = x_local[j];
                             }
                         }
@@ -367,10 +414,10 @@ class _MHWorker(Worker):
                 ''' + ",\n".join(kernel_param_names) + '''
                 ){
 
-                uint voxel_ind = get_group_id(0);
+                uint problem_ind = get_group_id(0);
 
                 ''' + self._model.get_kernel_data_struct_initialization(self._cl_environment.device,
-                                                                        'data', 'voxel_ind') + '''
+                                                                        'data', 'problem_ind') + '''
 
                 rand123_data rand123_rng_data = ''' + self._get_rand123_init_cl_code() + ''';
                 void* rng_data = (void*)&rand123_rng_data;
@@ -381,14 +428,19 @@ class _MHWorker(Worker):
                 local mot_float_type current_prior;
 
                 local mot_float_type proposal_state[''' + str(proposal_state_size) + '''];
+
+                // the following items are used for updating the proposals, do not use them for other purposes
                 local uint sampling_counter[''' + str(self._nmr_params) + '''];
                 local uint acceptance_counter[''' + str(self._nmr_params) + '''];
+                local mot_float_type parameter_mean[''' + str(self._nmr_params) + '''];
+                local mot_float_type parameter_m2[''' + str(self._nmr_params) + ''']; // used in calculation of variance
+                local mot_float_type parameter_variance[''' + str(self._nmr_params) + '''];
 
                 local double log_likelihood_tmp[''' + str(self._workgroup_size) + '''];
 
                 if(get_local_id(0) == 0){
                     for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
-                        x_local[i] = params[voxel_ind * ''' + str(self._nmr_params) + ''' + i];
+                        x_local[i] = params[problem_ind * ''' + str(self._nmr_params) + ''' + i];
                     }
 
                     current_prior = getLogPrior((void*)&data, x_local);
@@ -405,7 +457,14 @@ class _MHWorker(Worker):
 
                 _sample(x_local, rng_data, &current_likelihood,
                     &current_prior, (void*)&data, proposal_state, sampling_counter, acceptance_counter,
-                    samples, log_likelihood_tmp);
+                    parameter_mean, parameter_variance, parameter_m2, samples, log_likelihood_tmp);
+
+                if(get_local_id(0) == 0){
+                    for(int i = 0; i < ''' + str(proposal_state_size) + '''; i++){
+                        final_proposal_state[problem_ind
+                                             * ''' + str(proposal_state_size) + ''' + i] = proposal_state[i];
+                    }
+                }
             }
         '''
         return kernel_source

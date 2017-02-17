@@ -76,14 +76,16 @@ class Rosenbrock(OptimizeModelInterface):
             }
         '''
 
-    def get_objective_list_function(self, fname="calculateObjectiveList"):
-        eval_fname = fname + '_evaluateModel'
-        obs_fname = fname + '_getObservation'
+    def get_objective_per_observation_function(self, func_name="getObjectiveInstanceValue"):
+        eval_fname = func_name + '_evaluateModel'
+        obs_fname = func_name + '_getObservation'
         func = self.get_model_eval_function(eval_fname)
         func += self.get_observation_return_function(obs_fname)
         return func + '''
-            void ''' + fname + '''(const void* const data, mot_float_type* const x, mot_float_type* result){
-                result[1] = ''' + obs_fname + '''(data, 1) - ''' + eval_fname + '''(data, x, 1);
+            mot_float_type ''' + func_name + '''(const void* const data, mot_float_type* const x,
+                                                 int observation_index){
+                return ''' + obs_fname + '''(data, observation_index) -
+                            ''' + eval_fname + '''(data, x, observation_index);
             }
         '''
 
@@ -194,17 +196,16 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
             }
         '''
 
-    def get_objective_list_function(self, fname="calculateObjectiveList"):
-        eval_fname = fname + '_evaluateModel'
-        obs_fname = fname + '_getObservation'
+    def get_objective_per_observation_function(self, func_name="getObjectiveInstanceValue"):
+        eval_fname = func_name + '_evaluateModel'
+        obs_fname = func_name + '_getObservation'
         func = self.get_model_eval_function(eval_fname)
         func += self.get_observation_return_function(obs_fname)
         return func + '''
-            void ''' + fname + '''(const void* const data, mot_float_type* const x,
-                                     mot_float_type* result){
-                for(int i = 0; i < 10; i++){
-                    result[i] = ''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i);
-                }
+            mot_float_type ''' + func_name + '''(const void* const data, mot_float_type* const x,
+                                                 int observation_index){
+                return ''' + obs_fname + '''(data, observation_index) -
+                            ''' + eval_fname + '''(data, x, observation_index);
             }
         '''
 

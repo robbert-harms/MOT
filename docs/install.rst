@@ -34,6 +34,23 @@ and then install MOT with:
 After installation please continue with testing the installation below.
 
 
+***
+Mac
+***
+Installation on Mac is pretty easy using the Anaconda 4.2 or higher Python distribution.
+Please download and install the Python3.x 64 bit distribution, version 4.2 or higher which includes PyQt5,
+from `Anaconda <https://www.continuum.io/downloads>`_ and install it with the default settings.
+
+Afterwards, open a terminal and type:
+
+.. code-block:: bash
+
+    $ pip install mot
+
+
+To install MOT to your system.
+
+
 *******
 Windows
 *******

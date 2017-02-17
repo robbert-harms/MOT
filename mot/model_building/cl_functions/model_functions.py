@@ -3,7 +3,7 @@ from pkg_resources import resource_filename
 from mot.cl_data_type import CLDataType
 from mot.model_building.cl_functions.base import ModelFunction
 from mot.model_building.cl_functions.parameters import FreeParameter
-from mot.model_building.parameter_functions.priors import ARDBetaPDF, UniformWithinBoundsPrior
+from mot.model_building.parameter_functions.priors import ARDGaussian, UniformWithinBoundsPrior
 from mot.model_building.parameter_functions.proposals import GaussianProposal, ClippedGaussianProposal
 from mot.model_building.parameter_functions.transformations import ClampTransform, CosSqrClampTransform
 
@@ -85,7 +85,27 @@ class ARD_Beta_Weight(Weight):
             lower_bound (number or ndarray): The initial lower bound for the single free parameter of this function.
             upper_bound (number or ndarray): The initial upper bound for the single free parameter of this function.
         """
-        parameter_settings = dict(sampling_prior=ARDBetaPDF())
+        parameter_settings = dict(sampling_prior=ARDGaussian())
 
         super(ARD_Beta_Weight, self).__init__(name=name, value=value, lower_bound=lower_bound,
                                               upper_bound=upper_bound, parameter_kwargs=parameter_settings)
+
+
+class ARD_Gaussian_Weight(Weight):
+
+    def __init__(self, name='ARD_Gaussian_Weight', value=0.5, lower_bound=0.0, upper_bound=1.0):
+        """A compartment weight with a Gaussian prior, to be used in Automatic Relevance Detection
+
+        It is exactly the same as a weight, except that it has a different prior, a Gaussian prior with mean at zero
+        and std given by a hyperparameter.
+
+        Args:
+            name (str): The name of the model
+            value (number or ndarray): The initial value for the single free parameter of this function.
+            lower_bound (number or ndarray): The initial lower bound for the single free parameter of this function.
+            upper_bound (number or ndarray): The initial upper bound for the single free parameter of this function.
+        """
+        parameter_settings = dict(sampling_prior=ARDGaussian())
+
+        super(ARD_Gaussian_Weight, self).__init__(name=name, value=value, lower_bound=lower_bound,
+                                                  upper_bound=upper_bound, parameter_kwargs=parameter_settings)

@@ -56,6 +56,12 @@ For Debian users and Ubuntu < 16 users, install MOT with:
 * ``sudo pip3 install mot``
 
 
+**Mac**
+
+* Install Python Anaconda 3.* 64bit from https://www.continuum.io/downloads>
+* Open a terminal and type ``pip install mot``
+
+
 **Windows**
 For Windows the short guide is:
 

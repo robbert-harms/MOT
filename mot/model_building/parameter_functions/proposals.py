@@ -74,21 +74,11 @@ class AbstractParameterProposal(object):
             str: name of the function
         """
 
-    def get_proposal_update_function(self, address_space='private'):
+    def get_proposal_update_function(self):
         """Get the proposal update function to use for updating the adaptable parameters.
 
-        Args:
-            address_space (str): the address space for the arguments passed to the update function
-
         Returns:
-            str: the proposal update function to use
-        """
-
-    def get_proposal_update_function_name(self):
-        """Get the name of the proposal update function
-
-        Returns:
-            str: the name of the proposal update function
+            ProposalUpdate: the proposal update function defining the update mechanism
         """
 
 
@@ -114,17 +104,40 @@ class ProposalUpdate(object):
             str: the name of the function returned by :meth:`get_update_function`
         """
 
+    def uses_parameter_variance(self):
+        """Check if this proposal update function uses the parameter variance.
+
+        If not, we will not provide it, this saves memory in the kernel.
+
+        Returns:
+            boolean: if this proposal update function uses the parameter variance
+        """
+
+    def uses_jump_counters(self):
+        """Check if this proposal update function uses the jump counters (jump counter and acceptance counter).
+
+        If not, we will not provide it, this saves memory in the kernel.
+
+        Returns:
+            boolean: if this proposal update function uses the jump counters
+        """
+
 
 class SimpleProposalUpdate(ProposalUpdate):
 
-    def __init__(self, function_name):
+    def __init__(self, function_name, uses_parameter_variance=False, uses_jump_counters=True):
         """A simple proposal update function template.
 
         Args:
             function_name (str): the name of this proposal update function, try to choose an unique name.
-
+            uses_parameter_variance (boolean): if this proposal requires the parameter variance. Enable if you need it
+                 in your update function.
+            uses_jump_counters (boolean): if this proposal uses jump counters for its workings. This is enabled
+                by default. You can disable it for speed.
         """
         self._function_name = function_name
+        self._uses_parameter_variance = uses_parameter_variance
+        self._uses_jump_counters = uses_jump_counters
 
     def get_update_function(self, proposal_parameters, address_space='private'):
         return self._update_function_template('', proposal_parameters, address_space)
@@ -133,8 +146,12 @@ class SimpleProposalUpdate(ProposalUpdate):
         params = ['{address_space} mot_float_type* const {name}'.format(address_space=address_space, name=p.name)
                   for p in proposal_parameters if p.adaptable]
 
-        params.extend(['{address_space} uint* const sampling_counter'.format(address_space=address_space),
-                       '{address_space} uint* const acceptance_counter'.format(address_space=address_space)])
+        if self.uses_jump_counters():
+            params.extend(['{address_space} uint* const sampling_counter'.format(address_space=address_space),
+                           '{address_space} uint* const acceptance_counter'.format(address_space=address_space)])
+
+        if self.uses_parameter_variance():
+            params.append('mot_float_type parameter_variance'.format(address_space=address_space))
 
         return '''
             #ifndef {include_guard_name}
@@ -154,6 +171,12 @@ class SimpleProposalUpdate(ProposalUpdate):
         return 'proposal_update_{}_{}'.format(self._function_name,
                                               len([True for p in proposal_parameters if p.adaptable]))
 
+    def uses_parameter_variance(self):
+        return self._uses_parameter_variance
+
+    def uses_jump_counters(self):
+        return self._uses_jump_counters
+
 
 class NoOptUpdateFunction(SimpleProposalUpdate):
 
@@ -167,7 +190,7 @@ class NoOptUpdateFunction(SimpleProposalUpdate):
 
 class AcceptanceRateScaling(SimpleProposalUpdate):
 
-    def __init__(self, target_acceptance_rate=0.44, batch_size=50, damping_factor=500):
+    def __init__(self, target_acceptance_rate=0.44, batch_size=50, damping_factor=1):
         """Scales the proposal parameter (typically the std) such that it oscillates towards the chosen acceptance rate.
 
         This uses an scaling similar to the one in: "Examples of Adaptive MCMC",
@@ -186,6 +209,7 @@ class AcceptanceRateScaling(SimpleProposalUpdate):
         super(AcceptanceRateScaling, self).__init__('acceptance_rate_scaling')
         self._target_acceptance_rate = target_acceptance_rate
         self._batch_size = batch_size
+        self._damping_factor = damping_factor
 
         if target_acceptance_rate > 1 or target_acceptance_rate < 0:
             raise ValueError('The target acceptance rate should be '
@@ -195,24 +219,27 @@ class AcceptanceRateScaling(SimpleProposalUpdate):
         body = '''
             if(*sampling_counter % {batch_size} == 0){{
 
-                mot_float_type delta = sqrt(1.0/(400 * (*sampling_counter / {batch_size})));
+                mot_float_type delta = sqrt(1.0/({damping_factor} * (*sampling_counter / {batch_size})));
 
-                if(*acceptance_counter / (*sampling_counter % {batch_size}) > {target_ar}){{
+                if(*acceptance_counter / (mot_float_type){batch_size} > {target_ar}){{
                     *std *= exp(delta);
                 }}
                 else{{
                     *std /= exp(delta);
                 }}
 
+                *std = clamp(*std, (mot_float_type)1e-13, (mot_float_type)1e3);
+
                 *acceptance_counter = 0;
             }}
-        '''.format(batch_size=self._batch_size, target_ar=self._target_acceptance_rate)
+        '''.format(batch_size=self._batch_size, target_ar=self._target_acceptance_rate,
+                   damping_factor=self._damping_factor)
         return self._update_function_template(body, proposal_parameters, address_space)
 
 
 class FSLAcceptanceRateScaling(SimpleProposalUpdate):
 
-    def __init__(self, batch_size=50):
+    def __init__(self, batch_size=50, min_val=1e-13, max_val=1e3):
         """An acceptance rate scaling algorithm found in a Neuroscience package called FSL.
 
         This scaling algorithm scales the std. by :math:`\sqrt(a/(n - a))` where a is the number of accepted samples
@@ -221,24 +248,59 @@ class FSLAcceptanceRateScaling(SimpleProposalUpdate):
         So far, the author of this function in MOT has not been able to find theoretical support for this scaling
         algorithm. Please use this heuristic with caution.
 
+        To prevent runaway proposal values we clamp the updated parameter value between a minimum and maximum value
+        specified in the constructor.
+
         Args:
-            batch_size (int): the size of the batches inbetween which we update the parameters
+            batch_size (int): the size of the batches in between which we update the parameters
+            min_val (float): the minimum value the parameter can take
+            max_val (float): the maximum value the parameter can take
         """
         super(FSLAcceptanceRateScaling, self).__init__('fsl_acceptance_rate_scaling')
         self._batch_size = batch_size
+        self._min_val = min_val
+        self._max_val = max_val
 
     def get_update_function(self, proposal_parameters, address_space='private'):
         body = '''
             if(*sampling_counter == {batch_size}){{
-                if(*sampling_counter != *acceptance_counter){{
-                    *std = min(*std * sqrt((mot_float_type)*acceptance_counter /
-                                            (*sampling_counter - *acceptance_counter)), (mot_float_type)1e10);
-                }}
+                *std = clamp(*std * sqrt((mot_float_type)(*acceptance_counter + 1) /
+                                         ({batch_size} - *acceptance_counter + 1)),
+                             (mot_float_type){min_val},
+                             (mot_float_type){max_val});
 
                 *sampling_counter = 0;
                 *acceptance_counter = 0;
             }}
-        '''.format(batch_size=self._batch_size)
+        '''.format(batch_size=self._batch_size, min_val=self._min_val, max_val=self._max_val)
+        return self._update_function_template(body, proposal_parameters, address_space)
+
+
+class SingleComponentAdaptiveMetropolis(SimpleProposalUpdate):
+
+    def __init__(self, waiting_period=100, scaling_factor=2.4, epsilon=1e-20):
+        """Uses the Single Component Adaptive Metropolis (SCAM) scheme to update the proposals.
+
+        This uses an scaling described in: "Componentwise adaptation for high dimensional MCMC",
+        Heikki Haario, Eero Saksman and Johanna Tamminen (2005). That is, it updates the proposal standard deviation
+        using the variance of the chain's history.
+
+        Args:
+            waiting_period (int): only start updating the proposal std. after this many draws.
+            scaling_factor (float): the scaling factor to use (the parameter ``s`` in the paper referenced).
+            epsilon (float): small number to prevent the std. from collapsing to zero.
+        """
+        super(SingleComponentAdaptiveMetropolis, self).__init__('scam', uses_parameter_variance=True)
+        self._waiting_period = waiting_period
+        self._scaling_factor = scaling_factor
+        self._epsilon = epsilon
+
+    def get_update_function(self, proposal_parameters, address_space='private'):
+        body = '''
+            if(*sampling_counter > {waiting_period}){{
+                *std = {scaling_factor} * sqrt(parameter_variance) + {epsilon};
+            }}
+        '''.format(waiting_period=self._waiting_period, scaling_factor=self._scaling_factor, epsilon=self._epsilon)
         return self._update_function_template(body, proposal_parameters, address_space)
 
 
@@ -286,7 +348,7 @@ class SimpleProposal(AbstractParameterProposal):
         self._parameters = parameters
         self._is_symmetric = is_symmetric
         self._logpdf_body = logpdf_body
-        self._proposal_update_function = proposal_update_function or AcceptanceRateScaling()
+        self._proposal_update_function = proposal_update_function or SingleComponentAdaptiveMetropolis()
 
     def is_symmetric(self):
         return self._is_symmetric
@@ -336,11 +398,8 @@ class SimpleProposal(AbstractParameterProposal):
     def get_proposal_logpdf_function_name(self):
         return 'proposal_logpdf_{}'.format(self._proposal_name)
 
-    def get_proposal_update_function(self, address_space='private'):
-        return self._proposal_update_function.get_update_function(self._parameters, address_space)
-
-    def get_proposal_update_function_name(self):
-        return self._proposal_update_function.get_function_name(self._parameters)
+    def get_proposal_update_function(self):
+        return self._proposal_update_function
 
 
 class GaussianProposal(SimpleProposal):
@@ -352,14 +411,14 @@ class GaussianProposal(SimpleProposal):
             std (float): The scale of the Gaussian distribution.
             adaptable (boolean): If this proposal is adaptable during sampling
             proposal_update_function (ProposalUpdate): the proposal update function to use. Defaults
-                to :class:`AcceptanceRateScaling`.
+                to default in :class:`SimpleProposal`.
         """
         parameters = [ProposalParameter('std', std, adaptable)]
         super(GaussianProposal, self).__init__(
             'return fma(std, (mot_float_type)frandn(rng_data), current);',
             'gaussian',
             parameters,
-            proposal_update_function=proposal_update_function or FSLAcceptanceRateScaling()
+            proposal_update_function=proposal_update_function
         )
 
 
@@ -373,7 +432,7 @@ class CircularGaussianProposal(SimpleProposal):
             std (float): The scale of the Gaussian distribution.
             adaptable (boolean): If this proposal is adaptable during sampling
             proposal_update_function (ProposalUpdate): the proposal update function to use. Defaults
-                to :class:`FSLAcceptanceRateScaling`.
+                to default in :class:`SimpleProposal`.
         """
         parameters = [ProposalParameter('std', std, adaptable)]
         super(CircularGaussianProposal, self).__init__(
@@ -384,7 +443,7 @@ class CircularGaussianProposal(SimpleProposal):
             '''.format(modulus),
             'circular_gaussian',
             parameters,
-            proposal_update_function=proposal_update_function or FSLAcceptanceRateScaling()
+            proposal_update_function=proposal_update_function
         )
 
 
@@ -399,7 +458,7 @@ class ClippedGaussianProposal(SimpleProposal):
             min_val (float): the minimum value allowed, everything above is clipped to this value
             max_val (float): the maximum value allowed, everything above is clipped to this value
             proposal_update_function (ProposalUpdate): the proposal update function to use. Defaults
-                to :class:`FSLAcceptanceRateScaling`.
+                to default in :class:`SimpleProposal`.
         """
         parameters = [ProposalParameter('std', std, adaptable)]
         super(ClippedGaussianProposal, self).__init__(
@@ -410,5 +469,5 @@ class ClippedGaussianProposal(SimpleProposal):
             '''.format(min_val, max_val),
             'clipped_gaussian',
             parameters,
-            proposal_update_function=proposal_update_function or FSLAcceptanceRateScaling()
+            proposal_update_function=proposal_update_function
         )
