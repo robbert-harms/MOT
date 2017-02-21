@@ -1,6 +1,6 @@
 import numpy as np
 from mot.cl_data_type import CLDataType
-from mot.model_building.parameter_functions.proposals import GaussianProposal, ClippedGaussianProposal
+from mot.model_building.parameter_functions.proposals import GaussianProposal
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-06-19"
@@ -216,7 +216,7 @@ class ARDGaussian(SimplePrior):
         with the relationship :math:`\sigma = 1/\\sqrt(\\alpha)`.
         """
         from mot.model_building.cl_functions.parameters import FreeParameter
-        params = [FreeParameter(CLDataType.from_string('mot_float_type'), 'alpha', False, 8, 1e-5, 1e3,
+        params = [FreeParameter(CLDataType.from_string('mot_float_type'), 'alpha', False, 8, 1e-5, 1e4,
                                 sampling_prior=UniformWithinBoundsPrior(),
                                 sampling_proposal=GaussianProposal(20))]
 

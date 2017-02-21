@@ -445,29 +445,3 @@ class CircularGaussianProposal(SimpleProposal):
             parameters,
             proposal_update_function=proposal_update_function
         )
-
-
-class ClippedGaussianProposal(SimpleProposal):
-
-    def __init__(self, std=1.0, adaptable=True, min_val=0, max_val=1, proposal_update_function=None):
-        """Create a new proposal function using a Gaussian distribution with the given scale.
-
-        Args:
-            std (float): The scale of the Gaussian distribution.
-            adaptable (boolean): If this proposal is adaptable during sampling
-            min_val (float): the minimum value allowed, everything above is clipped to this value
-            max_val (float): the maximum value allowed, everything above is clipped to this value
-            proposal_update_function (ProposalUpdate): the proposal update function to use. Defaults
-                to default in :class:`SimpleProposal`.
-        """
-        parameters = [ProposalParameter('std', std, adaptable)]
-        super(ClippedGaussianProposal, self).__init__(
-            '''
-                return clamp(std * frandn(rng_data) + current,
-                             (mot_float_type){},
-                             (mot_float_type){});
-            '''.format(min_val, max_val),
-            'clipped_gaussian',
-            parameters,
-            proposal_update_function=proposal_update_function
-        )
