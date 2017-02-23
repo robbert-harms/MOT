@@ -1,6 +1,7 @@
 from functools import reduce
 
 import numpy as np
+import pyopencl
 import pyopencl as cl
 
 __author__ = 'Robbert Harms'
@@ -42,7 +43,10 @@ def device_supports_double(cl_device):
     Returns:
         boolean: True if the given cl_device supports double, false otherwise.
     """
-    return cl_device.get_info(cl.device_info.DOUBLE_FP_CONFIG) == 63
+    try:
+        return cl_device.get_info(cl.device_info.DOUBLE_FP_CONFIG) == 63
+    except pyopencl.LogicError:
+        return False
 
 
 def results_to_dict(results, param_names):
