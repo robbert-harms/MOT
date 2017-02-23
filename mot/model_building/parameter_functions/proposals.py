@@ -341,7 +341,7 @@ class SimpleProposal(AbstractParameterProposal):
                 ``q(x|y)`` and ``q(y|x)``. It should return the log of the probability. If the proposal is symmetric
                 this parameter need not be specified and defaults to returning a scalar.
             proposal_update_function (ProposalUpdate): the proposal update function to use. Defaults
-                to :class:`AcceptanceRateScaling`.
+                to :class:`SingleComponentAdaptiveMetropolis`.
         """
         self._proposal_body = proposal_body
         self._proposal_name = proposal_name
