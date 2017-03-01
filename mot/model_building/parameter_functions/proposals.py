@@ -14,8 +14,20 @@ class AbstractParameterProposal(object):
     """
 
     def is_symmetric(self):
-        """Check if this proposal is symmetric. That is, if q(x|y) == q(y|x)."""
+        """Check if this proposal is symmetric. That is, if q(x|y) == q(y|x).
+
+        Returns:
+            boolean: if the proposal function is symmetric return True, else False.
+        """
         return True
+
+    def is_adaptable(self):
+        """Check if this proposal is adaptable, i.e., if we need to update any of its parameters during sampling.
+
+        Returns:
+            boolean: return True if the proposal is adaptable, else False
+        """
+        return NotImplementedError
 
     def get_parameters(self):
         """The proposal parameters.
@@ -157,7 +169,7 @@ class SimpleProposalUpdate(ProposalUpdate):
             #ifndef {include_guard_name}
             #define {include_guard_name}
 
-            mot_float_type {function_name}({params}){{
+            void {function_name}({params}){{
                 {function_body}
             }}
 
@@ -352,6 +364,9 @@ class SimpleProposal(AbstractParameterProposal):
 
     def is_symmetric(self):
         return self._is_symmetric
+
+    def is_adaptable(self):
+        return any(p.adaptable for p in self._parameters)
 
     def get_parameters(self):
         return self._parameters

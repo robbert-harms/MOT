@@ -1432,8 +1432,9 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
     def get_proposal_state_update_function(self, func_name='updateProposalState', address_space='private'):
         return_str = ''
         for _, p in self._model_functions_info.get_estimable_parameters_list():
-            return_str += p.sampling_proposal.get_proposal_update_function().get_update_function(
-                p.sampling_proposal.get_parameters(), address_space=address_space)
+            if p.sampling_proposal.is_adaptable():
+                return_str += p.sampling_proposal.get_proposal_update_function().get_update_function(
+                    p.sampling_proposal.get_parameters(), address_space=address_space)
 
         return_str += '''
             void {func_name}({address_space} mot_float_type* const proposal_state,

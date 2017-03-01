@@ -159,15 +159,14 @@ class _MHWorker(Worker):
         self._sample_intervals = sample_intervals
         self.use_adaptive_proposals = use_adaptive_proposals
 
-        self._workgroup_size = min(cl_environment.device.max_work_group_size // 4,
-                                   max(1, 2**math.floor(math.log(self._model.get_nmr_inst_per_problem(), 2))))
-
         self._rand123_starting_point = RandomStartingPoint()
 
         self._kernel = self._build_kernel(compile_flags)
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
+        workgroup_size = cl.Kernel(self._kernel, 'sample').get_work_group_info(
+            cl.kernel_work_group_info.PREFERRED_WORK_GROUP_SIZE_MULTIPLE, self._cl_environment.device)
 
         data_buffers = [cl.Buffer(self._cl_run_context.context,
                                   cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR,
@@ -182,13 +181,15 @@ class _MHWorker(Worker):
                                     hostbuf=self._proposal_state[range_start:range_end, ...])
         data_buffers.append(proposal_buffer)
 
+        data_buffers.append(cl.LocalMemory(workgroup_size * np.dtype('double').itemsize))
+
         for data in self._model.get_data():
             data_buffers.append(cl.Buffer(self._cl_run_context.context,
                                           cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data))
 
         kernel_event = self._kernel.sample(self._cl_run_context.queue,
-                                           (int(nmr_problems * self._workgroup_size),),
-                                           (int(self._workgroup_size),),
+                                           (int(nmr_problems * workgroup_size),),
+                                           (int(workgroup_size),),
                                            *data_buffers)
 
         return [self._enqueue_readout(samples_buf, self._samples, 0, nmr_problems, [kernel_event]),
@@ -197,7 +198,8 @@ class _MHWorker(Worker):
     def _get_kernel_source(self):
         kernel_param_names = ['global mot_float_type* params',
                               'global mot_float_type* samples',
-                              'global mot_float_type* final_proposal_state']
+                              'global mot_float_type* final_proposal_state',
+                              'local double* log_likelihood_tmp']
         kernel_param_names.extend(self._model.get_kernel_param_names(self._cl_environment.device))
 
         proposal_state_size = len(self._model.get_proposal_state())
@@ -228,6 +230,7 @@ class _MHWorker(Worker):
                 int observation_ind;
                 uint local_id = get_local_id(0);
                 log_likelihood_tmp[local_id] = 0;
+                uint workgroup_size = get_local_size(0);
 
                 mot_float_type x_private[''' + str(self._nmr_params) + '''];
                 for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
@@ -235,9 +238,9 @@ class _MHWorker(Worker):
                 }
 
                 for(int i = 0; i < ceil(NMR_INST_PER_PROBLEM /
-                                        (mot_float_type)''' + str(self._workgroup_size) + '''); i++){
+                                        (mot_float_type)workgroup_size); i++){
 
-                    observation_ind = i * ''' + str(self._workgroup_size) + ''' + local_id;
+                    observation_ind = i * workgroup_size + local_id;
 
                     if(observation_ind < NMR_INST_PER_PROBLEM){
                         log_likelihood_tmp[local_id] += getLogLikelihoodPerObservation(
@@ -250,14 +253,14 @@ class _MHWorker(Worker):
 
             void _sum_log_likelihood_tmp_local(local double* log_likelihood_tmp, local double* log_likelihood){
                 *log_likelihood = 0;
-                for(int i = 0; i < ''' + str(self._workgroup_size) + '''; i++){
+                for(int i = 0; i < get_local_size(0); i++){
                     *log_likelihood += log_likelihood_tmp[i];
                 }
             }
 
             void _sum_log_likelihood_tmp_private(local double* log_likelihood_tmp, private double* log_likelihood){
                 *log_likelihood = 0;
-                for(int i = 0; i < ''' + str(self._workgroup_size) + '''; i++){
+                for(int i = 0; i < get_local_size(0); i++){
                     *log_likelihood += log_likelihood_tmp[i];
                 }
             }
@@ -393,8 +396,8 @@ class _MHWorker(Worker):
                             }
                         }
 
-                        if(i >= ''' + str(self._burn_length) + '''
-                           && i % ''' + str(self._sample_intervals + 1) + ''' == 0){
+                        if(i >= ''' + str(self._burn_length) + ''' &&
+                            i % ''' + str(self._sample_intervals + 1) + ''' == 0){
 
                             for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
                                 samples[(uint)((i - ''' + str(self._burn_length) + ''') // remove the burn-in
@@ -435,8 +438,6 @@ class _MHWorker(Worker):
                 local mot_float_type parameter_mean[''' + str(self._nmr_params) + '''];
                 local mot_float_type parameter_m2[''' + str(self._nmr_params) + ''']; // used in calculation of variance
                 local mot_float_type parameter_variance[''' + str(self._nmr_params) + '''];
-
-                local double log_likelihood_tmp[''' + str(self._workgroup_size) + '''];
 
                 if(get_local_id(0) == 0){
                     for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
