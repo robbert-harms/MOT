@@ -72,9 +72,9 @@ class CodecRunner(CLRoutine):
 
         data = np.require(data, np_dtype, requirements=['C', 'A', 'O', 'W'])
 
-        workers = self._create_workers(lambda cl_environment: _CodecWorker(cl_environment, self.get_compile_flags_list(),
-                                                                           cl_func, cl_func_name, data,
-                                                                           nmr_params, model))
+        workers = self._create_workers(lambda cl_environment: _CodecWorker(
+            cl_environment, self.get_compile_flags_list(model.double_precision),
+            cl_func, cl_func_name, data, nmr_params, model))
         self.load_balancer.process(workers, data.shape[0])
         return data
 

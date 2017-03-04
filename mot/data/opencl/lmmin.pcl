@@ -42,8 +42,8 @@ void lm_qrfac( const int m, const int n, global mot_float_type * const A, int* c
 void lm_qrsolv( const int n, global mot_float_type * const r, const int ldr, const int * const Pivot, const mot_float_type * const diag,
                 const mot_float_type * const qtb, mot_float_type * const x, mot_float_type * const Sdiag, mot_float_type * const W );
 
-mot_float_type lm_euclidian_norm(const mot_float_type* const x, const int n);
-mot_float_type lm_euclidian_norm_global(global const mot_float_type* const x, const int n);
+double lm_euclidian_norm(const mot_float_type* const x, const int n);
+double lm_euclidian_norm_global(global const mot_float_type* const x, const int n);
 
 /*****************************************************************************/
 /*  Numeric constants                                                        */
@@ -54,7 +54,7 @@ mot_float_type lm_euclidian_norm_global(global const mot_float_type* const x, co
 #define LM_DWARF      MOT_MIN       /* smallest nonzero number */
 #define LM_SQRT_DWARF sqrt(MOT_MIN) /* square should not underflow */
 #define LM_SQRT_GIANT sqrt(MOT_MAX) /* square should not overflow */
-#define LM_USERTOL    30*LM_MACHEP  /* users are recommended to require this */
+#define LM_USERTOL    (%(USERTOL_MULT)r * LM_MACHEP)  /* users are recommended to require this */
 
 #define FTOL LM_USERTOL      /* Relative error desired in the sum of squares.
                              Termination occurs when both the actual and
@@ -83,8 +83,8 @@ mot_float_type lm_euclidian_norm_global(global const mot_float_type* const x, co
 #define MAXFEV (PATIENCE * (%(NMR_PARAMS)s+1)) /** the maximum number of evaluations */
 #define EPS ((mot_float_type)sqrt(max(EPSILON, LM_MACHEP))) /* for forward differences */
 
-#define LM_ENORM_SQRT_GIANT sqrt(MOT_MAX) /* square should not overflow */
-#define LM_ENORM_SQRT_DWARF sqrt(MOT_MIN) /* square should not underflow */
+#define LM_ENORM_SQRT_GIANT LM_SQRT_GIANT /* square should not overflow */
+#define LM_ENORM_SQRT_DWARF LM_SQRT_DWARF /* square should not underflow */
 
 /**
  * Make sure that the following holds:
@@ -102,10 +102,11 @@ mot_float_type lm_euclidian_norm_global(global const mot_float_type* const x, co
 int lmmin(mot_float_type * const x, const void* const data, global mot_float_type* fjac){
 
 	int j, i;
-    mot_float_type actred, dirder, fnorm, fnorm1, gnorm, pnorm, prered, ratio, step, sum, temp, temp1, temp2, temp3;
+    mot_float_type actred, dirder, fnorm, fnorm1, gnorm, pnorm, prered, ratio, step, temp, temp1, temp2, temp3;
+    double sum;
 
-    bool   done_first = false;  /* loop counters, for monitoring */
-    bool   inner_success; /* flag for loop control */
+    bool done_first = false;  /* loop counters, for monitoring */
+    bool inner_success; /* flag for loop control */
     mot_float_type lmpar = 0;     /* Levenberg-Marquardt parameter */
     mot_float_type delta = 0;
     mot_float_type xnorm = 0;
@@ -210,7 +211,7 @@ int lmmin(mot_float_type * const x, const void* const data, global mot_float_typ
                 for (i = 0; i <= j; i++){
                     sum += fjac[j*%(NMR_INST_PER_PROBLEM)s+i] * qtf[i];
                 }
-                gnorm = max(gnorm, fabs(sum / wa2[Pivot[j]] / fnorm));
+                gnorm = max((double)gnorm, fabs(sum / wa2[Pivot[j]] / fnorm));
             }
         }
 
@@ -388,9 +389,19 @@ int lmmin(mot_float_type * const x, const void* const data, global mot_float_typ
 /*  lm_lmpar (determine Levenberg-Marquardt parameter)                       */
 /*****************************************************************************/
 
-void lm_lmpar(const int n, global mot_float_type* const r, int ldr, const int* const Pivot, mot_float_type * const diag,
-              mot_float_type* const qtb, const mot_float_type delta, mot_float_type* const par, mot_float_type * const x,
-              mot_float_type * const Sdiag, mot_float_type * const aux, mot_float_type * const xdi)
+void lm_lmpar(
+    const int n,
+    global mot_float_type* const r,
+    int ldr,
+    const int* const Pivot,
+    mot_float_type* const diag,
+    mot_float_type* const qtb,
+    const mot_float_type delta,
+    mot_float_type* const par,
+    mot_float_type * const x,
+    mot_float_type * const Sdiag,
+    mot_float_type * const aux,
+    mot_float_type * const xdi)
 {
 /*     Given an m by n matrix A, an n by n nonsingular diagonal matrix D,
  *     an m-vector b, and a positive number delta, the problem is to
@@ -877,7 +888,7 @@ void lm_qrsolv(const int n,
                     qtbpj = -_sin * W[k] + _cos * qtbpj;
                     W[k] = temp;
 
-                    /** Accumulate the tranformation in the row of S. **/
+                    /** Accumulate the transformation in the row of S. **/
                     for (i = k+1; i < n; i++) {
                         temp = _cos * r[k * ldr + i] + _sin * Sdiag[i];
                         Sdiag[i] = -_sin * r[k * ldr + i] + _cos * Sdiag[i];
@@ -923,7 +934,7 @@ void lm_qrsolv(const int n,
 /******************************************************************************/
 /*  lm_enorm (Euclidean norm)                                                 */
 /******************************************************************************/
-mot_float_type lm_euclidian_norm(const mot_float_type* const x, const int n){
+double lm_euclidian_norm(const mot_float_type* const x, const int n){
 /*     This function calculates the Euclidean norm of an n-vector x.
  *
  *     The Euclidean norm is computed by accumulating the sum of squares
@@ -990,7 +1001,7 @@ mot_float_type lm_euclidian_norm(const mot_float_type* const x, const int n){
 /******************************************************************************/
 /*  lm_enorm (Euclidean norm) for global memory                               */
 /******************************************************************************/
-mot_float_type lm_euclidian_norm_global(global const mot_float_type* const x, const int n){
+double lm_euclidian_norm_global(global const mot_float_type* const x, const int n){
 /*     This function calculates the Euclidean norm of an n-vector x.
  *
  *     The Euclidean norm is computed by accumulating the sum of squares

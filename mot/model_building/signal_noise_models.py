@@ -57,7 +57,7 @@ class JohnsonSignalNoise(SignalNoiseModel):
         super(JohnsonSignalNoise, self).__init__(
             'JohnsonNoise',
             'johnsonNoiseModel',
-            (FreeParameter(CLDataType.from_string('mot_float_type'), 'eta', False, 0.1, 0, 1e6,
+            (FreeParameter(CLDataType.from_string('mot_float_type'), 'eta', False, 0.1, 0, 100,
                            parameter_transform=CosSqrClampTransform()),), ())
 
     def get_signal_function(self, fname='signalNoiseModel'):

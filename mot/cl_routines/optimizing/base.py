@@ -127,7 +127,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
             'double' if model.double_precision else 'single'))
         for env in self.load_balancer.get_used_cl_environments(self.cl_environments):
             self._logger.info('Using device \'{}\'.'.format(str(env)))
-        self._logger.debug('Using compile flags: {}'.format(self.get_compile_flags_list()))
+        self._logger.info('Using compile flags: {}'.format(self.get_compile_flags_list(model.double_precision)))
         self._logger.info('The parameters we will optimize are: {0}'.format(model.get_optimized_param_names()))
         self._logger.info('We will use the optimizer {} '
                           'with optimizer settings {}'.format(self.__class__.__name__,
@@ -281,8 +281,8 @@ class AbstractParallelOptimizerWorker(Worker):
                     }
 
                     ''' + self._model.get_kernel_data_struct_initialization(self._cl_environment.device, 'data') + '''
-                    return_codes[gid] = (char) ''' + self._get_optimizer_call_name() + \
-                        '''(''' + ', '.join(self._get_optimizer_call_args()) + ''');
+                    return_codes[gid] = (char) ''' + self._get_optimizer_call_name() + '(' + \
+                         ', '.join(self._get_optimizer_call_args()) + ''');
 
                     ''' + ('decodeParameters((void*)&data, x);' if self._use_param_codec else '') + '''
 
@@ -346,7 +346,7 @@ class AbstractParallelOptimizerWorker(Worker):
         kernel_source += self._model.get_objective_function('calculateObjective')
         if self._use_param_codec:
             kernel_source += '''
-                mot_float_type evaluate(mot_float_type* x, const void* data){
+                double evaluate(mot_float_type* x, const void* data){
                     mot_float_type x_model[''' + str(self._nmr_params) + '''];
                     for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                         x_model[i] = x[i];
@@ -357,7 +357,7 @@ class AbstractParallelOptimizerWorker(Worker):
             '''
         else:
             kernel_source += '''
-                mot_float_type evaluate(mot_float_type* x, const void* data){
+                double evaluate(mot_float_type* x, const void* data){
                     return calculateObjective(data, x);
                 }
             '''

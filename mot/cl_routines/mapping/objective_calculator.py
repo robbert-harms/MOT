@@ -36,8 +36,9 @@ class ObjectiveCalculator(CLRoutine):
         objective_values = self._initialize_result_array(model)
 
         workers = self._create_workers(
-            lambda cl_environment: _ObjectiveCalculatorWorker(cl_environment, self.get_compile_flags_list(),
-                                                              model, parameters, objective_values))
+            lambda cl_environment: _ObjectiveCalculatorWorker(
+                cl_environment, self.get_compile_flags_list(model.double_precision), model,
+                parameters, objective_values))
         self.load_balancer.process(workers, model.get_nmr_problems())
 
         return objective_values

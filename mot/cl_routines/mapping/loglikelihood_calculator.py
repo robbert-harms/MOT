@@ -34,7 +34,8 @@ class LogLikelihoodCalculator(CLRoutine):
         log_likelihoods = self._initialize_result_array(model)
 
         workers = self._create_workers(
-            lambda cl_environment: _LogLikelihoodCalculatorWorker(cl_environment, self.get_compile_flags_list(),
+            lambda cl_environment: _LogLikelihoodCalculatorWorker(cl_environment,
+                                                                  self.get_compile_flags_list(model.double_precision),
                                                                   model, parameters,
                                                                   log_likelihoods, evaluation_model))
         self.load_balancer.process(workers, model.get_nmr_problems())

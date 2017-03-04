@@ -38,6 +38,7 @@ class GaussianPSS(ParameterSampleStatistics):
 
 
 class CircularGaussianPSS(ParameterSampleStatistics):
+
     def __init__(self, max_angle=np.pi):
         """Compute the circular mean for samples in a range
 

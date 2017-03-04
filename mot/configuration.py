@@ -14,6 +14,8 @@ using :py:func:`config_context`. Example:
 """
 from contextlib import contextmanager
 from copy import copy
+
+from mot.model_building.parameter_functions.proposal_updates import SingleComponentAdaptiveMetropolis
 from .cl_environments import CLEnvironmentFactory
 from .load_balance_strategies import PreferGPU
 
@@ -33,14 +35,19 @@ _config = {
     'load_balancer': PreferGPU(),
     'compile_flags': {
         'general': {
+            # this flag is automatically disabled when running in double mode
             '-cl-single-precision-constant': True,
+
             '-cl-denorms-are-zero': True,
             '-cl-mad-enable': True,
             '-cl-no-signed-zeros': True
         },
         'cl_routine_specific': {}
     },
-    'ignore_kernel_compile_warnings': True
+    'ignore_kernel_compile_warnings': True,
+
+    # The default proposal update function to use during sampling
+    'default_proposal_update': SingleComponentAdaptiveMetropolis()
 }
 
 
@@ -108,6 +115,26 @@ def get_compile_flags(cl_routine_name=None):
     if cl_routine_name in _config['compile_flags']['cl_routine_specific']:
         flags.update(_config['compile_flags']['cl_routine_specific'][cl_routine_name])
     return flags
+
+
+def get_default_proposal_update():
+    """Get the default proposal update function to use in sampling.
+
+    Returns:
+        mot.model_building.parameter_functions.proposal_updates.ProposalUpdate: the proposal update function
+            to use by default if no specific one is provided.
+    """
+    return _config['default_proposal_update']
+
+
+def set_default_proposal_update(proposal_update):
+    """Set the default proposal update function to use in sampling.
+
+    Args:
+        mot.model_building.parameter_functions.proposal_updates.ProposalUpdate: the new proposal update function
+            to use by default if no specific one is provided.
+    """
+    _config['default_proposal_update'] = proposal_update
 
 
 @contextmanager

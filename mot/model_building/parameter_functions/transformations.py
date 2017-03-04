@@ -78,6 +78,31 @@ class ClampTransform(AbstractTransformation):
                                            '(mot_float_type){upper_bound})')
 
 
+class ScaleClampTransform(AbstractTransformation):
+
+    def __init__(self, scale):
+        """Clamps the value to the given bounds and applies a scaling to bring the parameters in sensible ranges.
+
+        The given scaling factor should be without the scaling factor. To encode, the parameter value is multiplied
+        by the scaling factor. To decode, it is divided by the scaling factor.
+
+        Args:
+            scale (float): the scaling factor by which to scale the parameter
+        """
+        super(ScaleClampTransform, self).__init__()
+        self._scale = scale
+
+    def get_cl_encode(self):
+        return FormatAssignmentConstructor('clamp((mot_float_type){parameter_variable}, '
+                                           '(mot_float_type){lower_bound}, '
+                                           '(mot_float_type){upper_bound}) * ' + str(self._scale))
+
+    def get_cl_decode(self):
+        return FormatAssignmentConstructor('clamp((mot_float_type){parameter_variable} / ' + str(self._scale) + ', '
+                                           '(mot_float_type){lower_bound}, '
+                                           '(mot_float_type){upper_bound})')
+
+
 class CosSqrClampTransform(AbstractTransformation):
     """The clamp transformation limits the parameter between its lower and upper bound using a cos(sqr()) transform."""
 
@@ -131,6 +156,7 @@ class SinSqrClampDependentTransform(AbstractTransformation):
 
 
 class AbsModXTransform(AbstractTransformation):
+
     def __init__(self, x, dependencies=()):
         """Create an transformation that returns the absolute modulo x value of the input."""
         super(AbsModXTransform, self).__init__(dependencies)

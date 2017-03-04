@@ -89,7 +89,8 @@ class MetropolisHastings(AbstractSampler):
         self._logger.info('Starting sampling with method {0}'.format(self.__class__.__name__))
 
         workers = self._create_workers(lambda cl_environment: _MHWorker(
-            cl_environment, self.get_compile_flags_list(), model, parameters, samples, proposal_state,
+            cl_environment, self.get_compile_flags_list(model.double_precision), model, parameters,
+            samples, proposal_state,
             self.nmr_samples, self.burn_length, self.sample_intervals, self.use_adaptive_proposals))
         self.load_balancer.process(workers, model.get_nmr_problems())
 
@@ -124,7 +125,7 @@ class MetropolisHastings(AbstractSampler):
         for env in self.load_balancer.get_used_cl_environments(self.cl_environments):
             self._logger.info('Using device \'{}\'.'.format(str(env)))
 
-        self._logger.debug('Using compile flags: {}'.format(self.get_compile_flags_list()))
+        self._logger.info('Using compile flags: {}'.format(self.get_compile_flags_list(model.double_precision)))
 
         self._logger.info('The parameters we will sample are: {0}'.format(model.get_optimized_param_names()))
 

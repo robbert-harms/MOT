@@ -44,7 +44,8 @@ class ResidualCalculator(CLRoutine):
             model_estimates = np.require(model_estimates, np_dtype, requirements=['C', 'A', 'O'])
 
         workers = self._create_workers(lambda cl_environment: _ResidualCalculatorWorker(
-            cl_environment, self.get_compile_flags_list(), model, parameters, residuals, model_estimates))
+            cl_environment, self.get_compile_flags_list(model.double_precision), model, parameters,
+            residuals, model_estimates))
         self.load_balancer.process(workers, model.get_nmr_problems())
 
         return residuals

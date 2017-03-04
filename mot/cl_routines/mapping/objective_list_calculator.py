@@ -56,7 +56,7 @@ class ObjectiveListCalculator(CLRoutine):
         objectives = np.zeros((nmr_problems, nmr_inst_per_problem), dtype=np_dtype, order='C')
 
         workers = self._create_workers(lambda cl_environment: _ObjectiveListCalculatorWorker(
-            cl_environment, self.get_compile_flags_list(), model, parameters, objectives))
+            cl_environment, self.get_compile_flags_list(model.double_precision), model, parameters, objectives))
         self.load_balancer.process(workers, model.get_nmr_problems())
 
         return objectives

@@ -99,7 +99,7 @@ class AbstractFilter(CLRoutine):
         Returns:
             the python callback for generating the worker
         """
-        return lambda cl_environment: AbstractFilterWorker(cl_environment, self.get_compile_flags_list(), *args)
+        return lambda cl_environment: AbstractFilterWorker(cl_environment, self.get_compile_flags_list(args[-1]), *args)
 
 
 class AbstractFilterWorker(Worker):

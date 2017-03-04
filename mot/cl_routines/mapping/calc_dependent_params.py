@@ -56,7 +56,7 @@ class CalculateDependentParameters(CLRoutine):
                                           np_dtype, requirements=['C', 'A', 'O'])
 
         workers = self._create_workers(
-            lambda cl_environment: _CDPWorker(cl_environment, self.get_compile_flags_list(),
+            lambda cl_environment: _CDPWorker(cl_environment, self.get_compile_flags_list(self._double_precision),
                                               model, len(estimated_parameters_list),
                                               estimated_parameters, parameters_listing,
                                               dependent_parameter_names, results_list, self._double_precision))

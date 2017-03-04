@@ -42,13 +42,24 @@ class CLRoutine(object):
         """
         self.compile_flags.update({compile_flag: enable})
 
-    def get_compile_flags_list(self):
+    def get_compile_flags_list(self, double_precision=True):
         """Get a list of the enabled compile flags.
+
+        Args:
+            double_precision (boolean): if this is set to True we remove some of the Flags that are only applicable
+                when running in float mode. More specifically, this will set cl-single-precision-constant to False.
+                Set this to False to disable this behaviour and use the flags as specified in the config.
 
         Returns:
             list: the list of enabled compile flags.
         """
-        return [flag for flag, enabled in self.compile_flags.items() if enabled]
+        elements = [flag for flag, enabled in self.compile_flags.items() if enabled]
+
+        if double_precision:
+            elements_to_remove = ['-cl-single-precision-constant']
+            elements = list(filter(lambda e: e not in elements_to_remove, elements))
+
+        return elements
 
     @property
     def cl_environments(self):

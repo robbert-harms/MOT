@@ -46,7 +46,7 @@ class CalculateModelEstimates(CLRoutine):
         evaluations = np.zeros((nmr_problems, nmr_inst_per_problem), dtype=np_dtype, order='C')
 
         workers = self._create_workers(lambda cl_environment: _EvaluateModelWorker(
-            cl_environment, self.get_compile_flags_list(), model, parameters, evaluations))
+            cl_environment, self.get_compile_flags_list(model.double_precision), model, parameters, evaluations))
         self.load_balancer.process(workers, nmr_problems)
 
         return evaluations

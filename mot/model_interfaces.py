@@ -210,6 +210,8 @@ class OptimizeModelInterface(object):
     def get_objective_function(self, func_name="calculateObjective"):
         """Get the objective function that evaluates the entire problem instance under a noise model.
 
+        This CL function should return a double (instead of a mot_float_type) for accuracy reasons.
+
         Args:
             func_name (string): specifies the name of the function.
 
@@ -217,7 +219,7 @@ class OptimizeModelInterface(object):
             str: A CL function with signature:
                 .. code-block:: c
 
-                    mot_float_type <func_name>(const void* const data, mot_float_type* const x);
+                    double <func_name>(const void* const data, mot_float_type* const x);
         """
         raise NotImplementedError
 
@@ -237,7 +239,7 @@ class OptimizeModelInterface(object):
 
                 .. code-block:: c
 
-                    mot_float_type <func_name>(const void* const data, mot_float_type* const x, int observation_index);
+                    double <func_name>(const void* const data, mot_float_type* const x, int observation_index);
         """
         raise NotImplementedError
 
@@ -406,7 +408,7 @@ class SampleModelInterface(OptimizeModelInterface):
             str: A function of the kind:
                 .. code-block:: c
 
-                    mot_float_type <func_name>(const void* const data, mot_float_type* const x);
+                    double <func_name>(const void* const data, mot_float_type* const x);
         """
         raise NotImplementedError
 
@@ -425,8 +427,7 @@ class SampleModelInterface(OptimizeModelInterface):
             str: A function of the kind:
                 .. code-block:: c
 
-                    mot_float_type <fname>(const void* const data, mot_float_type* const x,
-                                           const int observation_index);
+                    double <fname>(const void* const data, mot_float_type* const x, const int observation_index);
         """
         raise NotImplementedError
 
@@ -454,7 +455,7 @@ class SampleModelInterface(OptimizeModelInterface):
 
                     mot_float_type <func_name>(const int i, const mot_float_type proposal,
                                                const mot_float_type current,
-                                               <address_space_proposal_state> mot_float_type* const proposal_state)
+                                               <address_space_proposal_state> mot_float_type* const proposal_state);
 
             Where ``i`` is the index of the parameter we would like to get the proposal from, ``current`` is the current
             value of that parameter and ``proposal`` the proposal value of the parameter. The final argument
@@ -481,7 +482,7 @@ class SampleModelInterface(OptimizeModelInterface):
                         const int i,
                         const mot_float_type current,
                         void* rng_data,
-                        <address_space_proposal_state> mot_float_type* const proposal_state)
+                        <address_space_proposal_state> mot_float_type* const proposal_state);
 
             Where ``i`` is the index of the parameter for which we want the proposal and ``current`` is the current
             value of that parameter. The argument ``proposal_state`` is the state of the proposal distribution.

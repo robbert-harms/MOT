@@ -51,7 +51,7 @@ typedef struct{
 /**
  * Simple swapping function that swaps a and b
  */
-void swap(mot_float_type *a, mot_float_type *b){
+void swap(mot_float_type* a, mot_float_type* b){
    mot_float_type temp;
    temp = *b;
    *b = *a;
@@ -149,7 +149,7 @@ mot_float_type powell_find_linear_minimum(mot_float_type* const point_0,
  * Returns:
  *  the function value at the given point
  */
-mot_float_type powell_linear_eval_function(mot_float_type x, const void* const eval_data){
+double powell_linear_eval_function(mot_float_type x, const void* const eval_data){
 
     linear_function_data f_data = *((linear_function_data*)eval_data);
 
@@ -348,10 +348,6 @@ mot_float_type bracket_and_brent(mot_float_type* xmin, const void* const eval_da
     mot_float_type fb = 0.0;
     mot_float_type fc = 0.0;
 
-    int iter;
-    mot_float_type fx, p, tol1, tol2, v, w, x, xm;
-    mot_float_type e=0.0;
-
     fa = powell_linear_eval_function(ax, eval_data);
     fb = powell_linear_eval_function(bx, eval_data);
 
@@ -422,7 +418,11 @@ mot_float_type bracket_and_brent(mot_float_type* xmin, const void* const eval_da
 
     /** from here starts brent */
     /** I inlined this function to save memory. Please view the original implementation for the details. */
-    mot_float_type d, fv, fw;
+    mot_float_type d, fx, fv, fw;
+    mot_float_type p, tol1, tol2, v, w, x, xm;
+    mot_float_type e=0.0;
+
+    int iter;
 
     mot_float_type a=(ax < cx ? ax : cx);
     mot_float_type b=(ax > cx ? ax : cx);

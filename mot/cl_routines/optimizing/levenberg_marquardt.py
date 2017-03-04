@@ -15,7 +15,7 @@ class LevenbergMarquardt(AbstractParallelOptimizer):
 
     default_patience = 250
 
-    def __init__(self, patience=None, **kwargs):
+    def __init__(self, patience=None, step_bound=None, scale_diag=None, optimizer_settings=None, **kwargs):
         """Use the Levenberg-Marquardt method to calculate the optimimum.
 
         Args:
@@ -23,7 +23,27 @@ class LevenbergMarquardt(AbstractParallelOptimizer):
                 Used to set the maximum number of iterations to patience*(number_of_parameters+1)
         """
         patience = patience or self.default_patience
-        super(LevenbergMarquardt, self).__init__(patience=patience, **kwargs)
+
+        optimizer_settings = optimizer_settings or {}
+
+        keyword_values = {}
+        keyword_values['step_bound'] = step_bound
+        keyword_values['scale_diag'] = scale_diag
+
+        option_defaults = {'step_bound': 100.0, 'scale_diag': 1}
+
+        def get_value(option_name):
+            value = keyword_values.get(option_name)
+            if value is None:
+                value = optimizer_settings.get(option_name)
+            if value is None:
+                value = option_defaults[option_name]
+            return value
+
+        for option in option_defaults:
+            optimizer_settings.update({option: get_value(option)})
+
+        super(LevenbergMarquardt, self).__init__(patience=patience, optimizer_settings=optimizer_settings, **kwargs)
 
     def _get_worker_generator(self, *args):
         return lambda cl_environment: LevenbergMarquardtWorker(cl_environment, *args)
@@ -138,10 +158,11 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
     def _get_optimization_function(self):
         params = {'NMR_PARAMS': self._nmr_params,
                   'PATIENCE': self._parent_optimizer.patience,
-                  'NMR_INST_PER_PROBLEM': self._model.get_nmr_inst_per_problem()}
+                  'NMR_INST_PER_PROBLEM': self._model.get_nmr_inst_per_problem(),
+                  'USER_TOL_MULT': 30}
 
         optimizer_settings = self._optimizer_settings or {}
-        option_defaults = {'step_bound': 100.0, 'scale_diag': 1}
+        option_defaults = {'step_bound': 100.0, 'scale_diag': 1, 'usertol_mult': 30}
         option_converters = {'scale_diag': lambda val: int(bool(val))}
 
         for option, default in option_defaults.items():
