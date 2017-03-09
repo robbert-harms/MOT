@@ -53,6 +53,14 @@ mot.load_balance_strategies module
     :undoc-members:
     :show-inheritance:
 
+mot.mcmc_diagnostics module
+---------------------------
+
+.. automodule:: mot.mcmc_diagnostics
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 mot.model_interfaces module
 ---------------------------
 

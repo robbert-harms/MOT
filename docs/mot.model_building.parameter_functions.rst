@@ -20,6 +20,14 @@ mot.model_building.parameter_functions.priors module
     :undoc-members:
     :show-inheritance:
 
+mot.model_building.parameter_functions.proposal_updates module
+--------------------------------------------------------------
+
+.. automodule:: mot.model_building.parameter_functions.proposal_updates
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 mot.model_building.parameter_functions.proposals module
 -------------------------------------------------------
 

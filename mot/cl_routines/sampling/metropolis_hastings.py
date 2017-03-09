@@ -1,4 +1,3 @@
-import math
 import pyopencl as cl
 import numpy as np
 from mot.cl_routines.mapping.error_measures import ErrorMeasures
@@ -7,7 +6,6 @@ from mot.random123 import get_random123_cl_code, RandomStartingPoint
 from ...utils import results_to_dict, get_float_type_def
 from ...load_balance_strategies import Worker
 from ...cl_routines.sampling.base import AbstractSampler
-
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-02-05"
@@ -61,7 +59,6 @@ class MetropolisHastings(AbstractSampler):
         if self._nmr_samples < 1:
             raise ValueError('The number of samples to draw can '
                              'not be smaller than 1, {} given'.format(self._nmr_samples))
-
 
     @property
     def nmr_samples(self):
