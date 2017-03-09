@@ -8,7 +8,6 @@ from ...utils import results_to_dict, get_float_type_def
 from ...load_balance_strategies import Worker
 from ...cl_routines.sampling.base import AbstractSampler
 
-from mem_top import mem_top
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-02-05"
