@@ -1,3 +1,4 @@
+import gc
 import pyopencl as cl
 import numpy as np
 from mot.cl_routines.mapping.error_measures import ErrorMeasures
@@ -6,6 +7,8 @@ from mot.random123 import get_random123_cl_code, RandomStartingPoint
 from ...utils import results_to_dict, get_float_type_def
 from ...load_balance_strategies import Worker
 from ...cl_routines.sampling.base import AbstractSampler
+
+from mem_top import mem_top
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-02-05"
@@ -90,6 +93,9 @@ class MetropolisHastings(AbstractSampler):
             samples, proposal_state,
             self.nmr_samples, self.burn_length, self.sample_intervals, self.use_adaptive_proposals))
         self.load_balancer.process(workers, model.get_nmr_problems())
+
+        del workers
+        gc.collect()
 
         samples_dict = results_to_dict(samples, model.get_optimized_param_names())
 

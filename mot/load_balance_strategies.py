@@ -14,10 +14,10 @@ import math
 import time
 import timeit
 import warnings
-import numpy as np
+
+import gc
 import pyopencl as cl
 from six import string_types
-from mot.model_building.data_adapter import DataAdapter
 from .utils import device_type_from_string
 
 

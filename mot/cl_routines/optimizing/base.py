@@ -1,4 +1,6 @@
 import logging
+
+import gc
 import numpy as np
 import pyopencl as cl
 from mot.cl_routines.mapping.error_measures import ErrorMeasures
@@ -157,7 +159,9 @@ class AbstractParallelOptimizer(AbstractOptimizer):
                                                                   nmr_params, return_codes,
                                                                   self._optimizer_settings))
         self.load_balancer.process(workers, model.get_nmr_problems())
+
         del workers
+        gc.collect()
 
         self._logger.info('Finished optimization')
 
