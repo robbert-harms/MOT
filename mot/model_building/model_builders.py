@@ -57,7 +57,6 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         self._model_functions_info = self._init_model_information_container(
             self._dependency_store, model_tree, evaluation_model, signal_noise_model)
 
-        self._parameters_dot_to_bar = {}
         self._post_optimization_modifiers = []
         self.problems_to_analyze = None
 
@@ -76,9 +75,6 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         self._problem_data = None
         if problem_data:
             self.set_problem_data(problem_data)
-
-        for m, p in self._model_functions_info.get_model_parameter_list():
-            self._parameters_dot_to_bar.update({m.name + '.' + p.name: m.name + '_' + p.name})
 
         self._set_default_dependencies()
 
@@ -218,7 +214,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             parameter_name (String): The parameter on which the dependency is applied
             dependency (ParameterDependency): The dependency rule, an ParameterDependency object
         """
-        if parameter_name not in self._parameters_dot_to_bar:
+        if parameter_name not in ['{}.{}'.format(m.name, p.name)
+                                  for m, p in self._model_functions_info.get_model_parameter_list()]:
             raise ParameterNameException("The parameter name \"{}\" can not be "
                                          "found in the model listing.".format(parameter_name))
         self._dependency_store.set_dependency(parameter_name, dependency)
@@ -387,7 +384,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             value = self._parameter_values[param_name]
 
             if results_dict and param_name in results_dict:
-                starting_points.append(results_dict[m.name + '.' + p.name])
+                starting_points.append(results_dict['{}.{}'.format(m.name, p.name)])
             elif is_scalar(value):
                 if self.get_nmr_problems() == 0:
                     starting_points.append(np.full((1, 1), value, dtype=np_dtype))
@@ -426,13 +423,13 @@ class OptimizeModelBuilder(OptimizeModelInterface):
     def set_initial_parameters(self, initial_params):
         """Update the initial parameters for this model by the given values.
 
-        This only affects free non-fixed parameters.
+        This only affects free parameters.
 
         Args:
             initial_params (dict): a dictionary containing as keys full parameter names (<model>.<param>) and as values
                 numbers or arrays to be used as starting point
         """
-        for m, p in self._model_functions_info.get_estimable_parameters_list():
+        for m, p in self._model_functions_info.get_free_parameters_list():
             param_name = '{}.{}'.format(m.name, p.name)
 
             if param_name in initial_params:
@@ -469,7 +466,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         func += self.get_kernel_data_struct_type() + '* data = (' + self.get_kernel_data_struct_type() + '*)void_data;'
 
         func += self._get_parameters_listing(
-            exclude_list=[m.name + '_' + p.name for (m, p) in
+            exclude_list=['{}.{}'.format(m.name, p.name).replace('.', '_') for (m, p) in
                           self._model_functions_info.get_non_model_tree_param_listing()])
 
         if self._signal_noise_model:
@@ -560,7 +557,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         fixed_params = param_lists['fixed']
         for (m, p) in fixed_params:
             if not self._model_functions_info.is_parameter_fixed_to_dependency(m, p):
-                name = m.name + '.' + p.name
+                name = '{}.{}'.format(m.name, p.name)
                 value = self._parameter_values['{}.{}'.format(m.name, p.name)]
 
                 if is_scalar(value):
@@ -579,10 +576,11 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             func += self._get_estimable_parameters_listing(param_lists['estimable'])
             func += self._get_dependent_parameters_listing(param_lists['dependent'])
 
-            estimable_params = [m.name + '.' + p.name for m, p in param_lists['estimable']]
+            estimable_params = ['{}.{}'.format(m.name, p.name) for m, p in param_lists['estimable']]
             estimated_parameters = [results_dict[k] for k in estimable_params]
 
-            dependent_parameter_names = [(m.name + '_' + p.name, m.name + '.' + p.name)
+            dependent_parameter_names = [('{}.{}'.format(m.name, p.name).replace('.', '_'),
+                                          '{}.{}'.format(m.name, p.name))
                                          for m, p in param_lists['dependent']]
 
             cpd = CalculateDependentParameters(double_precision=self.double_precision)
@@ -600,7 +598,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         dec_func_list = []
         enc_func_list = []
         for m, p in dep_list:
-            name = m.name + '.' + p.name
+            name = '{}.{}'.format(m.name, p.name)
             parameter = p
             ind = self._model_functions_info.get_parameter_estimable_index(m, p)
             transform = parameter.parameter_transform
@@ -668,7 +666,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         if self._signal_noise_model:
             noise_params_func = ''
             for p in self._signal_noise_model.get_free_parameters():
-                noise_params_func += ', ' + self._signal_noise_model.name + '_' + p.name
+                noise_params_func += ', ' + '{}.{}'.format(self._signal_noise_model.name, p.name).replace('.', '_')
 
             func += noise_func_name + '((' + self._build_model_from_tree(self._model_tree, 0) + ')' + \
                     noise_params_func + ');'
@@ -713,13 +711,14 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 else:
                     if len(static_map_value.shape) > 1 \
                             and static_map_value.shape[1] == self._problem_data.observations.shape[1]:
-                        param_list.append('data->var_data_' + model.name + '_' + param.name + '[observation_index]')
+                        param_list.append('data->var_data_' + '{}.{}'.format(model.name, param.name).replace('.', '_')
+                                          + '[observation_index]')
                     else:
-                        param_list.append('data->var_data_' + model.name + '_' + param.name)
+                        param_list.append('data->var_data_' + '{}.{}'.format(model.name, param.name).replace('.', '_'))
             elif isinstance(param, CurrentObservationParam):
                 param_list.append('data->var_data_observations[observation_index]')
             else:
-                param_list.append(model.name + '_' + param.name)
+                param_list.append('{}.{}'.format(model.name, param.name).replace('.', '_'))
 
         return model.cl_function_name + '(' + ', '.join(param_list) + ')'
 
@@ -769,7 +768,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         func = ''
         estimable_param_counter = 0
         for m, p in param_list:
-            name = m.name + '_' + p.name
+            name = '{}.{}'.format(m.name, p.name).replace('.', '_')
             if name not in exclude_list:
                 data_type = p.data_type.cl_type
                 assignment = 'x[' + str(estimable_param_counter) + ']'
@@ -795,7 +794,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         const_params_seen = []
         func = ''
         for m, p in param_list:
-            if (m.name + '_' + p.name) not in exclude_list:
+            if ('{}.{}'.format(m.name, p.name).replace('.', '_')) not in exclude_list:
                 data_type = p.data_type.cl_type
                 if p.name not in const_params_seen:
                     if all_elements_equal(protocol_info[p.name]):
@@ -833,7 +832,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         func = ''
         for m, p in param_list:
-            name = m.name + '_' + p.name
+            name = '{}.{}'.format(m.name, p.name).replace('.', '_')
             if name not in exclude_list:
                 data_type = p.data_type.raw_data_type
                 value = self._parameter_values['{}.{}'.format(m.name, p.name)]
@@ -841,7 +840,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 if all_elements_equal(value):
                     assignment = '(' + data_type + ')' + str(float(get_single_value(value)))
                 else:
-                    assignment = '(' + data_type + ') data->var_data_' + m.name + '_' + p.name
+                    assignment = '(' + data_type + ') data->var_data_' + \
+                                 '{}.{}'.format(m.name, p.name).replace('.', '_')
                 func += "\t"*4 + data_type + ' ' + name + ' = ' + assignment + ';' + "\n"
         return func
 
@@ -861,16 +861,16 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             dependent_param_list = self._get_parameter_type_lists()['dependent']
         func = ''
         for m, p in dependent_param_list:
-            pd = self._dependency_store.get_dependency(m.name + '.' + p.name)
+            pd = self._dependency_store.get_dependency('{}.{}'.format(m.name, p.name))
             if pd.pre_transform_code:
                 func += "\t"*4 + self._convert_parameters_dot_to_bar(pd.pre_transform_code)
 
             assignment = self._convert_parameters_dot_to_bar(pd.assignment_code)
-            name = m.name + '_' + p.name
+            name = '{}.{}'.format(m.name, p.name).replace('.', '_')
             data_type = p.data_type.raw_data_type
 
             if self._model_functions_info.is_parameter_fixed_to_dependency(m, p):
-                if (m.name + '_' + p.name) not in exclude_list:
+                if ('{}.{}'.format(m.name, p.name).replace('.', '_')) not in exclude_list:
                     func += "\t"*4 + data_type + ' ' + name + ' = ' + assignment + ';' + "\n"
             else:
                 func += "\t"*4 + name + ' = ' + assignment + ';' + "\n"
@@ -888,8 +888,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 if self.problems_to_analyze is not None:
                     value = value[self.problems_to_analyze, ...]
 
-                var_data_dict.update({m.name + '_' + p.name: SimpleDataAdapter(value, p.data_type,
-                                                                               self._get_mot_float_type())})
+                var_data_dict.update({'{}.{}'.format(m.name, p.name).replace('.', '_'):
+                                          SimpleDataAdapter(value, p.data_type, self._get_mot_float_type())})
         return var_data_dict
 
     def _get_static_parameters_as_var_data(self):
@@ -900,7 +900,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
             if not all_elements_equal(static_map_value):
                 data_adapter = SimpleDataAdapter(static_map_value, p.data_type, self._get_mot_float_type())
-                static_data_dict.update({m.name + '_' + p.name: data_adapter})
+                static_data_dict.update({'{}.{}'.format(m.name, p.name).replace('.', '_'): data_adapter})
 
         return static_data_dict
 
@@ -913,11 +913,11 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
             if not all_elements_equal(lower_bound):
                 data_adapter = SimpleDataAdapter(lower_bound, p.data_type, self._get_mot_float_type())
-                bounds_dict.update({'lb_' + m.name + '_' + p.name: data_adapter})
+                bounds_dict.update({'lb_' + '{}.{}'.format(m.name, p.name).replace('.', '_'): data_adapter})
 
             if not all_elements_equal(upper_bound):
                 data_adapter = SimpleDataAdapter(upper_bound, p.data_type, self._get_mot_float_type())
-                bounds_dict.update({'ub_' + m.name + '_' + p.name: data_adapter})
+                bounds_dict.update({'ub_' + '{}.{}'.format(m.name, p.name).replace('.', '_'): data_adapter})
 
         return bounds_dict
 
@@ -964,7 +964,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         parameters.
         """
         data_type = p.data_type.raw_data_type
-        name = m.name + '_' + p.name
+        name = '{}.{}'.format(m.name, p.name).replace('.', '_')
         assignment = ''
 
         if isinstance(p, ProtocolParameter):
@@ -977,7 +977,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 if all_elements_equal(value):
                     assignment = '(' + data_type + ')' + str(float(get_single_value(value)))
                 else:
-                    assignment = '(' + data_type + ') data->var_data_' + m.name + '_' + p.name
+                    assignment = '(' + data_type + ') data->var_data_' + \
+                                 '{}.{}'.format(m.name, p.name).replace('.', '_')
             elif not self._model_functions_info.parameter_has_dependency(m, p) \
                 or (self._model_functions_info.parameter_has_dependency(m, p)
                     and not self._model_functions_info.is_parameter_fixed_to_dependency(m, p)):
@@ -1007,7 +1008,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 estimable_parameters.append((m, p))
 
             if self._model_functions_info.parameter_has_dependency(m, p):
-                ind = self._dependency_store.get_index(m.name + '.' + p.name)
+                ind = self._dependency_store.get_index('{}.{}'.format(m.name, p.name))
                 depended_parameters.insert(ind, (m, p))
 
         return {'protocol': protocol_parameters, 'fixed': fixed_parameters,
@@ -1015,7 +1016,9 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
     def _convert_parameters_dot_to_bar(self, string):
         """Convert a string containing parameters with . to parameter names with _"""
-        for dname, bname in self._parameters_dot_to_bar.items():
+        for m, p in self._model_functions_info.get_model_parameter_list():
+            dname = '{}.{}'.format(m.name, p.name)
+            bname = '{}.{}'.format(m.name, p.name).replace('.', '_')
             string = string.replace(dname, bname)
         return string
 
@@ -1039,9 +1042,9 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                         break
 
                 if duplicate_found:
-                    self.add_parameter_dependency(m.name + '.' + p.name, SimpleAssignment(duplicate_key))
+                    self.add_parameter_dependency('{}.{}'.format(m.name, p.name), SimpleAssignment(duplicate_key))
                 else:
-                    var_data_dict.update({m.name + '.' + p.name: value})
+                    var_data_dict.update({'{}.{}'.format(m.name, p.name): value})
 
     def _get_variable_data(self):
         """See super class OptimizeModelInterface for details
@@ -1078,7 +1081,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                                                              p.data_type, self._get_mot_float_type())}
                         return_data.update(const_d)
                 else:
-                    exception = 'Protocol parameter "{}" could not be resolved'.format(m.name + '.' + p.name)
+                    exception = 'Protocol parameter "{}" could not be resolved'.format('{}.{}'.format(m.name, p.name))
                     raise ParameterResolutionException(exception)
         return return_data
 
@@ -1286,7 +1289,7 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
                        kernel_data_struct_type=self.get_kernel_data_struct_type())
 
         for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
-            name = m.name + '.' + p.name
+            name = '{}.{}'.format(m.name, p.name)
 
             if all_elements_equal(self._lower_bounds[name]):
                 lower_bound = str(get_single_value(self._lower_bounds[name]))
@@ -1315,7 +1318,8 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
                         if all_elements_equal(value):
                             prior_params.append(str(get_single_value(value)))
                         else:
-                            prior_params.append('data->var_data_' + '{}_{}'.format(m.name, prior_param.name))
+                            prior_params.append('data->var_data_' +
+                                                '{}.{}'.format(m.name, prior_param.name).replace('.', '_'))
 
                 prior += '\tprior *= {}(x[{}], {}, {}, {});\n'.format(function_name, i, lower_bound, upper_bound,
                                                                       ', '.join(prior_params))
@@ -1709,7 +1713,7 @@ class ModelFunctionsInformation(object):
         Returns:
             boolean: if the given parameter has a dependency
         """
-        return self._dependency_store.has_dependency(model.name + '.' + param.name)
+        return self._dependency_store.has_dependency('{}.{}'.format(model.name, param.name))
 
     def is_parameter_fixed_to_dependency(self, model, param):
         """Check if the given model and parameter name combo has a dependency.

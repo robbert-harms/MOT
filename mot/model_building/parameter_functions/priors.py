@@ -59,10 +59,19 @@ class AbstractParameterPrior(object):
 
 class SimplePrior(AbstractParameterPrior):
 
-    def __init__(self, prior_body, prior_name, prior_params=None):
+    def __init__(self, prior_body, prior_name, prior_params=None, cl_preamble=None):
+        """A prior template function.
+
+        Args:
+            prior_body (str): the body of the prior
+            prior_name (str): the name of this prior function
+            prior_params (list): additional parameters for this prior
+            preamble (str): optional C code loaded before the function definition.
+        """
         self._prior_body = prior_body
         self._prior_name = prior_name
         self._prior_params = prior_params or []
+        self._cl_preamble = cl_preamble
 
     def get_parameters(self):
         return self._prior_params
@@ -73,6 +82,8 @@ class SimplePrior(AbstractParameterPrior):
         params = ['const mot_float_type {}'.format(v) for v in params]
 
         return '''
+            {cl_preamble}
+
             #ifndef {include_guard_name}
             #define {include_guard_name}
 
@@ -82,7 +93,7 @@ class SimplePrior(AbstractParameterPrior):
 
             #endif //{include_guard_name}
         '''.format(include_guard_name='PRIOR_{}'.format(self._prior_name.upper()), function_name=self._prior_name,
-                   prior_body=self._prior_body, params=', '.join(params))
+                   prior_body=self._prior_body, params=', '.join(params), cl_preamble=self._cl_preamble or '')
 
     def get_prior_function_name(self):
         return self._prior_name
@@ -169,11 +180,11 @@ class VagueGammaPrior(SimplePrior):
 class NormalPDF(SimplePrior):
 
     def __init__(self):
-        """Normal PDF on the given value: :math:`P(v) = N(v; \\mu, \\sigma)`"""
+        r"""Normal PDF on the given value: :math:`P(v) = N(v; \mu, \sigma)`"""
         from mot.model_building.cl_functions.parameters import FreeParameter
         params = [FreeParameter(CLDataType.from_string('mot_float_type'), 'mu', True, 0, -np.inf, np.inf,
                                 sampling_prior=AlwaysOne()),
-                  FreeParameter(CLDataType.from_string('mot_float_type'), 'sigma', False, 1, -np.inf, np.inf,
+                  FreeParameter(CLDataType.from_string('mot_float_type'), 'sigma', True, 1, -np.inf, np.inf,
                                 sampling_prior=AlwaysOne())]
 
         super(NormalPDF, self).__init__(
@@ -182,15 +193,68 @@ class NormalPDF(SimplePrior):
             params)
 
 
+class AxialNormalPDF(SimplePrior):
+
+    def __init__(self):
+        r"""The axial normal PDF is a Normal distribution wrapped around 0 and :math:`\pi`.
+
+        It's PDF is given by:
+
+        .. math::
+
+            f(\theta; a, b) = \frac{\cosh(a\sin \theta + b\cos \theta)}{\pi I_{0}(\sqrt{a^{2} + b^{2}})}
+
+        where in this implementation :math:`a` and :math:`b` are parameterized with the input variables
+        :math:`\mu` and :math:`\sigma` using:
+
+        .. math::
+
+            \begin{align*}
+            \kappa &= \frac{1}{\sigma^{2}} \\
+            a &= \kappa * \sin \mu \\
+            b &= \kappa * \cos \mu
+            \end{align*}
+
+        References:
+            Barry C. Arnold, Ashis SenGupta (2006). Probability distributions and statistical inference for axial data.
+            Environmental and Ecological Statistics, volume 13, issue 3, pages 271-285.
+        """
+        from mot.model_building.cl_functions.parameters import FreeParameter
+        from mot.model_building.cl_functions.library_functions import Bessel, Trigonometrics
+
+        params = [FreeParameter(CLDataType.from_string('mot_float_type'), 'mu', True, 0, -np.inf, np.inf,
+                                sampling_prior=AlwaysOne()),
+                  FreeParameter(CLDataType.from_string('mot_float_type'), 'sigma', True, 1, -np.inf, np.inf,
+                                sampling_prior=AlwaysOne())]
+
+        super(AxialNormalPDF, self).__init__(
+            '''
+                float kappa = 1.0 / pown(sigma, 2);
+                float a = kappa * sin(mu);
+                float b = kappa * cos(mu);
+
+                return exp(log_cosh(a * sin(value) + b * cos(value))
+                            - log_bessel_i0(sqrt(pown(a, 2) + pown(b, 2)))
+                            - log(M_PI) );
+            ''',
+            'axial_normal_pdf',
+            params,
+            cl_preamble=Bessel().get_cl_code() + '\n' + Trigonometrics().get_cl_code())
+
+
 class ARDBeta(SimplePrior):
 
     def __init__(self):
-        """This is a collapsed form of the Beta PDF meant for use in Automatic Relevance Detection sampling.
+        r"""This is a collapsed form of the Beta PDF meant for use in Automatic Relevance Detection sampling.
 
         In this prior the ``alpha`` parameter of the Beta prior is set to 1 which simplifies the equation.
         The parameter ``beta`` is still free and can be changed as desired.
 
-        The implemented prior is :math:`B(x; 1, \\beta) = \\beta * (1 - x)^{\\beta - 1}`
+        The implemented prior is:
+
+        .. math::
+
+            B(x; 1, \beta) = \beta * (1 - x)^{\beta - 1}
 
         """
         from mot.model_building.cl_functions.parameters import FreeParameter

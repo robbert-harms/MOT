@@ -15,7 +15,7 @@ using :py:func:`config_context`. Example:
 from contextlib import contextmanager
 from copy import copy
 
-from mot.model_building.parameter_functions.proposal_updates import SingleComponentAdaptiveMetropolis
+from mot.model_building.parameter_functions.proposal_updates import AcceptanceRateScaling
 from .cl_environments import CLEnvironmentFactory
 from .load_balance_strategies import PreferGPU
 
@@ -47,7 +47,7 @@ _config = {
     'ignore_kernel_compile_warnings': True,
 
     # The default proposal update function to use during sampling
-    'default_proposal_update': SingleComponentAdaptiveMetropolis()
+    'default_proposal_update': AcceptanceRateScaling()
 }
 
 

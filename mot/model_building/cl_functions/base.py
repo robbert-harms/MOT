@@ -158,7 +158,7 @@ class ModelFunction(DependentCLFunction):
 
             for param in params:
                 prior_params = param.sampling_prior.get_parameters()
-                proxy_prior_params = [prior_param.get_renamed('{}_prior_{}'.format(param.name, prior_param.name))
+                proxy_prior_params = [prior_param.get_renamed('{}.prior.{}'.format(param.name, prior_param.name))
                                       for prior_param in prior_params]
 
                 return_params.extend(proxy_prior_params)

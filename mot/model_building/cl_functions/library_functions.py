@@ -33,13 +33,29 @@ class Bessel(SimpleLibraryFunctionFromFile):
         See the CL code for more details.
         """
         super(Bessel, self).__init__(
-            'mot_float_type',
-            '',
+            'double',
+            'bessel',
             (),
             (),
             resource_filename('mot', 'data/opencl/bessel.h'),
             resource_filename('mot', 'data/opencl/bessel.cl'),
             {})
+
+
+class Trigonometrics(SimpleLibraryFunctionFromFile):
+
+    def __init__(self):
+        """Function to estimate various additional trigonometric functions.
+        """
+        super(Trigonometrics, self).__init__(
+            'double',
+            'trigonometrics',
+            (),
+            (),
+            resource_filename('mot', 'data/opencl/trigonometrics.h'),
+            resource_filename('mot', 'data/opencl/trigonometrics.cl'),
+            {})
+
 
 
 class CerfImWOfX(SimpleLibraryFunctionFromFile):

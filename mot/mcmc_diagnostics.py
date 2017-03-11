@@ -1,5 +1,5 @@
 from collections import Mapping
-
+import multiprocessing
 import numpy as np
 from numpy.linalg import det
 from scipy.special._ufuncs import gammaln
@@ -318,7 +318,6 @@ def multivariate_ess(samples, nmr_offsets=None, batch_size_generator=None):
     else:
         samples_generator = samples
 
-    import multiprocessing
     p = multiprocessing.Pool()
 
     return np.array(list(p.imap(_MultivariateESSMultiProcessing(nmr_offsets, batch_size_generator),
