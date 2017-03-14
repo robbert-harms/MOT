@@ -1,8 +1,11 @@
+import os
 from collections import Mapping
 import multiprocessing
+
+import itertools
 import numpy as np
 from numpy.linalg import det
-from scipy.special._ufuncs import gammaln
+from scipy.special import gammaln
 from scipy.stats import chi2
 
 __author__ = 'Robbert Harms'
@@ -37,8 +40,8 @@ def get_auto_correlation(chain, lag):
 def get_auto_correlation_time(chain, max_lag=None):
     r"""Compute the auto correlation time up to the given lag for the given chain (1d vector).
 
-    This will break either when the maximum lag :math:`m` is reached or when the sum of two consecutive
-    lags is lower or equal to zero.
+    This will halt when the maximum lag :math:`m` is reached or when the sum of two consecutive lags for any
+    odd lag is lower or equal to zero.
 
     The auto correlation sum is estimated as:
 
@@ -80,11 +83,11 @@ def get_auto_correlation_time(chain, max_lag=None):
     return auto_corr_sum / variance
 
 
-def compute_univariate_ess(chain, max_lag=None):
-    r"""Estimate the effective sample size (ESS) of the given chain.
+def estimate_univariate_ess_autocorrelation(chain, max_lag=None):
+    r"""Estimate effective sample size (ESS) using the autocorrelation of the chain.
 
     The ESS is an estimate of the size of an iid sample with the same variance as the current sample.
-    It is estimated using:
+    This function implements the ESS as described in Kass et al. (1998) and Robert and Casella (2004; p. 500):
 
     .. math::
 
@@ -96,10 +99,19 @@ def compute_univariate_ess(chain, max_lag=None):
 
         \hat{\rho}_{k} = \frac{E[(X_{t} - \mu)(X_{t + k} - \mu)]}{\sigma^{2}}
 
+    References:
+        * Kass, R. E., Carlin, B. P., Gelman, A., and Neal, R. (1998)
+            Markov chain Monte Carlo in practice: A roundtable discussion. The American Statistician, 52, 93--100.
+        * Robert, C. P. and Casella, G. (2004) Monte Carlo Statistical Methods. New York: Springer.
+        * Geyer, C. J. (1992) Practical Markov chain Monte Carlo. Statistical Science, 7, 473--483.
+
     Args:
         chain (ndarray): the chain for which to calculate the ESS, assumes a vector of length ``n`` samples
         max_lag (int): the maximum lag used in the variance calculations. If not given defaults to
             :math:`min(n/3, 1000)`.
+
+    Returns:
+        float: the estimated ESS
     """
     variance = np.var(chain)
 
@@ -107,6 +119,34 @@ def compute_univariate_ess(chain, max_lag=None):
         return 0
 
     return len(chain) / (1 + 2 * get_auto_correlation_time(chain, max_lag))
+
+
+def estimate_univariate_ess_standard_error(chain, batch_size_generator=None, compute_method=None):
+    r"""Compute the univariate ESS using the standard error method.
+
+    This computes the ESS using:
+
+    .. math::
+
+        ESS(X) = n * \frac{\lambda^{2}}{\sigma^{2}}
+
+    Where :math:`\lambda` is the variance of the chain and :math:`\sigma` is estimated using the monte carlo
+    standard error (which in turn is by default estimated using a batch means estimator).
+
+    Args:
+        chain (ndarray): the Markov chain
+        batch_size_generator (UniVariateESSBatchSizeGenerator): the method that generates that batch sizes
+            we will use. Per default it uses the :class:`SquareRootSingleBatch` method.
+        compute_method (ComputeMonteCarloStandardError): the method used to compute the standard error.
+            By default we will use the :class:`BatchMeansMCSE` method
+
+    Returns:
+        float: the estimated ESS
+    """
+    sigma = (monte_carlo_standard_error(chain, batch_size_generator=batch_size_generator,
+                                        compute_method=compute_method) ** 2 * len(chain))
+    lambda_ = np.var(chain)
+    return len(chain) * (lambda_ / sigma)
 
 
 def minimum_multivariate_ess(nmr_params, alpha=0.05, epsilon=0.05):
@@ -177,7 +217,7 @@ def multivariate_ess_precision(nmr_params, multi_variate_ess, alpha=0.05):
     return np.sqrt(np.exp(log_min_ess))
 
 
-def estimate_multivariate_ess_sigma(samples, batch_size, nmr_offsets=None):
+def estimate_multivariate_ess_sigma(samples, batch_size):
     r"""Calculates the Sigma matrix which is part of the multivariate ESS calculation.
 
     This implementation is based on the Matlab implementation found at: https://github.com/lacerbi/multiESS
@@ -190,11 +230,17 @@ def estimate_multivariate_ess_sigma(samples, batch_size, nmr_offsets=None):
 
     Where :math:`Y` are our samples and :math:`\Lambda` is the covariance matrix of the samples.
 
+    This implementation computes the :math:`\Sigma` matrix using a Batch Mean estimator using the given batch size.
+    The batch size has to be :math:`1 \le b_n \le n` and a typical value is either :math:`\lfloor n^{1/2} \rfloor`
+    for slow mixing chains or :math:`\lfloor n^{1/3} \rfloor` for reasonable mixing chains.
+
+    If the length of the chain is longer than the sum of the length of all the batches, this implementation
+    calculates :math:`\Sigma` for every offset and returns the average of those offsets.
+
     Args:
         samples (ndarray): the samples for which we compute the sigma matrix. Expects an pxn array with
             p the number of parameters and n the sample size
         batch_size (int): the batch size used in the approximation of the correlation covariance
-        nmr_offsets (int): the number of offsets we will try in the approximation
 
     Returns:
         ndarray: an pxp array with p the number of parameters in the samples.
@@ -203,29 +249,29 @@ def estimate_multivariate_ess_sigma(samples, batch_size, nmr_offsets=None):
         Vats D, Flegal J, Jones G (2016). Multivariate Output Analysis for Markov Chain Monte Carlo.
         arXiv:1512.07713v2 [math.ST]
     """
-    nmr_offsets = nmr_offsets or 10
-
     sample_means = np.mean(samples, axis=1)
     nmr_params, chain_length = samples.shape
 
-    a = int(np.floor(chain_length / batch_size))
+    nmr_batches = int(np.floor(chain_length / batch_size))
     sigma = np.zeros((nmr_params, nmr_params))
 
-    offsets = np.unique(np.round(np.linspace(0, chain_length - a * batch_size, nmr_offsets)))
+    nmr_offsets = chain_length - nmr_batches * batch_size + 1
 
-    for offset in offsets:
-        Y = np.reshape(samples.T[np.array(offset + np.arange(0, a * batch_size), dtype=np.int), :],
-                       [batch_size, a, nmr_params], order='F')
-        Ybar = np.squeeze(np.mean(Y, axis=0))
-        Z = Ybar - sample_means
+    for offset in range(nmr_offsets):
+        batches = np.reshape(samples[:, np.array(offset + np.arange(0, nmr_batches * batch_size), dtype=np.int)].T,
+                             [batch_size, nmr_batches, nmr_params], order='F')
 
-        for i in range(0, a):
-            sigma += Z[i, :, None].T * Z[i, :, None]
+        batch_means = np.squeeze(np.mean(batches, axis=0))
 
-    return sigma * batch_size / (a - 1) / len(offsets)
+        Z = batch_means - sample_means
+
+        for x, y in itertools.product(range(nmr_params), range(nmr_params)):
+            sigma[x, y] += np.sum(Z[:, x] * Z[:, y])
+
+    return sigma * batch_size / (nmr_batches - 1) / nmr_offsets
 
 
-def compute_multivariate_ess(samples, nmr_offsets=None, batch_size_generator=None, full_output=False):
+def estimate_multivariate_ess(samples, batch_size_generator=None, full_output=False):
     r"""Compute the multivariate Effective Sample Size of your (single instance set of) samples.
 
     This multivariate ESS is defined in Vats et al. (2016) and is given by:
@@ -245,9 +291,8 @@ def compute_multivariate_ess(samples, nmr_offsets=None, batch_size_generator=Non
 
     Args:
         samples (ndarray): an pxn matrix with for p parameters and n samples.
-        nmr_offsets (int): the number of offsets we use for the estimation of the :math:`\Sigma`
         batch_size_generator (MultiVariateESSBatchSizeGenerator): the batch size generator, tells us how many
-            batches and of which size we use for estimating the minimum ESS.
+            batches and of which size we use for estimating the minimum ESS. Defaults to :class:`SquareRootSingleBatch`
         full_output (boolean): set to True to return the estimated :math:`\Sigma` and the optimal batch size.
 
     Returns:
@@ -259,10 +304,9 @@ def compute_multivariate_ess(samples, nmr_offsets=None, batch_size_generator=Non
         Vats D, Flegal J, Jones G (2016). Multivariate Output Analysis for Markov Chain Monte Carlo.
         arXiv:1512.07713v2 [math.ST]
     """
-    batch_size_generator = batch_size_generator or CubeRootSingleBatch()
-    nmr_offsets = nmr_offsets or 10
+    batch_size_generator = batch_size_generator or SquareRootSingleBatch()
 
-    batch_sizes = batch_size_generator.get_batch_sizes(*samples.shape)
+    batch_sizes = batch_size_generator.get_multivariate_ess_batch_sizes(*samples.shape)
 
     nmr_params, chain_length = samples.shape
     nmr_batches = len(batch_sizes)
@@ -273,8 +317,8 @@ def compute_multivariate_ess(samples, nmr_offsets=None, batch_size_generator=Non
     sigma_estimates = np.zeros((nmr_params, nmr_params, nmr_batches))
 
     for i in range(0, nmr_batches):
-        sigma = estimate_multivariate_ess_sigma(samples, int(batch_sizes[i]), nmr_offsets)
-        ess = chain_length * (det_lambda / det(sigma)) ** (1.0 / nmr_params)
+        sigma = estimate_multivariate_ess_sigma(samples, int(batch_sizes[i]))
+        ess = chain_length * (det_lambda**(1.0 / nmr_params) / det(sigma)**(1.0 / nmr_params))
 
         ess_estimates[i] = ess
         sigma_estimates[..., i] = sigma
@@ -291,16 +335,15 @@ def compute_multivariate_ess(samples, nmr_offsets=None, batch_size_generator=Non
     return ess_estimates[idx]
 
 
-def multivariate_ess(samples, nmr_offsets=None, batch_size_generator=None):
-    r"""Compute the multivariate Effective Sample Size for the samples of every problem.
+def multivariate_ess(samples, batch_size_generator=None):
+    r"""Estimate the multivariate Effective Sample Size for the samples of every problem.
 
-    This essentially applies :func:`compute_multivariate_ess` to every problem in the samples.
+    This essentially applies :func:`estimate_multivariate_ess` to every problem in the samples.
 
     Args:
         samples (ndarray, dict or generator): either an matrix of shape (d, n, p) with d problems, n samples
             and p parameters or a dictionary with for every parameter a matrix with shape (d, n) or
             a generator function that yields sample arrays of shape (d, n).
-        nmr_offsets (int): the number of offsets we use for the estimation of the :math:`\Sigma`
         batch_size_generator (MultiVariateESSBatchSizeGenerator): the batch size generator, tells us how many
             batches and of which size we use for estimating the minimum ESS.
 
@@ -318,33 +361,56 @@ def multivariate_ess(samples, nmr_offsets=None, batch_size_generator=None):
     else:
         samples_generator = samples
 
-    p = multiprocessing.Pool()
+    if os.name == 'nt': # In Windows there is no fork.
+        map_function = map
+    else:
+        p = multiprocessing.Pool()
+        map_function = p.imap
 
-    return np.array(list(p.imap(_MultivariateESSMultiProcessing(nmr_offsets, batch_size_generator),
-                                samples_generator())))
+    return np.array(list(map_function(_MultivariateESSMultiProcessing(batch_size_generator),
+                                      samples_generator())))
 
 
 class _MultivariateESSMultiProcessing(object):
 
-    def __init__(self, nmr_offsets, batch_size_generator):
-        """Used in the function :func:`multivariate_ess` to compute the multivariate ESS using multiprocessing."""
-        self._nmr_offsets = nmr_offsets
+    def __init__(self, batch_size_generator):
+        """Used in the function :func:`multivariate_ess` to estimate the multivariate ESS using multiprocessing."""
         self._batch_size_generator = batch_size_generator
 
     def __call__(self, samples):
-        return compute_multivariate_ess(samples, nmr_offsets=self._nmr_offsets,
-                                        batch_size_generator=self._batch_size_generator)
+        return estimate_multivariate_ess(samples, batch_size_generator=self._batch_size_generator)
+
+
+def monte_carlo_standard_error(chain, batch_size_generator=None, compute_method=None):
+    """Compute Monte Carlo standard errors for the expectations
+
+    This is a convenience function that calls the compute method for each batch size and returns the lowest ESS
+    over the used batch sizes.
+
+    Args:
+        chain (ndarray): the Markov chain
+        batch_size_generator (UniVariateESSBatchSizeGenerator): the method that generates that batch sizes
+            we will use. Per default it uses the :class:`SquareRootSingleBatch` method.
+        compute_method (ComputeMonteCarloStandardError): the method used to compute the standard error.
+            By default we will use the :class:`BatchMeansMCSE` method
+    """
+    batch_size_generator = batch_size_generator or SquareRootSingleBatch()
+    compute_method = compute_method or BatchMeansMCSE()
+
+    batch_sizes = batch_size_generator.get_univariate_ess_batch_sizes(len(chain))
+
+    return np.min(list(compute_method.compute_standard_error(chain, b) for b in batch_sizes))
 
 
 class MultiVariateESSBatchSizeGenerator(object):
     """Objects of this class are used as input to the multivariate ESS function.
 
-    The multivariate ESS function needs to have at least one batch size to use during the computations. More is also
-    possible and then the lowest ESS of all batches is chosen. Objects of this class implement the logic behind
-    choosing batch sizes.
+    The multivariate ESS function needs to have at least one batch size to use during the computations. More batch
+    sizes are also possible and the batch size with the lowest ESS is then preferred.
+    Objects of this class implement the logic behind choosing batch sizes.
     """
 
-    def get_batch_sizes(self, nmr_params, chain_length):
+    def get_multivariate_ess_batch_sizes(self, nmr_params, chain_length):
         r"""Get the batch sizes to use for the calculation of the Effective Sample Size (ESS).
 
         This should return a list of batch sizes that the ESS calculation will use to determine :math:`\Sigma`
@@ -358,16 +424,45 @@ class MultiVariateESSBatchSizeGenerator(object):
         """
 
 
-class SquareRootSingleBatch(MultiVariateESSBatchSizeGenerator):
+class UniVariateESSBatchSizeGenerator(object):
+    """Objects of this class are used as input to the univariate ESS function that uses the batch means.
+
+    The univariate batch means ESS function needs to have at least one batch size to use during the computations.
+    More batch sizes are also possible and the batch size with the lowest ESS is then preferred.
+    Objects of this class implement the logic behind choosing batch sizes.
+    """
+
+    def get_univariate_ess_batch_sizes(self, chain_length):
+        r"""Get the batch sizes to use for the calculation of the univariate Effective Sample Size (ESS).
+
+        This should return a list of batch sizes that the ESS calculation will use to determine :math:`\sigma`
+
+        Args:
+            chain_length (int): the length of the chain
+
+        Returns:
+            list: the batches of the given sizes we will test in the ESS calculations
+        """
+
+
+class SquareRootSingleBatch(MultiVariateESSBatchSizeGenerator, UniVariateESSBatchSizeGenerator):
     r"""Returns :math:`\sqrt(n)`."""
-    def get_batch_sizes(self, nmr_params, chain_length):
+
+    def get_multivariate_ess_batch_sizes(self, nmr_params, chain_length):
         return [np.floor(chain_length**(1/2.0))]
 
+    def get_univariate_ess_batch_sizes(self, chain_length):
+        return [np.floor(chain_length ** (1 / 2.0))]
 
-class CubeRootSingleBatch(MultiVariateESSBatchSizeGenerator):
+
+class CubeRootSingleBatch(MultiVariateESSBatchSizeGenerator, UniVariateESSBatchSizeGenerator):
     r"""Returns :math:`n^{1/3}`."""
-    def get_batch_sizes(self, nmr_params, chain_length):
+
+    def get_multivariate_ess_batch_sizes(self, nmr_params, chain_length):
         return [np.floor(chain_length**(1/3.0))]
+
+    def get_univariate_ess_batch_sizes(self, chain_length):
+        return [np.floor(chain_length ** (1 / 3.0))]
 
 
 class LinearSpacedBatchSizes(MultiVariateESSBatchSizeGenerator):
@@ -390,9 +485,54 @@ class LinearSpacedBatchSizes(MultiVariateESSBatchSizeGenerator):
         """
         self._nmr_batches = nmr_batches
 
-    def get_batch_sizes(self, nmr_params, chain_length):
+    def get_multivariate_ess_batch_sizes(self, nmr_params, chain_length):
         b_min = np.floor(chain_length**(1 / 4.0))
         b_max = np.max((np.floor(chain_length / np.max((nmr_params, 20))),
                         np.floor(chain_length**(1 / 2.0))))
         return list(np.unique(np.round(np.exp(np.linspace(np.log(b_min), np.log(b_max), self._nmr_batches)))))
 
+
+class ComputeMonteCarloStandardError(object):
+    """Method to compute the Monte Carlo Standard error."""
+
+    def compute_standard_error(self, chain, batch_size):
+        """Compute the standard error of the given chain and the given batch size.
+
+        Args:
+            chain (ndarray): the chain for which to compute the SE
+            batch_size (int): batch size or window size to use in the computations
+
+        Returns:
+            float: the Monte Carlo Standard Error
+        """
+        raise NotImplementedError()
+
+
+class BatchMeansMCSE(ComputeMonteCarloStandardError):
+    """Computes the Monte Carlo Standard Error using simple batch means."""
+
+    def compute_standard_error(self, chain, batch_size):
+        nmr_batches = int(np.floor(len(chain) / batch_size))
+
+        batch_means = np.zeros(nmr_batches)
+
+        for batch_index in range(nmr_batches):
+            batch_means[batch_index] = np.mean(chain[int(batch_index * batch_size):int((batch_index + 1) * batch_size)])
+
+        var_hat = batch_size * sum((batch_means - np.mean(chain))**2) / (nmr_batches - 1)
+        return np.sqrt(var_hat / len(chain))
+
+
+class OverlappingBatchMeansMCSE(ComputeMonteCarloStandardError):
+    """Computes the Monte Carlo Standard Error using overlapping batch means."""
+
+    def compute_standard_error(self, chain, batch_size):
+        nmr_batches = int(len(chain) - batch_size + 1)
+
+        batch_means = np.zeros(nmr_batches)
+
+        for batch_index in range(nmr_batches):
+            batch_means[batch_index] = np.mean(chain[int(batch_index):int(batch_index + batch_size)])
+
+        var_hat = len(chain) * batch_size * sum((batch_means - np.mean(chain))**2) / (nmr_batches - 1) / nmr_batches
+        return np.sqrt(var_hat / len(chain))
