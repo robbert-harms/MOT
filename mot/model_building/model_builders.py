@@ -1124,10 +1124,11 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
             cl_data = data_adapter.get_opencl_data()
 
-            if _check_array_fits_constant_buffer(cl_data, data_adapter.get_opencl_numpy_type()):
-                if constant_args_counter < max_constant_args:
-                    clmemtype = 'constant'
-                    constant_args_counter += 1
+            if data_adapter.allow_local_pointer():
+                if _check_array_fits_constant_buffer(cl_data, data_adapter.get_opencl_numpy_type()):
+                    if constant_args_counter < max_constant_args:
+                        clmemtype = 'constant'
+                        constant_args_counter += 1
 
             param_name = 'var_data_' + str(key)
             data_type = data_adapter.get_data_type().raw_data_type
@@ -1150,10 +1151,11 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
             cl_data = data_adapter.get_opencl_data()
 
-            if _check_array_fits_constant_buffer(cl_data, data_adapter.get_opencl_numpy_type()):
-                if constant_args_counter < max_constant_args:
-                    clmemtype = 'constant'
-                    constant_args_counter += 1
+            if data_adapter.allow_local_pointer():
+                if _check_array_fits_constant_buffer(cl_data, data_adapter.get_opencl_numpy_type()):
+                    if constant_args_counter < max_constant_args:
+                        clmemtype = 'constant'
+                        constant_args_counter += 1
 
             param_name = 'protocol_data_' + str(key)
             data_type = data_adapter.get_data_type().raw_data_type

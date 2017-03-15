@@ -11,8 +11,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 class DataAdapter(object):
     """Create a data adapter for the given data and type.
 
-    This data adapter is the bridge between the raw data and the data used in the kernels. If in the future we
-    want to add computation types like CUDA or compiling to C this data adapter can be used as the bridge.
+    This data adapter is the bridge between the raw data and the data used in the kernels.
     """
 
     def get_data_type(self):
@@ -36,10 +35,17 @@ class DataAdapter(object):
             np.dtype: the numpy type for the data
         """
 
+    def allow_local_pointer(self):
+        """If this data can be put in a local storage pointer if there is enough memory for it.
+
+        Returns:
+            boolean: if we allow this memory to be referenced by a local pointer or not.
+        """
+
 
 class SimpleDataAdapter(DataAdapter):
 
-    def __init__(self, data, data_type, mot_float_type):
+    def __init__(self, data, data_type, mot_float_type, allow_local_pointer=True):
         """Create a data adapter for the given data and type.
 
         This data adapter is the bridge between the raw data and the data used in the kernels. If in the future we
@@ -49,10 +55,13 @@ class SimpleDataAdapter(DataAdapter):
             value (ndarray): The value to adapt to different run environments
             data_type (mot.cl_data_type.CLDataType): the data type we need to convert it to
             mot_float_type (mot.cl_data_type.CLDataType): the data type of the mot_float_type
+            allow_local_pointer (boolean): if this data can be referenced by a local pointer in the kernel (if
+                there is enough memory for it).
         """
         self._data = data
         self._data_type = data_type
         self._mot_float_type = mot_float_type
+        self._allow_local_pointer = allow_local_pointer
 
     def get_opencl_data(self):
         if self._data_type.is_vector_type:
@@ -68,6 +77,9 @@ class SimpleDataAdapter(DataAdapter):
 
     def get_data_type(self):
         return self._data_type
+
+    def allow_local_pointer(self):
+        return self._allow_local_pointer
 
     def _get_cl_array(self):
         """Convert the data to a numpy array of the current data type.
