@@ -37,12 +37,12 @@ class CalculateModelEstimates(CLRoutine):
         nmr_inst_per_problem = model.get_nmr_inst_per_problem()
 
         if isinstance(parameters, Mapping):
-            nmr_problems = model.get_nmr_problems()
             parameters = np.require(model.get_initial_parameters(parameters), np_dtype,
                                     requirements=['C', 'A', 'O'])
         else:
-            nmr_problems = parameters.shape[0]
+            parameters = np.require(parameters, np_dtype, requirements=['C', 'A', 'O'])
 
+        nmr_problems = parameters.shape[0]
         evaluations = np.zeros((nmr_problems, nmr_inst_per_problem), dtype=np_dtype, order='C')
 
         workers = self._create_workers(lambda cl_environment: _EvaluateModelWorker(
@@ -64,10 +64,6 @@ class _EvaluateModelWorker(Worker):
 
         self._all_buffers, self._evaluations_buffer = self._create_buffers()
         self._kernel = self._build_kernel(compile_flags)
-
-    def __del__(self):
-        for buffer in self._all_buffers:
-            buffer.release()
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start

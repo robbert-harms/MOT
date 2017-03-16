@@ -289,7 +289,9 @@ class OptimizeModelBuilder(OptimizeModelInterface):
     def get_nmr_problems(self):
         """See super class for details"""
         if self.problems_to_analyze is None:
-            return self._problem_data.get_nmr_problems()
+            if self._problem_data:
+                return self._problem_data.get_nmr_problems()
+            return 0
         return len(self.problems_to_analyze)
 
     def get_nmr_inst_per_problem(self):
@@ -1344,12 +1346,37 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         return prior
 
     def get_proposal_state(self):
-        return_list = []
+        np_dtype = np.float32
+        if self.double_precision:
+            np_dtype = np.float64
+
+        proposal_state = []
         for m, p in self._model_functions_info.get_estimable_parameters_list():
             for param in p.sampling_proposal.get_parameters():
                 if param.adaptable:
-                    return_list.append(param.default_value)
-        return return_list
+                    value = param.default_value
+
+                    if is_scalar(value):
+                        if self.get_nmr_problems() == 0:
+                            proposal_state.append(np.full((1, 1), value, dtype=np_dtype))
+                        else:
+                            proposal_state.append(np.full((self.get_nmr_problems(), 1), value, dtype=np_dtype))
+                    else:
+                        if len(value.shape) < 2:
+                            value = np.transpose(np.asarray([value]))
+                        elif value.shape[1] > value.shape[0]:
+                            value = np.transpose(value)
+                        else:
+                            value = value
+
+                        if self.problems_to_analyze is None:
+                            proposal_state.append(value)
+                        else:
+                            proposal_state.append(value[self.problems_to_analyze, ...])
+
+        proposal_state_matrix = np.concatenate([np.transpose(np.array([s]))
+                                                if len(s.shape) < 2 else s for s in proposal_state], axis=1)
+        return proposal_state_matrix
 
     def get_proposal_state_names(self):
         return_list = []
@@ -1442,12 +1469,19 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
                 return_str += p.sampling_proposal.get_proposal_update_function().get_update_function(
                     p.sampling_proposal.get_parameters(), address_space=address_space)
 
-        return_str += '''
-            void {func_name}({address_space} mot_float_type* const proposal_state,
-                             {address_space} uint* const sampling_counter,
-                             {address_space} uint* const acceptance_counter,
-                             {address_space} mot_float_type* const parameter_variance){{
-        '''.format(func_name=func_name, address_space=address_space)
+        if self.proposal_state_update_uses_variance():
+            return_str += '''
+                void {func_name}({address_space} mot_float_type* const proposal_state,
+                                 {address_space} uint* const sampling_counter,
+                                 {address_space} uint* const acceptance_counter,
+                                 {address_space} mot_float_type* const parameter_variance){{
+            '''.format(func_name=func_name, address_space=address_space)
+        else:
+            return_str += '''
+                void {func_name}({address_space} mot_float_type* const proposal_state,
+                                 {address_space} uint* const sampling_counter,
+                                 {address_space} uint* const acceptance_counter){{
+            '''.format(func_name=func_name, address_space=address_space)
 
         adaptable_parameter_count = 0
         for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
@@ -1477,6 +1511,16 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
 
         return_str += '}'
         return return_str
+
+    def proposal_state_update_uses_variance(self):
+        for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
+            param_proposal = p.sampling_proposal
+            proposal_update_function = param_proposal.get_proposal_update_function()
+
+            if any(param.adaptable for param in param_proposal.get_parameters()):
+                if proposal_update_function.uses_parameter_variance():
+                    return True
+        return False
 
     def get_log_likelihood_function(self, func_name='getLogLikelihood', evaluation_model=None, full_likelihood=True):
         evaluation_model = evaluation_model or self._evaluation_model

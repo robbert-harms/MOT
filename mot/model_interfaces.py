@@ -50,7 +50,7 @@ class OptimizeModelInterface(object):
         Returns:
             list of ndarray: the arrays that need to be buffered.
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def get_kernel_data_struct(self, device):
         """Get the CL code for the data structure in the kernel.
@@ -74,7 +74,7 @@ class OptimizeModelInterface(object):
         Returns:
             str: the kernel data structure CL code
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def get_kernel_param_names(self, device):
         """Get for all the data buffers the kernel parameter arguments.
@@ -94,7 +94,7 @@ class OptimizeModelInterface(object):
         Returns:
             list: the kernel parameter names
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def get_kernel_data_struct_initialization(self, device, variable_name, problem_id_name):
         """The assignment code for the data structure.
@@ -115,7 +115,7 @@ class OptimizeModelInterface(object):
         Returns:
             str: the initialization assignment for the data structure.
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def get_kernel_data_struct_type(self):
         """Get the CL type of the kernel datastruct.
@@ -123,7 +123,7 @@ class OptimizeModelInterface(object):
         Returns:
             str: the CL type of the data struct
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def get_parameter_decode_function(self, fname='decodeParameters'):
         """Get a CL function that can transform the model parameters from encoded space to model space.
@@ -141,7 +141,7 @@ class OptimizeModelInterface(object):
             str: An OpenCL function that is used in the CL kernel to transform the parameters from encoded space to
                 model space so they can be used as input to the model.
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def get_parameter_encode_function(self, fname='encodeParameters'):
         """Get a CL function that can transform the model parameters from model space to an encoded space.
@@ -159,7 +159,7 @@ class OptimizeModelInterface(object):
             str: An OpenCL function that is used in the CL kernel to transform the parameters from model space to
                 encoded space so they can be used as input to an CL routine.
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def get_nmr_problems(self):
         """Get the number of problems we need to analyze.
@@ -167,7 +167,7 @@ class OptimizeModelInterface(object):
         Returns:
             int: A single integer specifying the number of problem instances
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def get_model_eval_function(self, func_name='evaluateModel'):
         """Get the evaluation function that evaluates the model at the given parameters.
@@ -191,7 +191,7 @@ class OptimizeModelInterface(object):
                     mot_float_type <func_name>(const void* const data, const mot_float_type* const x,
                                                const int observation_index);
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def get_observation_return_function(self, func_name='getObservation'):
         """Get the CL function that returns the observation for the given problem.
@@ -205,7 +205,7 @@ class OptimizeModelInterface(object):
 
                     mot_float_type <func_name>(const void* const data, const int observation_index);
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def get_objective_function(self, func_name="calculateObjective"):
         """Get the objective function that evaluates the entire problem instance under a noise model.
@@ -221,7 +221,7 @@ class OptimizeModelInterface(object):
 
                     double <func_name>(const void* const data, mot_float_type* const x);
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def get_objective_per_observation_function(self, func_name="getObjectiveInstanceValue"):
         """Get the objective function that returns the objective value at the given instance point.
@@ -241,7 +241,7 @@ class OptimizeModelInterface(object):
 
                     double <func_name>(const void* const data, mot_float_type* const x, int observation_index);
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def get_initial_parameters(self, results_dict=None):
         """Get a two dimensional matrix with the initial parameters (starting points) for every voxel.
@@ -257,7 +257,7 @@ class OptimizeModelInterface(object):
             ndarray: A two dimensional matrix with on the first axis the problem instances and on the second
                 the parameter values per problem instance
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def get_lower_bounds(self):
         """Get for each estimable parameter the lower bounds.
@@ -266,7 +266,7 @@ class OptimizeModelInterface(object):
             list: For every estimable parameter a scalar or vector with the the lower bound(s) for that parameter.
                 This value can also be the literal string '-inf' for infinity.
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def get_upper_bounds(self):
         """Get for each estimable parameter the upper bounds.
@@ -275,7 +275,7 @@ class OptimizeModelInterface(object):
             list: For every estimable parameter a scalar or vector with the the upper bound(s) for that parameter.
                 This value can also be the literal string '-inf' for infinity.
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def get_optimized_param_names(self):
         """Get a list of names with the free parameter names (the parameters that are estimated by the routines).
@@ -287,7 +287,7 @@ class OptimizeModelInterface(object):
         Returns:
             list of str: A list with the parameter names (in dot format) of all the estimated (free) parameters.
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def get_optimization_output_param_names(self):
         """Get a list with the names of the parameters, this is the list of keys to the titles and results.
@@ -299,7 +299,7 @@ class OptimizeModelInterface(object):
         Returns:
             list of str: a list with the parameter names
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def get_nmr_inst_per_problem(self):
         """Get the number of instances/data points per problem.
@@ -311,7 +311,7 @@ class OptimizeModelInterface(object):
         Returns:
             int: the number of instances per problem.
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def get_nmr_estimable_parameters(self):
         """Get the number of estimable parameters.
@@ -319,7 +319,7 @@ class OptimizeModelInterface(object):
         Returns:
             int: the number of estimable parameters
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def finalize_optimization_results(self, results_dict):
         """After optimization create the final dictionary with the result maps.
@@ -378,12 +378,12 @@ class SampleModelInterface(OptimizeModelInterface):
         super(SampleModelInterface, self).__init__()
 
     def get_proposal_state(self):
-        """Get a list of parameter values for the adaptable proposal parameters.
+        """Get for every problem instance the list of parameter values to use in the the adaptable proposal.
 
         Returns:
-            list: list of float with the proposal parameter values that are adaptable.
+            ndarray: per problem instance the proposal parameter values that are adaptable.
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def get_proposal_state_names(self):
         """Get a list of names for the adaptable proposal parameters.
@@ -392,7 +392,7 @@ class SampleModelInterface(OptimizeModelInterface):
             list: list of str with the name for each of the adaptable proposal parameters.
                 This is used by the sampler to create a dictionary of final proposal states.
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def get_log_likelihood_function(self, func_name="getLogLikelihood", evaluation_model=None, full_likelihood=True):
         """Get the CL Log Likelihood function that evaluates the entire problem instance under a noise model
@@ -410,7 +410,7 @@ class SampleModelInterface(OptimizeModelInterface):
 
                     double <func_name>(const void* const data, mot_float_type* const x);
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def get_log_likelihood_per_observation_function(self, func_name="getLogLikelihoodPerObservation",
                                                     evaluation_model=None, full_likelihood=True):
@@ -429,7 +429,7 @@ class SampleModelInterface(OptimizeModelInterface):
 
                     double <fname>(const void* const data, mot_float_type* const x, const int observation_index);
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def is_proposal_symmetric(self):
         """Check if the entire proposal distribution is symmetric: ``q(x|x') == q(x'|x)``.
@@ -437,7 +437,7 @@ class SampleModelInterface(OptimizeModelInterface):
         Returns:
             boolean: True if the proposal distribution is symmetric, false otherwise.
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def get_proposal_logpdf(self, func_name='getProposalLogPDF', address_space_proposal_state='private'):
         """Get the probability density function of the proposal in log space (as a CL string).
@@ -464,7 +464,7 @@ class SampleModelInterface(OptimizeModelInterface):
             It should return for the requested parameter a value ``q(proposal | current)``, the log Probability
             Density Function (log PDF) of the proposal given the current value.
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def get_proposal_function(self, func_name='getProposal', address_space_proposal_state='private'):
         """Get a proposal function that returns proposals for a requested parameter.
@@ -491,7 +491,7 @@ class SampleModelInterface(OptimizeModelInterface):
 
                 float randomnr = frand(rng_data);
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def get_proposal_state_update_function(self, func_name='updateProposalState', address_space='private'):
         """Get the function to update the proposal parameters
@@ -514,7 +514,19 @@ class SampleModelInterface(OptimizeModelInterface):
                 that where accepted since the last update. Both are of length equal to the total number of parameters
                 in the model (!). The implementing function is free to overwrite the values in each array.
         """
-        raise NotImplementedError
+        raise NotImplementedError()
+
+    def proposal_state_update_uses_variance(self):
+        """Check if the proposal state update function requires the variance of each of the parameters.
+
+        If none of the proposal update functions require the parameter variance then we can save memory in the
+        kernel by not calculating them.
+
+        Returns:
+            boolean: if at least one parameter proposal state update function requires the parameter variance
+                return True, else return False.
+        """
+        raise NotImplementedError()
 
     def get_log_prior_function(self, func_name='getLogPrior', address_space_parameter_vector='private'):
         """Get the prior function that returns the prior information about the given parameters.
@@ -537,7 +549,7 @@ class SampleModelInterface(OptimizeModelInterface):
 
             Which is called by the sampling routine to calculate the posterior probability.
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def samples_to_statistics(self, samples_dict):
         """Create statistics out of the given set of samples (in a dictionary).
@@ -550,4 +562,4 @@ class SampleModelInterface(OptimizeModelInterface):
             dict: The same dictionary but with statistical maps (mean, avg etc.) for each parameter, instead of the raw
             samples. In essence this is where one can place the logic to go from samples to meaningful maps.
         """
-        raise NotImplementedError
+        raise NotImplementedError()

@@ -77,19 +77,19 @@ class MetropolisHastings(AbstractSampler):
 
         self._do_initial_logging(model)
 
-        parameters = model.get_initial_parameters(init_params)
-
-        samples = np.zeros((model.get_nmr_problems(), parameters.shape[1], self.nmr_samples),
+        current_chain_position = np.require(model.get_initial_parameters(init_params), np_dtype,
+                                            requirements=['C', 'A', 'O', 'W'])
+        samples = np.zeros((model.get_nmr_problems(), current_chain_position.shape[1], self.nmr_samples),
                            dtype=np_dtype, order='C')
 
-        proposal_state = np.zeros((model.get_nmr_problems(), len(model.get_proposal_state())),
-                                  dtype=np_dtype, order='C')
+        proposal_state = np.require(model.get_proposal_state(), np_dtype, requirements=['C', 'A', 'O', 'W'])
+        mcmc_state = self._get_mcmc_state(model, current_chain_position)
 
         self._logger.info('Starting sampling with method {0}'.format(self.__class__.__name__))
 
         workers = self._create_workers(lambda cl_environment: _MHWorker(
-            cl_environment, self.get_compile_flags_list(model.double_precision), model, parameters,
-            samples, proposal_state,
+            cl_environment, self.get_compile_flags_list(model.double_precision), model, current_chain_position,
+            samples, proposal_state, mcmc_state,
             self.nmr_samples, self.burn_length, self.sample_intervals, self.use_adaptive_proposals))
         self.load_balancer.process(workers, model.get_nmr_problems())
 
@@ -113,11 +113,54 @@ class MetropolisHastings(AbstractSampler):
             volume_maps.update(error_measures)
             self._logger.info('Done calculating errors measures')
 
+            # todo remove and simplify the MCMC state
             proposal_state_dict = results_to_dict(proposal_state, model.get_proposal_state_names())
+            # proposal_state_dict.update(
+            #     results_to_dict(proposal_state_sampling_counter, [a + '.sampling_counter' for a in model.get_optimized_param_names()]))
+            # proposal_state_dict.update(
+            #     results_to_dict(proposal_state_acceptance_counter, [a + '.acceptance_counter' for a in model.get_optimized_param_names()]))
+            # proposal_state_dict.update(
+            #     results_to_dict(online_parameter_variance,
+            #                     [a + '.parameter_variance' for a in model.get_optimized_param_names()]))
 
             return samples_dict, volume_maps, proposal_state_dict
 
         return samples_dict
+
+    def _get_mcmc_state(self, model, parameters):
+        nmr_params = model.get_nmr_estimable_parameters()
+        np_dtype = np.float32
+        if model.double_precision:
+            np_dtype = np.float64
+
+        proposal_state_sampling_counter = np.zeros((model.get_nmr_problems(), nmr_params),
+                                                   dtype=np.uint32, order='C')
+        proposal_state_acceptance_counter = np.zeros((model.get_nmr_problems(), nmr_params),
+                                                     dtype=np.uint32, order='C')
+
+        state_dict = {
+            'proposal_state_sampling_counter': {'data': proposal_state_sampling_counter,
+                                                'cl_type': 'uint'},
+            'proposal_state_acceptance_counter': {'data': proposal_state_acceptance_counter,
+                                                  'cl_type': 'uint'}
+        }
+
+        if model.proposal_state_update_uses_variance():
+            online_parameter_variance = np.zeros((model.get_nmr_problems(), nmr_params),
+                                                 dtype=np_dtype, order='C')
+            online_parameter_variance_update_m2 = np.zeros((model.get_nmr_problems(), nmr_params),
+                                                           dtype=np_dtype, order='C')
+            online_parameter_mean = np.array(parameters, copy=True)
+
+            state_dict.update({
+                'online_parameter_variance': {'data': online_parameter_variance, 'cl_type': 'mot_float_type'},
+                'online_parameter_variance_update_m2': {'data': online_parameter_variance_update_m2,
+                                                        'cl_type': 'mot_float_type'},
+                'online_parameter_mean': {'data': online_parameter_mean,
+                                          'cl_type': 'mot_float_type'},
+            })
+
+        return state_dict
 
     def _do_initial_logging(self, model):
         self._logger.info('Entered sampling routine.')
@@ -147,15 +190,23 @@ class MetropolisHastings(AbstractSampler):
 
 class _MHWorker(Worker):
 
-    def __init__(self, cl_environment, compile_flags, model, parameters, samples, proposal_state,
-                 nmr_samples, burn_length, sample_intervals, use_adaptive_proposals):
+    def __init__(self, cl_environment, compile_flags, model, current_chain_position, samples, proposal_state,
+                 mcmc_state, nmr_samples, burn_length, sample_intervals, use_adaptive_proposals):
         super(_MHWorker, self).__init__(cl_environment)
 
         self._model = model
-        self._parameters = parameters
-        self._nmr_params = parameters.shape[1]
+        self._current_chain_position = current_chain_position
+        self._nmr_params = current_chain_position.shape[1]
         self._samples = samples
         self._proposal_state = proposal_state
+        self._update_parameter_variances = self._model.proposal_state_update_uses_variance()
+        self._mcmc_state = mcmc_state
+
+        self._mcmc_state_kernel_order = ['proposal_state_sampling_counter',
+                                         'proposal_state_acceptance_counter']
+        if self._update_parameter_variances:
+            self._mcmc_state_kernel_order.extend(
+                ['online_parameter_variance', 'online_parameter_variance_update_m2', 'online_parameter_mean'])
 
         self._nmr_samples = nmr_samples
         self._burn_length = burn_length
@@ -168,21 +219,59 @@ class _MHWorker(Worker):
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
+
         workgroup_size = cl.Kernel(self._kernel, 'sample').get_work_group_info(
             cl.kernel_work_group_info.PREFERRED_WORK_GROUP_SIZE_MULTIPLE, self._cl_environment.device)
 
-        data_buffers = [cl.Buffer(self._cl_run_context.context,
-                                  cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR,
-                                  hostbuf=self._parameters[range_start:range_end, :])]
+        data_buffers, samples_buf, proposal_buffer, mcmc_state_buffers, current_chain_position_buffer = \
+            self._get_buffers(range_start, range_end, workgroup_size)
+
+        kernel_event = self._kernel.sample(self._cl_run_context.queue,
+                                           (int(nmr_problems * workgroup_size),),
+                                           (int(workgroup_size),),
+                                           *data_buffers)
+
+        return_events = [
+            self._enqueue_readout(samples_buf, self._samples, 0, nmr_problems, [kernel_event]),
+            self._enqueue_readout(proposal_buffer, self._proposal_state, 0, nmr_problems, [kernel_event]),
+            self._enqueue_readout(current_chain_position_buffer, self._current_chain_position, 0, nmr_problems,
+                                  [kernel_event]),
+        ]
+
+        for mcmc_state_element in self._mcmc_state_kernel_order:
+            buffer = mcmc_state_buffers[mcmc_state_element]
+            host_array = self._mcmc_state[mcmc_state_element]['data']
+            return_events.append(self._enqueue_readout(buffer, host_array, 0, nmr_problems, [kernel_event]))
+
+        return return_events
+
+    def _get_buffers(self, range_start, range_end, workgroup_size):
+        data_buffers = []
+
+        current_chain_position_buffer = cl.Buffer(self._cl_run_context.context,
+                                                  cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR,
+                                                  hostbuf=self._current_chain_position[range_start:range_end, :])
+        data_buffers.append(current_chain_position_buffer)
+
         samples_buf = cl.Buffer(self._cl_run_context.context,
                                 cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
                                 hostbuf=self._samples[range_start:range_end, ...])
         data_buffers.append(samples_buf)
 
         proposal_buffer = cl.Buffer(self._cl_run_context.context,
-                                    cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
+                                    cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR,
                                     hostbuf=self._proposal_state[range_start:range_end, ...])
         data_buffers.append(proposal_buffer)
+
+        mcmc_state_buffers = {}
+        for mcmc_state_element in self._mcmc_state_kernel_order:
+            host_array = self._mcmc_state[mcmc_state_element]['data']
+
+            buffer = cl.Buffer(self._cl_run_context.context,
+                               cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR,
+                               hostbuf=host_array[range_start:range_end, ...])
+            mcmc_state_buffers[mcmc_state_element] = buffer
+            data_buffers.append(buffer)
 
         data_buffers.append(cl.LocalMemory(workgroup_size * np.dtype('double').itemsize))
 
@@ -190,22 +279,22 @@ class _MHWorker(Worker):
             data_buffers.append(cl.Buffer(self._cl_run_context.context,
                                           cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data))
 
-        kernel_event = self._kernel.sample(self._cl_run_context.queue,
-                                           (int(nmr_problems * workgroup_size),),
-                                           (int(workgroup_size),),
-                                           *data_buffers)
-
-        return [self._enqueue_readout(samples_buf, self._samples, 0, nmr_problems, [kernel_event]),
-                self._enqueue_readout(proposal_buffer, self._proposal_state, 0, nmr_problems, [kernel_event])]
+        return data_buffers, samples_buf, proposal_buffer, mcmc_state_buffers, current_chain_position_buffer
 
     def _get_kernel_source(self):
-        kernel_param_names = ['global mot_float_type* params',
+        kernel_param_names = ['global mot_float_type* current_chain_position',
                               'global mot_float_type* samples',
-                              'global mot_float_type* final_proposal_state',
-                              'local double* log_likelihood_tmp']
+                              'global mot_float_type* global_proposal_state']
+
+        for mcmc_state_element in self._mcmc_state_kernel_order:
+            cl_type = self._mcmc_state[mcmc_state_element]['cl_type']
+            kernel_param_names.append('global {}* global_{}'.format(cl_type, mcmc_state_element))
+
+        kernel_param_names.append('local double* log_likelihood_tmp')
+
         kernel_param_names.extend(self._model.get_kernel_param_names(self._cl_environment.device))
 
-        proposal_state_size = len(self._model.get_proposal_state())
+        proposal_state_size = self._model.get_proposal_state().shape[1]
 
         kernel_source = '''
             #define NMR_INST_PER_PROBLEM ''' + str(self._model.get_nmr_inst_per_problem()) + '''
@@ -345,9 +434,10 @@ class _MHWorker(Worker):
                          local mot_float_type* const proposal_state,
                          local uint* const sampling_counter,
                          local uint* const acceptance_counter,
-                         local mot_float_type* parameter_mean,
-                         local mot_float_type* parameter_variance,
-                         local mot_float_type* parameter_m2,
+                         ''' + ('''local mot_float_type* parameter_mean,
+                                   local mot_float_type* parameter_variance,
+                                   local mot_float_type* parameter_variance_update_m2,'''
+                                if self._update_parameter_variances else '') + '''
                          global mot_float_type* samples,
                          local double* log_likelihood_tmp){
 
@@ -355,12 +445,6 @@ class _MHWorker(Worker):
                 uint problem_ind = get_group_id(0);
                 bool is_first_work_item = get_local_id(0) == 0;
                 mot_float_type previous_mean;
-
-                for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
-                    parameter_mean[j] = x_local[j];
-                    parameter_variance[j] = 0;
-                    parameter_m2[j] = 0;
-                }
 
                 for(i = 0; i < ''' + str(self._nmr_samples * (self._sample_intervals + 1)
                                          + self._burn_length) + '''; i++){
@@ -374,31 +458,37 @@ class _MHWorker(Worker):
                             sampling_counter[j]++;
                         }
 
-                        ''' + ('updateProposalState(proposal_state, sampling_counter, acceptance_counter, '
-                               'parameter_variance);'
+                        ''' + ('updateProposalState(proposal_state, sampling_counter, acceptance_counter' +
+                                (', parameter_variance' if self._update_parameter_variances else '')
+                                    + ');'
                                if self.use_adaptive_proposals else '') + '''
 
+                        '''
+        if self._update_parameter_variances:
+            kernel_source += '''
                         if(i > 0){
                             for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
                                 // online variance, algorithm by Welford
                                 //  B. P. Welford (1962)."Note on a method for calculating corrected sums of squares
                                 //      and products". Technometrics 4(3):419–420.
                                 //
-                                // and studied in:
+                                // also studied in:
                                 // Chan, Tony F.; Golub, Gene H.; LeVeque, Randall J. (1983).
                                 //      Algorithms for Computing the Sample Variance: Analysis and Recommendations.
                                 //      The American Statistician 37, 242-247. http://www.jstor.org/stable/2683386
 
                                 previous_mean = parameter_mean[j];
                                 parameter_mean[j] += (x_local[j] - parameter_mean[j]) / (i + 1);
-                                parameter_m2[j] += (x_local[j] - previous_mean) * (x_local[j] - parameter_mean[j]);
+                                parameter_variance_update_m2[j] += (x_local[j] - previous_mean)
+                                                                      * (x_local[j] - parameter_mean[j]);
 
                                 if(i > 1){
-                                    parameter_variance[j] = parameter_m2[j] / (i - 1);
+                                    parameter_variance[j] = parameter_variance_update_m2[j] / (i - 1);
                                 }
                             }
                         }
-
+            '''
+        kernel_source += '''
                         if(i >= ''' + str(self._burn_length) + ''' &&
                             i % ''' + str(self._sample_intervals + 1) + ''' == 0){
 
@@ -438,35 +528,80 @@ class _MHWorker(Worker):
                 // the following items are used for updating the proposals, do not use them for other purposes
                 local uint sampling_counter[''' + str(self._nmr_params) + '''];
                 local uint acceptance_counter[''' + str(self._nmr_params) + '''];
+
+                '''
+        if self._update_parameter_variances:
+            kernel_source += '''
                 local mot_float_type parameter_mean[''' + str(self._nmr_params) + '''];
-                local mot_float_type parameter_m2[''' + str(self._nmr_params) + ''']; // used in calculation of variance
+                local mot_float_type parameter_variance_update_m2[
+                    ''' + str(self._nmr_params) + ''']; // M2, part of online calculation of variance
                 local mot_float_type parameter_variance[''' + str(self._nmr_params) + '''];
+            '''
+        kernel_source += '''
 
                 if(get_local_id(0) == 0){
                     for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
-                        x_local[i] = params[problem_ind * ''' + str(self._nmr_params) + ''' + i];
+                        x_local[i] = current_chain_position[problem_ind * ''' + str(self._nmr_params) + ''' + i];
+
+                        sampling_counter[i] = global_proposal_state_sampling_counter[
+                            problem_ind * ''' + str(self._nmr_params) + ''' + i];
+                        acceptance_counter[i] = global_proposal_state_acceptance_counter[
+                            problem_ind * ''' + str(self._nmr_params) + ''' + i];
+
+                '''
+        if self._update_parameter_variances:
+            kernel_source += '''
+                        parameter_variance[i] = global_online_parameter_variance[
+                            problem_ind * ''' + str(self._nmr_params) + ''' + i];
+                        parameter_variance_update_m2[i] = global_online_parameter_variance_update_m2[
+                            problem_ind * ''' + str(self._nmr_params) + ''' + i];
+                        parameter_mean[i] = global_online_parameter_mean[
+                            problem_ind * ''' + str(self._nmr_params) + ''' + i];
+            '''
+        kernel_source += '''
+                    }
+
+                    for(int i = 0; i < ''' + str(proposal_state_size) + '''; i++){
+                        proposal_state[i] = global_proposal_state[
+                                problem_ind * ''' + str(proposal_state_size) + ''' + i];
                     }
 
                     current_prior = getLogPrior((void*)&data, x_local);
-
-                    ''' + ' '.join('proposal_state[{}] = {};'.format(i, v)
-                                   for i, v in enumerate(self._model.get_proposal_state())) + '''
-                    ''' + ' '.join('sampling_counter[{}] = 0;'.format(i)
-                                   for i in range(self._nmr_params)) + '''
-                    ''' + ' '.join('acceptance_counter[{}] = 0;'.format(i)
-                                   for i in range(self._nmr_params)) + '''
                 }
+
                 _fill_log_likelihood_tmp((void*)&data, x_local, log_likelihood_tmp);
                 _sum_log_likelihood_tmp_local(log_likelihood_tmp, &current_likelihood);
 
                 _sample(x_local, rng_data, &current_likelihood,
                     &current_prior, (void*)&data, proposal_state, sampling_counter, acceptance_counter,
-                    parameter_mean, parameter_variance, parameter_m2, samples, log_likelihood_tmp);
+                    ''' + ('parameter_mean, parameter_variance, parameter_variance_update_m2,'
+                            if self._update_parameter_variances else '') + '''
+                    samples, log_likelihood_tmp);
 
                 if(get_local_id(0) == 0){
+                    for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
+                        current_chain_position[problem_ind * ''' + str(self._nmr_params) + ''' + i] = x_local[i];
+
+                        global_proposal_state_sampling_counter[
+                            problem_ind * ''' + str(self._nmr_params) + ''' + i] = sampling_counter[i];
+                        global_proposal_state_acceptance_counter[
+                            problem_ind * ''' + str(self._nmr_params) + ''' + i] = acceptance_counter[i];
+                '''
+        if self._update_parameter_variances:
+            kernel_source += '''
+                        global_online_parameter_variance[
+                            problem_ind * ''' + str(self._nmr_params) + ''' + i] = parameter_variance[i];
+                        global_online_parameter_variance_update_m2[
+                            problem_ind * ''' + str(self._nmr_params) + ''' + i] = parameter_variance_update_m2[i];
+                        global_online_parameter_mean[
+                            problem_ind * ''' + str(self._nmr_params) + ''' + i] = parameter_mean[i];
+            '''
+        kernel_source += '''
+                    }
+
                     for(int i = 0; i < ''' + str(proposal_state_size) + '''; i++){
-                        final_proposal_state[problem_ind
-                                             * ''' + str(proposal_state_size) + ''' + i] = proposal_state[i];
+                        global_proposal_state[
+                            problem_ind * ''' + str(proposal_state_size) + ''' + i] = proposal_state[i];
                     }
                 }
             }

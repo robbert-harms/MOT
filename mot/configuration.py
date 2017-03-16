@@ -35,9 +35,7 @@ _config = {
     'load_balancer': PreferGPU(),
     'compile_flags': {
         'general': {
-            # this flag is automatically disabled when running in double mode
-            '-cl-single-precision-constant': True,
-
+            '-cl-single-precision-constant': True,  # this flag is automatically disabled when running in double mode
             '-cl-denorms-are-zero': True,
             '-cl-mad-enable': True,
             '-cl-no-signed-zeros': True
