@@ -25,7 +25,7 @@ class MetropolisHastings(AbstractSampler):
         Args:
             cl_environments: a list with the cl environments to use
             load_balancer: the load balance strategy to use
-            nmr_samples (int): The length of the (returned) chain per voxel, defaults to 500
+            nmr_samples (int): The length of the (returned) chain per voxel, defaults to 0
             burn_length (int): The length of the burn in (per voxel), these are extra samples,
                 jump is set to 1 (no thinning)
             sample_intervals (int): how many sample we wait before storing one.
@@ -49,7 +49,7 @@ class MetropolisHastings(AbstractSampler):
         self.use_adaptive_proposals = use_adaptive_proposals
 
         if self.burn_length is None:
-            self.burn_length = 500
+            self.burn_length = 0
 
         if self.sample_intervals is None:
             self.sample_intervals = 0
@@ -245,6 +245,7 @@ class _MHWorker(Worker):
 
         return return_events
 
+    # todo, use other way to initialize the buffers
     def _get_buffers(self, range_start, range_end, workgroup_size):
         data_buffers = []
 
