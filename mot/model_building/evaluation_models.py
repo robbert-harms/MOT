@@ -2,7 +2,7 @@ from mot.model_building.cl_functions.parameters import FreeParameter
 from mot.model_building.cl_functions.base import ModelFunction
 from mot.model_building.cl_functions.library_functions import Bessel
 from mot.model_building.parameter_functions.transformations import ClampTransform
-from mot.cl_data_type import CLDataType
+from mot.cl_data_type import SimpleCLDataType
 
 
 __author__ = 'Robbert Harms'
@@ -31,14 +31,14 @@ class EvaluationModel(ModelFunction):
 
                 .. code-block:: c
 
-                    mot_float_type <fname>(const void* data, const mot_float_type* x,
+                    double <fname>(const void* data, const mot_float_type* x,
                                            const int observation_index);
 
             obs_fname (str): the name of the function that can be called for the observed data, its signature is:
 
                 .. code-block:: c
 
-                    mot_float_type <fname>(const void* data, const int observation_index);
+                    double <fname>(const void* data, const int observation_index);
 
             param_listing (str): the parameter listings for the parameters of the noise model
 
@@ -66,14 +66,14 @@ class EvaluationModel(ModelFunction):
 
                 .. code-block:: c
 
-                    mot_float_type <fname>(const void* data, const mot_float_type* x,
+                    double <fname>(const void* data, const mot_float_type* x,
                                            const int observation_index);
 
             obs_fname (str): the name of the function that can be called for the observed data, its signature is:
 
                 .. code-block:: c
 
-                    mot_float_type <fname>(const void* data, const int observation_index);
+                    double <fname>(const void* data, const int observation_index);
 
             param_listing (str): the parameter listings for the parameters of the noise model
 
@@ -96,14 +96,14 @@ class EvaluationModel(ModelFunction):
 
                 .. code-block:: c
 
-                    mot_float_type <fname>(const void* data, const mot_float_type* x,
+                    double <fname>(const void* data, const mot_float_type* x,
                                            const int observation_index);
 
             obs_fname (str): the name of the function that can be called for the observed data, its signature is:
 
                 .. code-block:: c
 
-                    mot_float_type <fname>(const void* data, const int observation_index);
+                    double <fname>(const void* data, const int observation_index);
 
             param_listing (str): the parameter listings for the parameters of the noise model
             full_likelihood (boolean): if we want the complete likelihood, or if we can drop the constant terms.
@@ -130,14 +130,14 @@ class EvaluationModel(ModelFunction):
 
                 .. code-block:: c
 
-                    mot_float_type <fname>(const void* data, const mot_float_type* x,
+                    double <fname>(const void* data, const mot_float_type* x,
                                            const int observation_index);
 
             obs_fname (str): the name of the function that can be called for the observed data, its signature is:
 
                 .. code-block:: c
 
-                    mot_float_type <fname>(const void* data, const int observation_index);
+                    double <fname>(const void* data, const int observation_index);
 
             param_listing (str): the parameter listings for the parameters of the noise model
             full_likelihood (boolean): if we want the complete likelihood, or if we can drop the constant terms.
@@ -259,7 +259,7 @@ class GaussianEvaluationModel(EvaluationModel):
         super(GaussianEvaluationModel, self).__init__(
             'GaussianNoise',
             'gaussianNoiseModel',
-            (FreeParameter(CLDataType.from_string('mot_float_type'), 'sigma', True, 1, 0, 'INFINITY',
+            (FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'sigma', True, 1, 0, 'INFINITY',
                            parameter_transform=ClampTransform()),), ())
 
     def get_objective_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
@@ -362,7 +362,7 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
         super(OffsetGaussianEvaluationModel, self).__init__(
             'OffsetGaussianNoise',
             'offsetGaussianNoiseModel',
-            (FreeParameter(CLDataType.from_string('mot_float_type'), 'sigma', True, 1, 0, 'INFINITY',
+            (FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'sigma', True, 1, 0, 'INFINITY',
                            parameter_transform=ClampTransform()),), ())
 
     def get_objective_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
@@ -473,7 +473,7 @@ class RicianEvaluationModel(EvaluationModel):
         super(RicianEvaluationModel, self).__init__(
             'RicianNoise',
             'ricianNoiseModel',
-            (FreeParameter(CLDataType.from_string('mot_float_type'), 'sigma', True, 1, 0, 'INFINITY',
+            (FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'sigma', True, 1, 0, 'INFINITY',
                            parameter_transform=ClampTransform()),),
             (Bessel(),))
 

@@ -20,6 +20,7 @@ class DataAdapter(object):
         Returns:
             mot.cl_data_type.CLDataType: the datatype
         """
+        raise NotImplementedError()
 
     def get_opencl_data(self):
         """Adapt and return the data for use in OpenCL kernels.
@@ -27,6 +28,7 @@ class DataAdapter(object):
         Returns:
             np.ndarray: the data to be used in compute kernels.
         """
+        raise NotImplementedError()
 
     def get_opencl_numpy_type(self):
         """Get the numpy type for the data in this class for OpenCL use.
@@ -34,6 +36,7 @@ class DataAdapter(object):
         Returns:
             np.dtype: the numpy type for the data
         """
+        raise NotImplementedError()
 
     def allow_local_pointer(self):
         """If this data can be put in a local storage pointer if there is enough memory for it.
@@ -41,6 +44,7 @@ class DataAdapter(object):
         Returns:
             boolean: if we allow this memory to be referenced by a local pointer or not.
         """
+        raise NotImplementedError()
 
 
 class SimpleDataAdapter(DataAdapter):

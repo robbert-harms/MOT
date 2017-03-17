@@ -85,7 +85,7 @@ def get_load_balancer():
     """Get the current load balancer to use during CL calculations.
 
     Returns:
-        LoadBalanceStrategy: the current load balancer to use
+        SimpleLoadBalanceStrategy: the current load balancer to use
     """
     return _config['load_balancer']
 
@@ -94,7 +94,7 @@ def set_load_balancer(load_balancer):
     """Set the current CL environments to the given list
 
     Args:
-        load_balancer (LoadBalanceStrategy): the current load balancer to use
+        load_balancer (SimpleLoadBalanceStrategy): the current load balancer to use
     """
     _config['load_balancer'] = load_balancer
 
@@ -199,7 +199,7 @@ class RuntimeConfigurationAction(SimpleConfigAction):
 
         Args:
             cl_environments (list of CLEnvironment): the new CL environments we wish to use for future computations
-            load_balancer (LoadBalanceStrategy): the load balancer to use
+            load_balancer (SimpleLoadBalanceStrategy): the load balancer to use
         """
         super(RuntimeConfigurationAction, self).__init__()
         self._cl_environments = cl_environments

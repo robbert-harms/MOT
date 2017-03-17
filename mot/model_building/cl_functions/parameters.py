@@ -1,6 +1,6 @@
 from copy import copy
 
-from mot.cl_data_type import CLDataType
+from mot.cl_data_type import SimpleCLDataType
 from mot.model_building.parameter_functions.priors import UniformWithinBoundsPrior
 from mot.model_building.parameter_functions.proposals import GaussianProposal
 from mot.model_building.parameter_functions.sample_statistics import GaussianPSS
@@ -18,7 +18,7 @@ class CLFunctionParameter(object):
         """Creates a new function parameter for the CL functions.
 
         Args:
-            data_type (mot.cl_data_type.CLDataType): the data type expected by this parameter
+            data_type (mot.cl_data_type.SimpleCLDataType): the data type expected by this parameter
             name (str): The name of this parameter
 
         Attributes:
@@ -74,7 +74,7 @@ class CurrentObservationParam(CLFunctionParameter):
 
         You can use this parameter by adding it to your model and then use the current name in your model equation.
         """
-        super(CurrentObservationParam, self).__init__(CLDataType.from_string('mot_float_type'), name)
+        super(CurrentObservationParam, self).__init__(SimpleCLDataType.from_string('mot_float_type'), name)
 
 
 class StaticMapParameter(CLFunctionParameter):
@@ -90,7 +90,7 @@ class StaticMapParameter(CLFunctionParameter):
         and differ per problem instance. This makes them differ slightly in semantics.
 
         Args:
-            data_type (mot.cl_data_type.CLDataType): the data type expected by this parameter
+            data_type (mot.cl_data_type.SimpleCLDataType): the data type expected by this parameter
             name (str): The name of this parameter
             value (double or ndarray): A single value for all voxels or a list of values for each voxel
 
@@ -118,7 +118,7 @@ class ModelDataParameter(CLFunctionParameter):
         and for every measurement point (protocol in DMRI). They can consist of vector and array types.
 
         Args:
-            data_type (mot.cl_data_type.CLDataType): the data type expected by this parameter
+            data_type (mot.cl_data_type.SimpleCLDataType): the data type expected by this parameter
             name (str): The name of this parameter
             value (double or ndarray): A single value for all voxels or a list of values for each voxel
 
@@ -139,15 +139,15 @@ class FreeParameter(CLFunctionParameter):
         These parameters may optionally be fixed to a value or list of values for all voxels.
 
         Args:
-            data_type (mot.cl_data_type.CLDataType): the data type expected by this parameter
+            data_type (mot.cl_data_type.SimpleCLDataType): the data type expected by this parameter
             name (str): The name of this parameter
             fixed (boolean): If this parameter is fixed to the value given
             value (double or ndarray): A single value for all voxels or a list of values for each voxel
             lower_bound (double): The lower bound of this parameter
             upper_bound (double): The upper bound of this parameter
             parameter_transform (AbstractTransformation): The parameter transformation function
-            sampling_proposal (AbstractParameterProposal): The proposal function for use in model sampling
-            sampling_prior (AbstractParameterPrior): The prior function for use in model sampling
+            sampling_proposal (ParameterProposal): The proposal function for use in model sampling
+            sampling_prior (ParameterPrior): The prior function for use in model sampling
             sampling_statistics (ParameterSampleStatistics): The statistic functions used to get
                 statistics out of the samples
 
@@ -157,8 +157,8 @@ class FreeParameter(CLFunctionParameter):
             upper_bound (number or ndarray): The upper bound
             fixed (boolean): If this free parameter is fixed to its value.
             parameter_transform (AbstractTransformation): The parameter transformation (codec information)
-            sampling_proposal (AbstractParameterProposal): The proposal function for use in model sampling
-            sampling_prior (AbstractParameterPrior): The prior function for use in model sampling
+            sampling_proposal (ParameterProposal): The proposal function for use in model sampling
+            sampling_prior (ParameterPrior): The prior function for use in model sampling
             sampling_statistics (ParameterSampleStatistics): The statistic functions used to get
                 statistics out of the samples
         """

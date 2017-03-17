@@ -8,7 +8,7 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class AbstractParameterProposal(object):
+class ParameterProposal(object):
     """The parameter proposals are meant for use during sampling.
 
     Proposal functions are an essential part in sampling as they provide new candidate points for the sampler.
@@ -22,7 +22,7 @@ class AbstractParameterProposal(object):
         Returns:
             boolean: if the proposal function is symmetric return True, else False.
         """
-        return True
+        raise NotImplementedError()
 
     def is_adaptable(self):
         """Check if this proposal is adaptable, i.e., if we need to update any of its parameters during sampling.
@@ -30,7 +30,7 @@ class AbstractParameterProposal(object):
         Returns:
             boolean: return True if the proposal is adaptable, else False
         """
-        return NotImplementedError
+        raise NotImplementedError()
 
     def get_parameters(self):
         """The proposal parameters.
@@ -38,6 +38,7 @@ class AbstractParameterProposal(object):
         Returns:
             list of ProposalParameter: the proposal parameter objects used by this proposal
         """
+        raise NotImplementedError()
 
     def get_proposal_function(self):
         """Get the proposal function as a CL string. This should include include guards (#ifdef's).
@@ -54,6 +55,7 @@ class AbstractParameterProposal(object):
         Returns:
             str: The cl function
         """
+        raise NotImplementedError()
 
     def get_proposal_function_name(self):
         """Get the name of the proposal function call.
@@ -63,6 +65,7 @@ class AbstractParameterProposal(object):
          Returns:
             str: name of the function
         """
+        raise NotImplementedError()
 
     def get_proposal_logpdf_function(self):
         """Get the proposal pdf function as a CL string.
@@ -79,6 +82,7 @@ class AbstractParameterProposal(object):
         Returns:
             str: The proposal log pdf function as a CL string
         """
+        raise NotImplementedError()
 
     def get_proposal_logpdf_function_name(self):
         """Get the name of the proposal logpdf function call.
@@ -88,6 +92,7 @@ class AbstractParameterProposal(object):
          Returns:
             str: name of the function
         """
+        raise NotImplementedError()
 
     def get_proposal_update_function(self):
         """Get the proposal update function to use for updating the adaptable parameters.
@@ -96,6 +101,7 @@ class AbstractParameterProposal(object):
             mot.model_building.parameter_functions.proposal_updates.ProposalUpdate: the proposal update function
                 defining the update mechanism
         """
+        raise NotImplementedError()
 
 
 class ProposalParameter(object):
@@ -116,7 +122,7 @@ class ProposalParameter(object):
         self.adaptable = adaptable
 
 
-class SimpleProposal(AbstractParameterProposal):
+class SimpleProposal(ParameterProposal):
 
     def __init__(self, proposal_body, proposal_name, parameters, is_symmetric=True, logpdf_body='return 0;',
                  proposal_update_function=None):

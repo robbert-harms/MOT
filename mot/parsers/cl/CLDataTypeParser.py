@@ -1,5 +1,5 @@
 import re
-from mot.cl_data_type import CLDataType
+from mot.cl_data_type import SimpleCLDataType
 from mot.parsers.cl.CLDataType import CLDataTypeParser, CLDataTypeSemantics
 
 
@@ -15,7 +15,7 @@ class Semantics(CLDataTypeSemantics):
         self._post_data_type_type_qualifier = None
 
     def result(self, ast):
-        return CLDataType(
+        return SimpleCLDataType(
             self._raw_data_type,
             is_pointer_type=self._is_pointer_type,
             vector_length=self._vector_length,
@@ -67,7 +67,7 @@ def parse(parameter_declaration):
         parameter_declaration (str): the CL parameter declaration. Example: const float4* const test
 
     Returns:
-        mot.cl_data_type.CLDataType: the CL data type for this parameter declaration
+        mot.cl_data_type.SimpleCLDataType: the CL data type for this parameter declaration
     """
     parser = CLDataTypeParser(parseinfo=False)
     return parser.parse(parameter_declaration, rule_name='result', semantics=Semantics())

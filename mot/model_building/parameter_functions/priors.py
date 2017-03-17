@@ -1,5 +1,5 @@
 import numpy as np
-from mot.cl_data_type import CLDataType
+from mot.cl_data_type import SimpleCLDataType
 from mot.model_building.parameter_functions.proposals import GaussianProposal
 
 __author__ = 'Robbert Harms'
@@ -9,7 +9,7 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class AbstractParameterPrior(object):
+class ParameterPrior(object):
     """The priors are used during model sampling.
 
     These priors should be in the
@@ -35,6 +35,7 @@ class AbstractParameterPrior(object):
         Returns:
             str: The cl function
         """
+        raise NotImplementedError()
 
     def get_prior_function_name(self):
         """Get the name of the prior function call.
@@ -44,6 +45,7 @@ class AbstractParameterPrior(object):
          Returns:
             str: name of the function
         """
+        raise NotImplementedError()
 
     def get_parameters(self):
         """Get the additional parameters featured in this prior.
@@ -54,10 +56,10 @@ class AbstractParameterPrior(object):
             list of CLFunctionParameter: the list of function parameters to be added to the list of
                 parameters of the enclosing model.
         """
-        return []
+        raise NotImplementedError()
 
 
-class SimplePrior(AbstractParameterPrior):
+class SimplePrior(ParameterPrior):
 
     def __init__(self, prior_body, prior_name, prior_params=None, cl_preamble=None):
         """A prior template function.
@@ -182,9 +184,9 @@ class NormalPDF(SimplePrior):
     def __init__(self):
         r"""Normal PDF on the given value: :math:`P(v) = N(v; \mu, \sigma)`"""
         from mot.model_building.cl_functions.parameters import FreeParameter
-        params = [FreeParameter(CLDataType.from_string('mot_float_type'), 'mu', True, 0, -np.inf, np.inf,
+        params = [FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'mu', True, 0, -np.inf, np.inf,
                                 sampling_prior=AlwaysOne()),
-                  FreeParameter(CLDataType.from_string('mot_float_type'), 'sigma', True, 1, -np.inf, np.inf,
+                  FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'sigma', True, 1, -np.inf, np.inf,
                                 sampling_prior=AlwaysOne())]
 
         super(NormalPDF, self).__init__(
@@ -222,9 +224,9 @@ class AxialNormalPDF(SimplePrior):
         from mot.model_building.cl_functions.parameters import FreeParameter
         from mot.model_building.cl_functions.library_functions import Bessel, Trigonometrics
 
-        params = [FreeParameter(CLDataType.from_string('mot_float_type'), 'mu', True, 0, -np.inf, np.inf,
+        params = [FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'mu', True, 0, -np.inf, np.inf,
                                 sampling_prior=AlwaysOne()),
-                  FreeParameter(CLDataType.from_string('mot_float_type'), 'sigma', True, 1, -np.inf, np.inf,
+                  FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'sigma', True, 1, -np.inf, np.inf,
                                 sampling_prior=AlwaysOne())]
 
         super(AxialNormalPDF, self).__init__(
@@ -258,7 +260,7 @@ class ARDBeta(SimplePrior):
 
         """
         from mot.model_building.cl_functions.parameters import FreeParameter
-        params = [FreeParameter(CLDataType.from_string('mot_float_type'), 'beta', False, 1, 1e-4, 1000,
+        params = [FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'beta', False, 1, 1e-4, 1000,
                                 sampling_prior=ReciprocalPrior(),
                                 sampling_proposal=GaussianProposal(0.01))]
 
@@ -280,7 +282,7 @@ class ARDGaussian(SimplePrior):
         with the relationship :math:`\sigma = 1/\\sqrt(\\alpha)`.
         """
         from mot.model_building.cl_functions.parameters import FreeParameter
-        params = [FreeParameter(CLDataType.from_string('mot_float_type'), 'alpha', False, 8, 1e-5, 1e4,
+        params = [FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'alpha', False, 8, 1e-5, 1e4,
                                 sampling_prior=UniformWithinBoundsPrior(),
                                 sampling_proposal=GaussianProposal(20))]
 

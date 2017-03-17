@@ -14,6 +14,7 @@ class ProposalUpdate(object):
                 update function. It will only use the parameters that have ``adaptable`` set to True.
             address_space (str): the address space to use for the function parameters
         """
+        raise NotImplementedError()
 
     def get_function_name(self, proposal_parameters):
         """Get the name of the proposal update function.
@@ -25,6 +26,7 @@ class ProposalUpdate(object):
         Returns:
             str: the name of the function returned by :meth:`get_update_function`
         """
+        raise NotImplementedError()
 
     def uses_parameter_variance(self):
         """Check if this proposal update function uses the parameter variance.
@@ -34,6 +36,7 @@ class ProposalUpdate(object):
         Returns:
             boolean: if this proposal update function uses the parameter variance
         """
+        raise NotImplementedError()
 
     def uses_jump_counters(self):
         """Check if this proposal update function uses the jump counters (jump counter and acceptance counter).
@@ -43,6 +46,7 @@ class ProposalUpdate(object):
         Returns:
             boolean: if this proposal update function uses the jump counters
         """
+        raise NotImplementedError()
 
 
 class SimpleProposalUpdate(ProposalUpdate):

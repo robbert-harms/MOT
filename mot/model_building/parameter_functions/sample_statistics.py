@@ -8,6 +8,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
 class ParameterSampleStatistics(object):
+
     def get_mean(self, samples):
         """Given the distribution represented by this statistic, get the mean of the samples.
 
@@ -17,6 +18,7 @@ class ParameterSampleStatistics(object):
         Returns:
             A 1d ndarray with the mean per voxel.
         """
+        raise NotImplementedError()
 
     def get_std(self, samples):
         """Given the distribution represented by this statistic, get the standard deviation of the samples.
@@ -27,9 +29,11 @@ class ParameterSampleStatistics(object):
         Returns:
             A 1d array with the variance per voxel.
         """
+        raise NotImplementedError()
 
 
 class GaussianPSS(ParameterSampleStatistics):
+
     def get_mean(self, samples):
         return np.mean(samples, axis=1)
 

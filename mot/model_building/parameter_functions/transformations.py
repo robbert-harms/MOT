@@ -31,7 +31,7 @@ class AbstractTransformation(object):
         Returns
             AssignmentConstructor: The cl code assignment constructor for encoding the parameter.
         """
-        pass
+        raise NotImplementedError()
 
     def get_cl_decode(self):
         """Get the CL decode assignment constructor
@@ -39,7 +39,7 @@ class AbstractTransformation(object):
         Returns:
             AssignmentConstructor: The cl code assignment constructor for decoding the parameter.
         """
-        pass
+        raise NotImplementedError()
 
     @property
     def dependencies(self):
@@ -49,6 +49,50 @@ class AbstractTransformation(object):
             list of tuple: A list of (CLFunction, CLFunctionParameter) tuples.
         """
         return self._dependencies
+
+
+class AssignmentConstructor(object):
+
+    def create_assignment(self, parameter_variable, lower_bound, upper_bound):
+        """Create the assignment string.
+
+        Args:
+            parameter_variable (str): the name of the parameter variable holding the current value in the kernel
+            lower_bound (str): the value or the name of the variable holding the value for the lower bound
+            upper_bound (str): the value or the name of the variable holding the value for the upper bound
+
+        Returns:
+            str: the transformation assignment
+        """
+        raise NotImplementedError()
+
+
+class FormatAssignmentConstructor(AssignmentConstructor):
+
+    def __init__(self, assignment):
+        """Assignment constructor that formats the given assignment template.
+
+        This expects that the assignment string has elements like:
+
+        * ``{parameter_variable}``: for the parameter variable
+        * ``{lower_bound}``: for the lower bound
+        * ``{upper_bound}``: for the upper bound
+        * ``{dependency_variable_<n>}``: for the dependency variable names
+
+        Args:
+            assignment (str): the string containing the assignment template.
+        """
+        self._assignment = assignment
+
+    def create_assignment(self, parameter_variable, lower_bound, upper_bound, dependency_variables=()):
+        assignment = self._assignment.replace('{parameter_variable}', parameter_variable)
+        assignment = assignment.replace('{lower_bound}', lower_bound)
+        assignment = assignment.replace('{upper_bound}', upper_bound)
+
+        for ind, var_name in enumerate(dependency_variables):
+            assignment = assignment.replace('{dependency_variable_' + str(ind) + '}', var_name)
+
+        return assignment
 
 
 class IdentityTransform(AbstractTransformation):
@@ -174,46 +218,3 @@ class AbsModXTransform(AbstractTransformation):
 class AbsModPiTransform(AbsModXTransform):
     def __init__(self):
         super(AbsModPiTransform, self).__init__('M_PI')
-
-
-class AssignmentConstructor(object):
-
-    def create_assignment(self, parameter_variable, lower_bound, upper_bound):
-        """Create the assignment string.
-
-        Args:
-            parameter_variable (str): the name of the parameter variable holding the current value in the kernel
-            lower_bound (str): the value or the name of the variable holding the value for the lower bound
-            upper_bound (str): the value or the name of the variable holding the value for the upper bound
-
-        Returns:
-            str: the transformation assignment
-        """
-
-
-class FormatAssignmentConstructor(AssignmentConstructor):
-
-    def __init__(self, assignment):
-        """Assignment constructor that formats the given assignment template.
-
-        This expects that the assignment string has elements like:
-
-        * ``{parameter_variable}``: for the parameter variable
-        * ``{lower_bound}``: for the lower bound
-        * ``{upper_bound}``: for the upper bound
-        * ``{dependency_variable_<n>}``: for the dependency variable names
-
-        Args:
-            assignment (str): the string containing the assignment template.
-        """
-        self._assignment = assignment
-
-    def create_assignment(self, parameter_variable, lower_bound, upper_bound, dependency_variables=()):
-        assignment = self._assignment.replace('{parameter_variable}', parameter_variable)
-        assignment = assignment.replace('{lower_bound}', lower_bound)
-        assignment = assignment.replace('{upper_bound}', upper_bound)
-
-        for ind, var_name in enumerate(dependency_variables):
-            assignment = assignment.replace('{dependency_variable_' + str(ind) + '}', var_name)
-
-        return assignment

@@ -1,6 +1,6 @@
 import os
 from pkg_resources import resource_filename
-from mot.cl_data_type import CLDataType
+from mot.cl_data_type import SimpleCLDataType
 from mot.model_building.cl_functions.base import ModelFunction
 from mot.model_building.cl_functions.parameters import FreeParameter
 from mot.model_building.parameter_functions.priors import ARDGaussian, UniformWithinBoundsPrior
@@ -33,7 +33,7 @@ class Scalar(ModelFunction):
         super(Scalar, self).__init__(
             name,
             'cmScalar',
-            (FreeParameter(CLDataType.from_string('mot_float_type'), param_name,
+            (FreeParameter(SimpleCLDataType.from_string('mot_float_type'), param_name,
                            False, value, lower_bound, upper_bound, **parameter_settings),))
 
     def get_cl_header(self):

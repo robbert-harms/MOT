@@ -14,8 +14,6 @@ import math
 import time
 import timeit
 import warnings
-
-import gc
 import pyopencl as cl
 from six import string_types
 from .utils import device_type_from_string
@@ -29,13 +27,52 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
 class LoadBalanceStrategy(object):
+    """Basic interface of a load balancing strategy.
+
+    Every load balancer has the option to run the calculations in batches. The advantage of batches is that it is
+    interruptable and it may prevent memory errors since we run with smaller buffers. The disadvantage is that it
+    may be slower due to constant waiting to load the new kernel and due to GPU thread starvation.
+    """
+
+    def process(self, workers, nmr_items, run_in_batches=None, single_batch_length=None):
+        """Process all of the items using the callback function in the work packages.
+
+        The idea is that a strategy can be chosen on the fly by for example testing the execution time of the callback
+        functions. Alternatively, a strategy can be determined based on the available environments (in the WorkPackages)
+        and/or by the total number of items to be processed.
+
+        Args:
+            workers (Worker): a list of workers
+            nmr_items (int): an integer specifying the total number of items to be processed
+            run_in_batches (boolean): a implementing class may overwrite run_in_batches with this parameter. If None
+                the value is not used.
+            single_batch_length (int): a implementing class may overwrite single_batch_length with this parameter.
+                If None the value is not used.
+        """
+        raise NotImplementedError()
+
+    def get_used_cl_environments(self, cl_environments):
+        """Get a subset of CL environments that this strategy plans on using.
+
+        The CL routine contains the list of CL environments, which it gives to this function. It then
+        expects back either same list or a proper subset of this list.
+
+        This can be used by the using class to only create workers for environments actually in use. This might save
+        compile time.
+
+        Args:
+            cl_environments: the CL environments we want this strategy to check if it wants to use them.
+
+        Returns:
+            A subset of the CL environments, can be all of them.
+        """
+        raise NotImplementedError()
+
+
+class SimpleLoadBalanceStrategy(LoadBalanceStrategy):
 
     def __init__(self, run_in_batches=True, single_batch_length=1e6):
-        """ The base load balancer.
-
-        Every load balancer has the option to run the calculations in batches. The advantage of batches is that it is
-        interruptable and it may prevent memory errors since we run with smaller buffers. The disadvantage is that it
-        may be slower due to constant waiting to load the new kernel and due to GPU thread starvation.
+        """An abstract class for quickly implementing load balancing strategies.
 
         Args:
             run_in_batches (boolean): If we want to run the load per worker in batches or in one large run.
@@ -54,51 +91,15 @@ class LoadBalanceStrategy(object):
     def run_in_batches(self):
         return self._run_in_batches
 
-    @run_in_batches.setter
-    def run_in_batches(self, value):
-        self._run_in_batches = value
-
     @property
     def single_batch_length(self):
         return self._single_batch_length
 
-    @single_batch_length.setter
-    def single_batch_length(self, value):
-        self._single_batch_length = int(value)
-
     def process(self, workers, nmr_items, run_in_batches=None, single_batch_length=None):
-        """Process all of the items using the callback function in the work packages.
-
-        The idea is that a strategy can be chosen on the fly by for example testing the execution time of the callback
-        functions. Alternatively, a strategy can be determined based on the available environments (in the WorkPackages)
-        and/or by the total number of items to be processed.
-
-        Args:
-            workers (Worker): a list of workers
-            nmr_items (int): an integer specifying the total number of items to be processed
-            run_in_batches (boolean): a implementing class may overwrite run_in_batches with this parameter. If None
-                the value is not used.
-            single_batch_length (int): a implementing class may overwrite single_batch_length with this parameter.
-                If None the value is not used.
-        """
-        pass
+        raise NotImplementedError()
 
     def get_used_cl_environments(self, cl_environments):
-        """Get a subset of CL environments that this strategy plans on using.
-
-        The CL routine contains the list of CL environments, which it gives to this function. It then
-        expects back either same list or a proper subset of this list.
-
-        This can be used by the using class to only create workers for environments actually in use. This might save
-        compile time.
-
-        Args:
-            cl_environments: the CL environments we want this strategy to check if it wants to use them.
-
-        Returns:
-            A subset of the CL environments, can be all of them.
-        """
-        pass
+        raise NotImplementedError()
 
     def _create_batches(self, range_start, range_end, run_in_batches=None, single_batch_length=None):
         """Created batches in the given range.
@@ -274,39 +275,35 @@ class Worker(object):
             is_blocking=False)[1]
 
 
-class MetaLoadBalanceStrategy(LoadBalanceStrategy):
+class MetaLoadBalanceStrategy(SimpleLoadBalanceStrategy):
 
     def __init__(self, lb_strategy):
         """ Create a load balance strategy that uses another strategy to do the actual computations.
 
         Args:
-            lb_strategy (LoadBalanceStrategy): The load balance strategy this class uses.
+            lb_strategy (SimpleLoadBalanceStrategy): The load balance strategy this class uses.
         """
         super(MetaLoadBalanceStrategy, self).__init__()
         self._lb_strategy = lb_strategy or EvenDistribution()
+
+    def process(self, workers, nmr_items, run_in_batches=None, single_batch_length=None):
+        raise NotImplementedError()
+
+    def get_used_cl_environments(self, cl_environments):
+        raise NotImplementedError()
 
     @property
     def run_in_batches(self):
         """ Returns the value for the load balance strategy this class uses. """
         return self._lb_strategy.run_in_batches
 
-    @run_in_batches.setter
-    def run_in_batches(self, value):
-        """ Sets the value for the load balance strategy this class uses. """
-        self._lb_strategy.run_in_batches = value
-
     @property
     def single_batch_length(self):
         """ Returns the value for the load balance strategy this class uses. """
         return self._lb_strategy.single_batch_length
 
-    @single_batch_length.setter
-    def single_batch_length(self, value):
-        """ Sets the value for the load balance strategy this class uses. """
-        self._lb_strategy.single_batch_length = value
 
-
-class EvenDistribution(LoadBalanceStrategy):
+class EvenDistribution(SimpleLoadBalanceStrategy):
     """Give each worker exactly 1/nth of the work."""
 
     def process(self, workers, nmr_items, run_in_batches=None, single_batch_length=None):
@@ -331,7 +328,7 @@ class EvenDistribution(LoadBalanceStrategy):
         return cl_environments
 
 
-class RuntimeLoadBalancing(LoadBalanceStrategy):
+class RuntimeLoadBalancing(SimpleLoadBalanceStrategy):
 
     def __init__(self, test_percentage=10, run_in_batches=True, single_batch_length=1e6):
         """Distribute the work by trying to minimize the runtime.
@@ -387,7 +384,7 @@ class PreferSingleDeviceType(MetaLoadBalanceStrategy):
         """This is a meta load balance strategy, it uses the given strategy and prefers the use of the indicated device.
 
         Args:
-            lb_strategy (LoadBalanceStrategy): The strategy this class uses in the background.
+            lb_strategy (SimpleLoadBalanceStrategy): The strategy this class uses in the background.
             device_type (str or cl.device_type): either a cl device type or a string like ('gpu', 'cpu' or 'apu').
                 This variable indicates the type of device we want to use.
         """
@@ -421,7 +418,7 @@ class PreferGPU(PreferSingleDeviceType):
         """This is a meta load balance strategy, it uses the given strategy and prefers the use of GPU's.
 
         Args:
-            lb_strategy (LoadBalanceStrategy): The strategy this class uses in the background.
+            lb_strategy (SimpleLoadBalanceStrategy): The strategy this class uses in the background.
         """
         super(PreferGPU, self).__init__(device_type='GPU', lb_strategy=lb_strategy)
 
@@ -432,7 +429,7 @@ class PreferCPU(PreferSingleDeviceType):
         """This is a meta load balance strategy, it uses the given strategy and prefers the use of CPU's.
 
         Args:
-            lb_strategy (LoadBalanceStrategy): The strategy this class uses in the background.
+            lb_strategy (SimpleLoadBalanceStrategy): The strategy this class uses in the background.
         """
         super(PreferCPU, self).__init__(device_type='CPU', lb_strategy=lb_strategy)
 
@@ -446,7 +443,7 @@ class PreferSpecificEnvironment(MetaLoadBalanceStrategy):
         optimization of multiple subjects with each on a specific device.
 
         Args:
-            lb_strategy (LoadBalanceStrategy): The strategy this class uses in the background.
+            lb_strategy (SimpleLoadBalanceStrategy): The strategy this class uses in the background.
             environment_nmr (int): the specific environment to use in the list of CL environments
         """
         super(PreferSpecificEnvironment, self).__init__(lb_strategy)

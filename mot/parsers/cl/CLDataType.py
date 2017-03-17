@@ -242,7 +242,7 @@ if __name__ == '__main__':
             print()
             sys.exit(0)
 
-    parser = argparse.ArgumentParser(description="Simple parser for CLDataType.")
+    parser = argparse.ArgumentParser(description="Simple parser for SimpleCLDataType.")
     parser.add_argument('-l', '--list', action=ListRules, nargs=0,
                         help="list all rules and exit")
     parser.add_argument('-n', '--no-nameguard', action='store_true',

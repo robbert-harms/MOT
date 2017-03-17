@@ -1,6 +1,6 @@
 import numpy as np
 import copy
-from mot.cl_data_type import CLDataType
+from mot.cl_data_type import SimpleCLDataType
 from mot.cl_routines.mapping.calc_dependent_params import CalculateDependentParameters
 from mot.model_building.cl_functions.model_functions import Weight
 from mot.model_building.cl_functions.parameters import CurrentObservationParam, StaticMapParameter, ProtocolParameter, \
@@ -408,7 +408,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         starting_points = np.concatenate([np.transpose(np.array([s]))
                                           if len(s.shape) < 2 else s for s in starting_points], axis=1)
 
-        data_adapter = SimpleDataAdapter(starting_points, CLDataType.from_string('mot_float_type'),
+        data_adapter = SimpleDataAdapter(starting_points, SimpleCLDataType.from_string('mot_float_type'),
                                          self._get_mot_float_type())
         return data_adapter.get_opencl_data()
 
@@ -1062,7 +1062,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
             observations = self._transform_observations(observations)
 
-            data_adapter = SimpleDataAdapter(observations, CLDataType.from_string('mot_float_type*'),
+            data_adapter = SimpleDataAdapter(observations, SimpleCLDataType.from_string('mot_float_type*'),
                                              self._get_mot_float_type())
             var_data_dict.update({'observations': data_adapter})
 
@@ -1236,8 +1236,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
     def _get_mot_float_type(self):
         """Get the data type for the mot_float_type"""
         if self.double_precision:
-            return CLDataType.from_string('double')
-        return CLDataType.from_string('float')
+            return SimpleCLDataType.from_string('double')
+        return SimpleCLDataType.from_string('float')
 
     def _get_weight_sum_to_one_transformation(self):
         """Returns a snippit of CL for the encode and decode functions to force the sum of the weights to 1"""
