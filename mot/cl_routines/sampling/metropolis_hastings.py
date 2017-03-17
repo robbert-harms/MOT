@@ -245,7 +245,6 @@ class _MHWorker(Worker):
 
         return return_events
 
-    # todo, use other way to initialize the buffers
     def _get_buffers(self, range_start, range_end, workgroup_size):
         data_buffers = []
 

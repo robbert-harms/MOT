@@ -31,15 +31,15 @@ class SignalNoiseModel(ModelFunction):
 
             .. code-block:: c
 
-                mot_float_type fname(const mot_float_type signal, <noise model parameters ...>);
+                double fname(const double signal, <noise model parameters ...>);
 
             For example, if the noise model has only one parameter 'sigma' the function should look like:
 
             .. code-block:: c
 
-                mot_float_type fname(const mot_float_type signal, const mot_float_type sigma);
+                double fname(const double signal, const double sigma);
 
-            The CL function should return a single mot_float_type that represents the signal with the signal noise
+            The CL function should return a single double that represents the signal with the signal noise
                 added to it.
         """
 
@@ -57,12 +57,12 @@ class JohnsonSignalNoise(SignalNoiseModel):
         super(JohnsonSignalNoise, self).__init__(
             'JohnsonNoise',
             'johnsonNoiseModel',
-            (FreeParameter(CLDataType.from_string('mot_float_type'), 'eta', False, 0.1, 0, 100,
+            (FreeParameter(CLDataType.from_string('double'), 'eta', False, 0.1, 0, 100,
                            parameter_transform=CosSqrClampTransform()),), ())
 
     def get_signal_function(self, fname='signalNoiseModel'):
         return '''
-            mot_float_type ''' + fname + '''(const mot_float_type signal, const mot_float_type eta){
+            double ''' + fname + '''(const double signal, const double eta){
                 return sqrt((signal * signal) + (eta * eta));
             }
         '''

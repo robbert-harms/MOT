@@ -442,13 +442,13 @@ class OptimizeModelBuilder(OptimizeModelInterface):
     def get_observation_return_function(self, func_name='getObservation'):
         if self._problem_data.observations.shape[1] < 2:
             return '''
-                mot_float_type ''' + func_name + '''(const void* const data, const int observation_index){
+                double ''' + func_name + '''(const void* const data, const int observation_index){
                     return ((''' + self.get_kernel_data_struct_type() + '''*)data)->var_data_observations;
                 }
             '''
 
         return '''
-            mot_float_type ''' + func_name + '''(const void* const data, const int observation_index){
+            double ''' + func_name + '''(const void* const data, const int observation_index){
                 return ((''' + \
                     self.get_kernel_data_struct_type() + '''*)data)->var_data_observations[observation_index];
             }
@@ -463,7 +463,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             func += pre_model_function
 
         func += '''
-            mot_float_type ''' + func_name + \
+            double ''' + func_name + \
                 '(const void* const void_data, const mot_float_type* const x, const int observation_index){' + "\n"
         func += self.get_kernel_data_struct_type() + '* data = (' + self.get_kernel_data_struct_type() + '*)void_data;'
 
@@ -1396,7 +1396,7 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
             return_str += p.sampling_proposal.get_proposal_logpdf_function()
 
         return_str += '''
-            mot_float_type {func_name}(
+            double {func_name}(
                 const int i,
                 const mot_float_type proposal,
                 const mot_float_type current,

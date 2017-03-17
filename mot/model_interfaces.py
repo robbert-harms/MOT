@@ -188,8 +188,8 @@ class OptimizeModelInterface(object):
             str: An CL function with the signature:
                 .. code-block:: c
 
-                    mot_float_type <func_name>(const void* const data, const mot_float_type* const x,
-                                               const int observation_index);
+                    double <func_name>(const void* const data, const mot_float_type* const x,
+                                       const int observation_index);
         """
         raise NotImplementedError()
 
@@ -203,7 +203,7 @@ class OptimizeModelInterface(object):
             str: An CL function with the signature:
                 .. code-block:: c
 
-                    mot_float_type <func_name>(const void* const data, const int observation_index);
+                    double <func_name>(const void* const data, const int observation_index);
         """
         raise NotImplementedError()
 
@@ -453,9 +453,9 @@ class SampleModelInterface(OptimizeModelInterface):
             str: A function with the signature:
                 .. code-block:: c
 
-                    mot_float_type <func_name>(const int i, const mot_float_type proposal,
-                                               const mot_float_type current,
-                                               <address_space_proposal_state> mot_float_type* const proposal_state);
+                    double <func_name>(const int i, const mot_float_type proposal,
+                                       const mot_float_type current,
+                                       <address_space_proposal_state> mot_float_type* const proposal_state);
 
             Where ``i`` is the index of the parameter we would like to get the proposal from, ``current`` is the current
             value of that parameter and ``proposal`` the proposal value of the parameter. The final argument
