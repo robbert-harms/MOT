@@ -303,16 +303,16 @@ class _MHWorker(Worker):
         kernel_source += get_float_type_def(self._model.double_precision)
         kernel_source += self._model.get_kernel_data_struct(self._cl_environment.device)
         kernel_source += self._model.get_log_prior_function('getLogPrior', address_space_parameter_vector='local')
-        kernel_source += self._model.get_proposal_function('getProposal', address_space_proposal_state='local')
-        kernel_source += self._model.get_log_likelihood_per_observation_function('getLogLikelihoodPerObservation',
-                                                                                 full_likelihood=False)
+        kernel_source += self._model.get_proposal_function('getProposal', address_space_proposal_state='global')
+        kernel_source += self._model.get_log_likelihood_per_observation_function(
+            'getLogLikelihoodPerObservation', full_likelihood=False)
 
         if self.use_adaptive_proposals:
             kernel_source += self._model.get_proposal_state_update_function('updateProposalState',
-                                                                            address_space='local')
+                                                                            address_space='global')
 
         if not self._model.is_proposal_symmetric():
-            kernel_source += self._model.get_proposal_logpdf('getProposalLogPDF', address_space_proposal_state='local')
+            kernel_source += self._model.get_proposal_logpdf('getProposalLogPDF', address_space_proposal_state='global')
 
         kernel_source += '''
             void _fill_log_likelihood_tmp(const void* const data,
@@ -364,8 +364,8 @@ class _MHWorker(Worker):
                                local double* const current_likelihood,
                                local mot_float_type* const current_prior,
                                const void* const data,
-                               local mot_float_type* const proposal_state,
-                               local uint * const acceptance_counter,
+                               global mot_float_type* const proposal_state,
+                               global uint * const acceptance_counter,
                                local double* log_likelihood_tmp){
 
                 float4 random_nmr;
@@ -431,12 +431,12 @@ class _MHWorker(Worker):
                          local double* const current_likelihood,
                          local mot_float_type* const current_prior,
                          const void* const data,
-                         local mot_float_type* const proposal_state,
-                         local uint* const sampling_counter,
-                         local uint* const acceptance_counter,
-                         ''' + ('''local mot_float_type* parameter_mean,
-                                   local mot_float_type* parameter_variance,
-                                   local mot_float_type* parameter_variance_update_m2,'''
+                         global mot_float_type* const proposal_state,
+                         global uint* const sampling_counter,
+                         global uint* const acceptance_counter,
+                         ''' + ('''global mot_float_type* parameter_mean,
+                                   global mot_float_type* parameter_variance,
+                                   global mot_float_type* parameter_variance_update_m2,'''
                                 if self._update_parameter_variances else '') + '''
                          global mot_float_type* samples,
                          local double* log_likelihood_tmp){
@@ -523,47 +523,27 @@ class _MHWorker(Worker):
                 local double current_likelihood;
                 local mot_float_type current_prior;
 
-                local mot_float_type proposal_state[''' + str(proposal_state_size) + '''];
-
-                // the following items are used for updating the proposals, do not use them for other purposes
-                local uint sampling_counter[''' + str(self._nmr_params) + '''];
-                local uint acceptance_counter[''' + str(self._nmr_params) + '''];
-
+                global mot_float_type* proposal_state =
+                    global_proposal_state + problem_ind * ''' + str(proposal_state_size) + ''';
+                global mot_float_type* sampling_counter =
+                    global_proposal_state_sampling_counter + problem_ind * ''' + str(self._nmr_params) + ''';
+                global mot_float_type* acceptance_counter =
+                    global_proposal_state_acceptance_counter + problem_ind * ''' + str(self._nmr_params) + ''';
                 '''
         if self._update_parameter_variances:
             kernel_source += '''
-                local mot_float_type parameter_mean[''' + str(self._nmr_params) + '''];
-                local mot_float_type parameter_variance_update_m2[
-                    ''' + str(self._nmr_params) + ''']; // M2, part of online calculation of variance
-                local mot_float_type parameter_variance[''' + str(self._nmr_params) + '''];
+                global mot_float_type* parameter_mean =
+                    global_online_parameter_mean + problem_ind * ''' + str(self._nmr_params) + ''';
+                global mot_float_type* parameter_variance =
+                    global_online_parameter_variance + problem_ind * ''' + str(self._nmr_params) + ''';
+                global mot_float_type* parameter_variance_update_m2 =
+                    global_online_parameter_variance_update_m2 + problem_ind * ''' + str(self._nmr_params) + ''';
             '''
         kernel_source += '''
 
                 if(get_local_id(0) == 0){
                     for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                         x_local[i] = current_chain_position[problem_ind * ''' + str(self._nmr_params) + ''' + i];
-
-                        sampling_counter[i] = global_proposal_state_sampling_counter[
-                            problem_ind * ''' + str(self._nmr_params) + ''' + i];
-                        acceptance_counter[i] = global_proposal_state_acceptance_counter[
-                            problem_ind * ''' + str(self._nmr_params) + ''' + i];
-
-                '''
-        if self._update_parameter_variances:
-            kernel_source += '''
-                        parameter_variance[i] = global_online_parameter_variance[
-                            problem_ind * ''' + str(self._nmr_params) + ''' + i];
-                        parameter_variance_update_m2[i] = global_online_parameter_variance_update_m2[
-                            problem_ind * ''' + str(self._nmr_params) + ''' + i];
-                        parameter_mean[i] = global_online_parameter_mean[
-                            problem_ind * ''' + str(self._nmr_params) + ''' + i];
-            '''
-        kernel_source += '''
-                    }
-
-                    for(int i = 0; i < ''' + str(proposal_state_size) + '''; i++){
-                        proposal_state[i] = global_proposal_state[
-                                problem_ind * ''' + str(proposal_state_size) + ''' + i];
                     }
 
                     current_prior = getLogPrior((void*)&data, x_local);
@@ -581,27 +561,6 @@ class _MHWorker(Worker):
                 if(get_local_id(0) == 0){
                     for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                         current_chain_position[problem_ind * ''' + str(self._nmr_params) + ''' + i] = x_local[i];
-
-                        global_proposal_state_sampling_counter[
-                            problem_ind * ''' + str(self._nmr_params) + ''' + i] = sampling_counter[i];
-                        global_proposal_state_acceptance_counter[
-                            problem_ind * ''' + str(self._nmr_params) + ''' + i] = acceptance_counter[i];
-                '''
-        if self._update_parameter_variances:
-            kernel_source += '''
-                        global_online_parameter_variance[
-                            problem_ind * ''' + str(self._nmr_params) + ''' + i] = parameter_variance[i];
-                        global_online_parameter_variance_update_m2[
-                            problem_ind * ''' + str(self._nmr_params) + ''' + i] = parameter_variance_update_m2[i];
-                        global_online_parameter_mean[
-                            problem_ind * ''' + str(self._nmr_params) + ''' + i] = parameter_mean[i];
-            '''
-        kernel_source += '''
-                    }
-
-                    for(int i = 0; i < ''' + str(proposal_state_size) + '''; i++){
-                        global_proposal_state[
-                            problem_ind * ''' + str(proposal_state_size) + ''' + i] = proposal_state[i];
                     }
                 }
             }

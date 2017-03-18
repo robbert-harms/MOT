@@ -28,3 +28,4 @@ class AbstractSampler(CLRoutine):
                 If full output is true it returns a tuple with as first elements the samples dict, as second
                 an volumetric map dictionary and as last element a dictionary with the adaptive proposal values.
         """
+        raise NotImplementedError()
