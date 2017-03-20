@@ -511,6 +511,7 @@ class _MHWorker(Worker):
                 ){
 
                 uint problem_ind = get_group_id(0);
+                const uint nmr_params = ''' + str(self._nmr_params) + ''';
 
                 ''' + self._model.get_kernel_data_struct_initialization(self._cl_environment.device,
                                                                         'data', 'problem_ind') + '''
@@ -518,7 +519,7 @@ class _MHWorker(Worker):
                 rand123_data rand123_rng_data = ''' + self._get_rand123_init_cl_code() + ''';
                 void* rng_data = (void*)&rand123_rng_data;
 
-                local mot_float_type x_local[''' + str(self._nmr_params) + '''];
+                local mot_float_type x_local[nmr_params];
 
                 local double current_likelihood;
                 local mot_float_type current_prior;
@@ -526,24 +527,24 @@ class _MHWorker(Worker):
                 global mot_float_type* proposal_state =
                     global_proposal_state + problem_ind * ''' + str(proposal_state_size) + ''';
                 global mot_float_type* sampling_counter =
-                    global_proposal_state_sampling_counter + problem_ind * ''' + str(self._nmr_params) + ''';
+                    global_proposal_state_sampling_counter + problem_ind * nmr_params;
                 global mot_float_type* acceptance_counter =
-                    global_proposal_state_acceptance_counter + problem_ind * ''' + str(self._nmr_params) + ''';
+                    global_proposal_state_acceptance_counter + problem_ind * nmr_params;
                 '''
         if self._update_parameter_variances:
             kernel_source += '''
                 global mot_float_type* parameter_mean =
-                    global_online_parameter_mean + problem_ind * ''' + str(self._nmr_params) + ''';
+                    global_online_parameter_mean + problem_ind * nmr_params;
                 global mot_float_type* parameter_variance =
-                    global_online_parameter_variance + problem_ind * ''' + str(self._nmr_params) + ''';
+                    global_online_parameter_variance + problem_ind * nmr_params;
                 global mot_float_type* parameter_variance_update_m2 =
-                    global_online_parameter_variance_update_m2 + problem_ind * ''' + str(self._nmr_params) + ''';
+                    global_online_parameter_variance_update_m2 + problem_ind * nmr_params;
             '''
         kernel_source += '''
 
                 if(get_local_id(0) == 0){
-                    for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
-                        x_local[i] = current_chain_position[problem_ind * ''' + str(self._nmr_params) + ''' + i];
+                    for(int i = 0; i < nmr_params; i++){
+                        x_local[i] = current_chain_position[problem_ind * nmr_params + i];
                     }
 
                     current_prior = getLogPrior((void*)&data, x_local);
@@ -559,8 +560,8 @@ class _MHWorker(Worker):
                     samples, log_likelihood_tmp);
 
                 if(get_local_id(0) == 0){
-                    for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
-                        current_chain_position[problem_ind * ''' + str(self._nmr_params) + ''' + i] = x_local[i];
+                    for(int i = 0; i < nmr_params; i++){
+                        current_chain_position[problem_ind * nmr_params + i] = x_local[i];
                     }
                 }
             }

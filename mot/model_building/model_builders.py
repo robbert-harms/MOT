@@ -150,6 +150,19 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         self._lower_bounds[model_param_name] = value
         return self
 
+    def set_lower_bounds(self, lower_bounds):
+        """Apply multiple lower bounds from a dictionary.
+
+        Args:
+            lower_bounds (dict): per parameter a lower bound
+
+        Returns:
+            Returns self for chainability
+        """
+        for param, value in lower_bounds.items():
+            self.set_lower_bound(param, value)
+        return self
+
     def set_upper_bound(self, model_param_name, value):
         """Set the upper bound for the given parameter to the given value.
 
@@ -161,6 +174,19 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             Returns self for chainability
         """
         self._upper_bounds[model_param_name] = value
+        return self
+
+    def set_upper_bounds(self, upper_bounds):
+        """Apply multiple upper bounds from a dictionary.
+
+        Args:
+            upper_bounds (dict): per parameter a upper bound
+
+        Returns:
+            Returns self for chainability
+        """
+        for param, value in upper_bounds.items():
+            self.set_upper_bound(param, value)
         return self
 
     def unfix(self, model_param_name):
