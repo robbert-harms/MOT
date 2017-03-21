@@ -4,6 +4,7 @@ import numpy as np
 from mot.cl_routines.mapping.error_measures import ErrorMeasures
 from mot.cl_routines.mapping.residual_calculator import ResidualCalculator
 from mot.random123 import get_random123_cl_code, RandomStartingPoint
+from mot.mcmc_diagnostics import multivariate_ess, univariate_ess
 from ...utils import results_to_dict, get_float_type_def
 from ...load_balance_strategies import Worker
 from ...cl_routines.sampling.base import AbstractSampler
@@ -112,6 +113,17 @@ class MetropolisHastings(AbstractSampler):
                                            model.double_precision).calculate(errors)
             volume_maps.update(error_measures)
             self._logger.info('Done calculating errors measures')
+
+            self._logger.info('Calculating the multivariate ESS')
+            mv_ess = multivariate_ess(samples)
+            volume_maps.update(MultivariateESS=mv_ess)
+            self._logger.info('Finished calculating the multivariate ESS')
+
+            self._logger.info('Calculating the univariate ESS with method \'standard_error\'')
+            uv_ess = univariate_ess(samples, method='standard_error')
+            uv_ess_maps = results_to_dict(uv_ess, [a + '.UnivariateESS' for a in model.get_optimized_param_names()])
+            volume_maps.update(uv_ess_maps)
+            self._logger.info('Finished calculating the univariate ESS')
 
             # todo remove and simplify the MCMC state
             proposal_state_dict = results_to_dict(proposal_state, model.get_proposal_state_names())

@@ -554,10 +554,11 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         """This adds the final optimization maps to the results dictionary.
 
         Steps in finalizing the results dict:
+
             1) It first adds the maps for the dependent and fixed parameters
             2) Second it adds the extra maps defined in the models itself.
             3) Third it loops through the post_optimization_modifiers callback functions for the final updates.
-            4) Adds additional maps defined in this model subclass
+            4) Finally it adds additional maps defined in this model subclass
 
         For more documentation see the base method.
 

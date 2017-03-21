@@ -1,7 +1,11 @@
+"""This module contains some diagnostic functions to diagnose the performance of MCMC sampling.
+
+The two most important functions are :func:`multivariate_ess` and :func:`univariate_ess` to calculate the effective
+sample size of your samples.
+"""
 import os
 from collections import Mapping
 import multiprocessing
-
 import itertools
 import numpy as np
 from numpy.linalg import det
@@ -12,6 +16,116 @@ __author__ = 'Robbert Harms'
 __date__ = "2017-03-07"
 __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
+
+
+def multivariate_ess(samples, batch_size_generator=None):
+    r"""Estimate the multivariate Effective Sample Size for the samples of every problem.
+
+    This essentially applies :func:`estimate_multivariate_ess` to every problem.
+
+    Args:
+        samples (ndarray, dict or generator): either an matrix of shape (d, p, n) with d problems, p parameters and
+            n samples, or a dictionary with for every parameter a matrix with shape (d, n) or, finally,
+            a generator function that yields sample arrays of shape (p, n).
+        batch_size_generator (MultiVariateESSBatchSizeGenerator): the batch size generator, tells us how many
+            batches and of which size we use in estimating the minimum ESS.
+
+    Returns:
+        ndarray: the multivariate ESS per problem
+    """
+    samples_generator = _get_sample_generator(samples)
+
+    if os.name == 'nt': # In Windows there is no fork.
+        map_function = map
+    else:
+        p = multiprocessing.Pool()
+        map_function = p.imap
+
+    return np.array(list(map_function(_MultivariateESSMultiProcessing(batch_size_generator),
+                                      samples_generator())))
+
+
+class _MultivariateESSMultiProcessing(object):
+
+    def __init__(self, batch_size_generator):
+        """Used in the function :func:`multivariate_ess` to estimate the multivariate ESS using multiprocessing."""
+        self._batch_size_generator = batch_size_generator
+
+    def __call__(self, samples):
+        return estimate_multivariate_ess(samples, batch_size_generator=self._batch_size_generator)
+
+
+def univariate_ess(samples, method='standard_error', **kwargs):
+    r"""Estimate the univariate Effective Sample Size for the samples of every problem.
+
+    This essentially applies the chosen univariate ESS method on every problem.
+
+    Args:
+        samples (ndarray, dict or generator): either an matrix of shape (d, p, n) with d problems, p parameters and
+            n samples, or a dictionary with for every parameter a matrix with shape (d, n) or, finally,
+            a generator function that yields sample arrays of shape (p, n).
+        method (str): one of 'autocorrelation' or 'standard_error' defaults to 'standard_error'.
+            If 'autocorrelation' is chosen we apply the function: :func:`estimate_univariate_ess_autocorrelation`,
+            if 'standard_error` is choosen we apply the function: :func:`estimate_univariate_ess_standard_error`.
+        **kwargs: passed to the chosen compute method
+
+    Returns:
+        ndarray: a matrix of size (d, p) with for every problem and every parameter an ESS.
+    """
+    samples_generator = _get_sample_generator(samples)
+
+    if os.name == 'nt':  # In Windows there is no fork.
+        map_function = map
+    else:
+        p = multiprocessing.Pool()
+        map_function = p.imap
+
+    return np.array(list(map_function(_UnivariateESSMultiProcessing(method, **kwargs),
+                                      samples_generator())))
+
+
+class _UnivariateESSMultiProcessing(object):
+
+    def __init__(self, method, **kwargs):
+        """Used in the function :func:`univariate_ess` to estimate the univariate ESS using multiprocessing."""
+        self._method = method
+        self._kwargs = kwargs
+
+    def __call__(self, samples):
+        if self._method == 'autocorrelation':
+            compute_func = estimate_univariate_ess_autocorrelation
+        else:
+            compute_func = estimate_univariate_ess_standard_error
+
+        result = np.zeros(samples.shape[0])
+        for param_ind in range(samples.shape[0]):
+            result[param_ind] = compute_func(samples[param_ind], **self._kwargs)
+
+        return result
+
+
+def _get_sample_generator(samples):
+    """Get a sample generator from the given polymorphic input.
+
+    Args:
+        samples (ndarray, dict or generator): either an matrix of shape (d, p, n) with d problems, p parameters and
+            n samples, or a dictionary with for every parameter a matrix with shape (d, n) or, finally,
+            a generator function that yields sample arrays of shape (p, n).
+
+    Returns:
+        generator: a generator that yields a matrix of size (p, n) for every problem in the input.
+    """
+    if isinstance(samples, Mapping):
+        def samples_generator():
+            for ind in range(samples[list(samples.keys())[0]].shape[0]):
+                yield np.array([samples[s][ind, :] for s in sorted(samples)])
+    elif isinstance(samples, np.ndarray):
+        def samples_generator():
+            for ind in range(samples.shape[0]):
+                yield samples[ind]
+    else:
+        samples_generator = samples
+    return samples_generator
 
 
 def get_auto_correlation(chain, lag):
@@ -33,8 +147,9 @@ def get_auto_correlation(chain, lag):
     Returns:
         float: the autocorrelation with the given lag
     """
-    normalized_chain = chain - np.mean(chain)
-    return (np.mean(normalized_chain[:len(chain) - lag] * normalized_chain[lag:])) / np.var(chain)
+    normalized_chain = chain - np.mean(chain, dtype=np.float64)
+    lagged_mean = np.mean(normalized_chain[:len(chain) - lag] * normalized_chain[lag:], dtype=np.float64)
+    return lagged_mean / np.var(chain, dtype=np.float64)
 
 
 def get_auto_correlation_time(chain, max_lag=None):
@@ -63,24 +178,22 @@ def get_auto_correlation_time(chain, max_lag=None):
     """
     max_lag = max_lag or min(len(chain) // 3, 1000)
 
-    variance = np.var(chain)
+    normalized_chain = chain - np.mean(chain, dtype=np.float64)
 
-    normalized_chain = chain - np.mean(chain)
-
-    previous_arcoeff = variance
+    previous_accoeff = 0
     auto_corr_sum = 0
 
     for lag in range(1, max_lag):
-        auto_correlation_coeff = np.mean(normalized_chain[:len(chain) - lag] * normalized_chain[lag:])
+        auto_correlation_coeff = np.mean(normalized_chain[:len(chain) - lag] * normalized_chain[lag:], dtype=np.float64)
 
         if lag % 2 == 0:
-            if previous_arcoeff + auto_correlation_coeff <= 0:
+            if previous_accoeff + auto_correlation_coeff <= 0:
                 break
 
         auto_corr_sum += auto_correlation_coeff
-        previous_arcoeff = auto_correlation_coeff
+        previous_accoeff = auto_correlation_coeff
 
-    return auto_corr_sum / variance
+    return auto_corr_sum / np.var(chain, dtype=np.float64)
 
 
 def estimate_univariate_ess_autocorrelation(chain, max_lag=None):
@@ -113,11 +226,6 @@ def estimate_univariate_ess_autocorrelation(chain, max_lag=None):
     Returns:
         float: the estimated ESS
     """
-    variance = np.var(chain)
-
-    if variance == 0:
-        return 0
-
     return len(chain) / (1 + 2 * get_auto_correlation_time(chain, max_lag))
 
 
@@ -145,7 +253,7 @@ def estimate_univariate_ess_standard_error(chain, batch_size_generator=None, com
     """
     sigma = (monte_carlo_standard_error(chain, batch_size_generator=batch_size_generator,
                                         compute_method=compute_method) ** 2 * len(chain))
-    lambda_ = np.var(chain)
+    lambda_ = np.var(chain, dtype=np.float64)
     return len(chain) * (lambda_ / sigma)
 
 
@@ -238,7 +346,7 @@ def estimate_multivariate_ess_sigma(samples, batch_size):
     calculates :math:`\Sigma` for every offset and returns the average of those offsets.
 
     Args:
-        samples (ndarray): the samples for which we compute the sigma matrix. Expects an pxn array with
+        samples (ndarray): the samples for which we compute the sigma matrix. Expects an (p, n) array with
             p the number of parameters and n the sample size
         batch_size (int): the batch size used in the approximation of the correlation covariance
 
@@ -249,7 +357,7 @@ def estimate_multivariate_ess_sigma(samples, batch_size):
         Vats D, Flegal J, Jones G (2016). Multivariate Output Analysis for Markov Chain Monte Carlo.
         arXiv:1512.07713v2 [math.ST]
     """
-    sample_means = np.mean(samples, axis=1)
+    sample_means = np.mean(samples, axis=1, dtype=np.float64)
     nmr_params, chain_length = samples.shape
 
     nmr_batches = int(np.floor(chain_length / batch_size))
@@ -261,7 +369,7 @@ def estimate_multivariate_ess_sigma(samples, batch_size):
         batches = np.reshape(samples[:, np.array(offset + np.arange(0, nmr_batches * batch_size), dtype=np.int)].T,
                              [batch_size, nmr_batches, nmr_params], order='F')
 
-        batch_means = np.squeeze(np.mean(batches, axis=0))
+        batch_means = np.squeeze(np.mean(batches, axis=0, dtype=np.float64))
 
         Z = batch_means - sample_means
 
@@ -333,52 +441,6 @@ def estimate_multivariate_ess(samples, batch_size_generator=None, full_output=Fa
     if full_output:
         return ess_estimates[idx], sigma_estimates[..., idx], batch_sizes[idx]
     return ess_estimates[idx]
-
-
-def multivariate_ess(samples, batch_size_generator=None):
-    r"""Estimate the multivariate Effective Sample Size for the samples of every problem.
-
-    This essentially applies :func:`estimate_multivariate_ess` to every problem in the samples.
-
-    Args:
-        samples (ndarray, dict or generator): either an matrix of shape (d, n, p) with d problems, n samples
-            and p parameters or a dictionary with for every parameter a matrix with shape (d, n) or
-            a generator function that yields sample arrays of shape (d, n).
-        batch_size_generator (MultiVariateESSBatchSizeGenerator): the batch size generator, tells us how many
-            batches and of which size we use for estimating the minimum ESS.
-
-    Returns:
-        ndarray: the multivariate ESS per problem
-    """
-    if isinstance(samples, Mapping):
-        def samples_generator():
-            for ind in range(samples[list(samples.keys())[0]].shape[0]):
-                yield np.array([samples[s][ind, :] for s in sorted(samples)])
-    elif isinstance(samples, np.ndarray):
-        def samples_generator():
-            for ind in range(samples.shape[0]):
-                yield samples[ind]
-    else:
-        samples_generator = samples
-
-    if os.name == 'nt': # In Windows there is no fork.
-        map_function = map
-    else:
-        p = multiprocessing.Pool()
-        map_function = p.imap
-
-    return np.array(list(map_function(_MultivariateESSMultiProcessing(batch_size_generator),
-                                      samples_generator())))
-
-
-class _MultivariateESSMultiProcessing(object):
-
-    def __init__(self, batch_size_generator):
-        """Used in the function :func:`multivariate_ess` to estimate the multivariate ESS using multiprocessing."""
-        self._batch_size_generator = batch_size_generator
-
-    def __call__(self, samples):
-        return estimate_multivariate_ess(samples, batch_size_generator=self._batch_size_generator)
 
 
 def monte_carlo_standard_error(chain, batch_size_generator=None, compute_method=None):
@@ -517,9 +579,10 @@ class BatchMeansMCSE(ComputeMonteCarloStandardError):
         batch_means = np.zeros(nmr_batches)
 
         for batch_index in range(nmr_batches):
-            batch_means[batch_index] = np.mean(chain[int(batch_index * batch_size):int((batch_index + 1) * batch_size)])
+            batch_means[batch_index] = np.mean(
+                chain[int(batch_index * batch_size):int((batch_index + 1) * batch_size)], dtype=np.float64)
 
-        var_hat = batch_size * sum((batch_means - np.mean(chain))**2) / (nmr_batches - 1)
+        var_hat = batch_size * sum((batch_means - np.mean(chain, dtype=np.float64))**2) / (nmr_batches - 1)
         return np.sqrt(var_hat / len(chain))
 
 
@@ -532,7 +595,8 @@ class OverlappingBatchMeansMCSE(ComputeMonteCarloStandardError):
         batch_means = np.zeros(nmr_batches)
 
         for batch_index in range(nmr_batches):
-            batch_means[batch_index] = np.mean(chain[int(batch_index):int(batch_index + batch_size)])
+            batch_means[batch_index] = np.mean(chain[int(batch_index):int(batch_index + batch_size)], dtype=np.float64)
 
-        var_hat = len(chain) * batch_size * sum((batch_means - np.mean(chain))**2) / (nmr_batches - 1) / nmr_batches
+        var_hat = (len(chain) * batch_size
+                   * sum((batch_means - np.mean(chain, dtype=np.float64))**2)) / (nmr_batches - 1) / nmr_batches
         return np.sqrt(var_hat / len(chain))
