@@ -20,12 +20,9 @@ class MultiStepOptimizer(AbstractOptimizer):
         super(MultiStepOptimizer, self).__init__(**kwargs)
         self.optimizers = optimizers
 
-    def minimize(self, model, init_params=None, full_output=False):
+    def minimize(self, model, init_params=None):
+        results = None
         for index, optimizer in enumerate(self.optimizers):
-            use_full_output = False
-            if index == len(self.optimizers) - 1:
-                use_full_output = full_output
-
-            init_params = optimizer.minimize(model, init_params=init_params, full_output=use_full_output)
-
-        return init_params
+            results = optimizer.minimize(model, init_params=init_params)
+            init_params = results.get_optimization_result()
+        return results

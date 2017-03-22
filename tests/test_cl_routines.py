@@ -50,9 +50,9 @@ class TestRosenbrock(CLRoutineTestCase):
 
     def test_model(self):
         for optimizer in self.optimizers:
-            v = optimizer.minimize(self.model)
-            for p in self.model.get_optimized_param_names():
-                self.assertAlmostEqual(float(v[p]), 1.0, places=3)
+            v = optimizer.minimize(self.model).get_optimization_result()[0]
+            for ind in range(self.model.get_nmr_inst_per_problem()):
+                self.assertAlmostEqual(float(v[ind]), 1.0, places=3)
 
 
 class TestLSQNonLinExample(CLRoutineTestCase):
@@ -65,7 +65,7 @@ class TestLSQNonLinExample(CLRoutineTestCase):
 
     def test_model(self):
         for optimizer in self.optimizers:
-            v = optimizer.minimize(self.model)
+            v = optimizer.minimize(self.model).get_optimization_result()
             res = self.residual_calc.calculate(self.model, v)
             s = 0
             for i in range(res.shape[1]):

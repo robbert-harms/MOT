@@ -321,24 +321,6 @@ class OptimizeModelInterface(object):
         """
         raise NotImplementedError()
 
-    def finalize_optimization_results(self, results_dict):
-        """After optimization create the final dictionary with the result maps.
-
-        In this location extra maps can be added to the results dictionary.
-
-        This function behaves as a procedure and as a function. The input dict can be updated in place, but it should
-        also return a dict but that is merely for the purpose of chaining.
-
-        Args:
-            results_dict (dict): A dictionary with as keys the names of the parameters and as values the 1d maps with
-                for each voxel the optimized parameter value. The given dictionary can be altered by this function.
-
-        Returns:
-            dict: The same result dictionary but with updated values or with additional maps.
-                It should at least return the results_dict.
-        """
-        return results_dict
-
 
 class SampleModelInterface(OptimizeModelInterface):
 

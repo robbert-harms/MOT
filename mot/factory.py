@@ -1,4 +1,3 @@
-from mot.cl_routines.optimizing.grid_search import GridSearch
 from mot.cl_routines.optimizing.multi_step_optimizer import MultiStepOptimizer
 from mot.cl_routines.optimizing.random_restart import RandomRestart
 from mot.cl_routines.sampling.metropolis_hastings import MetropolisHastings
@@ -19,7 +18,7 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-optimizers = [LevenbergMarquardt, Powell, NMSimplex, MultiStepOptimizer, GridSearch, RandomRestart]
+optimizers = [LevenbergMarquardt, Powell, NMSimplex, MultiStepOptimizer, RandomRestart]
 samplers = [MetropolisHastings]
 filters = [GaussianFilter, MeanFilter, MedianFilter]
 load_balance_strategies = [EvenDistribution, RuntimeLoadBalancing, PreferGPU, PreferCPU, PreferSpecificEnvironment]

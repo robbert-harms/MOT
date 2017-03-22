@@ -14,18 +14,35 @@ class AbstractSampler(CLRoutine):
         super(AbstractSampler, self).__init__(cl_environments=cl_environments, load_balancer=load_balancer, **kwargs)
         self._logger = logging.getLogger(__name__)
 
-    def sample(self, model, init_params=None, full_output=False):
+    def sample(self, model, init_params=None):
         """Minimize the given model with the given codec using the given environments.
 
         Args:
             model (SampleModelInterface): the model to minimize
             init_params (dict): a dictionary containing the results of a previous run, provides the starting point
-            full_output (boolean): If true, also return other output parameters. It will then return a tuple like
-                (samples, other_output_maps, proposal_state). If False, we only return the samples.
 
         Returns:
-            dict or tuple: if full output is False we return only the samples in a dictionary.
-                If full output is true it returns a tuple with as first elements the samples dict, as second
-                an volumetric map dictionary and as last element a dictionary with the adaptive proposal values.
+            SamplingOutput: the sampling output object
         """
         raise NotImplementedError()
+
+
+class SamplingOutput(object):
+
+    def get_samples(self):
+        """Get the matrix containing the sampling results.
+
+        Returns:
+            ndarray: the sampled parameter maps, an (d, p, n) array with for d problems and p parameters n samples.
+        """
+        raise NotImplementedError()
+
+
+class SimpleSampleOutput(SamplingOutput):
+
+    def __init__(self, samples):
+        """Simple storage container for the sampling output"""
+        self._samples = samples
+
+    def get_samples(self):
+        return self._samples

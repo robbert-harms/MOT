@@ -1,5 +1,5 @@
 import numpy as np
-from mot.cl_routines.optimizing.base import AbstractOptimizer
+from mot.cl_routines.optimizing.base import AbstractOptimizer, SimpleOptimizationResult
 
 __author__ = 'Robbert Harms'
 __date__ = "2016-11-22"
@@ -16,10 +16,11 @@ class StartingPointGenerator(object):
 
         Args:
             model: the model for which we are generating points
-            previous_results (dict): the dictionary with per parameter the results
+            previous_results (ndarray): the previous results, an (d, p) array with for every d problems and n parameters
+                the (semi-)optimum value
 
         Returns:
-            dict: per parameter a ndarray with the new starting points per problem instance.
+            ndarray: array of same type and shape as the input but with the new starting points
         """
         return NotImplementedError
 
@@ -42,13 +43,13 @@ class PointsFromGrid(StartingPointGenerator):
         if self._iteration_counter == self.grid.shape[0]:
             return None
 
-        init_dict = {}
+        new_points = np.zeros_like(previous_results)
 
-        for param_ind, param_name in enumerate(model.get_optimized_param_names()):
-            init_dict[param_name] = np.ones(model.get_nmr_problems()) * self.grid[self._iteration_counter, param_ind]
+        for param_ind in range(new_points.shape[1]):
+            new_points[:, param_ind] = np.ones(model.get_nmr_problems()) * self.grid[self._iteration_counter, param_ind]
 
         self._iteration_counter += 1
-        return init_dict
+        return new_points
 
 
 class UsePrevious(StartingPointGenerator):
@@ -91,18 +92,15 @@ class RandomStartingPoint(StartingPointGenerator):
             return None
         self._iteration_counter += 1
 
-        param_names = model.get_optimized_param_names()
         lower_bounds = model.get_lower_bounds()
         upper_bounds = model.get_upper_bounds()
 
-        init_dict = {}
-
-        for param_ind, param_name in enumerate(param_names):
-            init_dict[param_name] = np.ones(model.get_nmr_problems()) * \
+        new_points = np.zeros_like(previous_results)
+        for param_ind in range(new_points.shape[1]):
+            new_points[:, param_ind] = np.ones(model.get_nmr_problems()) * \
                                     np.random.uniform(np.min(lower_bounds[param_ind]),
                                                       np.max(upper_bounds[param_ind]))
-
-        return init_dict
+        return new_points
 
 
 class GaussianPerturbation(StartingPointGenerator):
@@ -127,18 +125,18 @@ class GaussianPerturbation(StartingPointGenerator):
             return None
         self._iteration_counter += 1
 
-        init_dict = {}
+        lower_bounds = model.get_lower_bounds()
+        upper_bounds = model.get_upper_bounds()
 
-        for param_ind, param_name in enumerate(model.get_optimized_param_names()):
-            std = np.std(previous_results[param_name])
+        new_points = np.zeros_like(previous_results)
+        for param_ind in range(new_points.shape[1]):
+            std = np.std(previous_results[:, param_ind])
 
-            points = np.zeros(model.get_nmr_problems())
             for problem_ind in range(model.get_nmr_problems()):
-                points[problem_ind] = np.random.normal(previous_results[param_name][problem_ind], std)
-
-            init_dict[param_name] = points
-
-        return init_dict
+                new_points[problem_ind, param_ind] = np.clip(
+                    np.random.normal(previous_results[problem_ind, param_ind], std),
+                    lower_bounds[param_ind], upper_bounds[param_ind])
+        return new_points
 
 
 class RandomRestart(AbstractOptimizer):
@@ -156,36 +154,42 @@ class RandomRestart(AbstractOptimizer):
 
         Args:
             optimizer (AbstractOptimizer): the optimization routines to run one after another.
-            starting_point_generator (StartingPointGenerator): the randomizer instance we use to randomize the starting point
+            starting_point_generator (StartingPointGenerator): the randomizer instance we use
+                to randomize the starting point
         """
         super(RandomRestart, self).__init__(**kwargs)
         self._optimizer = optimizer
         self._starting_point_generator = starting_point_generator
 
-    def minimize(self, model, init_params=None, full_output=False):
-        results = self._optimizer.minimize(model, init_params, full_output=True)
+    def minimize(self, model, init_params=None):
+        opt_output = self._optimizer.minimize(model, init_params)
+        l2_errors = opt_output.get_error_measures()['Errors.l2']
+        results = opt_output.get_optimization_result()
+        return_codes = opt_output.get_return_codes()
 
-        starting_points = self._starting_point_generator.next(model, results[0])
-        while starting_points:
-            new_results = self._optimizer.minimize(model, starting_points, full_output=True)
+        starting_points = self._starting_point_generator.next(model, results)
+        while starting_points is not None:
+            new_opt_output = self._optimizer.minimize(model, starting_points)
+            new_results = new_opt_output.get_optimization_result()
+            new_l2_errors = new_opt_output.get_error_measures()['Errors.l2']
+            return_codes = new_opt_output.get_return_codes()
 
-            results = self._get_best_results(results, new_results)
+            results, l2_errors = self._get_best_results(results, new_results, l2_errors, new_l2_errors)
 
-            starting_points = self._starting_point_generator.next(model, results[0])
+            starting_points = self._starting_point_generator.next(model, results)
 
-        return results
+        return SimpleOptimizationResult(model, results, return_codes)
 
-    def _get_best_results(self, previous_results, new_results):
-        result_choice = np.argmin([previous_results[1]['Errors.l2'], new_results[1]['Errors.l2']], axis=0)
+    def _get_best_results(self, previous_results, new_results, previous_l2_errors, new_l2_errors):
+        result_choice = np.argmin([previous_l2_errors, new_l2_errors], axis=0)
 
-        output = []
-        for results_ind in range(len(previous_results)):
-            output_dict = {}
+        results = np.zeros_like(previous_results)
 
-            for map_name in previous_results[results_ind]:
-                output_dict[map_name] = np.array([previous_results[results_ind][map_name],
-                          new_results[results_ind][map_name]])[(result_choice, range(result_choice.shape[0]))]
+        for param_ind in range(previous_results.shape[1]):
+            choices = np.array([previous_results[:, param_ind], new_results[:, param_ind]])
+            results[:, param_ind] = choices[(result_choice, range(result_choice.shape[0]))]
 
-            output.append(output_dict)
+        resulting_l2_errors = np.array([previous_l2_errors, new_l2_errors])[(result_choice,
+                                                                             range(result_choice.shape[0]))]
 
-        return output
+        return results, resulting_l2_errors

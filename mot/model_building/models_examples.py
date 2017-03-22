@@ -1,4 +1,6 @@
 import numpy as np
+from mot.utils import results_to_dict
+
 from mot.cl_data_type import SimpleCLDataType
 from mot.model_building.data_adapter import SimpleDataAdapter
 from mot.model_interfaces import OptimizeModelInterface
@@ -89,12 +91,16 @@ class Rosenbrock(OptimizeModelInterface):
             }
         '''
 
-    def get_initial_parameters(self, results_dict=None):
+    def get_initial_parameters(self, previous_results=None):
         params = np.ones((1, self.n)) * 3
-        if results_dict:
+
+        if isinstance(previous_results, np.ndarray):
+            previous_results = results_to_dict(previous_results, self.get_optimized_param_names())
+
+        if previous_results:
             for i in range(self.n):
-                if i in results_dict:
-                    params[0, i] = results_dict[i]
+                if i in previous_results:
+                    params[0, i] = previous_results[i]
         return SimpleDataAdapter(params, SimpleCLDataType.from_string('double'),
                                  SimpleCLDataType.from_string('double')).get_opencl_data()
 
@@ -209,12 +215,16 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
             }
         '''
 
-    def get_initial_parameters(self, results_dict=None):
+    def get_initial_parameters(self, previous_results=None):
         params = np.array([[0.3, 0.4]])
-        if results_dict:
+
+        if isinstance(previous_results, np.ndarray):
+            previous_results = results_to_dict(previous_results, self.get_optimized_param_names())
+
+        if previous_results:
             for i in range(2):
-                if i in results_dict:
-                    params[0, i] = results_dict[i]
+                if i in previous_results:
+                    params[0, i] = previous_results[i]
         return SimpleDataAdapter(params, SimpleCLDataType.from_string('double'),
                                  SimpleCLDataType.from_string('double')).get_opencl_data()
 

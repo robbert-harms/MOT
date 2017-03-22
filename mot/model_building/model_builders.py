@@ -8,7 +8,7 @@ from mot.model_building.cl_functions.parameters import CurrentObservationParam, 
 from mot.model_building.data_adapter import SimpleDataAdapter
 from mot.model_building.parameter_functions.dependencies import SimpleAssignment
 from mot.model_interfaces import OptimizeModelInterface, SampleModelInterface
-from mot.utils import TopologicalSort, is_scalar, all_elements_equal, get_single_value
+from mot.utils import TopologicalSort, is_scalar, all_elements_equal, get_single_value, results_to_dict
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-03-14"
@@ -395,24 +395,28 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             }
         '''
 
-    def get_initial_parameters(self, results_dict=None):
+    def get_initial_parameters(self, previous_results=None):
         """When overriding this function, please note that it should adhere to the attribute problems_to_analyze.
 
         Args:
-            results_dict (dict): the initialization settings for the specific parameters.
-                The number of items per dictionary item should match the number of problems to analyze.
+            previous_results (dict or ndarray): the initialization settings for the specific parameters.
+                The number of items per dictionary item should match the number of problems to analyze, or, if an
+                ndarray is given then the length in the first dimension should match the number of problems to analyze.
         """
         np_dtype = np.float32
         if self.double_precision:
             np_dtype = np.float64
+
+        if isinstance(previous_results, np.ndarray):
+            previous_results = results_to_dict(previous_results, self.get_optimized_param_names())
 
         starting_points = []
         for m, p in self._model_functions_info.get_estimable_parameters_list():
             param_name = '{}.{}'.format(m.name, p.name)
             value = self._parameter_values[param_name]
 
-            if results_dict and param_name in results_dict:
-                starting_points.append(results_dict['{}.{}'.format(m.name, p.name)])
+            if previous_results and param_name in previous_results:
+                starting_points.append(previous_results['{}.{}'.format(m.name, p.name)])
             elif is_scalar(value):
                 if self.get_nmr_problems() == 0:
                     starting_points.append(np.full((1, 1), value, dtype=np_dtype))
@@ -551,7 +555,10 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         return str(func)
 
     def finalize_optimization_results(self, results_dict):
-        """This adds the final optimization maps to the results dictionary.
+        """This adds some extra optimization maps to the results dictionary.
+
+        This function behaves as a procedure and as a function. The input dict can be updated in place, but it should
+        also return a dict but that is merely for the purpose of chaining.
 
         Steps in finalizing the results dict:
 
@@ -563,9 +570,12 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         For more documentation see the base method.
 
         Args:
-            results_dict (dict): the dictionary with the results (the keys are the parameter names, the values are the
-                1d parameter lists)
+            results_dict (dict): A dictionary with as keys the names of the parameters and as values the 1d maps with
+                for each voxel the optimized parameter value. The given dictionary can be altered by this function.
 
+        Returns:
+            dict: The same result dictionary but with updated values or with additional maps.
+                It should at least return the results_dict.
         """
         self._add_dependent_parameter_maps(results_dict)
         self._add_fixed_parameter_maps(results_dict)

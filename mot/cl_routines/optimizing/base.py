@@ -1,11 +1,10 @@
 import logging
-
-import gc
 import numpy as np
 import pyopencl as cl
+
 from mot.cl_routines.mapping.error_measures import ErrorMeasures
 from mot.cl_routines.mapping.residual_calculator import ResidualCalculator
-from ...utils import results_to_dict, get_float_type_def
+from ...utils import get_float_type_def
 from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
 from ...cl_routines.mapping.codec_runner import CodecRunner
@@ -95,20 +94,90 @@ class AbstractOptimizer(CLRoutine):
         """
         return self._optimizer_settings
 
-    def minimize(self, model, init_params=None, full_output=False):
+    def minimize(self, model, init_params=None):
         """Minimize the given model with the given codec using the given environments.
 
         Args:
             model (AbstractModel): The model to minimize, instance of AbstractModel
-            init_params (dict): A dictionary containing the results of a previous run, provides the starting point
-            full_output (boolean): If set to true, the output is a list with the results and a dictionary
-                with other outputs. If false, only return the results per problem instance.
+            init_params (dict or ndarray): A starting point for every problem in the model.
+                This expects the same input as that can be used in the method
+                :meth:`mot.model_interfaces.OptimizeModelInterface#get_initial_parameters`
+                of the model. That is, either a dict with per parameter a array with starting points for every problem,
+                or a ndarray of shape (d, p) with for every d problems the p parameter starting points.
 
         Returns:
-            Either only the results per problem, or a list: (results, {}), depending on if full_output is set.
-            Both the results dictionary as well as the extra output  dictionary should return results per
-            problem instance.
+            OptimizationResults: the container with the optimization results
         """
+        raise NotImplementedError()
+
+
+class OptimizationResults(object):
+
+    def get_optimization_result(self):
+        """Get the optimization result, that is, the matrix with the optimized parameter values.
+
+        Returns:
+            ndarray: the optimized parameter maps, an (d, p) array with for d problems a value for every p parameters
+        """
+        raise NotImplementedError()
+
+    def get_return_codes(self):
+        """Get the return codes, that is, the matrix with for every problem the return code of the optimizer
+
+        Returns:
+            ndarray: the return codes, an (d,) vector with for d problems a return code
+        """
+        raise NotImplementedError()
+
+    def get_residuals(self):
+        """Get the residuals per problem instance.
+
+        Returns:
+            ndarray: (d, r) matrix with for d problems r residuals
+        """
+        raise NotImplementedError()
+
+    def get_error_measures(self):
+        """Get some error measures.
+
+        Returns:
+            dict: a dictionary with (d,*) matrices with interesting error measures.
+                The first dimension of every return matrix is of length d (for d problems). The other dimensions may
+                vary.
+        """
+        raise NotImplementedError()
+
+
+class SimpleOptimizationResult(OptimizationResults):
+
+    def __init__(self, model, optimization_results, return_codes):
+        """Simple optimization results container which computes some values only when requested.
+
+        Args:
+            model (mot.model_interfaces.OptimizeModelInterface): the model we used to get these results
+            optimization_results (ndarray): a (d, p) matrix with for every d problems and p parameters the estimated
+                value
+            return_codes (ndarray): the return codes as a (d,) vector for every d problems
+        """
+        self._model = model
+        self._optimization_results = optimization_results
+        self._return_codes = return_codes
+        self._error_measures = None
+
+    def get_optimization_result(self):
+        return self._optimization_results
+
+    def get_return_codes(self):
+        return self._return_codes
+
+    def get_residuals(self):
+        return ResidualCalculator().calculate(self._model, self._optimization_results)
+
+    def get_error_measures(self):
+        if self._error_measures is None:
+            self._error_measures = ErrorMeasures(
+                double_precision=self._model.double_precision).calculate(self.get_residuals())
+        return self._error_measures
 
 
 class AbstractParallelOptimizer(AbstractOptimizer):
@@ -122,7 +191,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         super(AbstractParallelOptimizer, self).__init__(**kwargs)
         self._logger = logging.getLogger(__name__)
 
-    def minimize(self, model, init_params=None, full_output=False):
+    def minimize(self, model, init_params=None):
         self._logger.info('Entered optimization routine.')
         self._logger.info('Using MOT version {}'.format(__version__))
         self._logger.info('We will use a {} precision float type for the calculations.'.format(
@@ -160,28 +229,9 @@ class AbstractParallelOptimizer(AbstractOptimizer):
                                                                   self._optimizer_settings))
         self.load_balancer.process(workers, model.get_nmr_problems())
 
-        del workers
-        gc.collect()
-
         self._logger.info('Finished optimization')
 
-        self._logger.info('Calling finalize optimization results in the model')
-        results = model.finalize_optimization_results(results_to_dict(starting_points,
-                                                                      model.get_optimized_param_names()))
-
-        self._logger.info('Optimization finished.')
-
-        if full_output:
-            extra_output = {'ReturnCodes': return_codes}
-            self._logger.info('Calculating errors measures')
-            errors = ResidualCalculator(cl_environments=self.cl_environments, load_balancer=self.load_balancer).\
-                calculate(model, results)
-            extra_output.update(ErrorMeasures(self.cl_environments, self.load_balancer,
-                                              model.double_precision).calculate(errors))
-            self._logger.info('Done calculating errors measures')
-
-            return results, extra_output
-        return results
+        return SimpleOptimizationResult(model, starting_points, return_codes)
 
     def _get_worker_generator(self, *args):
         """Generate the worker generator callback for the function _create_workers()

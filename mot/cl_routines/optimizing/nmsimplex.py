@@ -82,7 +82,7 @@ class NMSimplex(AbstractParallelOptimizer):
 
         super(NMSimplex, self).__init__(patience=patience, optimizer_settings=optimizer_settings, **kwargs)
 
-    def minimize(self, model, init_params=None, full_output=False):
+    def minimize(self, model, init_params=None):
         if self._optimizer_settings.get('adaptive_scales', True):
             nmr_params = model.get_nmr_estimable_parameters()
             self._optimizer_settings.update(
@@ -91,7 +91,7 @@ class NMSimplex(AbstractParallelOptimizer):
                  'gamma': 1 + 2.0 / nmr_params,
                  'delta': 1 - 1.0 / nmr_params}
                 )
-        return super(NMSimplex, self).minimize(model, init_params=init_params, full_output=full_output)
+        return super(NMSimplex, self).minimize(model, init_params=init_params)
 
     def _get_worker_generator(self, *args):
         return lambda cl_environment: NMSimplexWorker(cl_environment, *args)

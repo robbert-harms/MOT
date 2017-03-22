@@ -7,8 +7,7 @@ from mot.random123 import get_random123_cl_code, RandomStartingPoint
 from mot.mcmc_diagnostics import multivariate_ess, univariate_ess
 from ...utils import results_to_dict, get_float_type_def
 from ...load_balance_strategies import Worker
-from ...cl_routines.sampling.base import AbstractSampler
-
+from ...cl_routines.sampling.base import AbstractSampler, SimpleSampleOutput
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-02-05"
@@ -71,7 +70,7 @@ class MetropolisHastings(AbstractSampler):
     def nmr_samples(self, value):
         self._nmr_samples = value or 1
 
-    def sample(self, model, init_params=None, full_output=False):
+    def sample(self, model, init_params=None):
         np_dtype = np.float32
         if model.double_precision:
             np_dtype = np.float64
@@ -94,50 +93,52 @@ class MetropolisHastings(AbstractSampler):
             self.nmr_samples, self.burn_length, self.sample_intervals, self.use_adaptive_proposals))
         self.load_balancer.process(workers, model.get_nmr_problems())
 
-        del workers
-        gc.collect()
-
-        samples_dict = results_to_dict(samples, model.get_optimized_param_names())
-
         self._logger.info('Finished sampling')
 
-        if full_output:
-            self._logger.info('Starting post-sampling transformations')
-            volume_maps = model.finalize_optimization_results(model.samples_to_statistics(samples_dict))
-            self._logger.info('Finished post-sampling transformations')
+        # todo add the state to this
+        return SimpleSampleOutput(samples)
 
-            self._logger.info('Calculating errors measures')
-            errors = ResidualCalculator(cl_environments=self.cl_environments,
-                                        load_balancer=self.load_balancer).calculate(model, volume_maps)
-            error_measures = ErrorMeasures(self.cl_environments, self.load_balancer,
-                                           model.double_precision).calculate(errors)
-            volume_maps.update(error_measures)
-            self._logger.info('Done calculating errors measures')
-
-            self._logger.info('Calculating the multivariate ESS')
-            mv_ess = multivariate_ess(samples)
-            volume_maps.update(MultivariateESS=mv_ess)
-            self._logger.info('Finished calculating the multivariate ESS')
-
-            self._logger.info('Calculating the univariate ESS with method \'standard_error\'')
-            uv_ess = univariate_ess(samples, method='standard_error')
-            uv_ess_maps = results_to_dict(uv_ess, [a + '.UnivariateESS' for a in model.get_optimized_param_names()])
-            volume_maps.update(uv_ess_maps)
-            self._logger.info('Finished calculating the univariate ESS')
-
-            # todo remove and simplify the MCMC state
-            proposal_state_dict = results_to_dict(proposal_state, model.get_proposal_state_names())
-            # proposal_state_dict.update(
-            #     results_to_dict(proposal_state_sampling_counter, [a + '.sampling_counter' for a in model.get_optimized_param_names()]))
-            # proposal_state_dict.update(
-            #     results_to_dict(proposal_state_acceptance_counter, [a + '.acceptance_counter' for a in model.get_optimized_param_names()]))
-            # proposal_state_dict.update(
-            #     results_to_dict(online_parameter_variance,
-            #                     [a + '.parameter_variance' for a in model.get_optimized_param_names()]))
-
-            return samples_dict, volume_maps, proposal_state_dict
-
-        return samples_dict
+        # samples_dict = results_to_dict(samples, model.get_optimized_param_names())
+        #
+        # self._logger.info('Finished sampling')
+        #
+        # if full_output:
+        #     self._logger.info('Starting post-sampling transformations')
+        #     volume_maps = model.finalize_optimization_results(model.samples_to_statistics(samples_dict))
+        #     self._logger.info('Finished post-sampling transformations')
+        #
+        #     self._logger.info('Calculating errors measures')
+        #     errors = ResidualCalculator(cl_environments=self.cl_environments,
+        #                                 load_balancer=self.load_balancer).calculate(model, volume_maps)
+        #     error_measures = ErrorMeasures(self.cl_environments, self.load_balancer,
+        #                                    model.double_precision).calculate(errors)
+        #     volume_maps.update(error_measures)
+        #     self._logger.info('Done calculating errors measures')
+        #
+        #     self._logger.info('Calculating the multivariate ESS')
+        #     mv_ess = multivariate_ess(samples)
+        #     volume_maps.update(MultivariateESS=mv_ess)
+        #     self._logger.info('Finished calculating the multivariate ESS')
+        #
+        #     self._logger.info('Calculating the univariate ESS with method \'standard_error\'')
+        #     uv_ess = univariate_ess(samples, method='standard_error')
+        #     uv_ess_maps = results_to_dict(uv_ess, [a + '.UnivariateESS' for a in model.get_optimized_param_names()])
+        #     volume_maps.update(uv_ess_maps)
+        #     self._logger.info('Finished calculating the univariate ESS')
+        #
+        #     # todo remove and simplify the MCMC state
+        #     proposal_state_dict = results_to_dict(proposal_state, model.get_proposal_state_names())
+        #     # proposal_state_dict.update(
+        #     #     results_to_dict(proposal_state_sampling_counter, [a + '.sampling_counter' for a in model.get_optimized_param_names()]))
+        #     # proposal_state_dict.update(
+        #     #     results_to_dict(proposal_state_acceptance_counter, [a + '.acceptance_counter' for a in model.get_optimized_param_names()]))
+        #     # proposal_state_dict.update(
+        #     #     results_to_dict(online_parameter_variance,
+        #     #                     [a + '.parameter_variance' for a in model.get_optimized_param_names()]))
+        #
+        #     return samples_dict, volume_maps, proposal_state_dict
+        #
+        # return samples_dict
 
     def _get_mcmc_state(self, model, parameters):
         nmr_params = model.get_nmr_estimable_parameters()
@@ -437,6 +438,32 @@ class _MHWorker(Worker):
                 }
             }
         '''
+        if self._update_parameter_variances:
+            kernel_source += '''
+                // online variance, algorithm by Welford
+                //  B. P. Welford (1962)."Note on a method for calculating corrected sums of squares
+                //      and products". Technometrics 4(3):419–420.
+                //
+                // also studied in:
+                // Chan, Tony F.; Golub, Gene H.; LeVeque, Randall J. (1983).
+                //      Algorithms for Computing the Sample Variance: Analysis and Recommendations.
+                //      The American Statistician 37, 242-247. http://www.jstor.org/stable/2683386
+                void _update_chain_statistics(const uint chain_count,
+                                              const mot_float_type new_param_value,
+                                              global mot_float_type* const parameter_mean,
+                                              global mot_float_type* const parameter_variance,
+                                              global mot_float_type* const parameter_variance_update_m2){
+
+                    mot_float_type previous_mean = *parameter_mean;
+                    *parameter_mean += (new_param_value - *parameter_mean) / (chain_count + 1);
+                    *parameter_variance_update_m2 += (new_param_value - previous_mean)
+                                                        * (new_param_value - *parameter_mean);
+
+                    if(chain_count > 1){
+                        *parameter_variance = *parameter_variance_update_m2 / (chain_count - 1);
+                    }
+                }
+            '''
         kernel_source += '''
             void _sample(local mot_float_type* const x_local,
                          void* rng_data,
@@ -456,7 +483,6 @@ class _MHWorker(Worker):
                 uint i, j;
                 uint problem_ind = get_group_id(0);
                 bool is_first_work_item = get_local_id(0) == 0;
-                mot_float_type previous_mean;
 
                 for(i = 0; i < ''' + str(self._nmr_samples * (self._sample_intervals + 1)
                                          + self._burn_length) + '''; i++){
@@ -478,26 +504,10 @@ class _MHWorker(Worker):
                         '''
         if self._update_parameter_variances:
             kernel_source += '''
-                        if(i > 0){
-                            for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
-                                // online variance, algorithm by Welford
-                                //  B. P. Welford (1962)."Note on a method for calculating corrected sums of squares
-                                //      and products". Technometrics 4(3):419–420.
-                                //
-                                // also studied in:
-                                // Chan, Tony F.; Golub, Gene H.; LeVeque, Randall J. (1983).
-                                //      Algorithms for Computing the Sample Variance: Analysis and Recommendations.
-                                //      The American Statistician 37, 242-247. http://www.jstor.org/stable/2683386
-
-                                previous_mean = parameter_mean[j];
-                                parameter_mean[j] += (x_local[j] - parameter_mean[j]) / (i + 1);
-                                parameter_variance_update_m2[j] += (x_local[j] - previous_mean)
-                                                                      * (x_local[j] - parameter_mean[j]);
-
-                                if(i > 1){
-                                    parameter_variance[j] = parameter_variance_update_m2[j] / (i - 1);
-                                }
-                            }
+                        for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
+                            _update_chain_statistics(i,
+                                x_local[j], parameter_mean + j, parameter_variance + j,
+                                parameter_variance_update_m2 + j);
                         }
             '''
         kernel_source += '''
