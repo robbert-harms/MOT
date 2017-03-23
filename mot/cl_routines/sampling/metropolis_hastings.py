@@ -1,13 +1,10 @@
-import gc
-import pyopencl as cl
 import numpy as np
-from mot.cl_routines.mapping.error_measures import ErrorMeasures
-from mot.cl_routines.mapping.residual_calculator import ResidualCalculator
+import pyopencl as cl
+
 from mot.random123 import get_random123_cl_code, RandomStartingPoint
-from mot.mcmc_diagnostics import multivariate_ess, univariate_ess
-from ...utils import results_to_dict, get_float_type_def
+from ...cl_routines.sampling.base import AbstractSampler, SamplingOutput
 from ...load_balance_strategies import Worker
-from ...cl_routines.sampling.base import AbstractSampler, SimpleSampleOutput
+from ...utils import get_float_type_def
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-02-05"
@@ -18,13 +15,11 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class MetropolisHastings(AbstractSampler):
 
-    def __init__(self, cl_environments=None, load_balancer=None, nmr_samples=None, burn_length=None,
+    def __init__(self, nmr_samples=None, burn_length=None,
                  sample_intervals=None, use_adaptive_proposals=True, **kwargs):
         """An CL implementation of Metropolis Hastings.
 
         Args:
-            cl_environments: a list with the cl environments to use
-            load_balancer: the load balance strategy to use
             nmr_samples (int): The length of the (returned) chain per voxel, defaults to 0
             burn_length (int): The length of the burn in (per voxel), these are extra samples,
                 jump is set to 1 (no thinning)
@@ -42,7 +37,7 @@ class MetropolisHastings(AbstractSampler):
             proposal_update_intervals (int): after how many samples we would like to update the proposals
                 This is during burning and sampling. A value of 1 means update after every jump.
         """
-        super(MetropolisHastings, self).__init__(cl_environments=cl_environments, load_balancer=load_balancer, **kwargs)
+        super(MetropolisHastings, self).__init__(**kwargs)
         self._nmr_samples = nmr_samples or 500
         self.burn_length = burn_length
         self.sample_intervals = sample_intervals
@@ -66,114 +61,46 @@ class MetropolisHastings(AbstractSampler):
     def nmr_samples(self):
         return self._nmr_samples
 
-    @nmr_samples.setter
-    def nmr_samples(self, value):
-        self._nmr_samples = value or 1
-
     def sample(self, model, init_params=None):
-        np_dtype = np.float32
+        """Sample the given model with Metropolis Hastings
+
+        Returns:
+            MHSampleOutput: extension of the default output with some more data
+        """
+        float_dtype = np.float32
         if model.double_precision:
-            np_dtype = np.float64
+            float_dtype = np.float64
 
         self._do_initial_logging(model)
 
-        current_chain_position = np.require(model.get_initial_parameters(init_params), np_dtype,
+        current_chain_position = np.require(model.get_initial_parameters(init_params), float_dtype,
                                             requirements=['C', 'A', 'O', 'W'])
         samples = np.zeros((model.get_nmr_problems(), current_chain_position.shape[1], self.nmr_samples),
-                           dtype=np_dtype, order='C')
+                           dtype=float_dtype, order='C')
 
-        proposal_state = np.require(model.get_proposal_state(), np_dtype, requirements=['C', 'A', 'O', 'W'])
-        mcmc_state = self._get_mcmc_state(model, current_chain_position)
+        proposal_state = np.require(model.get_proposal_state(), float_dtype, requirements=['C', 'A', 'O', 'W'])
+        mh_state = _prepare_mh_state(model.get_metropolis_hastings_state(), float_dtype)
 
         self._logger.info('Starting sampling with method {0}'.format(self.__class__.__name__))
 
         workers = self._create_workers(lambda cl_environment: _MHWorker(
             cl_environment, self.get_compile_flags_list(model.double_precision), model, current_chain_position,
-            samples, proposal_state, mcmc_state,
+            samples, proposal_state, mh_state,
             self.nmr_samples, self.burn_length, self.sample_intervals, self.use_adaptive_proposals))
         self.load_balancer.process(workers, model.get_nmr_problems())
 
         self._logger.info('Finished sampling')
 
-        # todo add the state to this
-        return SimpleSampleOutput(samples)
+        new_mh_state = SimpleMHState(
+            mh_state.nmr_samples_drawn + self._nmr_samples * (self.sample_intervals + 1) + self.burn_length,
+            mh_state.get_proposal_state_sampling_counter(),
+            mh_state.get_proposal_state_acceptance_counter(),
+            mh_state.get_online_parameter_variance(),
+            mh_state.get_online_parameter_variance_update_m2(),
+            mh_state.get_online_parameter_mean()
+        )
 
-        # samples_dict = results_to_dict(samples, model.get_optimized_param_names())
-        #
-        # self._logger.info('Finished sampling')
-        #
-        # if full_output:
-        #     self._logger.info('Starting post-sampling transformations')
-        #     volume_maps = model.finalize_optimization_results(model.samples_to_statistics(samples_dict))
-        #     self._logger.info('Finished post-sampling transformations')
-        #
-        #     self._logger.info('Calculating errors measures')
-        #     errors = ResidualCalculator(cl_environments=self.cl_environments,
-        #                                 load_balancer=self.load_balancer).calculate(model, volume_maps)
-        #     error_measures = ErrorMeasures(self.cl_environments, self.load_balancer,
-        #                                    model.double_precision).calculate(errors)
-        #     volume_maps.update(error_measures)
-        #     self._logger.info('Done calculating errors measures')
-        #
-        #     self._logger.info('Calculating the multivariate ESS')
-        #     mv_ess = multivariate_ess(samples)
-        #     volume_maps.update(MultivariateESS=mv_ess)
-        #     self._logger.info('Finished calculating the multivariate ESS')
-        #
-        #     self._logger.info('Calculating the univariate ESS with method \'standard_error\'')
-        #     uv_ess = univariate_ess(samples, method='standard_error')
-        #     uv_ess_maps = results_to_dict(uv_ess, [a + '.UnivariateESS' for a in model.get_optimized_param_names()])
-        #     volume_maps.update(uv_ess_maps)
-        #     self._logger.info('Finished calculating the univariate ESS')
-        #
-        #     # todo remove and simplify the MCMC state
-        #     proposal_state_dict = results_to_dict(proposal_state, model.get_proposal_state_names())
-        #     # proposal_state_dict.update(
-        #     #     results_to_dict(proposal_state_sampling_counter, [a + '.sampling_counter' for a in model.get_optimized_param_names()]))
-        #     # proposal_state_dict.update(
-        #     #     results_to_dict(proposal_state_acceptance_counter, [a + '.acceptance_counter' for a in model.get_optimized_param_names()]))
-        #     # proposal_state_dict.update(
-        #     #     results_to_dict(online_parameter_variance,
-        #     #                     [a + '.parameter_variance' for a in model.get_optimized_param_names()]))
-        #
-        #     return samples_dict, volume_maps, proposal_state_dict
-        #
-        # return samples_dict
-
-    def _get_mcmc_state(self, model, parameters):
-        nmr_params = model.get_nmr_estimable_parameters()
-        np_dtype = np.float32
-        if model.double_precision:
-            np_dtype = np.float64
-
-        proposal_state_sampling_counter = np.zeros((model.get_nmr_problems(), nmr_params),
-                                                   dtype=np.uint32, order='C')
-        proposal_state_acceptance_counter = np.zeros((model.get_nmr_problems(), nmr_params),
-                                                     dtype=np.uint32, order='C')
-
-        state_dict = {
-            'proposal_state_sampling_counter': {'data': proposal_state_sampling_counter,
-                                                'cl_type': 'uint'},
-            'proposal_state_acceptance_counter': {'data': proposal_state_acceptance_counter,
-                                                  'cl_type': 'uint'}
-        }
-
-        if model.proposal_state_update_uses_variance():
-            online_parameter_variance = np.zeros((model.get_nmr_problems(), nmr_params),
-                                                 dtype=np_dtype, order='C')
-            online_parameter_variance_update_m2 = np.zeros((model.get_nmr_problems(), nmr_params),
-                                                           dtype=np_dtype, order='C')
-            online_parameter_mean = np.array(parameters, copy=True)
-
-            state_dict.update({
-                'online_parameter_variance': {'data': online_parameter_variance, 'cl_type': 'mot_float_type'},
-                'online_parameter_variance_update_m2': {'data': online_parameter_variance_update_m2,
-                                                        'cl_type': 'mot_float_type'},
-                'online_parameter_mean': {'data': online_parameter_mean,
-                                          'cl_type': 'mot_float_type'},
-            })
-
-        return state_dict
+        return MHSampleOutput(samples, proposal_state, new_mh_state)
 
     def _do_initial_logging(self, model):
         self._logger.info('Entered sampling routine.')
@@ -201,10 +128,38 @@ class MetropolisHastings(AbstractSampler):
                           '{samples_returned} (per problem).'.format(**samples_drawn))
 
 
+class MHSampleOutput(SamplingOutput):
+
+    def __init__(self, samples, proposal_state, mh_state):
+        """Simple storage container for the sampling output"""
+        self._samples = samples
+        self._proposal_state = proposal_state
+        self._mh_state = mh_state
+
+    def get_samples(self):
+        return self._samples
+
+    def get_proposal_state(self):
+        """Get the proposal state at the end of this sampling
+
+        Returns:
+            ndarray: a (d, p) array with for d problems and p parameters the proposal state
+        """
+        return self._proposal_state
+
+    def get_mh_state(self):
+        """Get the Metropolis Hastings state as it was at the end of this sampling run.
+
+        Returns:
+            MHState: the current MH state
+        """
+        return self._mh_state
+
+
 class _MHWorker(Worker):
 
     def __init__(self, cl_environment, compile_flags, model, current_chain_position, samples, proposal_state,
-                 mcmc_state, nmr_samples, burn_length, sample_intervals, use_adaptive_proposals):
+                 mh_state, nmr_samples, burn_length, sample_intervals, use_adaptive_proposals):
         super(_MHWorker, self).__init__(cl_environment)
 
         self._model = model
@@ -213,13 +168,8 @@ class _MHWorker(Worker):
         self._samples = samples
         self._proposal_state = proposal_state
         self._update_parameter_variances = self._model.proposal_state_update_uses_variance()
-        self._mcmc_state = mcmc_state
-
-        self._mcmc_state_kernel_order = ['proposal_state_sampling_counter',
-                                         'proposal_state_acceptance_counter']
-        if self._update_parameter_variances:
-            self._mcmc_state_kernel_order.extend(
-                ['online_parameter_variance', 'online_parameter_variance_update_m2', 'online_parameter_mean'])
+        self._mh_state = mh_state
+        self._mh_state_dict = self._get_mh_state_dict()
 
         self._nmr_samples = nmr_samples
         self._burn_length = burn_length
@@ -251,9 +201,9 @@ class _MHWorker(Worker):
                                   [kernel_event]),
         ]
 
-        for mcmc_state_element in self._mcmc_state_kernel_order:
+        for mcmc_state_element in sorted(self._mh_state_dict):
             buffer = mcmc_state_buffers[mcmc_state_element]
-            host_array = self._mcmc_state[mcmc_state_element]['data']
+            host_array = self._mh_state_dict[mcmc_state_element]['data']
             return_events.append(self._enqueue_readout(buffer, host_array, 0, nmr_problems, [kernel_event]))
 
         return return_events
@@ -277,8 +227,8 @@ class _MHWorker(Worker):
         data_buffers.append(proposal_buffer)
 
         mcmc_state_buffers = {}
-        for mcmc_state_element in self._mcmc_state_kernel_order:
-            host_array = self._mcmc_state[mcmc_state_element]['data']
+        for mcmc_state_element in sorted(self._mh_state_dict):
+            host_array = self._mh_state_dict[mcmc_state_element]['data']
 
             buffer = cl.Buffer(self._cl_run_context.context,
                                cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR,
@@ -294,13 +244,34 @@ class _MHWorker(Worker):
 
         return data_buffers, samples_buf, proposal_buffer, mcmc_state_buffers, current_chain_position_buffer
 
+    def _get_mh_state_dict(self):
+        """Get a dictionary with the MH state kernel arrays"""
+        state_dict = {
+            'proposal_state_sampling_counter': {'data': self._mh_state.get_proposal_state_sampling_counter(),
+                                                'cl_type': 'uint'},
+            'proposal_state_acceptance_counter': {'data': self._mh_state.get_proposal_state_acceptance_counter(),
+                                                  'cl_type': 'uint'}
+        }
+
+        if self._model.proposal_state_update_uses_variance():
+            state_dict.update({
+                'online_parameter_variance': {'data': self._mh_state.get_online_parameter_variance(),
+                                              'cl_type': 'mot_float_type'},
+                'online_parameter_variance_update_m2': {
+                    'data': self._mh_state.get_online_parameter_variance_update_m2(), 'cl_type': 'mot_float_type'},
+                'online_parameter_mean': {'data': self._mh_state.get_online_parameter_mean(),
+                                          'cl_type': 'mot_float_type'},
+            })
+
+        return state_dict
+
     def _get_kernel_source(self):
         kernel_param_names = ['global mot_float_type* current_chain_position',
                               'global mot_float_type* samples',
                               'global mot_float_type* global_proposal_state']
 
-        for mcmc_state_element in self._mcmc_state_kernel_order:
-            cl_type = self._mcmc_state[mcmc_state_element]['cl_type']
+        for mcmc_state_element in sorted(self._mh_state_dict):
+            cl_type = self._mh_state_dict[mcmc_state_element]['cl_type']
             kernel_param_names.append('global {}* global_{}'.format(cl_type, mcmc_state_element))
 
         kernel_param_names.append('local double* log_likelihood_tmp')
@@ -440,14 +411,15 @@ class _MHWorker(Worker):
         '''
         if self._update_parameter_variances:
             kernel_source += '''
-                // online variance, algorithm by Welford
-                //  B. P. Welford (1962)."Note on a method for calculating corrected sums of squares
-                //      and products". Technometrics 4(3):419–420.
-                //
-                // also studied in:
-                // Chan, Tony F.; Golub, Gene H.; LeVeque, Randall J. (1983).
-                //      Algorithms for Computing the Sample Variance: Analysis and Recommendations.
-                //      The American Statistician 37, 242-247. http://www.jstor.org/stable/2683386
+                /** Online variance algorithm by Welford
+                 *  B. P. Welford (1962)."Note on a method for calculating corrected sums of squares
+                 *      and products". Technometrics 4(3):419–420.
+                 *
+                 * Also studied in:
+                 * Chan, Tony F.; Golub, Gene H.; LeVeque, Randall J. (1983).
+                 *      Algorithms for Computing the Sample Variance: Analysis and Recommendations.
+                 *      The American Statistician 37, 242-247. http://www.jstor.org/stable/2683386
+                 */
                 void _update_chain_statistics(const uint chain_count,
                                               const mot_float_type new_param_value,
                                               global mot_float_type* const parameter_mean,
@@ -486,6 +458,18 @@ class _MHWorker(Worker):
 
                 for(i = 0; i < ''' + str(self._nmr_samples * (self._sample_intervals + 1)
                                          + self._burn_length) + '''; i++){
+                '''
+        if self._update_parameter_variances:
+            kernel_source += '''
+                    if(is_first_work_item){
+                        for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
+                            _update_chain_statistics(i + ''' + str(self._mh_state.nmr_samples_drawn) + ''',
+                                x_local[j], parameter_mean + j, parameter_variance + j,
+                                parameter_variance_update_m2 + j);
+                        }
+                    }
+        '''
+        kernel_source += '''
 
                     _update_state(x_local, rng_data, current_likelihood, current_prior,
                                   data, proposal_state, acceptance_counter,
@@ -501,16 +485,6 @@ class _MHWorker(Worker):
                                     + ');'
                                if self.use_adaptive_proposals else '') + '''
 
-                        '''
-        if self._update_parameter_variances:
-            kernel_source += '''
-                        for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
-                            _update_chain_statistics(i,
-                                x_local[j], parameter_mean + j, parameter_variance + j,
-                                parameter_variance_update_m2 + j);
-                        }
-            '''
-        kernel_source += '''
                         if(i >= ''' + str(self._burn_length) + ''' &&
                             i % ''' + str(self._sample_intervals + 1) + ''' == 0){
 
@@ -602,4 +576,188 @@ class _MHWorker(Worker):
         else:
             return 'rand123_initialize_data((uint[]){%(c0)r, %(c1)r, %(c2)r, %(c3)r})' \
                    % {'c0': counter[0], 'c1': counter[1], 'c2': counter[2], 'c3': counter[3]}
+
+
+class MHState(object):
+    """The Metropolis Hastings state is used to initialize the state of the MH sampler.
+
+    The state is stored at the end of every MH run and can be used to continue sampling again from the
+    previous end point.
+    """
+
+    @property
+    def nmr_samples_drawn(self):
+        """Get the amount of samples already drawn, i.e. at what point in time is this state.
+
+        Returns:
+            uint: the current number of samples already drawn before this state
+        """
+        raise NotImplementedError()
+
+    def get_proposal_state_sampling_counter(self):
+        """Get the current state of the sampling counter that can be used by the adaptive proposals.
+
+        This value is per problem instance passed to the adaptive proposals which may reset the value.
+
+        Returns:
+            ndarray: a (d, p) array with for d problems and p parameters the current sampling counter,
+                should be of a np.uint32 type.
+        """
+        raise NotImplementedError()
+
+    def get_proposal_state_acceptance_counter(self):
+        """Get the current state of the acceptance counter that can be used by the adaptive proposals.
+
+        This value is per problem instance passed to the adaptive proposals which may reset the value.
+
+        Returns:
+            ndarray: a (d, p) array with for d problems and p parameters the current acceptance counter,
+                should be of a np.uint32 type.
+        """
+        raise NotImplementedError()
+
+    def get_online_parameter_variance(self):
+        """Get the current state of the online parameter variance that can be used by the adaptive proposals.
+
+        This value is updated while sampling and is passed as a constant to the adaptive proposals.
+
+        Returns:
+            ndarray: a (d, p) array with for d problems and p parameters the current parameter variance,
+                should be of a np.float32 or np.float64 type (it will still be auto-converted to the
+                current double type in the MCMC function).
+        """
+        raise NotImplementedError()
+
+    def get_online_parameter_variance_update_m2(self):
+        """A helper variable used in updating the online parameter variance.
+
+        Returns:
+            ndarray: a (d, p) array with for d problems and p parameters the current M2 state,
+                should be of a np.float32 or np.float64 type (it will still be auto-converted to the
+                current double type in the MCMC function).
+        """
+        raise NotImplementedError()
+
+    def get_online_parameter_mean(self):
+        """Get the current state of the online parameter mean, a helper variance in updating the variance.
+
+        Returns:
+            ndarray: a (d, p) array with for d problems and p parameters the current parameter mean,
+                should be of a np.float32 or np.float64 type (it will still be auto-converted to the
+                current double type in the MCMC function).
+        """
+        raise NotImplementedError()
+
+
+class DefaultMHState(MHState):
+
+    def __init__(self, nmr_problems, nmr_params, double_precision=False):
+        """Creates a initial (default) MCMC state.
+
+        Args:
+            nmr_problems (int): the number of problems we are optimizing, used to create the default state.
+            nmr_params (int): the number of parameters in the model, used to create the default state.
+            double_precision (boolean): used when auto-creating some of the default state items.
+        """
+        self._nmr_problems = nmr_problems
+        self._nmr_params = nmr_params
+        self._double_precision = double_precision
+
+        self._float_dtype = np.float32
+        if double_precision:
+            self._float_dtype = np.float64
+
+    @property
+    def nmr_samples_drawn(self):
+        return 0
+
+    def get_proposal_state_sampling_counter(self):
+        return np.zeros((self._nmr_problems, self._nmr_params), dtype=np.uint32, order='C')
+
+    def get_proposal_state_acceptance_counter(self):
+        return np.zeros((self._nmr_problems, self._nmr_params), dtype=np.uint32, order='C')
+
+    def get_online_parameter_variance(self):
+        return np.zeros((self._nmr_problems, self._nmr_params), dtype=self._float_dtype, order='C')
+
+    def get_online_parameter_variance_update_m2(self):
+        return np.zeros((self._nmr_problems, self._nmr_params), dtype=self._float_dtype, order='C')
+
+    def get_online_parameter_mean(self):
+        return np.zeros((self._nmr_problems, self._nmr_params), dtype=self._float_dtype, order='C')
+
+
+class SimpleMHState(MHState):
+    def __init__(self, nmr_samples_drawn, proposal_state_sampling_counter, proposal_state_acceptance_counter,
+                 online_parameter_variance, online_parameter_variance_update_m2,
+                 online_parameter_mean):
+        """A simple MCMC state containing provided items
+
+        Args:
+            nmr_samples_drawn (uint): the current number of samples already drawn to reach this state.
+            proposal_state_sampling_counter (ndarray): a (d, p) array with for d problems and p parameters
+                the current sampling counter.
+            proposal_state_acceptance_counter (ndarray): a (d, p) array with for d problems and p parameters
+                the current acceptance counter.
+            online_parameter_variance (ndarray): a (d, p) array with for d problems and p parameters
+                the current state of the online parameter variance
+            online_parameter_variance_update_m2 (ndarray): a (d, p) array with for d problems and p parameters
+                the current state of the online parameter variance update variable.
+            online_parameter_mean (ndarray): a (d, p) array with for d problems and p parameters
+                the current state of the online parameter mean
+        """
+        self._nmr_samples_drawn = nmr_samples_drawn
+        self._proposal_state_sampling_counter = proposal_state_sampling_counter
+        self._proposal_state_acceptance_counter = proposal_state_acceptance_counter
+        self._online_parameter_variance = online_parameter_variance
+        self._online_parameter_variance_update_m2 = online_parameter_variance_update_m2
+        self._online_parameter_mean = online_parameter_mean
+
+    @property
+    def nmr_samples_drawn(self):
+        return self._nmr_samples_drawn
+
+    def get_proposal_state_sampling_counter(self):
+        return self._proposal_state_sampling_counter
+
+    def get_proposal_state_acceptance_counter(self):
+        return self._proposal_state_acceptance_counter
+
+    def get_online_parameter_variance(self):
+        return self._online_parameter_variance
+
+    def get_online_parameter_variance_update_m2(self):
+        return self._online_parameter_variance_update_m2
+
+    def get_online_parameter_mean(self):
+        return self._online_parameter_mean
+
+
+def _prepare_mh_state(mh_state, float_dtype):
+    """Return a new MH state in which all the state variables are sanitized to the correct data type.
+
+    Args:
+        mh_state (MHState): the MH state we wish to sanitize
+        float_dtype (np.dtype): the numpy dtype for the floats, either np.float32 or np.float64
+
+    Returns:
+        MHState: MH state with the same data only then possibly sanitized
+    """
+    proposal_state_sampling_counter = np.require(np.copy(mh_state.get_proposal_state_sampling_counter()),
+                                                 np.uint32,requirements=['C', 'A', 'O', 'W'])
+
+    proposal_state_acceptance_counter = np.require(np.copy(mh_state.get_proposal_state_acceptance_counter()),
+                                                   np.uint32, requirements=['C', 'A', 'O', 'W'])
+    online_parameter_variance = np.require(np.copy(mh_state.get_online_parameter_variance()),
+                                           float_dtype, requirements=['C', 'A', 'O', 'W'])
+    online_parameter_variance_update_m2 = np.require(np.copy(mh_state.get_online_parameter_variance_update_m2()),
+                                                     float_dtype, requirements=['C', 'A', 'O', 'W'])
+    online_parameter_mean = np.require(np.copy(mh_state.get_online_parameter_mean()), float_dtype,
+                                       requirements=['C', 'A', 'O', 'W'])
+
+    return SimpleMHState(mh_state.nmr_samples_drawn,
+                         proposal_state_sampling_counter, proposal_state_acceptance_counter,
+                         online_parameter_variance, online_parameter_variance_update_m2,
+                         online_parameter_mean
+                         )
 

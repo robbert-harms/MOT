@@ -12,14 +12,6 @@ mot.cl_routines.optimizing.base module
     :undoc-members:
     :show-inheritance:
 
-mot.cl_routines.optimizing.grid_search module
----------------------------------------------
-
-.. automodule:: mot.cl_routines.optimizing.grid_search
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
 mot.cl_routines.optimizing.levenberg_marquardt module
 -----------------------------------------------------
 

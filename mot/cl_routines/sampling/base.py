@@ -15,10 +15,10 @@ class AbstractSampler(CLRoutine):
         self._logger = logging.getLogger(__name__)
 
     def sample(self, model, init_params=None):
-        """Minimize the given model with the given codec using the given environments.
+        """Sample the given model with the given codec using the given environments.
 
         Args:
-            model (SampleModelInterface): the model to minimize
+            model (SampleModelInterface): the model to sample
             init_params (dict): a dictionary containing the results of a previous run, provides the starting point
 
         Returns:

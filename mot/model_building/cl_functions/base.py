@@ -202,7 +202,7 @@ class ModelFunction(DependentCLFunction):
     def get_extra_results_maps(self, results_dict):
         """Get extra results maps with extra output from this model function.
 
-        This is used by the function finalize_optimization_results() from the ModelBuilder to add extra maps
+        This is used by the function add_extra_result_maps() from the ModelBuilder to add extra maps
         to the resulting dictionary.
 
         Suppose a model has a parameter that can be viewed in multiple ways. It would be nice to be able

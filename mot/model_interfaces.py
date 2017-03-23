@@ -327,11 +327,14 @@ class SampleModelInterface(OptimizeModelInterface):
     def __init__(self):
         """Extends the OptimizeModelInterface with information for sampling purposes.
 
-        To be able to sample a model we need to have a:
+        This specific interface is tied to sampling with the Metropolis Hastings Random Walk sampler as
+        implement in :class:`mot.cl_routines.sampling.metropolis_hastings.MetropolisHastings`.
 
-        * log likelihood function
-        * a proposal function
-        * a prior function
+        To be able to sample a model we (in principle) need to have:
+
+        * a log likelihood function;
+        * a proposal function;
+        * and a prior function
 
 
         Proposal functions can be symmetric (if it holds that ``q(x|x') == q(x'|x)``) or
@@ -346,7 +349,7 @@ class SampleModelInterface(OptimizeModelInterface):
         A trick in sampling is to have auto-adapting proposals. These proposals commonly have a distribution with a
         standard deviation that varies in time. The idea is that if the distribution is too tight (low std) only a few
         of the proposed samples are accepted and we need to broaden the distribution (increase the std). On the other
-        hand, if the std is to high we are jumping around to much in search space. This leads us to the following
+        hand, if the std is too high the jumps might not get accepted. This leads us to the following
         additional functionality:
 
         * proposal state update function
@@ -356,6 +359,10 @@ class SampleModelInterface(OptimizeModelInterface):
         a way to store the state of the proposal distribution inside the kernel function. For that, each proposal
         CL function has as additional parameter the ``proposal_state``. The initial state can be obtained from
         this class and needs to be handed to the proposal functions.
+
+        Finally, this interface requires to you specify a :class:`mot.cl_routines.sampling.metropolis_hastings.MHState`
+        that specifies the current state of the sampler. This can be set to a default state when starting sampling
+        or to the output of a previous run to continue sampling.
         """
         super(SampleModelInterface, self).__init__()
 
@@ -364,15 +371,6 @@ class SampleModelInterface(OptimizeModelInterface):
 
         Returns:
             ndarray: per problem instance the proposal parameter values that are adaptable.
-        """
-        raise NotImplementedError()
-
-    def get_proposal_state_names(self):
-        """Get a list of names for the adaptable proposal parameters.
-
-        Returns:
-            list: list of str with the name for each of the adaptable proposal parameters.
-                This is used by the sampler to create a dictionary of final proposal states.
         """
         raise NotImplementedError()
 
@@ -530,6 +528,16 @@ class SampleModelInterface(OptimizeModelInterface):
                     );
 
             Which is called by the sampling routine to calculate the posterior probability.
+        """
+        raise NotImplementedError()
+
+    def get_metropolis_hastings_state(self):
+        """Get the current state of the Metropolis Hastings sampler.
+
+        This can be used to continue execution of an MH sampling from a previous point in time.
+
+        Returns:
+            mot.cl_routines.sampling.metropolis_hastings.MHState: the current Metropolis Hastings state
         """
         raise NotImplementedError()
 

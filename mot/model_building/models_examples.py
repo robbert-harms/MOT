@@ -125,12 +125,6 @@ class Rosenbrock(OptimizeModelInterface):
     def get_parameter_encode_function(self, fname='encodeParameters'):
         return '''void ''' + fname + '''(const void* data, mot_float_type* x){}'''
 
-    def get_final_parameter_transformations(self, fname='applyFinalParameterTransformations'):
-        return None
-
-    def finalize_optimization_results(self, results_dict):
-        return results_dict
-
 
 class MatlabLSQNonlinExample(OptimizeModelInterface):
 
@@ -248,9 +242,3 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
 
     def get_parameter_encode_function(self, fname='encodeParameters'):
         return '''void ''' + fname + '''(const void* data, mot_float_type* x){}'''
-
-    def get_final_parameter_transformations(self, fname='applyFinalParameterTransformations'):
-        return None
-
-    def finalize_optimization_results(self, results_dict):
-        return results_dict

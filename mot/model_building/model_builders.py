@@ -2,6 +2,7 @@ import numpy as np
 import copy
 from mot.cl_data_type import SimpleCLDataType
 from mot.cl_routines.mapping.calc_dependent_params import CalculateDependentParameters
+from mot.cl_routines.sampling.metropolis_hastings import DefaultMHState
 from mot.model_building.cl_functions.model_functions import Weight
 from mot.model_building.cl_functions.parameters import CurrentObservationParam, StaticMapParameter, ProtocolParameter, \
     ModelDataParameter, FreeParameter
@@ -554,7 +555,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             func_name, inst_per_problem, eval_func_name, obs_func_name, param_listing))
         return str(func)
 
-    def finalize_optimization_results(self, results_dict):
+    def add_extra_result_maps(self, results_dict):
         """This adds some extra optimization maps to the results dictionary.
 
         This function behaves as a procedure and as a function. The input dict can be updated in place, but it should
@@ -672,7 +673,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
     def _add_finalizing_result_maps(self, results_dict):
         """Add some final results maps to the results dictionary.
 
-        This called by the function finalize_optimization_results() as last call to add more maps.
+        This called by the function add_extra_result_maps() as last call to add more maps.
 
         Args:
             results_dict (args): the results from model optmization. We are to modify this in-place.
@@ -1415,14 +1416,6 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
                                                 if len(s.shape) < 2 else s for s in proposal_state], axis=1)
         return proposal_state_matrix
 
-    def get_proposal_state_names(self):
-        return_list = []
-        for m, p in self._model_functions_info.get_estimable_parameters_list():
-            for param in p.sampling_proposal.get_parameters():
-                if param.adaptable:
-                    return_list.append('{}.{}.proposal.{}'.format(m.name, p.name, param.name))
-        return return_list
-
     def is_proposal_symmetric(self):
         return all(p.sampling_proposal.is_symmetric() for m, p in
                    self._model_functions_info.get_estimable_parameters_list())
@@ -1605,6 +1598,9 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
             full_likelihood=full_likelihood)
         return func
 
+    def get_metropolis_hastings_state(self):
+        return DefaultMHState(self.get_nmr_problems(), self.get_nmr_estimable_parameters(), self.double_precision)
+
     def samples_to_statistics(self, samples_dict):
         results = {}
         for key, value in samples_dict.items():
@@ -1613,6 +1609,20 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
             results[key] = stat_mod.get_mean(value)
             results[key + '.std'] = stat_mod.get_std(value)
         return results
+
+    def get_proposal_state_names(self):
+        """Get a list of names for the adaptable proposal parameters.
+
+        Returns:
+            list: list of str with the name for each of the adaptable proposal parameters.
+                This is used by the sampler to create a dictionary of final proposal states.
+        """
+        return_list = []
+        for m, p in self._model_functions_info.get_estimable_parameters_list():
+            for param in p.sampling_proposal.get_parameters():
+                if param.adaptable:
+                    return_list.append('{}.{}.proposal.{}'.format(m.name, p.name, param.name))
+        return return_list
 
 
 class _DependencyStore(object):
