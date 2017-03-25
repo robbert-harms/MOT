@@ -303,7 +303,7 @@ class GaussianEvaluationModel(EvaluationModel):
                     sum += pown(''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i), 2);
                 }
                 return - sum / (2 * GaussianNoise_sigma * GaussianNoise_sigma)
-                    ''' + ('+' + str(inst_per_problem) + ' * log(GaussianNoise_sigma * sqrt(2 * M_PI))'
+                    ''' + ('-' + str(inst_per_problem) + ' * log(GaussianNoise_sigma * sqrt(2 * M_PI))'
                            if full_likelihood else '') + ''';
 
             }
@@ -315,10 +315,10 @@ class GaussianEvaluationModel(EvaluationModel):
             double ''' + fname + '''(const void* const data, const mot_float_type* const x,
                                      const int observation_index){
                 ''' + param_listing + '''
-                return - (pown(''' + obs_fname + '''(data, observation_index)
-                          - ''' + eval_fname + '''(data, x, observation_index), 2))
+                return - pown(''' + obs_fname + '''(data, observation_index)
+                                - ''' + eval_fname + '''(data, x, observation_index), 2)
                     / (2 * GaussianNoise_sigma * GaussianNoise_sigma)
-                    ''' + ('+' + str(inst_per_problem) + ' * log(GaussianNoise_sigma * sqrt(2 * M_PI))'
+                    ''' + ('-' + str(inst_per_problem) + ' * log(GaussianNoise_sigma * sqrt(2 * M_PI))'
                            if full_likelihood else '') + ''';
             }
         '''
@@ -410,7 +410,7 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
                                     (OffsetGaussianNoise_sigma * OffsetGaussianNoise_sigma)), 2);
                 }
                 return - sum / (2 * pown(OffsetGaussianNoise_sigma, 2))
-                    ''' + ('+' + str(inst_per_problem) + ' * log(OffsetGaussianNoise_sigma * sqrt(2 * M_PI))'
+                    ''' + ('-' + str(inst_per_problem) + ' * log(OffsetGaussianNoise_sigma * sqrt(2 * M_PI))'
                            if full_likelihood else '') + ''';
             }
         '''
@@ -424,7 +424,7 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
                                 sqrt(pown(''' + eval_fname + '''(data, x, observation_index), 2) +
                                     (OffsetGaussianNoise_sigma * OffsetGaussianNoise_sigma)), 2)) /
                             (2 * pown(OffsetGaussianNoise_sigma, 2))
-                    ''' + ('+' + str(inst_per_problem) + ' * log(OffsetGaussianNoise_sigma * sqrt(2 * M_PI))'
+                    ''' + ('-' + str(inst_per_problem) + ' * log(OffsetGaussianNoise_sigma * sqrt(2 * M_PI))'
                            if full_likelihood else '') + ''';
             }
         '''
