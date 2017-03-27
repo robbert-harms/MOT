@@ -12,6 +12,7 @@ from numpy.linalg import det
 from scipy.special import gammaln
 from scipy.stats import chi2
 
+
 __author__ = 'Robbert Harms'
 __date__ = "2017-03-07"
 __maintainer__ = "Robbert Harms"
@@ -36,13 +37,15 @@ def multivariate_ess(samples, batch_size_generator=None):
     samples_generator = _get_sample_generator(samples)
 
     if os.name == 'nt': # In Windows there is no fork.
-        map_function = map
-    else:
-        p = multiprocessing.Pool()
-        map_function = p.imap
+        return np.array(list(map(_MultivariateESSMultiProcessing(batch_size_generator),
+                                 samples_generator())))
 
-    return np.array(list(map_function(_MultivariateESSMultiProcessing(batch_size_generator),
-                                      samples_generator())))
+    p = multiprocessing.Pool()
+    return_data = np.array(list(p.imap(_MultivariateESSMultiProcessing(batch_size_generator),
+                                       samples_generator())))
+    p.close()
+    p.join()
+    return return_data
 
 
 class _MultivariateESSMultiProcessing(object):
@@ -75,13 +78,15 @@ def univariate_ess(samples, method='standard_error', **kwargs):
     samples_generator = _get_sample_generator(samples)
 
     if os.name == 'nt':  # In Windows there is no fork.
-        map_function = map
-    else:
-        p = multiprocessing.Pool()
-        map_function = p.imap
+        return np.array(list(map(_UnivariateESSMultiProcessing(method, **kwargs),
+                                 samples_generator())))
 
-    return np.array(list(map_function(_UnivariateESSMultiProcessing(method, **kwargs),
-                                      samples_generator())))
+    p = multiprocessing.Pool()
+    return_data = np.array(list(p.imap(_UnivariateESSMultiProcessing(method, **kwargs),
+                                       samples_generator())))
+    p.close()
+    p.join()
+    return return_data
 
 
 class _UnivariateESSMultiProcessing(object):

@@ -107,20 +107,15 @@ class Random123GeneratorBase(CLRoutine):
             return samples[:-padding]
         return samples
 
-    def _get_rand123_init_cl_code(self):
-        if len(self._key):
-            return 'rand123_initialize_data_extra_precision_constmem(rand123_counter, rand123_key)'
-        else:
-            return 'rand123_initialize_data_constmem(rand123_counter)'
-
     def _get_uniform_kernel(self, min_val, max_val, c_type):
         src = get_random123_cl_code()
+        # By setting the rand123 state as kernel arguments the kernel does not need to be recompiled for a new state.
         src += '''
             __kernel void generate(constant uint* rand123_counter,
-                                   ''' + ('constant uint* rand123_key,' if len(self._key) else '') + '''
+                                   constant uint* rand123_key,
                                    global ''' + c_type + '''* samples){
 
-                rand123_data rng_data = ''' + self._get_rand123_init_cl_code() + ''';
+                rand123_data rng_data = rand123_initialize_data_constmem(rand123_counter, rand123_key);
 
                 ''' + c_type + '''4 randomnr =  rand123_uniform_''' + c_type + '''4(&rng_data);
 
@@ -136,12 +131,13 @@ class Random123GeneratorBase(CLRoutine):
 
     def _get_gaussian_kernel(self, mean, std, c_type):
         src = get_random123_cl_code()
+        # By setting the rand123 state as kernel arguments the kernel does not need to be recompiled for a new state.
         src += '''
             __kernel void generate(constant uint* rand123_counter,
-                                   ''' + ('constant uint* rand123_key,' if len(self._key) else '') + '''
+                                   constant uint* rand123_key,
                                    global ''' + c_type + '''* samples){
 
-                rand123_data rng_data = ''' + self._get_rand123_init_cl_code() + ''';
+                rand123_data rng_data = rand123_initialize_data_constmem(rand123_counter, rand123_key);
 
                 ''' + c_type + '''4 randomnr =  rand123_normal_''' + c_type + '''4(&rng_data);
 
@@ -172,20 +168,14 @@ class _Random123Worker(Worker):
         self._counter_buffer = cl.Buffer(self._cl_run_context.context,
                                          cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=self._counter)
 
-        if len(self._key):
-            self._key_buffer = cl.Buffer(self._cl_run_context.context,
-                                         cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=self._key)
+        self._key_buffer = cl.Buffer(self._cl_run_context.context,
+                                     cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=self._key)
 
         self._kernel = self._build_kernel()
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
-
-        kernel_args = [self._counter_buffer]
-        if len(self._key):
-            kernel_args.append(self._key_buffer)
-        kernel_args.append(self._samples_buf)
-
+        kernel_args = [self._counter_buffer, self._key_buffer, self._samples_buf]
         event = self._kernel.generate(self._cl_run_context.queue, (int(nmr_problems), ), None,
                                       *kernel_args, global_offset=(range_start,))
         return [self._enqueue_readout(self._samples_buf, self._samples, range_start * 4, range_end * 4, [event])]

@@ -1,7 +1,7 @@
 import numpy as np
 import pyopencl as cl
 
-from mot.random123 import get_random123_cl_code, RandomStartingPoint
+from mot.random123 import get_random123_cl_code, RandomStartingPoint, StartingPointFromSeed
 from ...cl_routines.sampling.base import AbstractSampler, SamplingOutput
 from ...load_balance_strategies import Worker
 from ...utils import get_float_type_def
@@ -27,15 +27,6 @@ class MetropolisHastings(AbstractSampler):
                 This will draw extra samples (chain_length * sample_intervals). If set to zero we
                 store every sample after the burn in.
             use_adaptive_proposals (boolean): if we use the adaptive proposals (set to True) or not (set to False).
-
-        Attributes:
-            nmr_samples (int): The length of the (returned) chain per voxel
-            burn_length (int): The length of the burn in (per voxel), these are extra samples,
-                jump is set to 1 (no thinning)
-            sample_intervals (int): how many samples we wait before we take,
-                this will draw extra samples (chain_length * sample_intervals)
-            proposal_update_intervals (int): after how many samples we would like to update the proposals
-                This is during burning and sampling. A value of 1 means update after every jump.
         """
         super(MetropolisHastings, self).__init__(**kwargs)
         self._nmr_samples = nmr_samples or 500
@@ -91,14 +82,8 @@ class MetropolisHastings(AbstractSampler):
 
         self._logger.info('Finished sampling')
 
-        new_mh_state = SimpleMHState(
-            mh_state.nmr_samples_drawn + self._nmr_samples * (self.sample_intervals + 1) + self.burn_length,
-            mh_state.get_proposal_state_sampling_counter(),
-            mh_state.get_proposal_state_acceptance_counter(),
-            mh_state.get_online_parameter_variance(),
-            mh_state.get_online_parameter_variance_update_m2(),
-            mh_state.get_online_parameter_mean()
-        )
+        new_mh_state = mh_state.with_nmr_samples_drawn(
+            mh_state.nmr_samples_drawn + self._nmr_samples * (self.sample_intervals + 1) + self.burn_length)
 
         return MHSampleOutput(samples, proposal_state, new_mh_state)
 
@@ -163,6 +148,7 @@ class _MHWorker(Worker):
         super(_MHWorker, self).__init__(cl_environment)
 
         self._model = model
+        self._nmr_problems = self._model.get_nmr_problems()
         self._current_chain_position = current_chain_position
         self._nmr_params = current_chain_position.shape[1]
         self._samples = samples
@@ -175,8 +161,6 @@ class _MHWorker(Worker):
         self._burn_length = burn_length
         self._sample_intervals = sample_intervals
         self.use_adaptive_proposals = use_adaptive_proposals
-
-        self._rand123_starting_point = RandomStartingPoint()
 
         self._kernel = self._build_kernel(compile_flags)
 
@@ -247,6 +231,8 @@ class _MHWorker(Worker):
     def _get_mh_state_dict(self):
         """Get a dictionary with the MH state kernel arrays"""
         state_dict = {
+            'rng_state': {'data': self._mh_state.get_rng_state(),
+                          'cl_type': 'uint'},
             'proposal_state_sampling_counter': {'data': self._mh_state.get_proposal_state_sampling_counter(),
                                                 'cl_type': 'uint'},
             'proposal_state_acceptance_counter': {'data': self._mh_state.get_proposal_state_acceptance_counter(),
@@ -297,6 +283,32 @@ class _MHWorker(Worker):
 
         if not self._model.is_proposal_symmetric():
             kernel_source += self._model.get_proposal_logpdf('getProposalLogPDF', address_space_proposal_state='global')
+
+        kernel_source += '''
+            rand123_data _rng_data_from_array(global uint* rng_state){
+                uint problem_ind = get_group_id(0);
+
+                return rand123_initialize_data(
+                    (uint[]){rng_state[0 + problem_ind * 6],
+                             rng_state[1 + problem_ind * 6],
+                             rng_state[2 + problem_ind * 6],
+                             rng_state[3 + problem_ind * 6]},
+                    (uint[]){rng_state[0 + problem_ind * 6],
+                             rng_state[1 + problem_ind * 6]});
+            }
+
+            void _rng_data_to_array(rand123_data data, global uint* rng_state){
+                uint problem_ind = get_group_id(0);
+
+                rng_state[0 + problem_ind * 6] = data.counter.v[0];
+                rng_state[1 + problem_ind * 6] = data.counter.v[1];
+                rng_state[2 + problem_ind * 6] = data.counter.v[2];
+                rng_state[3 + problem_ind * 6] = data.counter.v[3];
+
+                rng_state[4 + problem_ind * 6] = data.key.v[0];
+                rng_state[5 + problem_ind * 6] = data.key.v[1];
+            }
+        '''
 
         kernel_source += '''
             void _fill_log_likelihood_tmp(const void* const data,
@@ -500,47 +512,45 @@ class _MHWorker(Worker):
                 }
             }
         '''
-
         kernel_source += '''
             __kernel void sample(
                 ''' + ",\n".join(kernel_param_names) + '''
                 ){
 
                 uint problem_ind = get_group_id(0);
-                const uint nmr_params = ''' + str(self._nmr_params) + ''';
 
                 ''' + self._model.get_kernel_data_struct_initialization(self._cl_environment.device,
                                                                         'data', 'problem_ind') + '''
 
-                rand123_data rand123_rng_data = ''' + self._get_rand123_init_cl_code() + ''';
+                rand123_data rand123_rng_data = _rng_data_from_array(global_rng_state);
                 void* rng_data = (void*)&rand123_rng_data;
 
-                local mot_float_type x_local[nmr_params];
+                local mot_float_type x_local[''' + str(self._nmr_params) + '''];
 
                 local double current_likelihood;
                 local mot_float_type current_prior;
 
                 global mot_float_type* proposal_state =
                     global_proposal_state + problem_ind * ''' + str(proposal_state_size) + ''';
-                global mot_float_type* sampling_counter =
-                    global_proposal_state_sampling_counter + problem_ind * nmr_params;
-                global mot_float_type* acceptance_counter =
-                    global_proposal_state_acceptance_counter + problem_ind * nmr_params;
+                global uint* sampling_counter =
+                    global_proposal_state_sampling_counter + problem_ind * ''' + str(self._nmr_params) + ''';
+                global uint* acceptance_counter =
+                    global_proposal_state_acceptance_counter + problem_ind * ''' + str(self._nmr_params) + ''';
                 '''
         if self._update_parameter_variances:
             kernel_source += '''
                 global mot_float_type* parameter_mean =
-                    global_online_parameter_mean + problem_ind * nmr_params;
+                    global_online_parameter_mean + problem_ind * ''' + str(self._nmr_params) + ''';
                 global mot_float_type* parameter_variance =
-                    global_online_parameter_variance + problem_ind * nmr_params;
+                    global_online_parameter_variance + problem_ind * ''' + str(self._nmr_params) + ''';
                 global mot_float_type* parameter_variance_update_m2 =
-                    global_online_parameter_variance_update_m2 + problem_ind * nmr_params;
+                    global_online_parameter_variance_update_m2 + problem_ind * ''' + str(self._nmr_params) + ''';
             '''
         kernel_source += '''
 
                 if(get_local_id(0) == 0){
-                    for(int i = 0; i < nmr_params; i++){
-                        x_local[i] = current_chain_position[problem_ind * nmr_params + i];
+                    for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
+                        x_local[i] = current_chain_position[problem_ind * ''' + str(self._nmr_params) + ''' + i];
                     }
 
                     current_prior = getLogPrior((void*)&data, x_local);
@@ -556,26 +566,15 @@ class _MHWorker(Worker):
                     samples, log_likelihood_tmp);
 
                 if(get_local_id(0) == 0){
-                    for(int i = 0; i < nmr_params; i++){
-                        current_chain_position[problem_ind * nmr_params + i] = x_local[i];
+                    for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
+                        current_chain_position[problem_ind * ''' + str(self._nmr_params) + ''' + i] = x_local[i];
                     }
+
+                    _rng_data_to_array(rand123_rng_data, global_rng_state);
                 }
             }
         '''
         return kernel_source
-
-    def _get_rand123_init_cl_code(self):
-        key = self._rand123_starting_point.get_key()
-        counter = self._rand123_starting_point.get_counter()
-
-        if len(key):
-            return 'rand123_initialize_data_extra_precision((uint[]){%(c0)r, %(c1)r, %(c2)r, %(c3)r}, ' \
-                   '(uint[]){%(k0)r, %(k1)r})' % {'c0': counter[0], 'c1': counter[1],
-                                                  'c2': counter[2], 'c3': counter[3],
-                                                  'k0': key[0], 'k1': counter[1]}
-        else:
-            return 'rand123_initialize_data((uint[]){%(c0)r, %(c1)r, %(c2)r, %(c3)r})' \
-                   % {'c0': counter[0], 'c1': counter[1], 'c2': counter[2], 'c3': counter[3]}
 
 
 class MHState(object):
@@ -648,6 +647,14 @@ class MHState(object):
         """
         raise NotImplementedError()
 
+    def get_rng_state(self):
+        """Get the RNG state array for every problem instance.
+
+        Returns:
+            ndarray: a (d, *) state array with for every d problem the state of size > 0
+        """
+        raise NotImplementedError()
+
 
 class DefaultMHState(MHState):
 
@@ -686,11 +693,18 @@ class DefaultMHState(MHState):
     def get_online_parameter_mean(self):
         return np.zeros((self._nmr_problems, self._nmr_params), dtype=self._float_dtype, order='C')
 
+    def get_rng_state(self):
+        rand123_starting_point = RandomStartingPoint()
+        return np.tile(np.hstack([rand123_starting_point.get_counter(),
+                                  rand123_starting_point.get_key()]),
+                       (self._nmr_problems, 1)).astype(np.uint32)
+
 
 class SimpleMHState(MHState):
     def __init__(self, nmr_samples_drawn, proposal_state_sampling_counter, proposal_state_acceptance_counter,
                  online_parameter_variance, online_parameter_variance_update_m2,
-                 online_parameter_mean):
+                 online_parameter_mean,
+                 rng_state):
         """A simple MCMC state containing provided items
 
         Args:
@@ -705,6 +719,7 @@ class SimpleMHState(MHState):
                 the current state of the online parameter variance update variable.
             online_parameter_mean (ndarray): a (d, p) array with for d problems and p parameters
                 the current state of the online parameter mean
+            rng_state (ndarray): a (d, *) array with for d problems the rng state vector
         """
         self._nmr_samples_drawn = nmr_samples_drawn
         self._proposal_state_sampling_counter = proposal_state_sampling_counter
@@ -712,10 +727,23 @@ class SimpleMHState(MHState):
         self._online_parameter_variance = online_parameter_variance
         self._online_parameter_variance_update_m2 = online_parameter_variance_update_m2
         self._online_parameter_mean = online_parameter_mean
+        self._rng_state = rng_state
 
     @property
     def nmr_samples_drawn(self):
         return self._nmr_samples_drawn
+
+    def with_nmr_samples_drawn(self, nmr_samples_drawn):
+        """Recreate this object and set the number of samples drawn to the specified value."""
+        return type(self)(
+            nmr_samples_drawn,
+            self.get_proposal_state_sampling_counter(),
+            self.get_proposal_state_acceptance_counter(),
+            self.get_online_parameter_variance(),
+            self.get_online_parameter_variance_update_m2(),
+            self.get_online_parameter_mean(),
+            self.get_rng_state()
+        )
 
     def get_proposal_state_sampling_counter(self):
         return self._proposal_state_sampling_counter
@@ -732,6 +760,9 @@ class SimpleMHState(MHState):
     def get_online_parameter_mean(self):
         return self._online_parameter_mean
 
+    def get_rng_state(self):
+        return self._rng_state
+
 
 def _prepare_mh_state(mh_state, float_dtype):
     """Return a new MH state in which all the state variables are sanitized to the correct data type.
@@ -741,23 +772,29 @@ def _prepare_mh_state(mh_state, float_dtype):
         float_dtype (np.dtype): the numpy dtype for the floats, either np.float32 or np.float64
 
     Returns:
-        MHState: MH state with the same data only then possibly sanitized
+        SimpleMHState: MH state with the same data only then possibly sanitized
     """
     proposal_state_sampling_counter = np.require(np.copy(mh_state.get_proposal_state_sampling_counter()),
                                                  np.uint32,requirements=['C', 'A', 'O', 'W'])
 
     proposal_state_acceptance_counter = np.require(np.copy(mh_state.get_proposal_state_acceptance_counter()),
                                                    np.uint32, requirements=['C', 'A', 'O', 'W'])
+
     online_parameter_variance = np.require(np.copy(mh_state.get_online_parameter_variance()),
                                            float_dtype, requirements=['C', 'A', 'O', 'W'])
+
     online_parameter_variance_update_m2 = np.require(np.copy(mh_state.get_online_parameter_variance_update_m2()),
                                                      float_dtype, requirements=['C', 'A', 'O', 'W'])
+
     online_parameter_mean = np.require(np.copy(mh_state.get_online_parameter_mean()), float_dtype,
                                        requirements=['C', 'A', 'O', 'W'])
+
+    rng_state = np.require(np.copy(mh_state.get_rng_state()), np.uint32, requirements=['C', 'A', 'O', 'W'])
 
     return SimpleMHState(mh_state.nmr_samples_drawn,
                          proposal_state_sampling_counter, proposal_state_acceptance_counter,
                          online_parameter_variance, online_parameter_variance_update_m2,
-                         online_parameter_mean
+                         online_parameter_mean,
+                         rng_state
                          )
 
