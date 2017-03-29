@@ -1,6 +1,8 @@
+import os
+
 from pkg_resources import resource_filename
 from mot.cl_data_type import SimpleCLDataType
-from mot.model_building.cl_functions.base import SimpleLibraryFunctionFromFile
+from mot.model_building.cl_functions.base import SimpleLibraryFunctionFromFile, SimpleLibraryFunction
 from mot.model_building.cl_functions.parameters import LibraryParameter
 
 __author__ = 'Robbert Harms'
@@ -45,7 +47,7 @@ class Bessel(SimpleLibraryFunctionFromFile):
 class Trigonometrics(SimpleLibraryFunctionFromFile):
 
     def __init__(self):
-        """Function to estimate various additional trigonometric functions.
+        """Estimate various trigonometric functions additional to the OpenCL offerings.
         """
         super(Trigonometrics, self).__init__(
             'double',
@@ -56,6 +58,38 @@ class Trigonometrics(SimpleLibraryFunctionFromFile):
             resource_filename('mot', 'data/opencl/trigonometrics.cl'),
             {})
 
+
+class Rand123(SimpleLibraryFunction):
+
+    def __init__(self):
+        """Estimate various trigonometric functions additional to the OpenCL offerings.
+        """
+        super(Rand123, self).__init__(
+            'double',
+            'rand123',
+            (),
+            (),
+            Rand123._get_random123_cl_code(),
+            '')
+
+    @staticmethod
+    def _get_random123_cl_code():
+        """Get the source code needed for working with the Rand123 RNG.
+
+        Returns:
+            str: the CL code for the Rand123 RNG
+        """
+        generator = 'threefry'
+
+        src = open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/openclfeatures.h'), ), 'r').read()
+        src += open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/array.h'), ), 'r').read()
+        src += open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/{}.h'.format(generator)), ),
+                    'r').read()
+        src += open(os.path.abspath(resource_filename('mot', 'data/opencl/random.h'.format(generator)), ), 'r').read()
+        src += (open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/rand123.h'), ), 'r').read() % {
+            'GENERATOR_NAME': (generator)
+        })
+        return src
 
 
 class CerfImWOfX(SimpleLibraryFunctionFromFile):

@@ -23,14 +23,8 @@ def device_type_from_string(cl_device_type_str):
         cl.device_type: the pyopencl device type.
     """
     cl_device_type_str = cl_device_type_str.upper()
-    if cl_device_type_str == 'GPU':
-        return cl.device_type.GPU
-    if cl_device_type_str == 'CPU':
-        return cl.device_type.CPU
-    if cl_device_type_str == 'ACCELERATOR':
-        return cl.device_type.ACCELERATOR
-    if cl_device_type_str == 'CUSTOM':
-        return cl.device_type.CUSTOM
+    if hasattr(cl.device_type, cl_device_type_str):
+        return getattr(cl.device_type, cl_device_type_str)
     return None
 
 
@@ -43,28 +37,28 @@ def device_supports_double(cl_device):
     Returns:
         boolean: True if the given cl_device supports double, false otherwise.
     """
-    try:
-        return cl_device.get_info(cl.device_info.DOUBLE_FP_CONFIG) == 63
-    except pyopencl.LogicError:
-        return False
+    return cl_device.get_info(cl.device_info.DOUBLE_FP_CONFIG) == 63
 
 
 def results_to_dict(results, param_names):
-    """Create a dictionary out of the results, which the optimizer can output to the user
+    """Create a dictionary out of the results.
+
+    This basically splits the given nd-matrix into sub matrices based on the second dimension. The length of
+    the parameter names should match the length of the second dimension. If a two dimensional matrix of shape (d, p) is
+    given we return a matrix of shape (d,). If a matrix of shape (d, p, s_1, s_2, ..., s_n) is given, we return
+    a matrix of shape (d, s_1, s_2, ..., s_n).
 
     Args:
-        results: a 2d (from optimization) or 3d (from sampling) array that needs to be converted to a dictionary.
+        results: a multidimensional matrix we index based on the second dimension.
         param_names (list of str): the names of the parameters, one per column
 
     Returns:
         dict: the results packed in a dictionary
     """
-    results_slice = [slice(None)] * len(results.shape)
-    d = {}
-    for i in range(len(param_names)):
-        results_slice[1] = i
-        d[param_names[i]] = results[results_slice]
-    return d
+    if results.shape[1] != len(param_names):
+        raise ValueError('The number of columns ({}) in the matrix does not match '
+                         'the number of dictionary keys provided ({}).'.format(results.shape[1], len(param_names)))
+    return {name: results[:, i, ...] for i, name in enumerate(param_names)}
 
 
 def get_float_type_def(double_precision):
@@ -113,34 +107,63 @@ def get_float_type_def(double_precision):
         '''
 
 
-class TopologicalSort(object):
+def topological_sort(data):
+    """Topological sort the given dictionary structure.
 
-    def __init__(self, data):
-        """Topological sort the the given data. The data should consist of a dictionary structure.
+    Args:
+        data (dict); dictionary structure where the value is a list of dependencies for that given key.
+            For example: ``{'a': (), 'b': ('a',)}``, where ``a`` depends on nothing and ``b`` depends on ``a``.
+
+    Returns:
+        tuple: the dependencies in constructor order
+    """
+
+    def check_self_dependencies(input_data):
+        """Check if there are self dependencies within a node.
+
+        Self dependencies are for example: ``{'a': ('a',)}``.
 
         Args:
-            data (dict); dictionary structure where the value is a list of dependencies for that given key.
-                as an example ``{'a', (), 'b': ('a',)}``, where ``a`` depends on nothing and ``b`` depends on ``a``.
+            input_data (dict): the input data. Of a structure similar to {key: (list of values), ...}.
+
+        Raises:
+            ValueError: if there are indeed self dependencies
         """
-        self.data = data
+        for k, v in input_data.items():
+            if k in v:
+                raise ValueError('Self-dependency, {} depends on itself.'.format(k))
 
-    def get_sorted(self):
-        if not len(self.data):
-            return
+    def prepare_input_data(input_data):
+        """Prepares the input data by making sets of the dependencies. This automatically removes redundant items.
 
-        new_data = {}
-        for k, v in self.data.items():
-            new_v = set([])
-            if v:
-                new_v = set([e for e in v if e is not k])
-            new_data.update({k: new_v})
-        data = new_data
+        Args:
+            input_data (dict): the input data. Of a structure similar to {key: (list of values), ...}.
 
-        # Find all items that don't depend on anything.
-        extra_items_in_deps = reduce(set.union, data.values()) - set(data.keys())
+        Returns:
+            dict: a copy of the input dict but with sets instead of lists for the dependencies.
+        """
+        return {k: set(v) for k, v in input_data.items()}
 
-        # Add empty dependences where needed.
-        data.update({item: set() for item in extra_items_in_deps})
+    def find_items_without_dependencies(input_data):
+        """This searches the dependencies of all the items for items that have no dependencies.
+
+        For example, suppose the input is: ``{'a': ('b',)}``, then ``a`` depends on ``b`` and ``b`` depends on nothing.
+        This class returns ``(b,)`` in this example.
+
+        Args:
+            input_data (dict): the input data. Of a structure similar to {key: (list of values), ...}.
+
+        Returns:
+            list: the list of items without any dependency.
+        """
+        return list(reduce(set.union, input_data.values()) - set(input_data.keys()))
+
+    def add_empty_dependencies(data):
+        items_without_dependencies = find_items_without_dependencies(data)
+        data.update({item: set() for item in items_without_dependencies})
+
+    def get_sorted(input_data):
+        data = input_data
         while True:
             ordered = set(item for item, dep in data.items() if len(dep) == 0)
             if not ordered:
@@ -149,19 +172,26 @@ class TopologicalSort(object):
             data = {item: (dep - ordered) for item, dep in data.items() if item not in ordered}
 
         if len(data) != 0:
-            raise ValueError('Cyclic dependencies exist among these items: {}'.format(', '.join(repr(x)
-                                                                                                for x in data.items())))
+            raise ValueError('Cyclic dependencies exist '
+                             'among these items: {}'.format(', '.join(repr(x) for x in data.items())))
 
-    def get_flattened(self):
-        """Returns a single flattened list of dependencies.
+    check_self_dependencies(data)
 
-        Returns:
-            tuple: the list of dependencies in constructor order, optionally sorted
-        """
-        result = []
-        for d in self.get_sorted():
-            result.extend(tuple(d))
-        return result
+    if not len(data):
+        return []
+
+    data_copy = prepare_input_data(data)
+    add_empty_dependencies(data_copy)
+
+    result = []
+    for d in get_sorted(data_copy):
+        try:
+            d = sorted(d)
+        except TypeError:
+            d = list(d)
+
+        result.extend(d)
+    return result
 
 
 def is_scalar(value):

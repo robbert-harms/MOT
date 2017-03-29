@@ -9,7 +9,7 @@ from mot.model_building.cl_functions.parameters import CurrentObservationParam, 
 from mot.model_building.data_adapter import SimpleDataAdapter
 from mot.model_building.parameter_functions.dependencies import SimpleAssignment
 from mot.model_interfaces import OptimizeModelInterface, SampleModelInterface
-from mot.utils import TopologicalSort, is_scalar, all_elements_equal, get_single_value, results_to_dict
+from mot.utils import is_scalar, all_elements_equal, get_single_value, results_to_dict, topological_sort
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-03-14"
@@ -327,7 +327,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
     def get_nmr_estimable_parameters(self):
         """See super class for details"""
-        return len(self.get_optimized_param_names())
+        return len(self._model_functions_info.get_estimable_parameters_list())
 
     def get_data(self):
         """See super class for details"""
@@ -633,7 +633,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         for m, p in self._model_functions_info.get_estimable_parameters_list():
             dep_list.update({(m, p): (tuple(dep) for dep in p.parameter_transform.dependencies)})
 
-        dep_list = TopologicalSort(dep_list).get_flattened()
+        dep_list = topological_sort(dep_list)
 
         dec_func_list = []
         enc_func_list = []
@@ -976,15 +976,18 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         Returns:
             ndarray or number: the value for the given parameter.
         """
+        model_parameter_name = '{}.{}'.format(model.name, parameter.name)
+
         data = None
-        value = self._parameter_values.get('{}.{}'.format(model.name, parameter.name), None)
-        if parameter.name in self._problem_data.static_maps:
-            data = self._problem_data.static_maps[parameter.name]
+        value = self._parameter_values.get(model_parameter_name, None)
+
+        if model_parameter_name in self._problem_data.static_maps:
+            data = self._problem_data.static_maps[model_parameter_name]
         elif value is not None:
             data = value
 
         if data is None:
-            raise ValueError('No suitable data could be found for the static parameter {}.'.format(parameter.name))
+            raise ValueError('No suitable data could be found for the static parameter {}.'.format(model_parameter_name))
 
         if is_scalar(data):
             return data

@@ -1,7 +1,8 @@
 import numpy as np
 import pyopencl as cl
 
-from mot.random123 import get_random123_cl_code, RandomStartingPoint, StartingPointFromSeed
+from mot.model_building.cl_functions.library_functions import Rand123
+from mot.random123 import RandomStartingPoint
 from ...cl_routines.sampling.base import AbstractSampler, SamplingOutput
 from ...load_balance_strategies import Worker
 from ...utils import get_float_type_def
@@ -269,7 +270,9 @@ class _MHWorker(Worker):
         kernel_source = '''
             #define NMR_INST_PER_PROBLEM ''' + str(self._model.get_nmr_inst_per_problem()) + '''
         '''
-        kernel_source += get_random123_cl_code()
+        random_library = Rand123()
+        kernel_source += random_library.get_cl_header()
+        kernel_source += random_library.get_cl_code()
         kernel_source += get_float_type_def(self._model.double_precision)
         kernel_source += self._model.get_kernel_data_struct(self._cl_environment.device)
         kernel_source += self._model.get_log_prior_function('getLogPrior', address_space_parameter_vector='local')

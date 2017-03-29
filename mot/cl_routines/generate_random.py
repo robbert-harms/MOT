@@ -3,7 +3,8 @@ import pyopencl as cl
 
 from mot.cl_routines.base import CLRoutine
 from mot.load_balance_strategies import Worker
-from mot.random123 import RandomStartingPoint, get_random123_cl_code
+from mot.model_building.cl_functions.library_functions import Rand123
+from mot.random123 import RandomStartingPoint
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-10-29"
@@ -108,7 +109,9 @@ class Random123GeneratorBase(CLRoutine):
         return samples
 
     def _get_uniform_kernel(self, min_val, max_val, c_type):
-        src = get_random123_cl_code()
+        random_library = Rand123()
+        src = random_library.get_cl_header()
+        src += random_library.get_cl_code()
         # By setting the rand123 state as kernel arguments the kernel does not need to be recompiled for a new state.
         src += '''
             __kernel void generate(constant uint* rand123_counter,
@@ -130,7 +133,9 @@ class Random123GeneratorBase(CLRoutine):
         return src
 
     def _get_gaussian_kernel(self, mean, std, c_type):
-        src = get_random123_cl_code()
+        random_library = Rand123()
+        src = random_library.get_cl_header()
+        src += random_library.get_cl_code()
         # By setting the rand123 state as kernel arguments the kernel does not need to be recompiled for a new state.
         src += '''
             __kernel void generate(constant uint* rand123_counter,

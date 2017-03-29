@@ -1,8 +1,5 @@
-import os
 from random import Random
 import numpy as np
-from pkg_resources import resource_filename
-
 from mot.cl_routines.base import CLRoutine
 
 __author__ = 'Robbert Harms'
@@ -59,24 +56,6 @@ class RandomStartingPoint(StartingPointFromSeed):
     def __init__(self, **kwargs):
         """Generates the key and counter randomly."""
         super(RandomStartingPoint, self).__init__(Random().randint(0, 2**31), **kwargs)
-
-
-def get_random123_cl_code():
-    """Get the source code needed for working with the Rand123 RNG.
-
-    Returns:
-        str: the CL code for the Rand123 RNG
-    """
-    generator = 'threefry'
-
-    src = open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/openclfeatures.h'), ), 'r').read()
-    src += open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/array.h'), ), 'r').read()
-    src += open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/{}.h'.format(generator)), ), 'r').read()
-    src += open(os.path.abspath(resource_filename('mot', 'data/opencl/random.h'.format(generator)), ), 'r').read()
-    src += (open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/rand123.cl'), ), 'r').read() % {
-       'GENERATOR_NAME': (generator)
-    })
-    return src
 
 
 def generate_uniform(nmr_samples, minimum=0, maximum=1, dtype=None, starting_point=None):
