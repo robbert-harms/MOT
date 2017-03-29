@@ -1,9 +1,6 @@
 import os
-
 from pkg_resources import resource_filename
-from mot.cl_data_type import SimpleCLDataType
-from mot.model_building.cl_functions.base import SimpleLibraryFunctionFromFile, SimpleLibraryFunction
-from mot.model_building.cl_functions.parameters import LibraryParameter
+from mot.model_building.cl_functions.base import SimpleCLLibraryFromFile, SimpleCLLibrary
 
 __author__ = 'Robbert Harms'
 __date__ = "2016-10-03"
@@ -11,62 +8,34 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class FirstLegendreTerm(SimpleLibraryFunctionFromFile):
+class FirstLegendreTerm(SimpleCLLibraryFromFile):
 
     def __init__(self):
-        """A function for finding the first legendre term. (see the CL code for more details)
-        """
+        """A function for finding the first legendre term. (see the CL code for more details)"""
         super(FirstLegendreTerm, self).__init__(
-            'double',
-            'getFirstLegendreTerm',
-            (LibraryParameter(SimpleCLDataType.from_string('double'), 'x'),
-             LibraryParameter(SimpleCLDataType.from_string('int'), 'n')),
-            (),
-            resource_filename('mot', 'data/opencl/firstLegendreTerm.cl'),
-            {})
+            self.__class__.__name__, resource_filename('mot', 'data/opencl/firstLegendreTerm.cl'))
 
 
-class Bessel(SimpleLibraryFunctionFromFile):
+class Bessel(SimpleCLLibraryFromFile):
 
     def __init__(self):
-        """Function library for the bessel functions.
-
-        See the CL code for more details.
-        """
-        super(Bessel, self).__init__(
-            'double',
-            'bessel',
-            (),
-            (),
-            resource_filename('mot', 'data/opencl/bessel.cl'),
-            {})
+        """Function library for the bessel functions."""
+        super(Bessel, self).__init__(self.__class__.__name__, resource_filename('mot', 'data/opencl/bessel.cl'))
 
 
-class Trigonometrics(SimpleLibraryFunctionFromFile):
+class Trigonometrics(SimpleCLLibraryFromFile):
 
     def __init__(self):
-        """Estimate various trigonometric functions additional to the OpenCL offerings.
-        """
+        """Estimate various trigonometric functions additional to the OpenCL offerings."""
         super(Trigonometrics, self).__init__(
-            'double',
-            'trigonometrics',
-            (),
-            (),
-            resource_filename('mot', 'data/opencl/trigonometrics.cl'),
-            {})
+            self.__class__.__name__, resource_filename('mot', 'data/opencl/trigonometrics.cl'))
 
 
-class Rand123(SimpleLibraryFunction):
+class Rand123(SimpleCLLibrary):
 
     def __init__(self):
-        """Estimate various trigonometric functions additional to the OpenCL offerings.
-        """
-        super(Rand123, self).__init__(
-            'double',
-            'rand123',
-            (),
-            (),
-            Rand123._get_random123_cl_code())
+        """Estimate various trigonometric functions additional to the OpenCL offerings."""
+        super(Rand123, self).__init__(self.__class__.__name__, Rand123._get_random123_cl_code())
 
     @staticmethod
     def _get_random123_cl_code():
@@ -88,49 +57,33 @@ class Rand123(SimpleLibraryFunction):
         return src
 
 
-class CerfImWOfX(SimpleLibraryFunctionFromFile):
+class CerfImWOfX(SimpleCLLibraryFromFile):
 
     def __init__(self):
-        """Calculate the cerf. (see the CL code for more details)
-        """
+        """Calculate the cerf."""
         super(CerfImWOfX, self).__init__(
-            'mot_float_type',
-            'im_w_of_x',
-            (LibraryParameter(SimpleCLDataType.from_string('mot_float_type'), 'x'),),
-            (),
-            resource_filename('mot', 'data/opencl/cerf/im_w_of_x.cl'),
-            {})
+            self.__class__.__name__, resource_filename('mot', 'data/opencl/cerf/im_w_of_x.cl'))
 
 
-class CerfDawson(SimpleLibraryFunctionFromFile):
+class CerfDawson(SimpleCLLibraryFromFile):
 
     def __init__(self):
-        """Evaluate dawson integral. (see the CL code for more details)
-        """
+        """Evaluate dawson integral."""
         super(CerfDawson, self).__init__(
-            'mot_float_type',
-            'dawson',
-            (LibraryParameter(SimpleCLDataType.from_string('mot_float_type'), 'x'),),
-            (CerfImWOfX(),),
-            resource_filename('mot', 'data/opencl/cerf/dawson.cl'),
-            {})
+            self.__class__.__name__, resource_filename('mot', 'data/opencl/cerf/dawson.cl'),
+            dependencies=(CerfImWOfX(),))
 
 
-class CerfErfi(SimpleLibraryFunctionFromFile):
+class CerfErfi(SimpleCLLibraryFromFile):
 
     def __init__(self):
-        """Calculate erfi. (see the CL code for more details)
-        """
+        """Calculate erfi."""
         super(CerfErfi, self).__init__(
-            'mot_float_type',
-            'erfi',
-            (LibraryParameter(SimpleCLDataType.from_string('mot_float_type'), 'x'),),
-            (CerfImWOfX(),),
-            resource_filename('mot', 'data/opencl/cerf/erfi.cl'),
-            {})
+            self.__class__.__name__, resource_filename('mot', 'data/opencl/cerf/erfi.cl'),
+            dependencies=(CerfImWOfX(),))
 
 
-class EuclidianNormFunction(SimpleLibraryFunctionFromFile):
+class EuclidianNormFunction(SimpleCLLibraryFromFile):
 
     def __init__(self, memspace='private', memtype='mot_float_type'):
         """A CL functions for calculating the Euclidian distance between n values.
@@ -140,10 +93,6 @@ class EuclidianNormFunction(SimpleLibraryFunctionFromFile):
             memtype (str): the memory type to use, double, float, mot_float_type, ...
         """
         super(EuclidianNormFunction, self).__init__(
-            memtype,
-            'euclidian_norm_' + memspace + '_' + memtype,
-            (LibraryParameter(SimpleCLDataType.from_string(memtype + '*'), 'x'),
-             LibraryParameter(SimpleCLDataType.from_string('int'), 'n')),
-            (),
-            resource_filename('mot', 'data/opencl/euclidian_norm.pcl'),
-            {'MEMSPACE': memspace, 'MEMTYPE': memtype})
+            self.__class__.__name__ + '_' + memspace + '_' + memtype,
+            resource_filename('mot', 'data/opencl/euclidian_norm.cl'),
+            var_replace_dict={'MEMSPACE': memspace, 'MEMTYPE': memtype})

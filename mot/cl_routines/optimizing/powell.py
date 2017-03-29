@@ -61,7 +61,7 @@ class PowellWorker(AbstractParallelOptimizerWorker):
             params.update({option.upper(): value})
         params['RESET_METHOD'] = 'POWELL_RESET_METHOD_' + params['RESET_METHOD'].upper()
 
-        body = open(os.path.abspath(resource_filename('mot', 'data/opencl/powell.pcl')), 'r').read()
+        body = open(os.path.abspath(resource_filename('mot', 'data/opencl/powell.cl')), 'r').read()
         if params:
             body = body % params
         return body

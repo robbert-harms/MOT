@@ -7,12 +7,24 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class CLFunction(object):
+class CLLibrary(object):
+    """The basic interface for all CL libraries. This provides an interface to getting the CL code of a library."""
+
+    def get_cl_code(self):
+        """Get the function code for this library and for all its dependencies.
+
+        Returns:
+            str: The CL code for inclusion in a kernel.
+        """
+        raise NotImplementedError()
+
+
+class CLFunction(CLLibrary):
 
     def __init__(self, return_type, function_name, parameter_list):
-        """The header to one of the CL library functions.
+        """The header to a CL function.
 
-        Ideally the functions map bijective to the CL function files.
+        CL functions wraps some meta-information about a single OpenCL function in a Python object.
 
         Args:
             return_type (str): Return type of the CL function.
@@ -77,8 +89,9 @@ class DependentCLFunction(CLFunction):
         Args:
             return_type (str): Return type of the CL function.
             function_name (string): The name of the CL function
-            parameter_list (list of mot.model_building.cl_functions.parameters.CLFunctionParameter): The list of parameters required for this function
-            dependency_list (list of CLFunction): The list of CLFunctions this function is dependent on
+            parameter_list (list of mot.model_building.cl_functions.parameters.CLFunctionParameter): The
+                list of parameters required for this function
+            dependency_list (list of CLLibrary): The list of CL libraries this function depends on
         """
         super(DependentCLFunction, self).__init__(return_type, function_name, parameter_list)
         self._dependency_list = dependency_list
@@ -104,7 +117,7 @@ class ModelFunction(DependentCLFunction):
             name (str): The name of the model
             cl_function_name (string): The name of the CL function
             parameter_list (list or tuple of CLFunctionParameter): The list of parameters required for this function
-            dependency_list (list or tuple of CLFunction): The list of CLFunctions this function is dependent on
+            dependency_list (list or tuple of CLLibrary): The list of CL libraries this function depends on
         """
         super(ModelFunction, self).__init__('mot_float_type', cl_function_name, parameter_list, dependency_list)
         self._name = name
@@ -214,34 +227,22 @@ class ModelFunction(DependentCLFunction):
         return self._get_cl_dependency_code()
 
 
-class LibraryFunction(DependentCLFunction):
+class SimpleCLLibrary(CLLibrary):
 
-    def __init__(self, return_type, cl_function_name, parameter_list, dependency_list):
+    def __init__(self, name, cl_code, dependencies=None):
         """Create a CL function for a library function.
 
         These functions are not meant to be optimized, but can be used a helper functions for the models.
 
         Args:
-            return_type (str): Return type of the CL function.
-            cl_function_name (str): The name of the CL function
-            parameter_list (list or tuple of mot.model_building.cl_functions.parameters.CLFunctionParameter): The
-                list of parameters required for this function
-            dependency_list (list or tuple of mot.model_building.cl_functions.base.CLFunction): The list of
-                CLFunctions this function is dependent on
+            name (str): the name of this library, used to create the inclusion guards
+            cl_code (str): the CL code for this library
+            dependencies (list or tuple of CLLibrary): The list of CL libraries this function depends on
         """
-        super(LibraryFunction, self).__init__(return_type, cl_function_name, parameter_list, dependency_list)
-
-
-class SimpleLibraryFunction(LibraryFunction):
-
-    def __init__(self, return_type, cl_function_name, parameter_list, dependency_list, cl_code):
-        """Extends the default LibraryFunction by adding the cl code to the constructor.
-
-        Args:
-            cl_code (str): the CL code, this does not need to have dependencies or include guards
-        """
-        super(SimpleLibraryFunction, self).__init__(return_type, cl_function_name, parameter_list, dependency_list)
+        super(SimpleCLLibrary, self).__init__()
+        self._name = name
         self._cl_code = cl_code
+        self._dependencies = dependencies or {}
 
     def get_cl_code(self):
         return '''
@@ -251,32 +252,38 @@ class SimpleLibraryFunction(LibraryFunction):
             {code}
             #endif // {inclusion_guard_name}
         '''.format(dependencies=self._get_cl_dependency_code(),
-                   inclusion_guard_name='LIBRARY_FUNCTION_{}_CL'.format(self.cl_function_name),
+                   inclusion_guard_name='LIBRARY_FUNCTION_{}_CL'.format(self._name),
                    code=self._cl_code)
 
+    def _get_cl_dependency_code(self):
+        """Get the CL code for all the CL code for all the dependencies.
 
-class SimpleLibraryFunctionFromFile(SimpleLibraryFunction):
+        Returns:
+            str: The CL code with the actual code.
+        """
+        code = ''
+        for d in self._dependencies:
+            code += d.get_cl_code() + "\n"
+        return code
 
-    def __init__(self, return_type, cl_function_name, parameter_list, dependency_list, cl_code_file, var_replace_dict):
+
+class SimpleCLLibraryFromFile(SimpleCLLibrary):
+
+    def __init__(self, name, cl_code_file, var_replace_dict=None, dependencies=None):
         """Create a CL function for a library function.
 
         These functions are not meant to be optimized, but can be used a helper functions in models.
 
         Args:
-            return_type (str): Return type of the CL function.
-            cl_function_name (str): The name of the CL function
-            parameter_list (list or tuple of mot.model_building.cl_functions.parameters.CLFunctionParameter): The list
-                of parameters required for this function
-            dependency_list (list or tuple of mot.model_building.cl_functions.base.CLFunction): The list of CLFunctions
-                this function is dependent on
-            cl_code_file (str): The location of the code file .c or .pcl
+            name (str): The name of the CL function
+            cl_code_file (str): The location of the code file
             var_replace_dict (dict): In the cl_code file these replacements will be made
                 (using the % format function of Python)
+            dependencies (list or tuple of CLLibrary): The list of cl libraries this function depends on
         """
         code = open(os.path.abspath(cl_code_file), 'r').read()
 
-        if var_replace_dict:
+        if var_replace_dict is not None:
             code = code % var_replace_dict
 
-        super(SimpleLibraryFunctionFromFile, self).__init__(return_type, cl_function_name,
-                                                            parameter_list, dependency_list, code)
+        super(SimpleCLLibraryFromFile, self).__init__(name, code, dependencies)

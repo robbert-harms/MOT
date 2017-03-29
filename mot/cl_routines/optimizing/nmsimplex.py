@@ -108,7 +108,7 @@ class NMSimplexWorker(AbstractParallelOptimizerWorker):
             else:
                 params.update({option.upper(): value})
 
-        body = open(os.path.abspath(resource_filename('mot', 'data/opencl/nmsimplex.pcl')), 'r').read()
+        body = open(os.path.abspath(resource_filename('mot', 'data/opencl/nmsimplex.cl')), 'r').read()
         if params:
             body = body % params
         return body
