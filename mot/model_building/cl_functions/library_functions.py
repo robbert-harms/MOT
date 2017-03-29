@@ -22,7 +22,6 @@ class FirstLegendreTerm(SimpleLibraryFunctionFromFile):
             (LibraryParameter(SimpleCLDataType.from_string('double'), 'x'),
              LibraryParameter(SimpleCLDataType.from_string('int'), 'n')),
             (),
-            resource_filename('mot', 'data/opencl/firstLegendreTerm.h'),
             resource_filename('mot', 'data/opencl/firstLegendreTerm.cl'),
             {})
 
@@ -39,7 +38,6 @@ class Bessel(SimpleLibraryFunctionFromFile):
             'bessel',
             (),
             (),
-            resource_filename('mot', 'data/opencl/bessel.h'),
             resource_filename('mot', 'data/opencl/bessel.cl'),
             {})
 
@@ -54,7 +52,6 @@ class Trigonometrics(SimpleLibraryFunctionFromFile):
             'trigonometrics',
             (),
             (),
-            resource_filename('mot', 'data/opencl/trigonometrics.h'),
             resource_filename('mot', 'data/opencl/trigonometrics.cl'),
             {})
 
@@ -69,8 +66,7 @@ class Rand123(SimpleLibraryFunction):
             'rand123',
             (),
             (),
-            Rand123._get_random123_cl_code(),
-            '')
+            Rand123._get_random123_cl_code())
 
     @staticmethod
     def _get_random123_cl_code():
@@ -102,7 +98,6 @@ class CerfImWOfX(SimpleLibraryFunctionFromFile):
             'im_w_of_x',
             (LibraryParameter(SimpleCLDataType.from_string('mot_float_type'), 'x'),),
             (),
-            resource_filename('mot', 'data/opencl/cerf/im_w_of_x.h'),
             resource_filename('mot', 'data/opencl/cerf/im_w_of_x.cl'),
             {})
 
@@ -117,7 +112,6 @@ class CerfDawson(SimpleLibraryFunctionFromFile):
             'dawson',
             (LibraryParameter(SimpleCLDataType.from_string('mot_float_type'), 'x'),),
             (CerfImWOfX(),),
-            resource_filename('mot', 'data/opencl/cerf/dawson.h'),
             resource_filename('mot', 'data/opencl/cerf/dawson.cl'),
             {})
 
@@ -132,7 +126,6 @@ class CerfErfi(SimpleLibraryFunctionFromFile):
             'erfi',
             (LibraryParameter(SimpleCLDataType.from_string('mot_float_type'), 'x'),),
             (CerfImWOfX(),),
-            resource_filename('mot', 'data/opencl/cerf/erfi.h'),
             resource_filename('mot', 'data/opencl/cerf/erfi.cl'),
             {})
 
@@ -152,6 +145,5 @@ class EuclidianNormFunction(SimpleLibraryFunctionFromFile):
             (LibraryParameter(SimpleCLDataType.from_string(memtype + '*'), 'x'),
              LibraryParameter(SimpleCLDataType.from_string('int'), 'n')),
             (),
-            resource_filename('mot', 'data/opencl/euclidian_norm.ph'),
             resource_filename('mot', 'data/opencl/euclidian_norm.pcl'),
             {'MEMSPACE': memspace, 'MEMTYPE': memtype})

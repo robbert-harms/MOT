@@ -51,19 +51,11 @@ class CLFunction(object):
             A list containing instances of CLFunctionParameter."""
         return self._parameter_list
 
-    def get_cl_header(self):
-        """Get the CL header for this function and all its dependencies
-
-        Returns:
-            str: The CL header code for inclusion in CL source code.
-        """
-        return ''
-
     def get_cl_code(self):
         """Get the function code for this function and all its dependencies.
 
         Returns:
-            str: The CL header code for inclusion in CL source code.
+            str: The CL code for inclusion in a kernel.
         """
         return ''
 
@@ -90,17 +82,6 @@ class DependentCLFunction(CLFunction):
         """
         super(DependentCLFunction, self).__init__(return_type, function_name, parameter_list)
         self._dependency_list = dependency_list
-
-    def _get_cl_dependency_headers(self):
-        """Get the CL code for all the headers for all the dependencies.
-
-        Returns:
-            str: The CL code with the headers.
-        """
-        header = ''
-        for d in self._dependency_list:
-            header += d.get_cl_header() + "\n"
-        return header
 
     def _get_cl_dependency_code(self):
         """Get the CL code for all the CL code for all the dependencies.
@@ -224,14 +205,6 @@ class ModelFunction(DependentCLFunction):
         """
         return {}
 
-    def get_cl_dependency_headers(self):
-        """Get the CL code for all the headers for all the dependencies.
-
-        Returns:
-            str: The CL code with the headers.
-        """
-        return self._get_cl_dependency_headers()
-
     def get_cl_dependency_code(self):
         """Get the CL code for all the CL code for all the dependencies.
 
@@ -261,32 +234,14 @@ class LibraryFunction(DependentCLFunction):
 
 class SimpleLibraryFunction(LibraryFunction):
 
-    def __init__(self, return_type, cl_function_name, parameter_list, dependency_list, cl_header, cl_code):
+    def __init__(self, return_type, cl_function_name, parameter_list, dependency_list, cl_code):
         """Extends the default LibraryFunction by adding the cl code to the constructor.
 
         Args:
-            cl_header (str): the header function, this does not need the dependencies and include guards
-            cl_code (str): the CL code, this does not need the dependencies and include guards
+            cl_code (str): the CL code, this does not need to have dependencies or include guards
         """
         super(SimpleLibraryFunction, self).__init__(return_type, cl_function_name, parameter_list, dependency_list)
-        self._cl_header = cl_header
         self._cl_code = cl_code
-
-    def get_cl_header(self):
-        """Get the CL header for this function and all its dependencies.
-
-        Returns:
-            str: The CL code for the header
-        """
-        return '''
-            {dependencies}
-            #ifndef {inclusion_guard_name}
-            #define {inclusion_guard_name}
-            {header}
-            #endif // {inclusion_guard_name}
-        '''.format(dependencies=self._get_cl_dependency_headers(),
-                   inclusion_guard_name='LIBRARY_FUNCTION_{}_H'.format(self.cl_function_name),
-                   header=self._cl_header)
 
     def get_cl_code(self):
         return '''
@@ -302,8 +257,7 @@ class SimpleLibraryFunction(LibraryFunction):
 
 class SimpleLibraryFunctionFromFile(SimpleLibraryFunction):
 
-    def __init__(self, return_type, cl_function_name, parameter_list, dependency_list, cl_header_file,
-                 cl_code_file, var_replace_dict):
+    def __init__(self, return_type, cl_function_name, parameter_list, dependency_list, cl_code_file, var_replace_dict):
         """Create a CL function for a library function.
 
         These functions are not meant to be optimized, but can be used a helper functions in models.
@@ -315,17 +269,14 @@ class SimpleLibraryFunctionFromFile(SimpleLibraryFunction):
                 of parameters required for this function
             dependency_list (list or tuple of mot.model_building.cl_functions.base.CLFunction): The list of CLFunctions
                 this function is dependent on
-            cl_header_file (str): The location of the header file .h or .ph
             cl_code_file (str): The location of the code file .c or .pcl
-            var_replace_dict (dict): In the cl_header and cl_code file these replacements will be made
+            var_replace_dict (dict): In the cl_code file these replacements will be made
                 (using the % format function of Python)
         """
         code = open(os.path.abspath(cl_code_file), 'r').read()
-        header = open(os.path.abspath(cl_header_file), 'r').read()
 
         if var_replace_dict:
             code = code % var_replace_dict
-            header = header % var_replace_dict
 
         super(SimpleLibraryFunctionFromFile, self).__init__(return_type, cl_function_name,
-                                                            parameter_list, dependency_list, header, code)
+                                                            parameter_list, dependency_list, code)

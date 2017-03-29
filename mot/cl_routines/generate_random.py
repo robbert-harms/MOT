@@ -110,8 +110,7 @@ class Random123GeneratorBase(CLRoutine):
 
     def _get_uniform_kernel(self, min_val, max_val, c_type):
         random_library = Rand123()
-        src = random_library.get_cl_header()
-        src += random_library.get_cl_code()
+        src = random_library.get_cl_code()
         # By setting the rand123 state as kernel arguments the kernel does not need to be recompiled for a new state.
         src += '''
             __kernel void generate(constant uint* rand123_counter,
@@ -134,8 +133,7 @@ class Random123GeneratorBase(CLRoutine):
 
     def _get_gaussian_kernel(self, mean, std, c_type):
         random_library = Rand123()
-        src = random_library.get_cl_header()
-        src += random_library.get_cl_code()
+        src = random_library.get_cl_code()
         # By setting the rand123 state as kernel arguments the kernel does not need to be recompiled for a new state.
         src += '''
             __kernel void generate(constant uint* rand123_counter,

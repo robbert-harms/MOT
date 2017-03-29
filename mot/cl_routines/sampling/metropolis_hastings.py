@@ -271,7 +271,6 @@ class _MHWorker(Worker):
             #define NMR_INST_PER_PROBLEM ''' + str(self._model.get_nmr_inst_per_problem()) + '''
         '''
         random_library = Rand123()
-        kernel_source += random_library.get_cl_header()
         kernel_source += random_library.get_cl_code()
         kernel_source += get_float_type_def(self._model.double_precision)
         kernel_source += self._model.get_kernel_data_struct(self._cl_environment.device)

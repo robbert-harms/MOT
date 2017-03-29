@@ -36,11 +36,6 @@ class Scalar(ModelFunction):
             (FreeParameter(SimpleCLDataType.from_string('mot_float_type'), param_name,
                            False, value, lower_bound, upper_bound, **parameter_settings),))
 
-    def get_cl_header(self):
-        """See base class for details"""
-        path = resource_filename('mot', 'data/opencl/model_functions/Scalar.h')
-        return self._get_cl_dependency_headers() + "\n" + open(os.path.abspath(path), 'r').read()
-
     def get_cl_code(self):
         """See base class for details"""
         path = resource_filename('mot', 'data/opencl/model_functions/Scalar.cl')

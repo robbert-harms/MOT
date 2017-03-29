@@ -126,7 +126,6 @@ float4 rand123_normal_float4(rand123_data* rng_data){
 /** End of the random number generating functions */
 
 
-/** Implementations of the random.h header */
 double4 rand4(void* rng_data){
     double4 val = rand123_uniform_double4((rand123_data*)rng_data);
     rand123_increment_counters((rand123_data*)rng_data);

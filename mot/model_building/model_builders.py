@@ -527,7 +527,6 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             param_listing += self._get_param_listing_for_param(self._evaluation_model, p)
 
         func = ''
-        func += self._evaluation_model.get_cl_dependency_headers()
         func += self._evaluation_model.get_cl_dependency_code()
 
         func += self.get_model_eval_function(eval_func_name)
@@ -546,7 +545,6 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             param_listing += self._get_param_listing_for_param(self._evaluation_model, p)
 
         func = ''
-        func += self._evaluation_model.get_cl_dependency_headers()
         func += self._evaluation_model.get_cl_dependency_code()
 
         func += self.get_model_eval_function(eval_func_name)
@@ -766,7 +764,6 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         """Get the model functions CL. This is used in get_model_eval_function()."""
         cl_code = ''
         for compartment_model in self._model_tree.get_compartment_models():
-            cl_code += compartment_model.get_cl_header() + "\n"
             cl_code += compartment_model.get_cl_code() + "\n"
 
         if self._signal_noise_model:
@@ -1567,7 +1564,6 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
             param_listing += self._get_param_listing_for_param(evaluation_model, p)
 
         func = ''
-        func += evaluation_model.get_cl_dependency_headers()
         func += evaluation_model.get_cl_dependency_code()
 
         func += self.get_model_eval_function(eval_func_name)
@@ -1590,7 +1586,6 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
             param_listing += self._get_param_listing_for_param(evaluation_model, p)
 
         func = ''
-        func += evaluation_model.get_cl_dependency_headers()
         func += evaluation_model.get_cl_dependency_code()
 
         func += self.get_model_eval_function(eval_func_name)
