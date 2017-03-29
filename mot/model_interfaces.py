@@ -23,7 +23,7 @@ class OptimizeModelInterface(object):
         Returns:
             str: A string with the name of this model.
         """
-        return ""
+        raise NotImplementedError()
 
     @property
     def double_precision(self):
@@ -35,7 +35,7 @@ class OptimizeModelInterface(object):
         Returns:
             boolean: if we would like to use double precision floating point during the calculations
         """
-        return False
+        raise NotImplementedError()
 
     def get_data(self):
         """Get the data this model needs inside the CL kernels.
@@ -322,48 +322,45 @@ class OptimizeModelInterface(object):
 
 
 class SampleModelInterface(OptimizeModelInterface):
+    """Extends the OptimizeModelInterface with information for sampling purposes.
 
-    def __init__(self):
-        """Extends the OptimizeModelInterface with information for sampling purposes.
+    This specific interface is tied to sampling with the Metropolis Hastings Random Walk sampler as
+    implement in :class:`mot.cl_routines.sampling.metropolis_hastings.MetropolisHastings`.
 
-        This specific interface is tied to sampling with the Metropolis Hastings Random Walk sampler as
-        implement in :class:`mot.cl_routines.sampling.metropolis_hastings.MetropolisHastings`.
+    To be able to sample a model we (in principle) need to have:
 
-        To be able to sample a model we (in principle) need to have:
-
-        * a log likelihood function;
-        * a proposal function;
-        * and a prior function
+    * a log likelihood function;
+    * a proposal function;
+    * and a prior function
 
 
-        Proposal functions can be symmetric (if it holds that ``q(x|x') == q(x'|x)``) or
-        non symmetric (i.e. ``q(x|x') != q(x'|x)``). In the case of non-symmetric proposals we need to
-        have a function to get the probability log likelihood of the proposal.
-        This indicates the need for two more pieces of information:
+    Proposal functions can be symmetric (if it holds that ``q(x|x') == q(x'|x)``) or
+    non symmetric (i.e. ``q(x|x') != q(x'|x)``). In the case of non-symmetric proposals we need to
+    have a function to get the probability log likelihood of the proposal.
+    This indicates the need for two more pieces of information:
 
-        * test if the proposal is symmetric
-        * proposal log PDF function
-
-
-        A trick in sampling is to have auto-adapting proposals. These proposals commonly have a distribution with a
-        standard deviation that varies in time. The idea is that if the distribution is too tight (low std) only a few
-        of the proposed samples are accepted and we need to broaden the distribution (increase the std). On the other
-        hand, if the std is too high the jumps might not get accepted. This leads us to the following
-        additional functionality:
-
-        * proposal state update function
+    * test if the proposal is symmetric
+    * proposal log PDF function
 
 
-        Since OpenCL < 2.1 does not allow for state variables in functions and does not have classes we need to find
-        a way to store the state of the proposal distribution inside the kernel function. For that, each proposal
-        CL function has as additional parameter the ``proposal_state``. The initial state can be obtained from
-        this class and needs to be handed to the proposal functions.
+    A trick in sampling is to have auto-adapting proposals. These proposals commonly have a distribution with a
+    standard deviation that varies in time. The idea is that if the distribution is too tight (low std) only a few
+    of the proposed samples are accepted and we need to broaden the distribution (increase the std). On the other
+    hand, if the std is too high the jumps might not get accepted. This leads us to the following
+    additional functionality:
 
-        Finally, this interface requires to you specify a :class:`mot.cl_routines.sampling.metropolis_hastings.MHState`
-        that specifies the current state of the sampler. This can be set to a default state when starting sampling
-        or to the output of a previous run to continue sampling.
-        """
-        super(SampleModelInterface, self).__init__()
+    * proposal state update function
+
+
+    Since OpenCL < 2.1 does not allow state variables in functions and also does not support classes, we need to find
+    a way to store the state of the proposal distribution inside the kernel function. For that, each proposal
+    CL function has as additional parameter the ``proposal_state``. The initial state can be obtained from
+    this class and needs to be handed to the proposal functions in the kernels.
+
+    Finally, this interface requires to you specify a :class:`mot.cl_routines.sampling.metropolis_hastings.MHState`
+    that specifies the current state of the sampler. This can be set to a default state when starting sampling
+    or to the output of a previous run to continue sampling.
+    """
 
     def get_proposal_state(self):
         """Get for every problem instance the list of parameter values to use in the the adaptable proposal.

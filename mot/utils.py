@@ -1,7 +1,5 @@
 from functools import reduce
-
 import numpy as np
-import pyopencl
 import pyopencl as cl
 
 __author__ = 'Robbert Harms'
