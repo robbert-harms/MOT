@@ -1,8 +1,9 @@
+from random import Random
+
 import numpy as np
 import pyopencl as cl
 
 from mot.model_building.cl_functions.library_functions import Rand123
-from mot.random123 import RandomStartingPoint
 from ...cl_routines.sampling.base import AbstractSampler, SamplingOutput
 from ...load_balance_strategies import Worker
 from ...utils import get_float_type_def
@@ -294,21 +295,20 @@ class _MHWorker(Worker):
                     (uint[]){rng_state[0 + problem_ind * 6],
                              rng_state[1 + problem_ind * 6],
                              rng_state[2 + problem_ind * 6],
-                             rng_state[3 + problem_ind * 6]},
-                    (uint[]){rng_state[0 + problem_ind * 6],
-                             rng_state[1 + problem_ind * 6]});
+                             rng_state[3 + problem_ind * 6],
+                             rng_state[4 + problem_ind * 6],
+                             rng_state[5 + problem_ind * 6]});
             }
 
             void _rng_data_to_array(rand123_data data, global uint* rng_state){
                 uint problem_ind = get_group_id(0);
 
-                rng_state[0 + problem_ind * 6] = data.counter.v[0];
-                rng_state[1 + problem_ind * 6] = data.counter.v[1];
-                rng_state[2 + problem_ind * 6] = data.counter.v[2];
-                rng_state[3 + problem_ind * 6] = data.counter.v[3];
+                uint state[6];
+                rand123_data_to_array(data, state);
 
-                rng_state[4 + problem_ind * 6] = data.key.v[0];
-                rng_state[5 + problem_ind * 6] = data.key.v[1];
+                for(int i = 0; i < 6; i++){
+                    rng_state[i + problem_ind * 6] = state[i];
+                }
             }
         '''
 
@@ -696,9 +696,13 @@ class DefaultMHState(MHState):
         return np.zeros((self._nmr_problems, self._nmr_params), dtype=self._float_dtype, order='C')
 
     def get_rng_state(self):
-        rand123_starting_point = RandomStartingPoint()
-        return np.tile(np.hstack([rand123_starting_point.get_counter(),
-                                  rand123_starting_point.get_key()]),
+        rng = Random()
+        dtype_info = np.iinfo(np.uint32)
+
+        starting_point = np.array(list(rng.randrange(dtype_info.min, dtype_info.max + 1) for _ in range(6)),
+                                  dtype=np.uint32)
+
+        return np.tile(np.hstack([starting_point]),
                        (self._nmr_problems, 1)).astype(np.uint32)
 
 

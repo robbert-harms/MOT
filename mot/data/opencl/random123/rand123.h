@@ -39,26 +39,29 @@ uint4 rand123_generate_bits(rand123_data* rng_data){
 /**
  * Initializes the rand123_data structure.
  *
- * The provided key is extended with the global id of the kernel and a zero for possible future use.
+ * The state is implicitly extended with the global id of the kernel such that every work item generates
+ * it's own unique random numbers.
  */
-rand123_data rand123_initialize_data(uint counter[4], uint key[2]){
-    %(GENERATOR_NAME)s4x32_ctr_t c = {{counter[0], counter[1], counter[2], counter[3]}};
-    %(GENERATOR_NAME)s4x32_key_t k = {{key[0], key[1], get_global_id(0), 0}};
+rand123_data rand123_initialize_data(uint state[6]){
+    %(GENERATOR_NAME)s4x32_ctr_t c = {{state[0], state[1], state[2], state[3]}};
+    %(GENERATOR_NAME)s4x32_key_t k = {{state[4], state[5], get_global_id(0), 0}};
 
     rand123_data rng_data = {c, k};
     return rng_data;
 }
 
 /**
- * Initializes the rand123_data structure with additional precision (extra key) using constant memory pointers.
- *
- * The same function as ``rand123_initialize_data`` but this accepts ``constant`` memory pointers.
+ * Convert the rand123 state back into a state array.
  */
-rand123_data rand123_initialize_data_constmem(constant uint counter[4], constant uint key[2]){
-    return rand123_initialize_data(
-        (uint []){counter[0], counter[1], counter[2], counter[3]},
-        (uint []){key[0], key[1]});
+void rand123_data_to_array(rand123_data data, uint rng_state[6]){
+    rng_state[0] = data.counter.v[0];
+    rng_state[1] = data.counter.v[1];
+    rng_state[2] = data.counter.v[2];
+    rng_state[3] = data.counter.v[3];
+    rng_state[4] = data.key.v[0];
+    rng_state[5] = data.key.v[1];
 }
+
 
 /**
  * Increments the rand123 state counters for the next iteration.

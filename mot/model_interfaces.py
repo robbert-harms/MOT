@@ -1,11 +1,10 @@
 """The interfaces needed for models.
 
-Since a lot of information about a model is needed to be able to optimize or sample it we encapsulate all that
+Since a lot of information about a model is needed to be able to optimize or sample it, we encapsulate all that
 information in an interface. Only objects that successful implement the interfaces in this module can be optimized or
 sampled using one of the optimization or sampling routines in MOT.
 
-These interfaces expose data and modeling code. The data is represented in CL buffers that may be memoized for
-future usage. The code should be returned as CL strings.
+These interfaces expose data and modeling code. The data is represented as numpy arrays and the CL code as strings.
 """
 
 __author__ = 'Robbert Harms'

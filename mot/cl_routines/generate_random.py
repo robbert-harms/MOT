@@ -1,10 +1,12 @@
+from random import Random
+
 import numpy as np
 import pyopencl as cl
 
 from mot.cl_routines.base import CLRoutine
 from mot.load_balance_strategies import Worker
 from mot.model_building.cl_functions.library_functions import Rand123
-from mot.random123 import RandomStartingPoint
+
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-10-29"
@@ -13,9 +15,43 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
+def generate_uniform(nmr_samples, minimum=0, maximum=1, dtype=None, seed=None):
+    """Draw random samples from the uniform distribution.
+
+    Args:
+        nmr_samples (int): The number of samples to draw
+        minimum (double): The minimum value of the random numbers
+        maximum (double): The minimum value of the random numbers
+        dtype (np.dtype): the numpy datatype, either one of float32 (default) or float64.
+        seed (float): the seed, if not given a random seed is used.
+
+    Returns:
+        ndarray: A numpy array with nmr_samples random samples drawn from the uniform distribution.
+    """
+    generator = Random123GeneratorBase(seed=seed)
+    return generator.generate_uniform(nmr_samples, minimum=minimum, maximum=maximum, dtype=dtype)
+
+
+def generate_gaussian(nmr_samples, mean=0, std=1, dtype=None, seed=None):
+    """Draw random samples from the Gaussian distribution.
+
+    Args:
+        nmr_samples (int): The number of samples to draw
+        mean (double): The mean of the distribution
+        std (double): The standard deviation or the distribution
+        dtype (np.dtype): the numpy datatype, either one of float32 (default) or float64.
+        seed (float): the seed, if not given a random seed is used.
+
+    Returns:
+        ndarray: A numpy array with nmr_samples random samples drawn from the Gaussian distribution.
+    """
+    generator = Random123GeneratorBase(seed=seed)
+    return generator.generate_gaussian(nmr_samples, mean=mean, std=std, dtype=dtype)
+
+
 class Random123GeneratorBase(CLRoutine):
 
-    def __init__(self, starting_point=None, **kwargs):
+    def __init__(self, seed=None, **kwargs):
         """Create the random123 basis for generating a list of random numbers.
 
         *From the Random123 documentation:*
@@ -35,19 +71,26 @@ class Random123GeneratorBase(CLRoutine):
         All the Random123 generators are counter-based RNGs that use integer multiplication, xor and permutation
         of W-bit words to scramble its N-word input key.
 
+
+        *Implementation note:
+
+        In this implementation we generate a counter and key automatically from a single seed.
+
         Args:
-            starting_point (mot.random123.Random123StartingPoint): object that provides the generator
-                with the starting points (key, counter) tuple. If None is given we will use the
-                ``RandomStartingPoint``.
+            seed (float): the seed, if not given a random seed is used.
         """
         super(Random123GeneratorBase, self).__init__(**kwargs)
-
-        starting_point = starting_point or RandomStartingPoint()
-
         self.context = self.cl_environments[0].get_cl_context().context
+        self._rng_state = self._get_rng_state(seed)
 
-        self._key = starting_point.get_key()
-        self._counter = starting_point.get_counter()
+    def _get_rng_state(self, seed):
+        if seed is None:
+            seed = Random().randint(0, 2 ** 31)
+
+        rng = Random(seed)
+        dtype_info = np.iinfo(np.uint32)
+
+        return np.array(list(rng.randrange(dtype_info.min, dtype_info.max + 1) for _ in range(6)), dtype=np.uint32)
 
     def generate_uniform(self, nmr_samples, minimum=0, maximum=1, dtype=None):
         """Draw random samples from the uniform distribution.
@@ -101,7 +144,7 @@ class Random123GeneratorBase(CLRoutine):
         samples = np.zeros((nmr_samples,), dtype=np.float32)
 
         workers = self._create_workers(lambda cl_environment: _Random123Worker(cl_environment, samples,
-                                                                               kernel_source, self._key, self._counter))
+                                                                               kernel_source, self._rng_state))
         self.load_balancer.process(workers, nmr_samples // 4)
 
         if padding:
@@ -113,11 +156,11 @@ class Random123GeneratorBase(CLRoutine):
         src = random_library.get_cl_code()
         # By setting the rand123 state as kernel arguments the kernel does not need to be recompiled for a new state.
         src += '''
-            __kernel void generate(constant uint* rand123_counter,
-                                   constant uint* rand123_key,
+            __kernel void generate(constant uint* rng_state,
                                    global ''' + c_type + '''* samples){
 
-                rand123_data rng_data = rand123_initialize_data_constmem(rand123_counter, rand123_key);
+                rand123_data rng_data = rand123_initialize_data(
+                    (uint[]){rng_state[0], rng_state[1], rng_state[2], rng_state[3], rng_state[4], rng_state[5]});
 
                 ''' + c_type + '''4 randomnr =  rand123_uniform_''' + c_type + '''4(&rng_data);
 
@@ -136,11 +179,11 @@ class Random123GeneratorBase(CLRoutine):
         src = random_library.get_cl_code()
         # By setting the rand123 state as kernel arguments the kernel does not need to be recompiled for a new state.
         src += '''
-            __kernel void generate(constant uint* rand123_counter,
-                                   constant uint* rand123_key,
+            __kernel void generate(constant uint* rng_state,
                                    global ''' + c_type + '''* samples){
 
-                rand123_data rng_data = rand123_initialize_data_constmem(rand123_counter, rand123_key);
+                rand123_data rng_data = rand123_initialize_data(
+                    (uint[]){rng_state[0], rng_state[1], rng_state[2], rng_state[3], rng_state[4], rng_state[5]});
 
                 ''' + c_type + '''4 randomnr =  rand123_normal_''' + c_type + '''4(&rng_data);
 
@@ -157,28 +200,24 @@ class Random123GeneratorBase(CLRoutine):
 
 class _Random123Worker(Worker):
 
-    def __init__(self, cl_environment, samples, kernel_source, key, counter):
+    def __init__(self, cl_environment, samples, kernel_source, rng_state):
         super(_Random123Worker, self).__init__(cl_environment)
         self._samples = samples
         self._nmr_samples = self._samples.shape[0]
         self._kernel_source = kernel_source
-        self._key = key
-        self._counter = counter
+        self._rng_state = rng_state
 
         self._samples_buf = cl.Buffer(self._cl_run_context.context, cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
                                       hostbuf=self._samples)
 
-        self._counter_buffer = cl.Buffer(self._cl_run_context.context,
-                                         cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=self._counter)
-
-        self._key_buffer = cl.Buffer(self._cl_run_context.context,
-                                     cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=self._key)
+        self._rng_state_buffer = cl.Buffer(self._cl_run_context.context,
+                                           cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=self._rng_state)
 
         self._kernel = self._build_kernel()
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
-        kernel_args = [self._counter_buffer, self._key_buffer, self._samples_buf]
+        kernel_args = [self._rng_state_buffer, self._samples_buf]
         event = self._kernel.generate(self._cl_run_context.queue, (int(nmr_problems), ), None,
                                       *kernel_args, global_offset=(range_start,))
         return [self._enqueue_readout(self._samples_buf, self._samples, range_start * 4, range_end * 4, [event])]

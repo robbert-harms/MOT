@@ -50,7 +50,6 @@ class Rand123(SimpleCLLibrary):
         src += open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/array.h'), ), 'r').read()
         src += open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/{}.h'.format(generator)), ),
                     'r').read()
-        src += open(os.path.abspath(resource_filename('mot', 'data/opencl/random.h'.format(generator)), ), 'r').read()
         src += (open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/rand123.h'), ), 'r').read() % {
             'GENERATOR_NAME': (generator)
         })
