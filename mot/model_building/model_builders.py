@@ -973,18 +973,15 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         Returns:
             ndarray or number: the value for the given parameter.
         """
-        model_parameter_name = '{}.{}'.format(model.name, parameter.name)
-
         data = None
-        value = self._parameter_values.get(model_parameter_name, None)
-
-        if model_parameter_name in self._problem_data.static_maps:
-            data = self._problem_data.static_maps[model_parameter_name]
+        value = self._parameter_values.get('{}.{}'.format(model.name, parameter.name), None)
+        if parameter.name in self._problem_data.static_maps:
+            data = self._problem_data.static_maps[parameter.name]
         elif value is not None:
             data = value
 
         if data is None:
-            raise ValueError('No suitable data could be found for the static parameter {}.'.format(model_parameter_name))
+            raise ValueError('No suitable data could be found for the static parameter {}.'.format(parameter.name))
 
         if is_scalar(data):
             return data
