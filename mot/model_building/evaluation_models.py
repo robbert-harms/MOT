@@ -161,7 +161,7 @@ class EvaluationModel(ModelFunction):
         return 'sigma'
 
 
-class SumOfSquares(EvaluationModel):
+class SumOfSquaresEvaluationModel(EvaluationModel):
 
     def __init__(self):
         """Evaluates the distance between the estimated signal and the data using the sum of squared differences.

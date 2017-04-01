@@ -35,12 +35,17 @@ _config = {
     'load_balancer': PreferGPU(),
     'compile_flags': {
         'general': {
-            '-cl-single-precision-constant': True,  # this flag is automatically disabled when running in double mode
+            '-cl-single-precision-constant': True,
             '-cl-denorms-are-zero': True,
             '-cl-mad-enable': True,
             '-cl-no-signed-zeros': True
         },
-        'cl_routine_specific': {}
+
+        # CL Routine specific flags
+        'cl_routine_specific': {},
+
+        # The flags to disable when running in double mode
+        'disable_in_double_precision': ['-cl-single-precision-constant']
     },
     'ignore_kernel_compile_warnings': True,
 
@@ -113,6 +118,15 @@ def get_compile_flags(cl_routine_name=None):
     if cl_routine_name in _config['compile_flags']['cl_routine_specific']:
         flags.update(_config['compile_flags']['cl_routine_specific'][cl_routine_name])
     return flags
+
+
+def get_compile_flags_to_disable_in_double_precision():
+    """Get the list of compile flags we want to disable when running in double precision.
+
+    Returns:
+        boolean: the list of flags we want to disable when running in double mode
+    """
+    return copy(_config['compile_flags']['disable_in_double_precision'])
 
 
 def get_default_proposal_update():

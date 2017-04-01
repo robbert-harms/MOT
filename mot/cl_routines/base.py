@@ -1,4 +1,5 @@
 from mot import configuration
+from mot.configuration import get_compile_flags_to_disable_in_double_precision
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-04-26"
@@ -56,7 +57,7 @@ class CLRoutine(object):
         elements = [flag for flag, enabled in self.compile_flags.items() if enabled]
 
         if double_precision:
-            elements_to_remove = ['-cl-single-precision-constant']
+            elements_to_remove = get_compile_flags_to_disable_in_double_precision()
             elements = list(filter(lambda e: e not in elements_to_remove, elements))
 
         return elements

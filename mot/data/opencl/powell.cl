@@ -119,13 +119,14 @@ bool powell_fval_diff_within_threshold(mot_float_type previous_fval, mot_float_t
  * Returns:
  *  the function value at the optimum point found on the line.
  */
-mot_float_type powell_find_linear_minimum(mot_float_type* const point_0,
-                                          mot_float_type* const point_1,
-                                          const void* const data){
+mot_float_type powell_find_linear_minimum(
+        mot_float_type* const point_0,
+        mot_float_type* const point_1,
+        const void* const data){
 
     linear_function_data eval_data = {point_0, point_1, data};
 
-    mot_float_type xmin;
+    mot_float_type xmin = 0;
     mot_float_type fval = bracket_and_brent(&xmin, (const void*) &eval_data);
 
     for(int j=0; j < %(NMR_PARAMS)r; j++){
@@ -187,12 +188,12 @@ double powell_linear_eval_function(mot_float_type x, const void* const eval_data
  *   the new lowest function value
  */
 mot_float_type powell_do_line_searches(
-    mot_float_type search_directions[%(NMR_PARAMS)r][%(NMR_PARAMS)r],
-    const void* const data,
-    mot_float_type fval,
-    mot_float_type* starting_point,
-    mot_float_type* largest_decrease,
-    int* index_largest_decrease){
+        mot_float_type search_directions[%(NMR_PARAMS)r][%(NMR_PARAMS)r],
+        const void* const data,
+        mot_float_type fval,
+        mot_float_type* starting_point,
+        mot_float_type* largest_decrease,
+        int* index_largest_decrease){
 
     int i, j;
     *index_largest_decrease = 0;
@@ -247,10 +248,10 @@ mot_float_type powell_evaluate_extrapolated(mot_float_type* new_best_point, mot_
  * This is the test in Numerical Recipes, other tests can also be used for the other methods.
  */
 bool powell_should_exchange_search_directions(
-    mot_float_type fval_at_start_of_iteration,
-    mot_float_type fval_best_found,
-    mot_float_type fval_extrapolated,
-    mot_float_type largest_decrease){
+        mot_float_type fval_at_start_of_iteration,
+        mot_float_type fval_best_found,
+        mot_float_type fval_extrapolated,
+        mot_float_type largest_decrease){
 
     if(fval_extrapolated >= fval_at_start_of_iteration){
         return false;
