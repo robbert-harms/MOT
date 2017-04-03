@@ -106,7 +106,9 @@ release-ubuntu-ppa: dist-ubuntu
 
 release-github:
 	git push . master:latest_release
+	git tag -a v$(PROJECT_VERSION) -m "Version $(PROJECT_VERSION)"
 	git push origin latest_release
+	git push origin --tags
 
 dist: clean
 	$(PYTHON) setup.py sdist
