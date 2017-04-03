@@ -69,6 +69,98 @@ class LoadBalanceStrategy(object):
         raise NotImplementedError()
 
 
+class Worker(object):
+
+    def __init__(self, cl_environment):
+        """Create a new worker.
+
+        Workload strategies use workers to perform the calculations, in a distributed way determined by the strategy.
+        All computed results should be stored internally by the worker.
+
+        Args:
+            cl_environment (CLEnvironment): The cl environment, can be used to determine the load
+        """
+        self._cl_environment = cl_environment
+        self._cl_run_context = self._cl_environment.get_cl_context()
+
+    @property
+    def cl_environment(self):
+        """Get the used CL environment.
+
+        Returns:
+            cl_environment (CLEnvironment): The cl environment to use for calculations.
+        """
+        return self._cl_environment
+
+    def calculate(self, range_start, range_end):
+        """Calculate for this problem the given range.
+
+        The results of the computations must be stored internally.
+
+        Args:
+            range_start (int): The start of the processing range
+            range_end (int): The end of the processing range
+
+        Returns:
+            list[cl_event]: The list of CL events to wait for.
+        """
+        return []
+
+    def post_process(self, range_start, range_end):
+        """Apply post processing at the end of the calculation.
+
+        This is called after event.wait() has finished for every worker working per batch. One can use this function
+        to post-process data after kernel execution.
+
+        Args:
+            range_start (int): The start of the processing range
+            range_end (int): The end of the processing range
+        """
+
+    def _build_kernel(self, compile_flags=()):
+        """Build the kernel for this worker.
+
+        This assumes that the implementer implements the function _get_kernel_source() to get the source.
+
+        Returns:
+            cl.Program: a compiled CL kernel
+        """
+        kernel_source = self._get_kernel_source()
+        from mot import configuration
+        if configuration.should_ignore_kernel_compile_warnings():
+            warnings.simplefilter("ignore")
+        return cl.Program(self._cl_run_context.context, kernel_source).build(' '.join(compile_flags))
+
+    def _get_kernel_source(self):
+        """Calculate the kernel source for this worker.
+
+        Returns:
+            str: the kernel
+        """
+
+    def _enqueue_readout(self, buffer, host_array, range_start, range_end, wait_for):
+        """Enqueue a readout for a buffer started with use_host_ptr.
+
+        This encapsulates all the low level details needed to readout the given range of values.
+
+        Args:
+            buffer: the buffer on the device
+            host_array (ndarray): the host side array of the given buffer
+            range_start (int): the start of the range to read out (in the first dimension)
+            range_end (int): the end of the range to read out (in the first dimension)
+            wait_for (list of event): the list of events to wait for
+
+        Returns:
+            event; the event of the readout
+        """
+        nmr_problems = range_end - range_start
+        return cl.enqueue_map_buffer(
+            self._cl_run_context.queue, buffer, cl.map_flags.READ, range_start * host_array.strides[0],
+            (nmr_problems, ) + host_array.shape[1:], host_array.dtype, order="C", wait_for=wait_for,
+            is_blocking=False)[1]
+
+
+
 class SimpleLoadBalanceStrategy(LoadBalanceStrategy):
 
     def __init__(self, run_in_batches=True, single_batch_length=1e6):
@@ -182,97 +274,6 @@ class SimpleLoadBalanceStrategy(LoadBalanceStrategy):
                 time.strftime('%H:%M:%S', time.gmtime(remaining_time))))
 
         self._logger.debug('Ran all batches.')
-
-
-class Worker(object):
-
-    def __init__(self, cl_environment):
-        """Create a new worker.
-
-        Workload strategies use workers to perform the calculations, in a distributed way determined by the strategy.
-        All computed results should be stored internally by the worker.
-
-        Args:
-            cl_environment (CLEnvironment): The cl environment, can be used to determine the load
-        """
-        self._cl_environment = cl_environment
-        self._cl_run_context = self._cl_environment.get_cl_context()
-
-    @property
-    def cl_environment(self):
-        """Get the used CL environment.
-
-        Returns:
-            cl_environment (CLEnvironment): The cl environment to use for calculations.
-        """
-        return self._cl_environment
-
-    def calculate(self, range_start, range_end):
-        """Calculate for this problem the given range.
-
-        The results of the computations must be stored internally.
-
-        Args:
-            range_start (int): The start of the processing range
-            range_end (int): The end of the processing range
-
-        Returns:
-            list[cl_event]: The list of CL events to wait for.
-        """
-        return []
-
-    def post_process(self, range_start, range_end):
-        """Apply post processing at the end of the calculation.
-
-        This is called after event.wait() has finished for every worker working per batch. One can use this function
-        to post-process data after kernel execution.
-
-        Args:
-            range_start (int): The start of the processing range
-            range_end (int): The end of the processing range
-        """
-
-    def _build_kernel(self, compile_flags=()):
-        """Build the kernel for this worker.
-
-        This assumes that the implementer implements the function _get_kernel_source() to get the source.
-
-        Returns:
-            cl.Program: a compiled CL kernel
-        """
-        kernel_source = self._get_kernel_source()
-        from mot import configuration
-        if configuration.should_ignore_kernel_compile_warnings():
-            warnings.simplefilter("ignore")
-        return cl.Program(self._cl_run_context.context, kernel_source).build(' '.join(compile_flags))
-
-    def _get_kernel_source(self):
-        """Calculate the kernel source for this worker.
-
-        Returns:
-            str: the kernel
-        """
-
-    def _enqueue_readout(self, buffer, host_array, range_start, range_end, wait_for):
-        """Enqueue a readout for a buffer started with use_host_ptr.
-
-        This encapsulates all the low level details needed to readout the given range of values.
-
-        Args:
-            buffer: the buffer on the device
-            host_array (ndarray): the host side array of the given buffer
-            range_start (int): the start of the range to read out (in the first dimension)
-            range_end (int): the end of the range to read out (in the first dimension)
-            wait_for (list of event): the list of events to wait for
-
-        Returns:
-            event; the event of the readout
-        """
-        nmr_problems = range_end - range_start
-        return cl.enqueue_map_buffer(
-            self._cl_run_context.queue, buffer, cl.map_flags.READ, range_start * host_array.strides[0],
-            (nmr_problems, ) + host_array.shape[1:], host_array.dtype, order="C", wait_for=wait_for,
-            is_blocking=False)[1]
 
 
 class MetaLoadBalanceStrategy(SimpleLoadBalanceStrategy):
