@@ -53,7 +53,7 @@ class CalculateDependentParameters(CLRoutine):
             dtype=np_dtype, order='C')
 
         estimated_parameters = np.require(np.dstack(estimated_parameters_list),
-                                          np_dtype, requirements=['C', 'A', 'O'])
+                                          np_dtype, requirements=['C', 'A', 'O'])[0, ...]
 
         workers = self._create_workers(
             lambda cl_environment: _CDPWorker(cl_environment, self.get_compile_flags_list(self._double_precision),
@@ -117,7 +117,7 @@ class _CDPWorker(Worker):
         parameter_write_out = ''
         for i, p in enumerate(dependent_parameter_names):
             parameter_write_out += 'results[gid * ' + str(len(dependent_parameter_names)) + \
-                                   ' + ' + str(i) + '] = _get_' + p + '(&x, data);\n'
+                                   ' + ' + str(i) + '] = ' + p + ";\n"
 
         kernel_param_names = ['global mot_float_type* params', 'global mot_float_type* results']
         kernel_param_names.extend(self._model.get_kernel_param_names(self._cl_environment.device))
@@ -125,18 +125,6 @@ class _CDPWorker(Worker):
         kernel_source = ''
         kernel_source += get_float_type_def(self._double_precision)
         kernel_source += self._model.get_kernel_data_struct(self._cl_environment.device)
-
-        for dependent_parameter_name in dependent_parameter_names:
-            kernel_source += '''
-            mot_float_type _get_''' + dependent_parameter_name + '''(
-                    mot_float_type* x,
-                    ''' + self._model.get_kernel_data_struct_type() + '''* data){{
-
-                ''' + self._parameters_listing + '''
-                return ''' + dependent_parameter_name + ''';
-            }}
-            '''
-
         kernel_source += '''
             __kernel void transform(
                 ''' + ",\n".join(kernel_param_names) + '''
@@ -152,7 +140,7 @@ class _CDPWorker(Worker):
                     for(i = 0; i < ''' + str(self._nmr_estimated_params) + '''; i++){
                         x[i] = params[gid * ''' + str(self._nmr_estimated_params) + ''' + i];
                     }
-
+                    ''' + self._parameters_listing + '''
                     ''' + parameter_write_out + '''
             }
         '''
