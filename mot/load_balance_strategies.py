@@ -139,7 +139,7 @@ class Worker(object):
         """
 
     def _enqueue_readout(self, buffer, host_array, range_start, range_end, wait_for):
-        """Enqueue a readout for a buffer started with use_host_ptr.
+        """Enqueue a readout for a buffer created with use_host_ptr.
 
         This encapsulates all the low level details needed to readout the given range of values.
 
@@ -158,7 +158,6 @@ class Worker(object):
             self._cl_run_context.queue, buffer, cl.map_flags.READ, range_start * host_array.strides[0],
             (nmr_problems, ) + host_array.shape[1:], host_array.dtype, order="C", wait_for=wait_for,
             is_blocking=False)[1]
-
 
 
 class SimpleLoadBalanceStrategy(LoadBalanceStrategy):
@@ -217,7 +216,7 @@ class SimpleLoadBalanceStrategy(LoadBalanceStrategy):
         if run_in_batches:
             batches = []
             for start_pos in range(int(range_start), int(range_end), int(single_batch_length)):
-                batches.append((start_pos, min(start_pos + single_batch_length, range_end)))
+                batches.append((start_pos, int(min(start_pos + single_batch_length, range_end))))
             return batches
 
         return [(range_start, range_end)]
