@@ -88,7 +88,7 @@ class MetropolisHastings(AbstractSampler):
         new_mh_state = mh_state.with_nmr_samples_drawn(
             mh_state.nmr_samples_drawn + self._nmr_samples * (self.sample_intervals + 1) + self.burn_length)
 
-        return MHSampleOutput(samples, proposal_state, new_mh_state)
+        return MHSampleOutput(samples, proposal_state, new_mh_state, current_chain_position)
 
     def _do_initial_logging(self, model):
         self._logger.info('Entered sampling routine.')
@@ -118,11 +118,21 @@ class MetropolisHastings(AbstractSampler):
 
 class MHSampleOutput(SamplingOutput):
 
-    def __init__(self, samples, proposal_state, mh_state):
-        """Simple storage container for the sampling output"""
+    def __init__(self, samples, proposal_state, mh_state, current_chain_position):
+        """Simple storage container for the sampling output
+
+        Args:
+            samples (ndarray): an (d, p, n) matrix with d problems, p parameters and n samples
+            proposal_state (ndarray): (d, p) matrix with for d problems and p parameters the proposal state
+            mh_state (MHState): the current MH state
+            current_chain_position (ndarray): (d, p) matrix with for d observations and p parameters the current
+                chain position. If the samples are not empty the last element in the samples (``samples[..., -1]``)
+                should equal this matrix.
+        """
         self._samples = samples
         self._proposal_state = proposal_state
         self._mh_state = mh_state
+        self._current_chain_position = current_chain_position
 
     def get_samples(self):
         return self._samples
@@ -143,6 +153,16 @@ class MHSampleOutput(SamplingOutput):
         """
         return self._mh_state
 
+    def get_current_chain_position(self):
+        """Get the current chain position current_chain_position
+
+        Returns:
+            ndarray: (d, p) matrix with for d observations and p parameters the current
+                chain position. If the samples are not empty the last element in the samples (``samples[..., -1]``)
+                should equal this matrix.
+        """
+        return self._current_chain_position
+
 
 class _MHWorker(Worker):
 
@@ -154,6 +174,7 @@ class _MHWorker(Worker):
         self._current_chain_position = current_chain_position
         self._nmr_params = current_chain_position.shape[1]
         self._samples = samples
+
         self._proposal_state = proposal_state
         self._mh_state = mh_state
         self._mh_state_dict = self._get_mh_state_dict()
@@ -165,7 +186,8 @@ class _MHWorker(Worker):
         # we split the kernel into multiple batches to prevent memory issues with long running kernels
         # this does not mean that the computations are interruptable. We enqueue all kernels at once
         # and they will run until completion.
-        self._max_samples_per_batch = 1000
+        self._max_samples_per_batch = 5000
+        self._max_iterations_per_batch = self._max_samples_per_batch * (self._sample_intervals + 1)
 
         kernel_builder = _MCMCKernelBuilder(
             compile_flags, self._mh_state_dict, cl_environment, model,
@@ -180,53 +202,71 @@ class _MHWorker(Worker):
         workgroup_size = cl.Kernel(self._sampling_kernel, 'sample').get_work_group_info(
             cl.kernel_work_group_info.PREFERRED_WORK_GROUP_SIZE_MULTIPLE, self._cl_environment.device)
 
-        data_buffers, readout_items = self._get_buffers(range_start, range_end, workgroup_size)
+        data_buffers, readout_items = self._get_buffers(workgroup_size)
 
         last_kernel_event_list = None
-        sample_count_offset = self._mh_state.nmr_samples_drawn
+        iteration_offset = self._mh_state.nmr_samples_drawn
 
         if self._burn_length > 0:
-            last_kernel_event_list, sample_count_offset = self._enqueue_burnin(
-                range_start, range_end, workgroup_size, data_buffers, sample_count_offset, last_kernel_event_list)
-
-        batch_sizes = self._get_sampling_batch_sizes(
-            self._nmr_samples * (self._sample_intervals + 1), self._max_samples_per_batch)
+            last_kernel_event_list, iteration_offset = self._enqueue_burnin(
+                range_start, range_end, workgroup_size, data_buffers, iteration_offset, last_kernel_event_list)
 
         samples_buf = cl.Buffer(self._cl_run_context.context,
                                 cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
-                                hostbuf=self._samples[range_start:range_end, ...])
+                                hostbuf=self._samples)
         data_buffers.append(samples_buf)
         readout_items.append([samples_buf, self._samples])
 
-        for batch_size in batch_sizes:
+        iteration_batch_sizes = self._get_sampling_batch_sizes(
+            self._nmr_samples * (self._sample_intervals + 1), self._max_iterations_per_batch)
+
+        for nmr_iterations in iteration_batch_sizes:
             sampling_event = self._sampling_kernel.sample(self._cl_run_context.queue,
                                                           (int(nmr_problems * workgroup_size),),
                                                           (int(workgroup_size),),
-                                                          np.uint32(batch_size),
-                                                          np.uint32(sample_count_offset),
+                                                          np.uint32(nmr_iterations),
+                                                          np.uint32(iteration_offset),
                                                           *data_buffers,
-                                                          wait_for=last_kernel_event_list)
+                                                          wait_for=last_kernel_event_list,
+                                                          global_offset=(range_start * workgroup_size,))
+
             last_kernel_event_list = [sampling_event]
-            sample_count_offset += batch_size
+            iteration_offset += nmr_iterations
 
         return_events = []
         for buffer, host_array in readout_items:
-            return_events.append(self._enqueue_readout(buffer, host_array, 0, nmr_problems, last_kernel_event_list))
+            return_events.append(self._enqueue_readout(buffer, host_array, range_start, range_end,
+                                                       last_kernel_event_list))
         return return_events
 
-    def _get_buffers(self, range_start, range_end, workgroup_size):
+    def _enqueue_burnin(self, range_start, range_end, workgroup_size, data_buffers,
+                        iteration_offset, last_kernel_event_list):
+        nmr_problems = range_end - range_start
+        batch_sizes = self._get_sampling_batch_sizes(self._burn_length, self._max_iterations_per_batch)
+
+        for nmr_iterations in batch_sizes:
+            burnin_event = self._burnin_kernel.sample(
+                self._cl_run_context.queue, (int(nmr_problems * workgroup_size),), (int(workgroup_size),),
+                np.uint32(nmr_iterations), np.uint32(iteration_offset), *data_buffers,
+                wait_for=last_kernel_event_list, global_offset=(range_start * workgroup_size,))
+            last_kernel_event_list = [burnin_event]
+            iteration_offset += nmr_iterations
+
+        return last_kernel_event_list, iteration_offset
+
+    def _get_buffers(self, workgroup_size):
         data_buffers = []
         readout_items = []
 
         current_chain_position_buffer = cl.Buffer(self._cl_run_context.context,
                                                   cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR,
-                                                  hostbuf=self._current_chain_position[range_start:range_end, :])
+                                                  hostbuf=self._current_chain_position)
         data_buffers.append(current_chain_position_buffer)
         readout_items.append([current_chain_position_buffer, self._current_chain_position])
 
         proposal_buffer = cl.Buffer(self._cl_run_context.context,
                                     cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR,
-                                    hostbuf=self._proposal_state[range_start:range_end, ...])
+                                    hostbuf=self._proposal_state)
         data_buffers.append(proposal_buffer)
         readout_items.append([proposal_buffer, self._proposal_state])
 
@@ -236,7 +276,7 @@ class _MHWorker(Worker):
 
             buffer = cl.Buffer(self._cl_run_context.context,
                                cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR,
-                               hostbuf=host_array[range_start:range_end, ...])
+                               hostbuf=host_array)
             mcmc_state_buffers[mcmc_state_element] = buffer
 
             data_buffers.append(buffer)
@@ -249,21 +289,6 @@ class _MHWorker(Worker):
                                           cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data))
 
         return data_buffers, readout_items
-
-    def _enqueue_burnin(self, range_start, range_end, workgroup_size, data_buffers,
-                        sample_count_offset, last_kernel_event_list):
-        nmr_problems = range_end - range_start
-        batch_sizes = self._get_sampling_batch_sizes(self._burn_length, self._max_samples_per_batch)
-
-        for batch_size in batch_sizes:
-            burnin_event = self._burnin_kernel.sample(
-                self._cl_run_context.queue, (int(nmr_problems * workgroup_size),), (int(workgroup_size),),
-                np.uint32(batch_size), np.uint32(sample_count_offset), *data_buffers,
-                wait_for=last_kernel_event_list)
-            last_kernel_event_list = [burnin_event]
-            sample_count_offset += batch_size
-
-        return last_kernel_event_list, sample_count_offset
 
     def _get_sampling_batch_sizes(self, total_nmr_samples, max_batch_length):
         """Cuts the total number of samples into smaller batches.
@@ -345,10 +370,12 @@ class _MCMCKernelBuilder(object):
 
     def _get_kernel_source(self, store_samples=True):
         kernel_param_names = [
-            'uint nmr_samples',
-            'uint sample_count_offset',
+            'uint nmr_iterations',
+            'uint iteration_offset']
+
+        kernel_param_names.extend([
             'global mot_float_type* current_chain_position',
-            'global mot_float_type* global_proposal_state']
+            'global mot_float_type* global_proposal_state'])
 
         for mcmc_state_element in sorted(self._mh_state_dict):
             cl_type = self._mh_state_dict[mcmc_state_element]['cl_type']
@@ -391,8 +418,8 @@ class _MCMCKernelBuilder(object):
                          local double* const current_likelihood,
                          local mot_float_type* const current_prior,
                          const void* const data,
-                         uint nmr_samples,
-                         uint sample_count_offset,
+                         uint nmr_iterations,
+                         uint iteration_offset,
                          global mot_float_type* const proposal_state,
                          global uint* const sampling_counter,
                          global uint* const acceptance_counter,
@@ -400,20 +427,20 @@ class _MCMCKernelBuilder(object):
                                    global mot_float_type* parameter_variance,
                                    global mot_float_type* parameter_variance_update_m2,'''
                                 if self._update_parameter_variances else '') + '''
-                         ''' + ('global mot_float_type* samples,' if store_samples else '') + '''
+                         ''' + ('global mot_float_type* samples, ' if store_samples else '') + '''
                          local double* log_likelihood_tmp){
 
                 uint i, j;
-                uint problem_ind = get_group_id(0);
+                uint problem_ind = (uint)(get_global_id(0) / get_local_size(0));
                 bool is_first_work_item = get_local_id(0) == 0;
 
-                for(i = 0; i < nmr_samples; i++){
+                for(i = 0; i < nmr_iterations; i++){
                 '''
         if self._update_parameter_variances:
             kernel_source += '''
                     if(is_first_work_item){
                         for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
-                            _update_chain_statistics(i + sample_count_offset,
+                            _update_chain_statistics(i + iteration_offset,
                                 x_local[j], parameter_mean + j, parameter_variance + j,
                                 parameter_variance_update_m2 + j);
                         }
@@ -436,9 +463,10 @@ class _MCMCKernelBuilder(object):
         '''
         if store_samples:
             kernel_source += '''
-                        if((i + sample_count_offset) % ''' + str(self._sample_intervals + 1) + ''' == 0){
+                        if((i - ''' + str(self._burn_length) + ''' + iteration_offset) % ''' + \
+                             str(self._sample_intervals + 1) + ''' == 0){
                             for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
-                                samples[(uint)((i - ''' + str(self._burn_length) + ''' + sample_count_offset)
+                                samples[(uint)((i - ''' + str(self._burn_length) + ''' + iteration_offset)
                                                 / ''' + str(self._sample_intervals + 1) + ''') // remove the interval
                                         + j * ''' + str(self._nmr_samples) + '''  // parameter index
                                         + problem_ind * ''' + str(self._nmr_params * self._nmr_samples) + '''
@@ -456,7 +484,7 @@ class _MCMCKernelBuilder(object):
                 ''' + ",\n".join(kernel_param_names) + '''
                 ){
 
-                uint problem_ind = get_group_id(0);
+                uint problem_ind = (uint)(get_global_id(0) / get_local_size(0));
 
                 ''' + self._model.get_kernel_data_struct_initialization(self._cl_environment.device,
                                                                         'data', 'problem_ind') + '''
@@ -498,8 +526,9 @@ class _MCMCKernelBuilder(object):
                 _fill_log_likelihood_tmp((void*)&data, x_local, log_likelihood_tmp);
                 _sum_log_likelihood_tmp_local(log_likelihood_tmp, &current_likelihood);
 
-                _sample(x_local, rng_data, &current_likelihood, &current_prior, (void*)&data, nmr_samples,
-                        sample_count_offset, proposal_state, sampling_counter, acceptance_counter,
+                _sample(x_local, rng_data, &current_likelihood, &current_prior, (void*)&data, nmr_iterations,
+                        iteration_offset,
+                        proposal_state, sampling_counter, acceptance_counter,
                     ''' + ('parameter_mean, parameter_variance, parameter_variance_update_m2,'
                             if self._update_parameter_variances else '') + '''
                     ''' + ('samples, ' if store_samples else '') + '''
@@ -522,7 +551,7 @@ class _MCMCKernelBuilder(object):
 
         kernel_source += '''
             rand123_data _rng_data_from_array(global uint* rng_state){
-                uint problem_ind = get_group_id(0);
+                uint problem_ind = (uint)(get_global_id(0) / get_local_size(0));
 
                 return rand123_initialize_data(
                     (uint[]){rng_state[0 + problem_ind * 6],
@@ -534,7 +563,7 @@ class _MCMCKernelBuilder(object):
             }
 
             void _rng_data_to_array(rand123_data data, global uint* rng_state){
-                uint problem_ind = get_group_id(0);
+                uint problem_ind = (uint)(get_global_id(0) / get_local_size(0));
 
                 uint state[6];
                 rand123_data_to_array(data, state);
@@ -810,7 +839,7 @@ class DefaultMHState(MHState):
         return np.zeros((self._nmr_problems, self._nmr_params), dtype=self._float_dtype, order='C')
 
     def get_rng_state(self):
-        rng = Random()
+        rng = Random(0) # todo remove after testing
         dtype_info = np.iinfo(np.uint32)
 
         starting_point = np.array(list(rng.randrange(dtype_info.min, dtype_info.max + 1) for _ in range(6)),
