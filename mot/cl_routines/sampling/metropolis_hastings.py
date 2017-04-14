@@ -223,8 +223,8 @@ class _MHWorker(Worker):
             self._sampling_kernel.sample(self._cl_run_context.queue,
                                          (int(nmr_problems * workgroup_size),),
                                          (int(workgroup_size),),
-                                         np.uint32(nmr_iterations),
-                                         np.uint32(iteration_offset),
+                                         np.uint64(nmr_iterations),
+                                         np.uint64(iteration_offset),
                                          *data_buffers,
                                          global_offset=(range_start * workgroup_size,))
 
@@ -241,7 +241,7 @@ class _MHWorker(Worker):
         for nmr_iterations in batch_sizes:
             self._burnin_kernel.sample(
                 self._cl_run_context.queue, (int(nmr_problems * workgroup_size),), (int(workgroup_size),),
-                np.uint32(nmr_iterations), np.uint32(iteration_offset), *data_buffers,
+                np.uint64(nmr_iterations), np.uint64(iteration_offset), *data_buffers,
                 global_offset=(range_start * workgroup_size,))
             iteration_offset += nmr_iterations
 
@@ -305,9 +305,9 @@ class _MHWorker(Worker):
             'rng_state': {'data': self._mh_state.get_rng_state(),
                           'cl_type': 'uint'},
             'proposal_state_sampling_counter': {'data': self._mh_state.get_proposal_state_sampling_counter(),
-                                                'cl_type': 'uint'},
+                                                'cl_type': 'ulong'},
             'proposal_state_acceptance_counter': {'data': self._mh_state.get_proposal_state_acceptance_counter(),
-                                                  'cl_type': 'uint'}
+                                                  'cl_type': 'ulong'}
         }
 
         if self._model.proposal_state_update_uses_variance():
@@ -363,8 +363,8 @@ class _MCMCKernelBuilder(object):
 
     def _get_kernel_source(self, store_samples=True):
         kernel_param_names = [
-            'uint nmr_iterations',
-            'uint iteration_offset']
+            'ulong nmr_iterations',
+            'ulong iteration_offset']
 
         kernel_param_names.extend([
             'global mot_float_type* current_chain_position',
@@ -411,11 +411,11 @@ class _MCMCKernelBuilder(object):
                          local double* const current_likelihood,
                          local mot_float_type* const current_prior,
                          const void* const data,
-                         uint nmr_iterations,
-                         uint iteration_offset,
+                         ulong nmr_iterations,
+                         ulong iteration_offset,
                          global mot_float_type* const proposal_state,
-                         global uint* const sampling_counter,
-                         global uint* const acceptance_counter,
+                         global ulong* const sampling_counter,
+                         global ulong* const acceptance_counter,
                          ''' + ('''global mot_float_type* parameter_mean,
                                    global mot_float_type* parameter_variance,
                                    global mot_float_type* parameter_variance_update_m2,'''
@@ -423,8 +423,9 @@ class _MCMCKernelBuilder(object):
                          ''' + ('global mot_float_type* samples, ' if store_samples else '') + '''
                          local double* log_likelihood_tmp){
 
-                uint i, j;
-                uint problem_ind = (uint)(get_global_id(0) / get_local_size(0));
+                ulong i;
+                uint j;
+                ulong problem_ind = (ulong)(get_global_id(0) / get_local_size(0));
                 bool is_first_work_item = get_local_id(0) == 0;
 
                 for(i = 0; i < nmr_iterations; i++){
@@ -459,7 +460,7 @@ class _MCMCKernelBuilder(object):
                         if((i - ''' + str(self._burn_length) + ''' + iteration_offset) % ''' + \
                              str(self._sample_intervals + 1) + ''' == 0){
                             for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
-                                samples[(uint)((i - ''' + str(self._burn_length) + ''' + iteration_offset)
+                                samples[(ulong)((i - ''' + str(self._burn_length) + ''' + iteration_offset)
                                                 / ''' + str(self._sample_intervals + 1) + ''') // remove the interval
                                         + j * ''' + str(self._nmr_samples) + '''  // parameter index
                                         + problem_ind * ''' + str(self._nmr_params * self._nmr_samples) + '''
@@ -477,7 +478,7 @@ class _MCMCKernelBuilder(object):
                 ''' + ",\n".join(kernel_param_names) + '''
                 ){
 
-                uint problem_ind = (uint)(get_global_id(0) / get_local_size(0));
+                ulong problem_ind = (ulong)(get_global_id(0) / get_local_size(0));
 
                 ''' + self._model.get_kernel_data_struct_initialization(self._cl_environment.device,
                                                                         'data', 'problem_ind') + '''
@@ -492,9 +493,9 @@ class _MCMCKernelBuilder(object):
 
                 global mot_float_type* proposal_state =
                     global_proposal_state + problem_ind * ''' + str(proposal_state_size) + ''';
-                global uint* sampling_counter =
+                global ulong* sampling_counter =
                     global_proposal_state_sampling_counter + problem_ind * ''' + str(self._nmr_params) + ''';
-                global uint* acceptance_counter =
+                global ulong* acceptance_counter =
                     global_proposal_state_acceptance_counter + problem_ind * ''' + str(self._nmr_params) + ''';
                 '''
         if self._update_parameter_variances:
@@ -509,7 +510,7 @@ class _MCMCKernelBuilder(object):
         kernel_source += '''
 
                 if(get_local_id(0) == 0){
-                    for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
+                    for(uint i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                         x_local[i] = current_chain_position[problem_ind * ''' + str(self._nmr_params) + ''' + i];
                     }
 
@@ -528,7 +529,7 @@ class _MCMCKernelBuilder(object):
                     log_likelihood_tmp);
 
                 if(get_local_id(0) == 0){
-                    for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
+                    for(uint i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                         current_chain_position[problem_ind * ''' + str(self._nmr_params) + ''' + i] = x_local[i];
                     }
 
@@ -544,7 +545,7 @@ class _MCMCKernelBuilder(object):
 
         kernel_source += '''
             rand123_data _rng_data_from_array(global uint* rng_state){
-                uint problem_ind = (uint)(get_global_id(0) / get_local_size(0));
+                ulong problem_ind = (ulong)(get_global_id(0) / get_local_size(0));
 
                 return rand123_initialize_data(
                     (uint[]){rng_state[0 + problem_ind * 6],
@@ -556,12 +557,12 @@ class _MCMCKernelBuilder(object):
             }
 
             void _rng_data_to_array(rand123_data data, global uint* rng_state){
-                uint problem_ind = (uint)(get_global_id(0) / get_local_size(0));
+                ulong problem_ind = (ulong)(get_global_id(0) / get_local_size(0));
 
                 uint state[6];
                 rand123_data_to_array(data, state);
 
-                for(int i = 0; i < 6; i++){
+                for(uint i = 0; i < 6; i++){
                     rng_state[i + problem_ind * 6] = state[i];
                 }
             }
@@ -576,19 +577,17 @@ class _MCMCKernelBuilder(object):
                                           local mot_float_type* const x_local,
                                           local double* log_likelihood_tmp){
 
-                int observation_ind;
-                uint local_id = get_local_id(0);
+                ulong observation_ind;
+                ulong local_id = get_local_id(0);
                 log_likelihood_tmp[local_id] = 0;
                 uint workgroup_size = get_local_size(0);
 
                 mot_float_type x_private[''' + str(self._nmr_params) + '''];
-                for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
+                for(uint i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                     x_private[i] = x_local[i];
                 }
 
-                for(int i = 0; i < ceil(NMR_INST_PER_PROBLEM /
-                                        (mot_float_type)workgroup_size); i++){
-
+                for(uint i = 0; i < ceil(NMR_INST_PER_PROBLEM / (mot_float_type)workgroup_size); i++){
                     observation_ind = i * workgroup_size + local_id;
 
                     if(observation_ind < NMR_INST_PER_PROBLEM){
@@ -602,14 +601,14 @@ class _MCMCKernelBuilder(object):
 
             void _sum_log_likelihood_tmp_local(local double* log_likelihood_tmp, local double* log_likelihood){
                 *log_likelihood = 0;
-                for(int i = 0; i < get_local_size(0); i++){
+                for(uint i = 0; i < get_local_size(0); i++){
                     *log_likelihood += log_likelihood_tmp[i];
                 }
             }
 
             void _sum_log_likelihood_tmp_private(local double* log_likelihood_tmp, private double* log_likelihood){
                 *log_likelihood = 0;
-                for(int i = 0; i < get_local_size(0); i++){
+                for(uint i = 0; i < get_local_size(0); i++){
                     *log_likelihood += log_likelihood_tmp[i];
                 }
             }
@@ -624,7 +623,7 @@ class _MCMCKernelBuilder(object):
                                local mot_float_type* const current_prior,
                                const void* const data,
                                global mot_float_type* const proposal_state,
-                               global uint * const acceptance_counter,
+                               global ulong * const acceptance_counter,
                                local double* log_likelihood_tmp){
 
                 float4 random_nmr;
@@ -635,7 +634,7 @@ class _MCMCKernelBuilder(object):
                 bool is_first_work_item = get_local_id(0) == 0;
 
                 #pragma unroll 1
-                for(int k = 0; k < ''' + str(self._nmr_params) + '''; k++){
+                for(uint k = 0; k < ''' + str(self._nmr_params) + '''; k++){
                     if(is_first_work_item){
                         random_nmr = frand(rng_data);
 
@@ -696,7 +695,7 @@ class _MCMCKernelBuilder(object):
              *      Algorithms for Computing the Sample Variance: Analysis and Recommendations.
              *      The American Statistician 37, 242-247. http://www.jstor.org/stable/2683386
              */
-            void _update_chain_statistics(const uint chain_count,
+            void _update_chain_statistics(const ulong chain_count,
                                           const mot_float_type new_param_value,
                                           global mot_float_type* const parameter_mean,
                                           global mot_float_type* const parameter_variance,
@@ -727,7 +726,7 @@ class MHState(object):
         """Get the amount of samples already drawn, i.e. at what point in time is this state.
 
         Returns:
-            uint: the current number of samples already drawn before this state
+            uint64: the current number of samples already drawn before this state
         """
         raise NotImplementedError()
 
@@ -738,7 +737,7 @@ class MHState(object):
 
         Returns:
             ndarray: a (d, p) array with for d problems and p parameters the current sampling counter,
-                should be of a np.uint32 type.
+                should be of a np.uint64 type.
         """
         raise NotImplementedError()
 
@@ -749,7 +748,7 @@ class MHState(object):
 
         Returns:
             ndarray: a (d, p) array with for d problems and p parameters the current acceptance counter,
-                should be of a np.uint32 type.
+                should be of a np.uint64 type.
         """
         raise NotImplementedError()
 
@@ -817,10 +816,10 @@ class DefaultMHState(MHState):
         return 0
 
     def get_proposal_state_sampling_counter(self):
-        return np.zeros((self._nmr_problems, self._nmr_params), dtype=np.uint32, order='C')
+        return np.zeros((self._nmr_problems, self._nmr_params), dtype=np.uint64, order='C')
 
     def get_proposal_state_acceptance_counter(self):
-        return np.zeros((self._nmr_problems, self._nmr_params), dtype=np.uint32, order='C')
+        return np.zeros((self._nmr_problems, self._nmr_params), dtype=np.uint64, order='C')
 
     def get_online_parameter_variance(self):
         return np.zeros((self._nmr_problems, self._nmr_params), dtype=self._float_dtype, order='C')
@@ -832,7 +831,7 @@ class DefaultMHState(MHState):
         return np.zeros((self._nmr_problems, self._nmr_params), dtype=self._float_dtype, order='C')
 
     def get_rng_state(self):
-        rng = Random(0) # todo remove after testing
+        rng = Random()
         dtype_info = np.iinfo(np.uint32)
 
         starting_point = np.array(list(rng.randrange(dtype_info.min, dtype_info.max + 1) for _ in range(6)),
@@ -850,7 +849,7 @@ class SimpleMHState(MHState):
         """A simple MCMC state containing provided items
 
         Args:
-            nmr_samples_drawn (uint): the current number of samples already drawn to reach this state.
+            nmr_samples_drawn (ndarray): the current number of samples already drawn to reach this state.
             proposal_state_sampling_counter (ndarray): a (d, p) array with for d problems and p parameters
                 the current sampling counter.
             proposal_state_acceptance_counter (ndarray): a (d, p) array with for d problems and p parameters
@@ -917,10 +916,10 @@ def _prepare_mh_state(mh_state, float_dtype):
         SimpleMHState: MH state with the same data only then possibly sanitized
     """
     proposal_state_sampling_counter = np.require(np.copy(mh_state.get_proposal_state_sampling_counter()),
-                                                 np.uint32,requirements=['C', 'A', 'O', 'W'])
+                                                 np.uint64,requirements=['C', 'A', 'O', 'W'])
 
     proposal_state_acceptance_counter = np.require(np.copy(mh_state.get_proposal_state_acceptance_counter()),
-                                                   np.uint32, requirements=['C', 'A', 'O', 'W'])
+                                                   np.uint64, requirements=['C', 'A', 'O', 'W'])
 
     online_parameter_variance = np.require(np.copy(mh_state.get_online_parameter_variance()),
                                            float_dtype, requirements=['C', 'A', 'O', 'W'])

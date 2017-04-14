@@ -164,7 +164,7 @@ class Random123GeneratorBase(CLRoutine):
 
                 ''' + c_type + '''4 randomnr =  rand123_uniform_''' + c_type + '''4(&rng_data);
 
-                int gid = get_global_id(0);
+                ulong gid = get_global_id(0);
 
                 samples[gid * 4] = ''' + str(min_val) + ''' + randomnr.x * ''' + str(max_val - min_val) + ''';
                 samples[gid * 4 + 1] = ''' + str(min_val) + ''' + randomnr.y * ''' + str(max_val - min_val) + ''';
@@ -187,7 +187,7 @@ class Random123GeneratorBase(CLRoutine):
 
                 ''' + c_type + '''4 randomnr =  rand123_normal_''' + c_type + '''4(&rng_data);
 
-                int gid = get_global_id(0);
+                ulong gid = get_global_id(0);
 
                 samples[gid * 4] = ''' + str(mean) + ''' + randomnr.x * ''' + str(std) + ''';
                 samples[gid * 4 + 1] = ''' + str(mean) + ''' + randomnr.y * ''' + str(std) + ''';

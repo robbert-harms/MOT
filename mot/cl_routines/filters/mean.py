@@ -29,13 +29,13 @@ class _MeanFilterWorker(AbstractFilterWorker):
                 global mot_float_type* results
                 ){
                     ''' + self._get_ks_dimension_inits(len(self._volume_shape)) + '''
-                    int ind = ''' + self._get_ks_sub2ind_func_call(len(self._volume_shape)) + ''';
+                    ulong ind = ''' + self._get_ks_sub2ind_func_call(len(self._volume_shape)) + ''';
 
                     ''' + ('if(mask[ind] > 0){' if self._use_mask else 'if(true){') + '''
                         ''' + self._get_ks_dimension_sizes(self._volume_shape) + '''
 
                         mot_float_type sum = 0.0;
-                        int count = 0;
+                        uint count = 0;
 
                         ''' + self._get_ks_loop(self._volume_shape) + '''
 

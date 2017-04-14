@@ -30,7 +30,7 @@ class _MedianFilterWorker(AbstractFilterWorker):
                 ){
 
                     ''' + self._get_ks_dimension_inits(len(self._volume_shape)) + '''
-                    const int ind = ''' + self._get_ks_sub2ind_func_call(len(self._volume_shape)) + ''';
+                    const ulong ind = ''' + self._get_ks_sub2ind_func_call(len(self._volume_shape)) + ''';
 
                     ''' + ('if(mask[ind] > 0){' if self._use_mask else 'if(true){') + '''
 
@@ -44,7 +44,7 @@ class _MedianFilterWorker(AbstractFilterWorker):
                         mot_float_type equal;
                         mot_float_type minv = volume[ind];
                         mot_float_type maxv = volume[ind];
-                        int number_of_items = 0;
+                        uint number_of_items = 0;
 
                         mot_float_type tmp_val = 0.0;
 

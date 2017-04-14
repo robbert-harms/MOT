@@ -19,8 +19,7 @@ class LevenbergMarquardt(AbstractParallelOptimizer):
         """Use the Levenberg-Marquardt method to calculate the optimimum.
 
         Args:
-            patience (int):
-                Used to set the maximum number of iterations to patience*(number_of_parameters+1)
+            patience (int): Used to set the maximum number of iterations to patience*(number_of_parameters+1)
         """
         patience = patience or self.default_patience
 
@@ -98,10 +97,10 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
             __kernel void minimize(
                 ''' + ",\n".join(kernel_param_names) + '''
                 ){
-                    int gid = get_global_id(0);
+                    ulong gid = get_global_id(0);
 
                     mot_float_type x[''' + str(nmr_params) + '''];
-                    for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
+                    for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
                         x[i] = params[gid * ''' + str(nmr_params) + ''' + i];
                     }
 
@@ -114,7 +113,7 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
 
                     ''' + ('decodeParameters((void*)&data, x);' if self._use_param_codec else '') + '''
 
-                    for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
+                    for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
                         params[gid * ''' + str(nmr_params) + ''' + i] = x[i];
                     }
                 }
@@ -135,12 +134,12 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
             kernel_source += '''
                 void evaluate(mot_float_type* x, const void* data, mot_float_type* result){
                     mot_float_type x_model[''' + str(self._nmr_params) + '''];
-                    for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
+                    for(uint i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                         x_model[i] = x[i];
                     }
                     decodeParameters(data, x_model);
 
-                    for(int i = 0; i < ''' + str(self._model.get_nmr_inst_per_problem()) + '''; i++){
+                    for(uint i = 0; i < ''' + str(self._model.get_nmr_inst_per_problem()) + '''; i++){
                         result[i] = getObjectiveInstanceValue(data, x_model, i);
                     }
                 }
@@ -148,7 +147,7 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
         else:
             kernel_source += '''
                 void evaluate(mot_float_type* x, const void* data, mot_float_type* result){
-                    for(int i = 0; i < ''' + str(self._model.get_nmr_inst_per_problem()) + '''; i++){
+                    for(uint i = 0; i < ''' + str(self._model.get_nmr_inst_per_problem()) + '''; i++){
                         result[i] = getObjectiveInstanceValue(data, x_model, i);
                     }
                 }

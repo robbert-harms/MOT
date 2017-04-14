@@ -323,12 +323,12 @@ class AbstractParallelOptimizerWorker(Worker):
             __kernel void minimize(
                 ''' + ",\n".join(self._get_kernel_param_names()) + '''
                 ){
-                    int gid = get_global_id(0);
+                    ulong gid = get_global_id(0);
         '''
 
         kernel_source += '''
                     mot_float_type x[''' + str(nmr_params) + '''];
-                    for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
+                    for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
                         x[i] = params[gid * ''' + str(nmr_params) + ''' + i];
                     }
 
@@ -338,7 +338,7 @@ class AbstractParallelOptimizerWorker(Worker):
 
                     ''' + ('decodeParameters((void*)&data, x);' if self._use_param_codec else '') + '''
 
-                    for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
+                    for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
                         params[gid * ''' + str(nmr_params) + ''' + i] = x[i];
                     }
                 }
@@ -400,7 +400,7 @@ class AbstractParallelOptimizerWorker(Worker):
             kernel_source += '''
                 double evaluate(mot_float_type* x, const void* data){
                     mot_float_type x_model[''' + str(self._nmr_params) + '''];
-                    for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
+                    for(uint i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                         x_model[i] = x[i];
                     }
                     decodeParameters(data, x_model);

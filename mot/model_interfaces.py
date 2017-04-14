@@ -188,7 +188,7 @@ class OptimizeModelInterface(object):
                 .. code-block:: c
 
                     double <func_name>(const void* const data, const mot_float_type* const x,
-                                       const int observation_index);
+                                       const uint observation_index);
         """
         raise NotImplementedError()
 
@@ -202,7 +202,7 @@ class OptimizeModelInterface(object):
             str: An CL function with the signature:
                 .. code-block:: c
 
-                    double <func_name>(const void* const data, const int observation_index);
+                    double <func_name>(const void* const data, const uint observation_index);
         """
         raise NotImplementedError()
 
@@ -238,7 +238,7 @@ class OptimizeModelInterface(object):
 
                 .. code-block:: c
 
-                    double <func_name>(const void* const data, mot_float_type* const x, int observation_index);
+                    double <func_name>(const void* const data, mot_float_type* const x, uint observation_index);
         """
         raise NotImplementedError()
 
@@ -403,7 +403,7 @@ class SampleModelInterface(OptimizeModelInterface):
             str: A function of the kind:
                 .. code-block:: c
 
-                    double <fname>(const void* const data, mot_float_type* const x, const int observation_index);
+                    double <fname>(const void* const data, mot_float_type* const x, const uint observation_index);
         """
         raise NotImplementedError()
 
@@ -429,13 +429,13 @@ class SampleModelInterface(OptimizeModelInterface):
             str: A function with the signature:
                 .. code-block:: c
 
-                    double <func_name>(const int i, const mot_float_type proposal,
+                    double <func_name>(const uint param_ind, const mot_float_type proposal,
                                        const mot_float_type current,
                                        <address_space_proposal_state> mot_float_type* const proposal_state);
 
-            Where ``i`` is the index of the parameter we would like to get the proposal from, ``current`` is the current
-            value of that parameter and ``proposal`` the proposal value of the parameter. The final argument
-            ``proposal_state`` are the current settings of the proposal function.
+            Where ``param_ind`` is the index of the parameter we would like to get the proposal from,
+            ``current`` is the current value of that parameter and ``proposal`` the proposal value of the parameter.
+            The final argument ``proposal_state`` are the current settings of the proposal function.
 
             It should return for the requested parameter a value ``q(proposal | current)``, the log Probability
             Density Function (log PDF) of the proposal given the current value.
@@ -455,14 +455,14 @@ class SampleModelInterface(OptimizeModelInterface):
                 .. code-block:: c
 
                     mot_float_type <func_name>(
-                        const int i,
+                        const uint param_ind,
                         const mot_float_type current,
                         void* rng_data,
                         <address_space_proposal_state> mot_float_type* const proposal_state);
 
-            Where ``i`` is the index of the parameter for which we want the proposal and ``current`` is the current
-            value of that parameter. The argument ``proposal_state`` is the state of the proposal distribution.
-            One can obtain random numbers with:
+            Where ``param_ind`` is the index of the parameter for which we want the proposal and
+            ``current`` is the current value of that parameter. The argument ``proposal_state`` is the
+            state of the proposal distribution. One can obtain random numbers with:
             .. code-block:: c
 
                 float randomnr = frand(rng_data);
@@ -481,8 +481,8 @@ class SampleModelInterface(OptimizeModelInterface):
                 .. code-block:: c
 
                     void <func_name>(<address_space> mot_float_type* const proposal_state,
-                                     <address_space> uint* const sampling_counter,
-                                     <address_space> uint* const acceptance_counter);
+                                     <address_space> ulong* const sampling_counter,
+                                     <address_space> ulong* const acceptance_counter);
 
                 The ``proposal_state`` holds the current value of all the adaptable proposal parameters and is
                 of length equal to the number of adaptable parameters. The ``sampling_counter`` holds the number of

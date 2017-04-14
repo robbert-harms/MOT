@@ -121,17 +121,17 @@ class _ResidualCalculatorWorker(Worker):
                 __kernel void get_errors(
                     ''' + ",\n".join(kernel_param_names) + '''
                     ){
-                        int gid = get_global_id(0);
+                        ulong gid = get_global_id(0);
                         ''' + self._model.get_kernel_data_struct_initialization(self._cl_environment.device, 'data') + '''
 
                         mot_float_type x[''' + str(nmr_params) + '''];
-                        for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
+                        for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
                             x[i] = params[gid * ''' + str(nmr_params) + ''' + i];
                         }
 
                         global mot_float_type* result = errors + gid * NMR_INST_PER_PROBLEM;
 
-                        for(int i = 0; i < NMR_INST_PER_PROBLEM; i++){
+                        for(uint i = 0; i < NMR_INST_PER_PROBLEM; i++){
                             result[i] = getObservation((void*)&data, i) - evaluateModel((void*)&data, x, i);
                         }
                 }
@@ -141,13 +141,13 @@ class _ResidualCalculatorWorker(Worker):
                 __kernel void get_errors(
                     ''' + ",\n".join(kernel_param_names) + '''
                     ){
-                        int gid = get_global_id(0);
+                        ulong gid = get_global_id(0);
                         ''' + self._model.get_kernel_data_struct_initialization(self._cl_environment.device,
                                                                                 'data') + '''
 
                         global mot_float_type* result = errors + gid * NMR_INST_PER_PROBLEM;
 
-                        for(int i = 0; i < NMR_INST_PER_PROBLEM; i++){
+                        for(uint i = 0; i < NMR_INST_PER_PROBLEM; i++){
                             result[i] = getObservation(&data, i) - model_estimates[i + gid * NMR_INST_PER_PROBLEM];
                         }
                 }

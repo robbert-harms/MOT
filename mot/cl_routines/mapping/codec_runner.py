@@ -121,19 +121,19 @@ class _CodecWorker(Worker):
         kernel_source += '''
             __kernel void transformParameterSpace(
                 ''' + ",\n".join(kernel_param_names) + '''){
-                int gid = get_global_id(0);
+                ulong gid = get_global_id(0);
 
                 ''' + self._model.get_kernel_data_struct_initialization(self._cl_environment.device, 'data') + '''
 
                 mot_float_type x[''' + str(self._nmr_params) + '''];
 
-                for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
+                for(uint i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                     x[i] = x_global[gid * ''' + str(self._nmr_params) + ''' + i];
                 }
 
                 ''' + self._cl_func_name + '''((void*)&data, x);
 
-                for(int i = 0; i < ''' + str(self._nmr_params) + '''; i++){
+                for(uint i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                     x_global[gid * ''' + str(self._nmr_params) + ''' + i] = x[i];
                 }
             }

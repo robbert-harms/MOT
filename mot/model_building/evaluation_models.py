@@ -31,14 +31,13 @@ class EvaluationModel(ModelFunction):
 
                 .. code-block:: c
 
-                    double <fname>(const void* data, const mot_float_type* x,
-                                           const int observation_index);
+                    double <fname>(const void* data, const mot_float_type* x, const uint observation_index);
 
             obs_fname (str): the name of the function that can be called for the observed data, its signature is:
 
                 .. code-block:: c
 
-                    double <fname>(const void* data, const int observation_index);
+                    double <fname>(const void* data, const uint observation_index);
 
             param_listing (str): the parameter listings for the parameters of the noise model
 
@@ -66,14 +65,13 @@ class EvaluationModel(ModelFunction):
 
                 .. code-block:: c
 
-                    double <fname>(const void* data, const mot_float_type* x,
-                                           const int observation_index);
+                    double <fname>(const void* data, const mot_float_type* x, const uint observation_index);
 
             obs_fname (str): the name of the function that can be called for the observed data, its signature is:
 
                 .. code-block:: c
 
-                    double <fname>(const void* data, const int observation_index);
+                    double <fname>(const void* data, const uint observation_index);
 
             param_listing (str): the parameter listings for the parameters of the noise model
 
@@ -82,7 +80,7 @@ class EvaluationModel(ModelFunction):
 
                 .. code-block:: c
 
-                    double (const void* const data, mot_float_type* const x, const int observation_index);
+                    double (const void* const data, mot_float_type* const x, const uint observation_index);
         """
 
     def get_log_likelihood_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing,
@@ -96,14 +94,13 @@ class EvaluationModel(ModelFunction):
 
                 .. code-block:: c
 
-                    double <fname>(const void* data, const mot_float_type* x,
-                                           const int observation_index);
+                    double <fname>(const void* data, const mot_float_type* x, const uint observation_index);
 
             obs_fname (str): the name of the function that can be called for the observed data, its signature is:
 
                 .. code-block:: c
 
-                    double <fname>(const void* data, const int observation_index);
+                    double <fname>(const void* data, const uint observation_index);
 
             param_listing (str): the parameter listings for the parameters of the noise model
             full_likelihood (boolean): if we want the complete likelihood, or if we can drop the constant terms.
@@ -130,14 +127,13 @@ class EvaluationModel(ModelFunction):
 
                 .. code-block:: c
 
-                    double <fname>(const void* data, const mot_float_type* x,
-                                           const int observation_index);
+                    double <fname>(const void* data, const mot_float_type* x, const uint observation_index);
 
             obs_fname (str): the name of the function that can be called for the observed data, its signature is:
 
                 .. code-block:: c
 
-                    double <fname>(const void* data, const int observation_index);
+                    double <fname>(const void* data, const uint observation_index);
 
             param_listing (str): the parameter listings for the parameters of the noise model
             full_likelihood (boolean): if we want the complete likelihood, or if we can drop the constant terms.
@@ -149,7 +145,7 @@ class EvaluationModel(ModelFunction):
                 .. code-block:: c
 
                     double <fname>(const void* const data, mot_float_type* const x,
-                                   const int observation_index);
+                                   const uint observation_index);
         """
 
     def get_noise_std_param_name(self):
@@ -177,7 +173,7 @@ class SumOfSquaresEvaluationModel(EvaluationModel):
             double ''' + fname + '''(const void* const data, mot_float_type* const x){
                 ''' + param_listing + '''
                 double sum = 0.0;
-                for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
+                for(uint i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     sum += pown(''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i), 2);
                 }
                 return sum;
@@ -187,7 +183,7 @@ class SumOfSquaresEvaluationModel(EvaluationModel):
     def get_objective_per_observation_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
         return '''
             double ''' + fname + '''(const void* const data, mot_float_type* const x,
-                                     const int observation_index){
+                                     const uint observation_index){
                 ''' + param_listing + '''
                 return ''' + obs_fname + '''(data, observation_index) -
                         ''' + eval_fname + '''(data, x, observation_index);
@@ -200,7 +196,7 @@ class SumOfSquaresEvaluationModel(EvaluationModel):
             double ''' + fname + '''(const void* const data, const mot_float_type* const x){
                 ''' + param_listing + '''
                 double sum = 0.0;
-                for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
+                for(uint i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     sum += pown(''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i), 2);
                 }
                 return - sum;
@@ -211,7 +207,7 @@ class SumOfSquaresEvaluationModel(EvaluationModel):
                                                     full_likelihood=True):
         return '''
             double ''' + fname + '''(const void* const data, const mot_float_type* const x,
-                                     const int observation_index){
+                                     const uint observation_index){
                 ''' + param_listing + '''
                 return - (pown(''' + obs_fname + '''(data, observation_index)
                             - ''' + eval_fname + '''(data, x, observation_index), 2));
@@ -276,7 +272,7 @@ class GaussianEvaluationModel(EvaluationModel):
             double ''' + fname + '''(const void* const data, mot_float_type* const x){
                 ''' + param_listing + '''
                 double sum = 0.0;
-                for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
+                for(uint i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     sum += pown(''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i), 2);
                 }
                 return sum / (2 * GaussianNoise_sigma * GaussianNoise_sigma);
@@ -286,7 +282,7 @@ class GaussianEvaluationModel(EvaluationModel):
     def get_objective_per_observation_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
         return '''
             double ''' + fname + '''(const void* const data, mot_float_type* const x,
-                                     const int observation_index){
+                                     const uint observation_index){
                 ''' + param_listing + '''
                 return ''' + obs_fname + '''(data, observation_index) -
                         ''' + eval_fname + '''(data, x, observation_index);
@@ -299,7 +295,7 @@ class GaussianEvaluationModel(EvaluationModel):
             double ''' + fname + '''(const void* const data, const mot_float_type* const x){
                 ''' + param_listing + '''
                 double sum = 0.0;
-                for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
+                for(uint i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     sum += pown(''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i), 2);
                 }
                 return - sum / (2 * GaussianNoise_sigma * GaussianNoise_sigma)
@@ -313,7 +309,7 @@ class GaussianEvaluationModel(EvaluationModel):
                                                     full_likelihood=True):
         return '''
             double ''' + fname + '''(const void* const data, const mot_float_type* const x,
-                                     const int observation_index){
+                                     const uint observation_index){
                 ''' + param_listing + '''
                 return - pown(''' + obs_fname + '''(data, observation_index)
                                 - ''' + eval_fname + '''(data, x, observation_index), 2)
@@ -378,7 +374,7 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
             double ''' + fname + '''(const void* const data, mot_float_type* const x){
                 ''' + param_listing + '''
                 double sum = 0.0;
-                for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
+                for(uint i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     sum += pown(''' + obs_fname + '''(data, i) -
                                 sqrt(pown(''' + eval_fname + '''(data, x, i), 2) +
                                     (OffsetGaussianNoise_sigma * OffsetGaussianNoise_sigma)), 2);
@@ -390,7 +386,7 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
     def get_objective_per_observation_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
         return '''
             double ''' + fname + '''(const void* const data, mot_float_type* const x,
-                                     const int observation_index){
+                                     const uint observation_index){
                 ''' + param_listing + '''
                 return ''' + obs_fname + '''(data, observation_index) -
                          sqrt(pown(''' + eval_fname + '''(data, x, observation_index), 2)
@@ -404,7 +400,7 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
             double ''' + fname + '''(const void* const data, mot_float_type* const x){
                 ''' + param_listing + '''
                 double sum = 0.0;
-                for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
+                for(uint i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     sum += pown(''' + obs_fname + '''(data, i) -
                                 sqrt(pown(''' + eval_fname + '''(data, x, i), 2) +
                                     (OffsetGaussianNoise_sigma * OffsetGaussianNoise_sigma)), 2);
@@ -418,7 +414,7 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
     def get_log_likelihood_per_observation_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing,
                                                     full_likelihood=True):
         return '''
-            double ''' + fname + '''(const void* const data, mot_float_type* const x, const int observation_index){
+            double ''' + fname + '''(const void* const data, mot_float_type* const x, const uint observation_index){
                 ''' + param_listing + '''
                 return - (pown(''' + obs_fname + '''(data, observation_index) -
                                 sqrt(pown(''' + eval_fname + '''(data, x, observation_index), 2) +
@@ -494,7 +490,7 @@ class RicianEvaluationModel(EvaluationModel):
                 double sum = 0.0;
                 double observation;
                 double evaluation;
-                for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
+                for(uint i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     observation = (double)''' + obs_fname + '''(data, i);
                     evaluation = (double)''' + eval_fname + '''(data, x, i);
 
@@ -508,7 +504,7 @@ class RicianEvaluationModel(EvaluationModel):
     def get_objective_per_observation_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
         return '''
             double ''' + fname + '''(const void* const data, mot_float_type* const x,
-                                     const int observation_index){
+                                     const uint observation_index){
                 ''' + param_listing + '''
 
                 double observation = (double)''' + obs_fname + '''(data, observation_index);
@@ -527,7 +523,7 @@ class RicianEvaluationModel(EvaluationModel):
                 double sum = 0.0;
                 double observation;
                 double evaluation;
-                for(int i = 0; i < ''' + str(inst_per_problem) + '''; i++){
+                for(uint i = 0; i < ''' + str(inst_per_problem) + '''; i++){
                     observation = (double)''' + obs_fname + '''(data, i);
                     evaluation = (double)''' + eval_fname + '''(data, x, i);
 
@@ -544,7 +540,7 @@ class RicianEvaluationModel(EvaluationModel):
                                                     full_likelihood=True):
         return '''
             double ''' + fname + '''(const void* const data, const mot_float_type* const x,
-                                     const int observation_index){
+                                     const uint observation_index){
                 ''' + param_listing + '''
                 double observation = (double)''' + obs_fname + '''(data, observation_index);
                 double evaluation = (double)''' + eval_fname + '''(data, x, observation_index);

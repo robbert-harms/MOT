@@ -73,8 +73,8 @@ class SimpleProposalUpdate(ProposalUpdate):
                   for p in proposal_parameters if p.adaptable]
 
         if self.uses_jump_counters():
-            params.extend(['{address_space} uint* const sampling_counter'.format(address_space=address_space),
-                           '{address_space} uint* const acceptance_counter'.format(address_space=address_space)])
+            params.extend(['{address_space} ulong* const sampling_counter'.format(address_space=address_space),
+                           '{address_space} ulong* const acceptance_counter'.format(address_space=address_space)])
 
         if self.uses_parameter_variance():
             params.append('mot_float_type parameter_variance'.format(address_space=address_space))

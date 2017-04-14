@@ -473,13 +473,13 @@ class OptimizeModelBuilder(OptimizeModelInterface):
     def get_observation_return_function(self, func_name='getObservation'):
         if self._problem_data.observations.shape[1] < 2:
             return '''
-                double ''' + func_name + '''(const void* const data, const int observation_index){
+                double ''' + func_name + '''(const void* const data, const uint observation_index){
                     return ((''' + self.get_kernel_data_struct_type() + '''*)data)->var_data_observations;
                 }
             '''
 
         return '''
-            double ''' + func_name + '''(const void* const data, const int observation_index){
+            double ''' + func_name + '''(const void* const data, const uint observation_index){
                 return ((''' + \
                     self.get_kernel_data_struct_type() + '''*)data)->var_data_observations[observation_index];
             }
@@ -495,7 +495,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         func += '''
             double ''' + func_name + \
-                '(const void* const void_data, const mot_float_type* const x, const int observation_index){' + "\n"
+                '(const void* const void_data, const mot_float_type* const x, const uint observation_index){' + "\n"
         func += self.get_kernel_data_struct_type() + '* data = (' + self.get_kernel_data_struct_type() + '*)void_data;'
 
         func += self._get_parameters_listing(
@@ -1424,12 +1424,12 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
 
         return_str += '''
             double {func_name}(
-                const int i,
+                const uint param_ind,
                 const mot_float_type proposal,
                 const mot_float_type current,
                 {address_space_proposal_state} mot_float_type* const proposal_state){{
 
-                switch(i){{
+                switch(param_ind){{
         '''.format(func_name=func_name, address_space_proposal_state=address_space_proposal_state)
 
         adaptable_parameter_count = 0
@@ -1460,12 +1460,12 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
 
         return_str += '''
             mot_float_type {func_name}(
-                const int i,
+                const uint param_ind,
                 const mot_float_type current,
                 void* rng_data,
                 {address_space_proposal_state} mot_float_type* const proposal_state){{
 
-                switch(i){{
+                switch(param_ind){{
         '''.format(func_name=func_name, address_space_proposal_state=address_space_proposal_state)
 
         adaptable_parameter_count = 0
@@ -1499,15 +1499,15 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         if self.proposal_state_update_uses_variance():
             return_str += '''
                 void {func_name}({address_space} mot_float_type* const proposal_state,
-                                 {address_space} uint* const sampling_counter,
-                                 {address_space} uint* const acceptance_counter,
+                                 {address_space} ulong* const sampling_counter,
+                                 {address_space} ulong* const acceptance_counter,
                                  {address_space} mot_float_type* const parameter_variance){{
             '''.format(func_name=func_name, address_space=address_space)
         else:
             return_str += '''
                 void {func_name}({address_space} mot_float_type* const proposal_state,
-                                 {address_space} uint* const sampling_counter,
-                                 {address_space} uint* const acceptance_counter){{
+                                 {address_space} ulong* const sampling_counter,
+                                 {address_space} ulong* const acceptance_counter){{
             '''.format(func_name=func_name, address_space=address_space)
 
         adaptable_parameter_count = 0

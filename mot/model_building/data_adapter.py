@@ -107,10 +107,16 @@ class SimpleDataAdapter(DataAdapter):
         """
         raw_type = data_type.raw_data_type
 
-        if raw_type == 'float':
-            return np.float32
         if raw_type == 'int':
             return np.int32
+        if raw_type == 'uint':
+            return np.uint32
+        if raw_type == 'long':
+            return np.int64
+        if raw_type == 'ulong':
+            return np.uint64
+        if raw_type == 'float':
+            return np.float32
         if raw_type == 'double':
             return np.float64
         if raw_type == 'mot_float_type':
@@ -158,7 +164,8 @@ class SimpleDataAdapter(DataAdapter):
 
         if vector_length not in (2, 3, 4, 8, 16):
             raise ValueError('The given vector length is not one of (2, 3, 4, 8, 16)')
-        if data_type not in ('char', 'uchar', 'short', 'ushort', 'int', 'uint', 'long', 'ulong', 'float', 'double', 'half'):
+        if data_type not in ('char', 'uchar', 'short', 'ushort', 'int', 'uint', 'long',
+                             'ulong', 'float', 'double', 'half'):
             raise ValueError('The given data type ({}) is not supported.'.format(data_type))
 
         return getattr(cl_array.vec, data_type + str(vector_length))

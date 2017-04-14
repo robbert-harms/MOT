@@ -129,15 +129,15 @@ class _CDPWorker(Worker):
             __kernel void transform(
                 ''' + ",\n".join(kernel_param_names) + '''
                 ){
-                    int gid = get_global_id(0);
+                    ulong gid = get_global_id(0);
 
                     ''' + self._model.get_kernel_data_struct_initialization(self._cl_environment.device,
                                                                             'data_var') + '''
                     ''' + self._model.get_kernel_data_struct_type() + '''* data = &data_var;
 
                     mot_float_type x[''' + str(self._nmr_estimated_params) + '''];
-                    int i = 0;
-                    for(i = 0; i < ''' + str(self._nmr_estimated_params) + '''; i++){
+
+                    for(uint i = 0; i < ''' + str(self._nmr_estimated_params) + '''; i++){
                         x[i] = params[gid * ''' + str(self._nmr_estimated_params) + ''' + i];
                     }
                     ''' + self._parameters_listing + '''

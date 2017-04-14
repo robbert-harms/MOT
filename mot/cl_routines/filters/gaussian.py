@@ -107,15 +107,15 @@ class _GaussianFilterWorker(AbstractFilterWorker):
                 ){
 
                 ''' + self._get_ks_dimension_inits(len(self._volume_shape)) + '''
-                const int ind = ''' + self._get_ks_sub2ind_func_call(len(self._volume_shape)) + ''';
+                const ulong ind = ''' + self._get_ks_sub2ind_func_call(len(self._volume_shape)) + ''';
 
                 ''' + ('if(mask[ind] > 0){' if self._use_mask else 'if(true){') + '''
-                    int filter_index = 0;
+                    ulong filter_index = 0;
                     mot_float_type filtered_value = 0;
 
-                    const int start = dim''' + str(dimension) + ''' - ''' + str(left_right) + ''';
-                    const int end = dim''' + str(dimension) + ''' + ''' + str(left_right) + ''';
-                    int tmp_ind = 0;
+                    const ulong start = dim''' + str(dimension) + ''' - ''' + str(left_right) + ''';
+                    const ulong end = dim''' + str(dimension) + ''' + ''' + str(left_right) + ''';
+                    ulong tmp_ind = 0;
 
                     for(''' + working_dim + ''' = start; ''' + working_dim + ''' <= end; ''' + working_dim + '''++){
                         tmp_ind = ''' + self._get_ks_sub2ind_func_call(len(self._volume_shape)) + ''';
