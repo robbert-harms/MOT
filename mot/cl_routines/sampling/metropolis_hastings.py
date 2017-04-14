@@ -183,10 +183,10 @@ class _MHWorker(Worker):
         self._burn_length = burn_length
         self._sample_intervals = sample_intervals
 
-        # we split the kernel into multiple batches to prevent memory issues with long running kernels
-        # this does not mean that the computations are interruptable. We enqueue all kernels at once
+        # We split the kernel into multiple batches to (try to) prevent screen freezing.
+        # This does not mean that the computations are interruptable. We enqueue all operations at once
         # and they will run until completion.
-        self._max_samples_per_batch = 5000
+        self._max_samples_per_batch = np.ceil(5000 / (self._sample_intervals + 1))
         self._max_iterations_per_batch = self._max_samples_per_batch * (self._sample_intervals + 1)
 
         kernel_builder = _MCMCKernelBuilder(
@@ -204,12 +204,11 @@ class _MHWorker(Worker):
 
         data_buffers, readout_items = self._get_buffers(workgroup_size)
 
-        last_kernel_event_list = None
         iteration_offset = self._mh_state.nmr_samples_drawn
 
         if self._burn_length > 0:
-            last_kernel_event_list, iteration_offset = self._enqueue_burnin(
-                range_start, range_end, workgroup_size, data_buffers, iteration_offset, last_kernel_event_list)
+            iteration_offset = self._enqueue_burnin(range_start, range_end, workgroup_size,
+                                                    data_buffers, iteration_offset)
 
         samples_buf = cl.Buffer(self._cl_run_context.context,
                                 cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
@@ -221,38 +220,32 @@ class _MHWorker(Worker):
             self._nmr_samples * (self._sample_intervals + 1), self._max_iterations_per_batch)
 
         for nmr_iterations in iteration_batch_sizes:
-            sampling_event = self._sampling_kernel.sample(self._cl_run_context.queue,
-                                                          (int(nmr_problems * workgroup_size),),
-                                                          (int(workgroup_size),),
-                                                          np.uint32(nmr_iterations),
-                                                          np.uint32(iteration_offset),
-                                                          *data_buffers,
-                                                          wait_for=last_kernel_event_list,
-                                                          global_offset=(range_start * workgroup_size,))
+            self._sampling_kernel.sample(self._cl_run_context.queue,
+                                         (int(nmr_problems * workgroup_size),),
+                                         (int(workgroup_size),),
+                                         np.uint32(nmr_iterations),
+                                         np.uint32(iteration_offset),
+                                         *data_buffers,
+                                         global_offset=(range_start * workgroup_size,))
 
-            last_kernel_event_list = [sampling_event]
             iteration_offset += nmr_iterations
 
-        return_events = []
         for buffer, host_array in readout_items:
-            return_events.append(self._enqueue_readout(buffer, host_array, range_start, range_end,
-                                                       last_kernel_event_list))
-        return return_events
+            self._enqueue_readout(buffer, host_array, range_start, range_end)
 
     def _enqueue_burnin(self, range_start, range_end, workgroup_size, data_buffers,
-                        iteration_offset, last_kernel_event_list):
+                        iteration_offset):
         nmr_problems = range_end - range_start
         batch_sizes = self._get_sampling_batch_sizes(self._burn_length, self._max_iterations_per_batch)
 
         for nmr_iterations in batch_sizes:
-            burnin_event = self._burnin_kernel.sample(
+            self._burnin_kernel.sample(
                 self._cl_run_context.queue, (int(nmr_problems * workgroup_size),), (int(workgroup_size),),
                 np.uint32(nmr_iterations), np.uint32(iteration_offset), *data_buffers,
-                wait_for=last_kernel_event_list, global_offset=(range_start * workgroup_size,))
-            last_kernel_event_list = [burnin_event]
+                global_offset=(range_start * workgroup_size,))
             iteration_offset += nmr_iterations
 
-        return last_kernel_event_list, iteration_offset
+        return iteration_offset
 
     def _get_buffers(self, workgroup_size):
         data_buffers = []

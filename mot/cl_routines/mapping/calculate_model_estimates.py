@@ -67,9 +67,9 @@ class _EvaluateModelWorker(Worker):
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
-        event = self._kernel.get_estimates(self._cl_run_context.queue, (int(nmr_problems), ), None,
-                                           *self._all_buffers, global_offset=(int(range_start),))
-        return [self._enqueue_readout(self._evaluations_buffer, self._evaluations, range_start, range_end, [event])]
+        self._kernel.get_estimates(self._cl_run_context.queue, (int(nmr_problems), ), None,
+                                   *self._all_buffers, global_offset=(int(range_start),))
+        self._enqueue_readout(self._evaluations_buffer, self._evaluations, range_start, range_end)
 
     def _create_buffers(self):
         evaluations_buffer = cl.Buffer(self._cl_run_context.context,

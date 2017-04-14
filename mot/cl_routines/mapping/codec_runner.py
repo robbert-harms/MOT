@@ -106,10 +106,9 @@ class _CodecWorker(Worker):
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
 
-        event = self._kernel.transformParameterSpace(self._cl_run_context.queue, (int(nmr_problems), ), None,
-                                                     *self._all_buffers, global_offset=(int(range_start),))
-
-        return [self._enqueue_readout(self._param_buf, self._data, range_start, range_end, [event])]
+        self._kernel.transformParameterSpace(self._cl_run_context.queue, (int(nmr_problems), ), None,
+                                             *self._all_buffers, global_offset=(int(range_start),))
+        self._enqueue_readout(self._param_buf, self._data, range_start, range_end)
 
     def _get_kernel_source(self):
         kernel_param_names = ['global mot_float_type* x_global'] + \

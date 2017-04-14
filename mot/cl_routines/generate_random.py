@@ -218,9 +218,9 @@ class _Random123Worker(Worker):
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
         kernel_args = [self._rng_state_buffer, self._samples_buf]
-        event = self._kernel.generate(self._cl_run_context.queue, (int(nmr_problems), ), None,
-                                      *kernel_args, global_offset=(range_start,))
-        return [self._enqueue_readout(self._samples_buf, self._samples, range_start * 4, range_end * 4, [event])]
+        self._kernel.generate(self._cl_run_context.queue, (int(nmr_problems), ), None,
+                              *kernel_args, global_offset=(range_start,))
+        self._enqueue_readout(self._samples_buf, self._samples, range_start * 4, range_end * 4)
 
     def _get_kernel_source(self):
         return self._kernel_source

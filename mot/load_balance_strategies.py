@@ -92,6 +92,16 @@ class Worker(object):
         """
         return self._cl_environment
 
+    def get_used_queues(self):
+        """Get the queues this worker is using for its GPU computations.
+
+        The load balancing routine will use these queues to flush and finish the computations.
+
+        Returns:
+            list of pyopencl queues: the list of queues
+        """
+        return [self._cl_run_context.queue]
+
     def calculate(self, range_start, range_end):
         """Calculate for this problem the given range.
 
@@ -100,11 +110,7 @@ class Worker(object):
         Args:
             range_start (int): The start of the processing range
             range_end (int): The end of the processing range
-
-        Returns:
-            list[cl_event]: The list of CL events to wait for.
         """
-        return []
 
     def post_process(self, range_start, range_end):
         """Apply post processing at the end of the calculation.
@@ -138,7 +144,7 @@ class Worker(object):
             str: the kernel
         """
 
-    def _enqueue_readout(self, buffer, host_array, range_start, range_end, wait_for):
+    def _enqueue_readout(self, buffer, host_array, range_start, range_end, wait_for=None):
         """Enqueue a readout for a buffer created with use_host_ptr.
 
         This encapsulates all the low level details needed to readout the given range of values.
@@ -244,18 +250,23 @@ class SimpleLoadBalanceStrategy(LoadBalanceStrategy):
         problems_seen = 0
 
         start_time = timeit.default_timer()
+
         for batch_nmr in range(most_nmr_batches):
-            events = []
+
             for worker_ind, worker in enumerate(workers):
                 if batch_nmr < len(batches[worker_ind]):
                     self._logger.debug('Going to run batch {0} on device {1} with range ({2}, {3})'.format(
                         batch_nmr, worker_ind, *batches[worker_ind][batch_nmr]))
-                    events.extend(worker.calculate(int(batches[worker_ind][batch_nmr][0]),
-                                                   int(batches[worker_ind][batch_nmr][1])))
+
+                    worker.calculate(int(batches[worker_ind][batch_nmr][0]), int(batches[worker_ind][batch_nmr][1]))
                     problems_seen += batches[worker_ind][batch_nmr][1] - batches[worker_ind][batch_nmr][0]
 
-            for event in events:
-                event.wait()
+                    for queue in worker.get_used_queues():
+                        queue.flush()
+
+            for worker in workers:
+                for queue in worker.get_used_queues():
+                    queue.finish()
 
             for worker_ind, worker in enumerate(workers):
                 if batch_nmr < len(batches[worker_ind]):

@@ -273,12 +273,10 @@ class AbstractParallelOptimizerWorker(Worker):
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
 
-        kernel_event = self._kernel.minimize(self._cl_run_context.queue, (nmr_problems, ), None, *self._all_buffers,
-                                             global_offset=(range_start,))
-        return [
-            self._enqueue_readout(self._params_buffer, self._starting_points, range_start, range_end, [kernel_event]),
-            self._enqueue_readout(self._return_code_buffer, self._return_codes, range_start, range_end, [kernel_event])
-        ]
+        self._kernel.minimize(self._cl_run_context.queue, (nmr_problems, ), None, *self._all_buffers,
+                              global_offset=(range_start,))
+        self._enqueue_readout(self._params_buffer, self._starting_points, range_start, range_end)
+        self._enqueue_readout(self._return_code_buffer, self._return_codes, range_start, range_end)
 
     def _create_buffers(self):
         all_buffers = []

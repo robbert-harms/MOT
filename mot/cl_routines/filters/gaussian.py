@@ -47,7 +47,6 @@ class _GaussianFilterWorker(AbstractFilterWorker):
                                 cl.mem_flags.WRITE_ONLY | cl.mem_flags.COPY_HOST_PTR,
                                 hostbuf=self._results_dict[volumes_to_run[0][0]])
 
-        return_event = None
         for volume_name, volume in volumes_to_run:
             cl.enqueue_copy(self._cl_run_context.queue, volume_buf, volume, is_blocking=False)
             cl.enqueue_copy(self._cl_run_context.queue, results_buf, self._results_dict[volume_name], is_blocking=False)
@@ -74,10 +73,8 @@ class _GaussianFilterWorker(AbstractFilterWorker):
                 kernel.filter(self._cl_run_context.queue, self._volume_shape, None, *buffers_list)
 
                 if dimension == len(self._volume_shape) - 1:
-                    return_event = [cl.enqueue_copy(self._cl_run_context.queue, self._results_dict[volume_name],
-                                                   results_buf_ptr, is_blocking=False)]
-
-        return return_event
+                    cl.enqueue_copy(self._cl_run_context.queue, self._results_dict[volume_name],
+                                    results_buf_ptr, is_blocking=False)
 
     def _build_kernel(self, compile_flags=()):
         pass
