@@ -174,14 +174,14 @@ class AbstractFilterWorker(Worker):
         """Get the kernel source part for the dimension initializations"""
         s = ''
         for i in range(nmr_dimensions):
-            s += 'ulong dim' + str(i) + ' = get_global_id(' + str(i) + ');' + "\n"
+            s += 'long dim' + str(i) + ' = get_global_id(' + str(i) + ');' + "\n"
         return s
 
     def _get_ks_sub2ind_func(self, volume_shape):
         """Get the kernel source part for converting array subscripts to indices"""
-        s = 'ulong sub2ind('
+        s = 'long sub2ind('
         for i in range(len(volume_shape)):
-            s += 'const ulong dim' + str(i) + ', '
+            s += 'const long dim' + str(i) + ', '
         s = s[0:-2] + '){' + "\n"
         s += 'return '
         for i, d in enumerate(volume_shape):
@@ -220,8 +220,8 @@ class AbstractFilterWorker(Worker):
         """Get the kernel source for the start and end of each of the dimensions"""
         s = ''
         for i, d in enumerate(volume_shape):
-            s += 'ulong dim' + str(i) + '_start = max(0, dim' + str(i) + ' - ' + str(self._get_size_in_dimension(i)) \
-                 + ');' + "\n"
-            s += 'ulong dim' + str(i) + '_end = min(' + str(d) + ', dim' + str(i) + ' + ' + \
+            s += 'long dim' + str(i) + '_start = max((long)0, dim' + str(i) + ' - ' + \
+                 str(self._get_size_in_dimension(i)) + ');' + "\n"
+            s += 'long dim' + str(i) + '_end = min((long)' + str(d) + ', dim' + str(i) + ' + ' + \
                  str(self._get_size_in_dimension(i)) + ' + 1);' + "\n"
         return s

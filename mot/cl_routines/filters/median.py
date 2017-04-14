@@ -30,7 +30,7 @@ class _MedianFilterWorker(AbstractFilterWorker):
                 ){
 
                     ''' + self._get_ks_dimension_inits(len(self._volume_shape)) + '''
-                    const ulong ind = ''' + self._get_ks_sub2ind_func_call(len(self._volume_shape)) + ''';
+                    const long ind = ''' + self._get_ks_sub2ind_func_call(len(self._volume_shape)) + ''';
 
                     ''' + ('if(mask[ind] > 0){' if self._use_mask else 'if(true){') + '''
 
