@@ -40,12 +40,17 @@ def multivariate_ess(samples, batch_size_generator=None):
         return np.array(list(map(_MultivariateESSMultiProcessing(batch_size_generator),
                                  samples_generator())))
 
-    p = multiprocessing.Pool()
-    return_data = np.array(list(p.imap(_MultivariateESSMultiProcessing(batch_size_generator),
-                                       samples_generator())))
-    p.close()
-    p.join()
-    return return_data
+    try:
+        p = multiprocessing.Pool()
+        return_data = np.array(list(p.imap(_MultivariateESSMultiProcessing(batch_size_generator),
+                                           samples_generator())))
+        p.close()
+        p.join()
+        return return_data
+
+    except OSError:
+        return np.array(list(map(_MultivariateESSMultiProcessing(batch_size_generator),
+                                 samples_generator())))
 
 
 class _MultivariateESSMultiProcessing(object):
