@@ -30,17 +30,15 @@ class AbstractParameterDependency(object):
 
 class SimpleAssignment(AbstractParameterDependency):
 
-    def __init__(self, assignment_code, fixed=True):
+    def __init__(self, assignment_code):
         """Adds a simple parameter dependency rule for the given parameter.
 
         This is for one parameter, a simple one-line transformation dependency.
 
         Args:
             assignment_code (str): the assignment code (in CL) for this parameter
-            fixed (boolean): if this parameters fixes to the assigned value or not
         """
         self._assignment = assignment_code
-        self._fixed = fixed
 
     @property
     def assignment_code(self):

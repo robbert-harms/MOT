@@ -54,17 +54,17 @@ class LoadBalanceStrategy(object):
     def get_used_cl_environments(self, cl_environments):
         """Get a subset of CL environments that this strategy plans on using.
 
-        The CL routine contains the list of CL environments, which it gives to this function. It then
-        expects back either same list or a proper subset of this list.
-
-        This can be used by the using class to only create workers for environments actually in use. This might save
-        compile time.
+        The strategy can decide on which workers to use based on the CL environment of the worker. To prevent the
+        calling function from generating workers that will not be used by this strategy, the calling function can
+        ask this function which CL environments it will use.
 
         Args:
-            cl_environments: the CL environments we want this strategy to check if it wants to use them.
+            cl_environments (list): the CL environments we were planning on using and were planning on generating
+                workers for
 
         Returns:
-            A subset of the CL environments, can be all of them.
+            list: A proper subset of the CL environments or all of them.
+                This should reflect the list of Cl environment we will use in :meth:`process`.
         """
         raise NotImplementedError()
 

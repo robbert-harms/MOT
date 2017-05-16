@@ -158,7 +158,7 @@ class AbstractFilterWorker(Worker):
     def _get_kernel_source(self):
         """Get the kernel source for this filtering kernel.
 
-           This should be implemented by the subclass.
+        This should be implemented by the subclass.
         """
 
     def _get_size_in_dimension(self, dimension):

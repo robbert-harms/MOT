@@ -1,5 +1,8 @@
 import numpy as np
 import copy
+
+from six import string_types
+
 from mot.cl_data_type import SimpleCLDataType
 from mot.cl_routines.mapping.calc_dependent_params import CalculateDependentParameters
 from mot.cl_routines.sampling.metropolis_hastings import DefaultMHState
@@ -7,7 +10,7 @@ from mot.model_building.cl_functions.model_functions import Weight
 from mot.model_building.cl_functions.parameters import CurrentObservationParam, StaticMapParameter, ProtocolParameter, \
     ModelDataParameter, FreeParameter
 from mot.model_building.data_adapter import SimpleDataAdapter
-from mot.model_building.parameter_functions.dependencies import SimpleAssignment
+from mot.model_building.parameter_functions.dependencies import SimpleAssignment, AbstractParameterDependency
 from mot.model_interfaces import OptimizeModelInterface, SampleModelInterface
 from mot.utils import is_scalar, all_elements_equal, get_single_value, results_to_dict, topological_sort
 
@@ -116,13 +119,17 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         Args:
             model_param_name (string): A model.param name like 'Ball.d'
-            value (scalar or vector): The value to fix the given parameter to
+            value (scalar or vector or string or AbstractParameterDependency): The value to fix the given parameter to
 
         Returns:
             Returns self for chainability
         """
-        self._parameter_values[model_param_name] = value
-        self._model_functions_info.set_fixed_to_value(model_param_name, True)
+        if isinstance(value, (string_types, AbstractParameterDependency)):
+            self._add_parameter_dependency(model_param_name, value)
+        else:
+            self._dependency_store.remove_dependency(model_param_name)
+            self._parameter_values[model_param_name] = value
+            self._model_functions_info.set_fixed_to_value(model_param_name, True)
         return self
 
     def init(self, model_param_name, value):
@@ -136,6 +143,23 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             Returns self for chainability
         """
         self._parameter_values[model_param_name] = value
+        return self
+
+    def set_initial_parameters(self, initial_params):
+        """Update the initial parameters for this model by the given values.
+
+        This only affects free parameters.
+
+        Args:
+            initial_params (dict): a dictionary containing as keys full parameter names (<model>.<param>) and as values
+                numbers or arrays to be used as starting point
+        """
+        for m, p in self._model_functions_info.get_free_parameters_list():
+            param_name = '{}.{}'.format(m.name, p.name)
+
+            if param_name in initial_params:
+                self.init(param_name, initial_params[param_name])
+
         return self
 
     def set_lower_bound(self, model_param_name, value):
@@ -199,6 +223,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         Returns:
             Returns self for chainability
         """
+        self._dependency_store.remove_dependency(model_param_name)
         self._model_functions_info.set_fixed_to_value(model_param_name, False)
         return self
 
@@ -230,32 +255,6 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             self._parameter_values['{}.{}'.format(
                 self._evaluation_model.name,
                 self._evaluation_model.get_noise_std_param_name())] = self._problem_data.noise_std
-        return self
-
-    def add_parameter_dependency(self, parameter_name, dependency):
-        """Adds a dependency rule to this model. The dependency is supposed to be a ParameterDependency object.
-
-        The dependencies are executed in the same order as they were added to this model.
-
-        Args:
-            parameter_name (String): The parameter on which the dependency is applied
-            dependency (ParameterDependency): The dependency rule, an ParameterDependency object
-        """
-        if parameter_name not in ['{}.{}'.format(m.name, p.name)
-                                  for m, p in self._model_functions_info.get_model_parameter_list()]:
-            raise ParameterNameException("The parameter name \"{}\" can not be "
-                                         "found in the model listing.".format(parameter_name))
-        self._dependency_store.set_dependency(parameter_name, dependency)
-        return self
-
-    def add_parameter_dependencies(self, dependencies):
-        """Adds a list of dependency objects. The order of the dependencies matter (order of parameter instantiation).
-
-        Args:
-            dependencies: the dependency rules, an tuple list like ((name, ParameterDependency object),)
-        """
-        for name, d in dependencies:
-            self.add_parameter_dependency(name, d)
         return self
 
     def add_post_optimization_modifier(self, model_param_name, mod_routine):
@@ -452,23 +451,6 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         """See super class for details"""
         return list(self._upper_bounds['{}.{}'.format(m.name, p.name)] for m, p in
                     self._model_functions_info.get_estimable_parameters_list())
-
-    def set_initial_parameters(self, initial_params):
-        """Update the initial parameters for this model by the given values.
-
-        This only affects free parameters.
-
-        Args:
-            initial_params (dict): a dictionary containing as keys full parameter names (<model>.<param>) and as values
-                numbers or arrays to be used as starting point
-        """
-        for m, p in self._model_functions_info.get_free_parameters_list():
-            param_name = '{}.{}'.format(m.name, p.name)
-
-            if param_name in initial_params:
-                self._parameter_values[param_name] = initial_params[param_name]
-
-        return self
 
     def get_observation_return_function(self, func_name='getObservation'):
         if self._problem_data.observations.shape[1] < 2:
@@ -1079,7 +1061,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                         break
 
                 if duplicate_found:
-                    self.add_parameter_dependency('{}.{}'.format(m.name, p.name), SimpleAssignment(duplicate_key))
+                    self._add_parameter_dependency('{}.{}'.format(m.name, p.name), SimpleAssignment(duplicate_key))
                 else:
                     var_data_dict.update({'{}.{}'.format(m.name, p.name): value})
 
@@ -1266,7 +1248,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         if self._enforce_weights_sum_to_one:
             names = ['{}.{}'.format(m.name, p.name) for (m, p) in self._model_functions_info.get_weights()]
             if len(names):
-                self.add_parameter_dependency(names[0], SimpleAssignment('1 - ({})'.format(' + '.join(names[1:]))))
+                self._add_parameter_dependency(names[0], SimpleAssignment('1 - ({})'.format(' + '.join(names[1:]))))
 
     def _get_mot_float_type(self):
         """Get the data type for the mot_float_type"""
@@ -1288,6 +1270,27 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 }
             '''
         return ''
+
+    def _add_parameter_dependency(self, parameter_name, dependency):
+        """Adds a dependency rule to this model. The dependency is supposed to be a ParameterDependency object.
+
+        The dependencies are executed in the same order as they were added to this model.
+
+        Args:
+            parameter_name (String): The parameter on which the dependency is applied
+            dependency (ParameterDependency): The dependency rule, an ParameterDependency object
+        """
+        if parameter_name not in ['{}.{}'.format(m.name, p.name)
+                                  for m, p in self._model_functions_info.get_model_parameter_list()]:
+            raise ParameterNameException("The parameter name \"{}\" can not be "
+                                         "found in the model listing.".format(parameter_name))
+
+        if isinstance(dependency, string_types):
+            dependency = SimpleAssignment(dependency)
+
+        self._dependency_store.set_dependency(parameter_name, dependency)
+        return self
+
 
 
 class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
@@ -1642,6 +1645,11 @@ class _DependencyStore(object):
 
     def get_index(self, param_name):
         return self.names_in_order.index(param_name)
+
+    def remove_dependency(self, param_name):
+        if param_name in self.dependencies:
+            del self.dependencies[param_name]
+            self.names_in_order.remove(param_name)
 
 
 class ModelFunctionsInformation(object):
