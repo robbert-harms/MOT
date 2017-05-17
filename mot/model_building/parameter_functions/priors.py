@@ -12,7 +12,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 class ParameterPrior(object):
     """The priors are used during model sampling.
 
-    These priors should be in the
+    These priors are not in log space, we take the log in the model builder.
 
     They indicate the a priori information one has about a parameter.
     """
