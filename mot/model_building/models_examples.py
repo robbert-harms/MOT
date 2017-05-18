@@ -95,7 +95,7 @@ class Rosenbrock(OptimizeModelInterface):
         params = np.ones((1, self.n)) * 3
 
         if isinstance(previous_results, np.ndarray):
-            previous_results = results_to_dict(previous_results, self.get_optimized_param_names())
+            previous_results = results_to_dict(previous_results, self.get_free_param_names())
 
         if previous_results:
             for i in range(self.n):
@@ -110,7 +110,7 @@ class Rosenbrock(OptimizeModelInterface):
     def get_upper_bounds(self):
         return ['inf'] * self.n
 
-    def get_optimized_param_names(self):
+    def get_free_param_names(self):
         return range(self.n)
 
     def get_nmr_inst_per_problem(self):
@@ -213,7 +213,7 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
         params = np.array([[0.3, 0.4]])
 
         if isinstance(previous_results, np.ndarray):
-            previous_results = results_to_dict(previous_results, self.get_optimized_param_names())
+            previous_results = results_to_dict(previous_results, self.get_free_param_names())
 
         if previous_results:
             for i in range(2):
@@ -228,7 +228,7 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
     def get_upper_bounds(self):
         return ['inf', 'inf']
 
-    def get_optimized_param_names(self):
+    def get_free_param_names(self):
         return [0, 1]
 
     def get_nmr_inst_per_problem(self):

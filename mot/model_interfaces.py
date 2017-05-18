@@ -276,7 +276,7 @@ class OptimizeModelInterface(object):
         """
         raise NotImplementedError()
 
-    def get_optimized_param_names(self):
+    def get_free_param_names(self):
         """Get a list of names with the free parameter names (the parameters that are estimated by the routines).
 
         The function get_optimization_output_param_names() returns the names of all the parameter names,
@@ -291,7 +291,7 @@ class OptimizeModelInterface(object):
     def get_optimization_output_param_names(self):
         """Get a list with the names of the parameters, this is the list of keys to the titles and results.
 
-        See get_optimized_param_names() for getting the names of the parameters that are actually being optimized.
+        See get_free_param_names() for getting the names of the parameters that are actually being optimized.
 
         This should be a complete overview of all the maps returned from optimizing this model.
 

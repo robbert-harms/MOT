@@ -100,7 +100,7 @@ class MetropolisHastings(AbstractSampler):
 
         self._logger.info('Using compile flags: {}'.format(self.get_compile_flags_list(model.double_precision)))
 
-        self._logger.info('The parameters we will sample are: {0}'.format(model.get_optimized_param_names()))
+        self._logger.info('The parameters we will sample are: {0}'.format(model.get_free_param_names()))
 
         sample_settings = dict(nmr_samples=self.nmr_samples,
                                burn_length=self.burn_length,

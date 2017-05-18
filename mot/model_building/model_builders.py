@@ -307,7 +307,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         items.extend(name for name, _ in self._post_optimization_modifiers)
         return items
 
-    def get_optimized_param_names(self):
+    def get_free_param_names(self):
         """See super class for details"""
         return ['{}.{}'.format(m.name, p.name) for m, p in
                 self._model_functions_info.get_estimable_parameters_list()]
@@ -408,7 +408,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             np_dtype = np.float64
 
         if isinstance(previous_results, np.ndarray):
-            previous_results = results_to_dict(previous_results, self.get_optimized_param_names())
+            previous_results = results_to_dict(previous_results, self.get_free_param_names())
 
         starting_points = []
         for m, p in self._model_functions_info.get_estimable_parameters_list():
