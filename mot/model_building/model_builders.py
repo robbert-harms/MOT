@@ -57,9 +57,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         self.use_parameter_transformations = True
         self._double_precision = False
 
-        self._dependency_store = _DependencyStore()
         self._model_functions_info = self._init_model_information_container(
-            self._dependency_store, model_tree, evaluation_model, signal_noise_model)
+            model_tree, evaluation_model, signal_noise_model)
 
         self._post_optimization_modifiers = []
         self.problems_to_analyze = None
@@ -82,18 +81,17 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         self._set_default_dependencies()
 
-    def _init_model_information_container(self, dependency_store, model_tree, evaluation_model, signal_noise_model):
+    def _init_model_information_container(self, model_tree, evaluation_model, signal_noise_model):
         """Get the model information container object.
 
-        This is called in the __init__ to provide the new model with the correct subclass function information
-        object. The rationale is that some subclasses may have additional parameters not present in optimization. For
-        example, in sampling one can have priors with parameters. These parameters must be added to the model and the
-        best point to do that is in the ModelFunctionsInformation object.
+        The rationale for this function is that some subclasses may have additional parameters not present in
+        optimization. For example, in sampling one can have priors with parameters. These parameters must be
+        added to the model and the best point to do that is in the ModelFunctionsInformation object.
 
         Returns:
             ModelFunctionsInformation: the model function information object
         """
-        return ModelFunctionsInformation(dependency_store, model_tree, evaluation_model, signal_noise_model)
+        return ModelFunctionsInformation(model_tree, evaluation_model, signal_noise_model)
 
     @property
     def name(self):
@@ -119,17 +117,27 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         Args:
             model_param_name (string): A model.param name like 'Ball.d'
-            value (scalar or vector or string or AbstractParameterDependency): The value to fix the given parameter to
+            value (scalar or vector or string or AbstractParameterDependency): The value or dependency
+                to fix the given parameter to.
 
         Returns:
             Returns self for chainability
         """
-        if isinstance(value, (string_types, AbstractParameterDependency)):
-            self._add_parameter_dependency(model_param_name, value)
-        else:
-            self._dependency_store.remove_dependency(model_param_name)
-            self._parameter_values[model_param_name] = value
-            self._model_functions_info.set_fixed_to_value(model_param_name, True)
+        if isinstance(value, string_types):
+            value = SimpleAssignment(value)
+        self._model_functions_info.fix_parameter(model_param_name, value)
+        return self
+
+    def unfix(self, model_param_name):
+        """Unfix the given model.param
+
+        Args:
+            model_param_name (string): A model.param name like 'Ball.d'
+
+        Returns:
+            Returns self for chainability
+        """
+        self._model_functions_info.unfix(model_param_name)
         return self
 
     def init(self, model_param_name, value):
@@ -214,19 +222,6 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             self.set_upper_bound(param, value)
         return self
 
-    def unfix(self, model_param_name):
-        """Unfix the given model.param
-
-        Args:
-            model_param_name (string): A model.param name like 'Ball.d'
-
-        Returns:
-            Returns self for chainability
-        """
-        self._dependency_store.remove_dependency(model_param_name)
-        self._model_functions_info.set_fixed_to_value(model_param_name, False)
-        return self
-
     def has_parameter(self, model_param_name):
         """Check to see if the given parameter is defined in this model.
 
@@ -309,8 +304,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
     def get_free_param_names(self):
         """See super class for details"""
-        return ['{}.{}'.format(m.name, p.name) for m, p in
-                self._model_functions_info.get_estimable_parameters_list()]
+        return ['{}.{}'.format(m.name, p.name) for m, p in self._model_functions_info.get_estimable_parameters_list()]
 
     def get_nmr_problems(self):
         """See super class for details"""
@@ -396,7 +390,10 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         '''
 
     def get_initial_parameters(self, previous_results=None):
-        """When overriding this function, please note that it should adhere to the attribute problems_to_analyze.
+        """Get the initial parameters to use for model fitting.
+
+        Implementation note, when overriding this function, please note that it should adhere
+        to the attribute problems_to_analyze.
 
         Args:
             previous_results (dict or ndarray): the initialization settings for the specific parameters.
@@ -573,35 +570,36 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
     def _add_fixed_parameter_maps(self, results_dict):
         """In place add complete maps for the fixed parameters."""
-        param_lists = self._get_parameter_type_lists()
-        fixed_params = param_lists['fixed']
-        for (m, p) in fixed_params:
-            if not self._model_functions_info.is_parameter_fixed_to_dependency(m, p):
-                name = '{}.{}'.format(m.name, p.name)
-                value = self._parameter_values['{}.{}'.format(m.name, p.name)]
+        fixed_params = self._model_functions_info.get_value_fixed_parameters_list(exclude_priors=True)
 
-                if is_scalar(value):
-                    results_dict.update({name: np.tile(np.array([value]), (self.get_nmr_problems(),))})
-                else:
-                    if self.problems_to_analyze is not None:
-                        value = value[self.problems_to_analyze, ...]
-                    results_dict.update({name: value})
+        for (m, p) in fixed_params:
+            name = '{}.{}'.format(m.name, p.name)
+            value = self._model_functions_info.get_fixed_value(name)
+
+            if is_scalar(value):
+                results_dict.update({name: np.tile(np.array([value]), (self.get_nmr_problems(),))})
+            else:
+                if self.problems_to_analyze is not None:
+                    value = value[self.problems_to_analyze, ...]
+                results_dict.update({name: value})
 
     def _add_dependent_parameter_maps(self, results_dict):
         """In place add complete maps for the dependent parameters."""
-        param_lists = self._get_parameter_type_lists()
-        if len(param_lists['dependent']):
-            func = ''
-            func += self._get_fixed_parameters_listing(param_lists['fixed'])
-            func += self._get_estimable_parameters_listing(param_lists['estimable'])
-            func += self._get_dependent_parameters_listing(param_lists['dependent'])
+        estimable_parameters = self._model_functions_info.get_estimable_parameters_list(exclude_priors=True)
+        dependent_parameters = self._model_functions_info.get_dependency_fixed_parameters_list(exclude_priors=True)
 
-            estimable_params = ['{}.{}'.format(m.name, p.name) for m, p in param_lists['estimable']]
+        if len(dependent_parameters):
+            func = ''
+            func += self._get_fixed_parameters_listing()
+            func += self._get_estimable_parameters_listing()
+            func += self._get_dependent_parameters_listing()
+
+            estimable_params = ['{}.{}'.format(m.name, p.name) for m, p in estimable_parameters]
             estimated_parameters = [results_dict[k] for k in estimable_params]
 
             dependent_parameter_names = [('{}.{}'.format(m.name, p.name).replace('.', '_'),
                                           '{}.{}'.format(m.name, p.name))
-                                         for m, p in param_lists['dependent']]
+                                         for m, p in dependent_parameters]
 
             cpd = CalculateDependentParameters(double_precision=self.double_precision)
             dependent_parameters = cpd.calculate(self, estimated_parameters, func, dependent_parameter_names)
@@ -763,26 +761,19 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             An CL string that contains all the parameters as primitive data types.
         """
         func = ''
-        param_lists = self._get_parameter_type_lists()
-        func += self._get_protocol_parameters_listing(param_lists['protocol'], exclude_list=exclude_list)
-        func += self._get_fixed_parameters_listing(param_lists['fixed'], exclude_list=exclude_list)
-        func += self._get_estimable_parameters_listing(param_lists['estimable'], exclude_list=exclude_list)
-        func += self._get_dependent_parameters_listing(param_lists['dependent'], exclude_list=exclude_list)
+        func += self._get_protocol_parameters_listing(exclude_list=exclude_list)
+        func += self._get_fixed_parameters_listing(exclude_list=exclude_list)
+        func += self._get_estimable_parameters_listing(exclude_list=exclude_list)
+        func += self._get_dependent_parameters_listing(exclude_list=exclude_list)
         return str(func)
 
-    def _get_estimable_parameters_listing(self, param_list=None, exclude_list=()):
+    def _get_estimable_parameters_listing(self, exclude_list=()):
         """Get the parameter listing for the free parameters.
 
-        For performance reasons, the parameter list should already be given.
-            If not given it is calculated using:
-                self._get_parameter_type_lists()['estimable']
-
         Args:
-            param_list: the list with the estimable parameters
             exclude_list: a list of parameters to exclude from this listing
         """
-        if param_list is None:
-            param_list = self._get_parameter_type_lists()['estimable']
+        param_list = self._model_functions_info.get_estimable_parameters_list(exclude_priors=True)
 
         func = ''
         estimable_param_counter = 0
@@ -795,20 +786,14 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 estimable_param_counter += 1
         return func
 
-    def _get_protocol_parameters_listing(self, param_list=None, exclude_list=()):
+    def _get_protocol_parameters_listing(self, exclude_list=()):
         """Get the parameter listing for the protocol parameters.
 
-        For performance reasons, the parameter list should already be given.
-            If not given it is calculated using:
-                self._get_parameter_type_lists()['protocol']
-
         Args:
-            param_list: the list with the protocol parameters
             exclude_list: a list of parameters to exclude from this listing
         """
         protocol_info = self._problem_data.protocol
-        if param_list is None:
-            param_list = self._get_parameter_type_lists()['protocol']
+        param_list = self._model_functions_info.get_protocol_parameters_list()
 
         const_params_seen = []
         func = ''
@@ -835,26 +820,20 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                     const_params_seen.append(p.name)
         return func
 
-    def _get_fixed_parameters_listing(self, param_list=None, exclude_list=()):
+    def _get_fixed_parameters_listing(self, exclude_list=()):
         """Get the parameter listing for the fixed parameters.
 
-        For performance reasons, the fixed parameter list should already be given.
-            If not given it is calculated using:
-                self._get_parameter_type_lists()['fixed']
-
         Args:
-            dependent_param_list: the list list of fixed params
             exclude_list: a list of parameters to exclude from this listing
         """
-        if param_list is None:
-            param_list = self._get_parameter_type_lists()['fixed']
+        param_list = self._model_functions_info.get_value_fixed_parameters_list(exclude_priors=True)
 
         func = ''
         for m, p in param_list:
             name = '{}.{}'.format(m.name, p.name).replace('.', '_')
             if name not in exclude_list:
                 data_type = p.data_type.raw_data_type
-                value = self._parameter_values['{}.{}'.format(m.name, p.name)]
+                value = self._model_functions_info.get_fixed_value('{}.{}'.format(m.name, p.name))
 
                 if all_elements_equal(value):
                     assignment = '(' + data_type + ')' + str(float(get_single_value(value)))
@@ -867,43 +846,35 @@ class OptimizeModelBuilder(OptimizeModelInterface):
     def _get_dependent_parameters_listing(self, dependent_param_list=None, exclude_list=()):
         """Get the parameter listing for the dependent parameters.
 
-        For performance reasons, the dependent parameter list should already be given.
-            If not given it is calculated using:
-                self._get_parameter_type_lists()['dependent']
-
         Args:
             dependent_param_list: the list list of dependent params
             exclude_list: a list of parameters to exclude from this listing, note that this will only exclude the
                 definition of the parameter, not the dependency code.
         """
         if dependent_param_list is None:
-            dependent_param_list = self._get_parameter_type_lists()['dependent']
+            dependent_param_list = self._model_functions_info.get_dependency_fixed_parameters_list(exclude_priors=True)
+
         func = ''
         for m, p in dependent_param_list:
-            pd = self._dependency_store.get_dependency('{}.{}'.format(m.name, p.name))
-            if pd.pre_transform_code:
-                func += "\t"*4 + self._convert_parameters_dot_to_bar(pd.pre_transform_code)
+            dependency = self._model_functions_info.get_fixed_value('{}.{}'.format(m.name, p.name))
 
-            assignment = self._convert_parameters_dot_to_bar(pd.assignment_code)
+            if dependency.pre_transform_code:
+                func += "\t"*4 + self._convert_parameters_dot_to_bar(dependency.pre_transform_code)
+
+            assignment = self._convert_parameters_dot_to_bar(dependency.assignment_code)
             name = '{}.{}'.format(m.name, p.name).replace('.', '_')
             data_type = p.data_type.raw_data_type
 
-            if self._model_functions_info.is_parameter_fixed_to_dependency(m, p):
-                if ('{}.{}'.format(m.name, p.name).replace('.', '_')) not in exclude_list:
-                    func += "\t"*4 + data_type + ' ' + name + ' = ' + assignment + ';' + "\n"
-            else:
-                func += "\t"*4 + name + ' = ' + assignment + ';' + "\n"
+            if ('{}.{}'.format(m.name, p.name).replace('.', '_')) not in exclude_list:
+                func += "\t"*4 + data_type + ' ' + name + ' = ' + assignment + ';' + "\n"
         return func
 
     def _get_fixed_parameters_as_var_data(self):
         var_data_dict = {}
-        for m, p in self._model_functions_info.get_free_parameters_list():
-            value = self._parameter_values['{}.{}'.format(m.name, p.name)]
+        for m, p in self._model_functions_info.get_value_fixed_parameters_list():
+            value = self._model_functions_info.get_fixed_value('{}.{}'.format(m.name, p.name))
 
-            if self._model_functions_info.is_fixed_to_value('{}.{}'.format(m.name, p.name)) \
-                and not all_elements_equal(value) \
-                and not self._model_functions_info.is_parameter_fixed_to_dependency(m, p):
-
+            if not all_elements_equal(value):
                 if self.problems_to_analyze is not None:
                     value = value[self.problems_to_analyze, ...]
 
@@ -991,47 +962,18 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         elif isinstance(p, FreeParameter):
             value = self._parameter_values['{}.{}'.format(m.name, p.name)]
 
-            if self._model_functions_info.is_fixed_to_value('{}.{}'.format(m.name, p.name)) \
-                and not self._model_functions_info.parameter_has_dependency(m, p):
+            if self._model_functions_info.is_fixed_to_value('{}.{}'.format(m.name, p.name)):
                 if all_elements_equal(value):
                     assignment = '(' + data_type + ')' + str(float(get_single_value(value)))
                 else:
-                    assignment = '(' + data_type + ') data->var_data_' + \
-                                 '{}.{}'.format(m.name, p.name).replace('.', '_')
-            elif not self._model_functions_info.parameter_has_dependency(m, p) \
-                or (self._model_functions_info.parameter_has_dependency(m, p)
-                    and not self._model_functions_info.is_parameter_fixed_to_dependency(m, p)):
+                    assignment = '(' + data_type + ') data->var_data_{}.{}'.format(m.name, p.name).replace('.', '_')
+            elif self._model_functions_info.is_fixed_to_dependency(m, p):
+                return self._get_dependent_parameters_listing(((m, p),))
+            else:
                 ind = self._model_functions_info.get_parameter_estimable_index(m, p)
                 assignment += 'x[' + str(ind) + ']'
-            if self._model_functions_info.parameter_has_dependency(m, p):
-                return self._get_dependent_parameters_listing(((m, p),))
 
         return data_type + ' ' + name + ' = ' + assignment + ';' + "\n"
-
-    def _get_parameter_type_lists(self):
-        """Returns a dictionary with the parameters sorted in the types protocol, fixed, estimable and dependent.
-
-        Parameters may occur in different lists (estimable and dependent for example).
-        """
-        protocol_parameters = self._model_functions_info.get_protocol_parameters_list()
-        fixed_parameters = []
-        estimable_parameters = []
-        depended_parameters = []
-
-        for m, p in self._model_functions_info.get_free_parameters_list(exclude_priors=True):
-            if self._model_functions_info.is_fixed_to_value('{}.{}'.format(m.name, p.name)) \
-                and not self._model_functions_info.parameter_has_dependency(m, p):
-                fixed_parameters.append((m, p))
-
-            elif self._model_functions_info.is_parameter_estimable(m, p):
-                estimable_parameters.append((m, p))
-
-            if self._model_functions_info.parameter_has_dependency(m, p):
-                ind = self._dependency_store.get_index('{}.{}'.format(m.name, p.name))
-                depended_parameters.insert(ind, (m, p))
-
-        return {'protocol': protocol_parameters, 'fixed': fixed_parameters,
-                'estimable': estimable_parameters, 'dependent': depended_parameters}
 
     def _convert_parameters_dot_to_bar(self, string):
         """Convert a string containing parameters with . to parameter names with _"""
@@ -1047,10 +989,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         for m, p in self._model_functions_info.get_free_parameters_list():
             value = self._parameter_values['{}.{}'.format(m.name, p.name)]
 
-            if self._model_functions_info.is_fixed_to_value('{}.{}'.format(m.name, p.name)) \
-                    and not is_scalar(value) \
-                    and not self._model_functions_info.is_parameter_fixed_to_dependency(m, p):
-
+            if self._model_functions_info.is_fixed_to_value('{}.{}'.format(m.name, p.name)) and not is_scalar(value):
                 duplicate_found = False
                 duplicate_key = None
 
@@ -1061,7 +1000,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                         break
 
                 if duplicate_found:
-                    self._add_parameter_dependency('{}.{}'.format(m.name, p.name), SimpleAssignment(duplicate_key))
+                    self.fix('{}.{}'.format(m.name, p.name), SimpleAssignment(duplicate_key))
                 else:
                     var_data_dict.update({'{}.{}'.format(m.name, p.name): value})
 
@@ -1248,7 +1187,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         if self._enforce_weights_sum_to_one:
             names = ['{}.{}'.format(m.name, p.name) for (m, p) in self._model_functions_info.get_weights()]
             if len(names):
-                self._add_parameter_dependency(names[0], SimpleAssignment('1 - ({})'.format(' + '.join(names[1:]))))
+                self.fix(names[0], SimpleAssignment('1 - ({})'.format(' + '.join(names[1:]))))
 
     def _get_mot_float_type(self):
         """Get the data type for the mot_float_type"""
@@ -1271,27 +1210,6 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             '''
         return ''
 
-    def _add_parameter_dependency(self, parameter_name, dependency):
-        """Adds a dependency rule to this model. The dependency is supposed to be a ParameterDependency object.
-
-        The dependencies are executed in the same order as they were added to this model.
-
-        Args:
-            parameter_name (String): The parameter on which the dependency is applied
-            dependency (ParameterDependency): The dependency rule, an ParameterDependency object
-        """
-        if parameter_name not in ['{}.{}'.format(m.name, p.name)
-                                  for m, p in self._model_functions_info.get_model_parameter_list()]:
-            raise ParameterNameException("The parameter name \"{}\" can not be "
-                                         "found in the model listing.".format(parameter_name))
-
-        if isinstance(dependency, string_types):
-            dependency = SimpleAssignment(dependency)
-
-        self._dependency_store.set_dependency(parameter_name, dependency)
-        return self
-
-
 
 class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
 
@@ -1300,7 +1218,7 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         super(SampleModelBuilder, self).__init__(model_name, model_tree, evaluation_model, signal_noise_model,
                                                  problem_data, enforce_weights_sum_to_one=enforce_weights_sum_to_one)
 
-    def _init_model_information_container(self, dependency_store, model_tree, evaluation_model, signal_noise_model):
+    def _init_model_information_container(self, model_tree, evaluation_model, signal_noise_model):
         """Get the model information container object.
 
         This is called in the __init__ to provide the new model with the correct subclass function information
@@ -1311,8 +1229,7 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         Returns:
             ModelFunctionsInformation: the model function information object
         """
-        return ModelFunctionsInformation(dependency_store, model_tree, evaluation_model, signal_noise_model,
-                                         enable_prior_parameters=True)
+        return ModelFunctionsInformation(model_tree, evaluation_model, signal_noise_model, enable_prior_parameters=True)
 
     def get_log_prior_function(self, func_name='getLogPrior', address_space_parameter_vector='private'):
         prior = ''
@@ -1623,44 +1540,12 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         return return_list
 
 
-class _DependencyStore(object):
-
-    def __init__(self):
-        self.names_in_order = []
-        self.dependencies = {}
-
-    def set_dependency(self, param_name, dependency):
-        if param_name not in self.names_in_order:
-            self.names_in_order.append(param_name)
-        self.dependencies.update({param_name: dependency})
-
-    def get_dependency(self, param_name):
-        return self.dependencies[param_name]
-
-    def has_dependency(self, param_name):
-        return param_name in self.dependencies
-
-    def has_dependencies(self):
-        return self.names_in_order
-
-    def get_index(self, param_name):
-        return self.names_in_order.index(param_name)
-
-    def remove_dependency(self, param_name):
-        if param_name in self.dependencies:
-            del self.dependencies[param_name]
-            self.names_in_order.remove(param_name)
-
-
 class ModelFunctionsInformation(object):
 
-    def __init__(self, dependency_store, model_tree, evaluation_model, signal_noise_model=None,
-                 enable_prior_parameters=False):
+    def __init__(self, model_tree, evaluation_model, signal_noise_model=None, enable_prior_parameters=False):
         """Contains centralized information about the model functions in the model builder parent.
 
         Args:
-            dependency_store (_DependencyStore): the shared dependency store containing information about
-                the parameters that depend on each other
             model_tree (mot.model_building.trees.CompartmentModelTree): the model tree object
             evaluation_model (mot.model_building.evaluation_models.EvaluationModel): the evaluation model to
                 use for the resulting complete model
@@ -1668,7 +1553,6 @@ class ModelFunctionsInformation(object):
                 noise model to use to add noise to the model prediction
             enable_prior_parameters (boolean): adds possible prior parameters to the list of parameters in the model
         """
-        self._dependency_store = dependency_store
         self._model_tree = model_tree
         self._evaluation_model = evaluation_model
         self._signal_noise_model = signal_noise_model
@@ -1683,27 +1567,40 @@ class ModelFunctionsInformation(object):
         self._fixed_parameters = {'{}.{}'.format(m.name, p.name): p.fixed for m, p in
                                   self.get_model_parameter_list() if isinstance(p, FreeParameter)}
 
-    def set_fixed_to_value(self, parameter_name, fix_state):
-        """Set the given parameter fixed.
+        self._parameter_values = {'{}.{}'.format(m.name, p.name): p.value for m, p in
+                                  self.get_free_parameters_list() +
+                                  self.get_static_parameters_list()}
+        self._fixed_values = copy.copy(self._parameter_values)
 
-        This only works with free parameters.
-
-        Args:
-            parameter_name (str): the name of the parameter to fix or unfix
-            fix_state (boolean): if the parameter is fixed or not
-        """
-        self._fixed_parameters[parameter_name] = fix_state
-
-    def is_fixed_to_value(self, parameter_name):
-        """Check if the given (free) parameter is fixed to a value.
+    def get_fixed_value(self, parameter_name):
+        """Get the fixed value for the given parameter.
 
         Args:
-            parameter_name (str): the name of the parameter to fix or unfix
+            parameter_name (string): A model.param name like 'Ball.d'
 
         Returns:
-            boolean: if the parameter is fixed to a value or not
+            float or ndarray: the value the parameter is fixed to
         """
-        return self._fixed_parameters[parameter_name]
+        return self._fixed_values[parameter_name]
+
+    def fix_parameter(self, parameter_name, value):
+        """Fix the indicated free parameter to the given value.
+
+        Args:
+            parameter_name (string): A model.param name like 'Ball.d'
+            value (scalar or vector or string or AbstractParameterDependency): The value or dependency
+                to fix the given parameter to.
+        """
+        self._fixed_parameters[parameter_name] = True
+        self._fixed_values[parameter_name] = value
+
+    def unfix(self, parameter_name):
+        """Unfix the indicated parameter
+
+        Args:
+            parameter_name (str): the name of the parameter to fix or unfix
+        """
+        self._fixed_parameters[parameter_name] = False
 
     def get_model_list(self):
         """Get the list of all the applicable model functions
@@ -1733,7 +1630,7 @@ class ModelFunctionsInformation(object):
         This does not incorporate checking for fixed parameters.
 
         Args:
-            exclude_priors (boolean): if we want to exclude the priors or not
+            exclude_priors (boolean): if we want to exclude the parameters for the priors
 
         Returns:
             list of tuple: the list of tuples containing (model, parameters)
@@ -1749,6 +1646,56 @@ class ModelFunctionsInformation(object):
                 free_params.extend(prior_params)
 
         return free_params
+
+    def get_estimable_parameters_list(self, exclude_priors=False):
+        """Gets a list (as model, parameter tuples) of all parameters that are estimable.
+
+        Args:
+            exclude_priors (boolean): if we want to exclude the parameters for the priors
+
+        Returns:
+            list of tuple: the list of estimable parameters
+        """
+        estimable_parameters = [(m, p) for m, p in self._model_parameter_list if self.is_parameter_estimable(m, p)]
+
+        if not exclude_priors:
+            if self._enable_prior_parameters:
+                prior_params = []
+                for m, p in estimable_parameters:
+                    prior_params.extend((m, prior_p) for prior_p in m.get_prior_parameters(p) if not prior_p.fixed)
+                estimable_parameters.extend(prior_params)
+
+        return estimable_parameters
+
+    def get_value_fixed_parameters_list(self, exclude_priors=False):
+        """Gets a list (as model, parameter tuples) of all parameters that are fixed to a value.
+
+        Args:
+            exclude_priors (boolean): if we want to exclude the parameters for the priors
+
+        Returns:
+            list of tuple: the list of value fixed parameters
+        """
+        value_fixed_parameters = []
+        for m, p in self.get_free_parameters_list(exclude_priors=exclude_priors):
+            if self.is_fixed_to_value('{}.{}'.format(m.name, p.name)):
+                value_fixed_parameters.append((m, p))
+        return value_fixed_parameters
+
+    def get_dependency_fixed_parameters_list(self, exclude_priors=False):
+        """Gets a list (as model, parameter tuples) of all parameters that are fixed to a dependency.
+
+        Args:
+            exclude_priors (boolean): if we want to exclude the parameters for the priors
+
+        Returns:
+            list of tuple: the list of value fixed parameters
+        """
+        dependency_fixed_parameters = []
+        for m, p in self.get_free_parameters_list(exclude_priors=exclude_priors):
+            if self.is_fixed_to_dependency(m, p):
+                dependency_fixed_parameters.append((m, p))
+        return dependency_fixed_parameters
 
     def get_static_parameters_list(self):
         """Gets the static parameters (as model, parameter tuples) from the model listing."""
@@ -1799,7 +1746,31 @@ class ModelFunctionsInformation(object):
 
         return listing
 
-    def parameter_has_dependency(self, model, param):
+    def is_fixed(self, parameter_name):
+        """Check if the given (free) parameter is fixed or not
+
+        Args:
+            parameter_name (str): the name of the parameter to fix or unfix
+
+        Returns:
+            boolean: if the parameter is fixed or not (can be fixed to a value and dependency).
+        """
+        return parameter_name in self._fixed_parameters and self._fixed_parameters[parameter_name]
+
+    def is_fixed_to_value(self, parameter_name):
+        """Check if the given (free) parameter is fixed to a value.
+
+        Args:
+            parameter_name (str): the name of the parameter to fix or unfix
+
+        Returns:
+            boolean: if the parameter is fixed to a value or not
+        """
+        if self.is_fixed(parameter_name):
+            return not isinstance(self._fixed_values[parameter_name], AbstractParameterDependency)
+        return False
+
+    def is_fixed_to_dependency(self, model, param):
         """Check if the given model and parameter name combo has a dependency.
 
         Args:
@@ -1809,25 +1780,15 @@ class ModelFunctionsInformation(object):
         Returns:
             boolean: if the given parameter has a dependency
         """
-        return self._dependency_store.has_dependency('{}.{}'.format(model.name, param.name))
-
-    def is_parameter_fixed_to_dependency(self, model, param):
-        """Check if the given model and parameter name combo has a dependency.
-
-        Args:
-            model (mot.model_building.cl_functions.base.ModelFunction): the model function
-            param (mot.model_building.cl_functions.parameters.CLFunctionParameter): the parameter
-
-        Returns:
-            boolean: if the given parameter is fixed to a dependency. Returns False if either this parameter
-                has no dependency or if it is not fixed to it.
-        """
-        return self.parameter_has_dependency(model, param)
+        model_param_name = '{}.{}'.format(model.name, param.name)
+        if self.is_fixed(model_param_name):
+            return isinstance(self._fixed_values[model_param_name], AbstractParameterDependency)
+        return False
 
     def is_parameter_estimable(self, model, param):
         """Check if the given model parameter is estimable.
 
-        A parameter is estimable if it is free, not fixed to dependencies and not fixed to any static value.
+        A parameter is estimable if it is of the Free parameter type and is not fixed.
 
         Args:
             model (mot.model_building.cl_functions.base.ModelFunction): the model function
@@ -1836,25 +1797,7 @@ class ModelFunctionsInformation(object):
         Returns:
             boolean: true if the parameter is estimable, false otherwise
         """
-        return isinstance(param, FreeParameter) and \
-            not self._fixed_parameters.get('{}.{}'.format(model.name, param.name), False) and \
-            not self.is_parameter_fixed_to_dependency(model, param)
-
-    def get_estimable_parameters_list(self):
-        """Gets a list (as model, parameter tuples) of all parameters that are estimable.
-
-        Returns:
-            list of tuple: the list of estimable parameters
-        """
-        estimable_parameters = [(m, p) for m, p in self._model_parameter_list if self.is_parameter_estimable(m, p)]
-
-        if self._enable_prior_parameters:
-            prior_params = []
-            for m, p in estimable_parameters:
-                prior_params.extend((m, prior_p) for prior_p in m.get_prior_parameters(p) if not prior_p.fixed)
-            estimable_parameters.extend(prior_params)
-
-        return estimable_parameters
+        return isinstance(param, FreeParameter) and not self.is_fixed('{}.{}'.format(model.name, param.name))
 
     def get_weights(self):
         """Get all the model functions/parameter tuples of the models that are a subclass of Weight
