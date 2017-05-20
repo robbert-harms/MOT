@@ -16,7 +16,7 @@ class Rosenbrock(OptimizeModelInterface):
 
     def __init__(self, n=5):
         """When optimized the parameters should all be equal to 1."""
-        super(Rosenbrock, self).__init__()
+        super(OptimizeModelInterface, self).__init__()
         self.n = n
 
     def double_precision(self):
@@ -42,7 +42,7 @@ class Rosenbrock(OptimizeModelInterface):
     def get_kernel_param_names(self, device):
         return []
 
-    def get_kernel_data_struct_initialization(self, device, variable_name):
+    def get_kernel_data_struct_initialization(self, device, variable_name, problem_id_name='gid'):
         return self.get_kernel_data_struct_type() + ' ' + variable_name + ' = {0};'
 
     def get_nmr_problems(self):
@@ -135,7 +135,7 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
         (viewed at 2015-04-02).
 
         """
-        super(MatlabLSQNonlinExample, self).__init__()
+        super(OptimizeModelInterface, self).__init__()
 
     def double_precision(self):
         return True
@@ -160,7 +160,7 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
     def get_kernel_param_names(self, device):
         return []
 
-    def get_kernel_data_struct_initialization(self, device, variable_name):
+    def get_kernel_data_struct_initialization(self, device, variable_name, problem_id_name='gid'):
         return self.get_kernel_data_struct_type() + ' ' + variable_name + ' = {0};'
 
     def get_nmr_problems(self):

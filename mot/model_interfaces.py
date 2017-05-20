@@ -95,7 +95,7 @@ class OptimizeModelInterface(object):
         """
         raise NotImplementedError()
 
-    def get_kernel_data_struct_initialization(self, device, variable_name, problem_id_name):
+    def get_kernel_data_struct_initialization(self, device, variable_name, problem_id_name='gid'):
         """The assignment code for the data structure.
 
         The data structure needs to be generated given the kernel arguments, this function returns
@@ -109,7 +109,8 @@ class OptimizeModelInterface(object):
         Args:
             device (pyopencl.Device): the device for which to generate the data structure
             variable_name (str): the name for the generated struct variable
-            problem_id_name (str): the name of the variable holding the problem id, commonly set to get_global_id()
+            problem_id_name (str): the name of the variable holding the problem id, commonly set to 'gid' where
+                'gid' refers to the get_global_id()
 
         Returns:
             str: the initialization assignment for the data structure.
