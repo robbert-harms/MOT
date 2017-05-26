@@ -1,3 +1,6 @@
+import os
+from pkg_resources import resource_filename
+
 from mot.model_building.cl_functions.library_functions import LibNMSimplex
 from ...cl_routines.optimizing.base import AbstractParallelOptimizer, AbstractParallelOptimizerWorker
 
@@ -8,21 +11,36 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class NMSimplex(AbstractParallelOptimizer):
+class SBPlex(AbstractParallelOptimizer):
 
-    default_patience = 200
+    default_patience = 5
 
-    def __init__(self, scale=None, alpha=None, beta=None, gamma=None, delta=None, adaptive_scales=None,
+    def __init__(self, scale=None, alpha=None, beta=None, gamma=None, delta=None, psi=None, omega=None,
+                 min_subspace_length=None, max_subspace_length=None, adaptive_scales=None,
+                 patience_nmsimplex=None,
                  patience=None, optimizer_settings=None, **kwargs):
-        """Use the Nelder-Mead simplex method to calculate the optimimum.
+        """Variation on the Nelder-Mead Simplex method by Thomas H. Rowan.
+
+        This method uses NMSimplex to search subspace regions for the minimum. See Rowan's thesis titled
+        "Functional Stability analysis of numerical algorithms" for more details.
 
         Args:
             patience (int): Used to set the maximum number of iterations to patience*(number_of_parameters+1)
+            patience_nmsimplex (int): The maximum patience for each subspace search.
+                For each subspace search we set the number of iterations to patience*(number_of_parameters_subspace+1)
             scale (double): the scale of the initial simplex, default 1.0
             alpha (double): reflection coefficient, default 1.0
             beta (double): contraction coefficient, default 0.5
             gamma (double); expansion coefficient, default 2.0
             delta (double); shrinkage coefficient, default 0.5
+            psi (double): subplex specific, simplex reduction coefficient, default 0.01
+                The default used in Rowan's Thesis is 0.25, we opted here for 0.01 for greater accuracy.
+            omega (double): subplex specific, scaling reduction coefficient, default 0.1
+            min_subspace_length (int): the minimum subspace length, defaults to min(2, n).
+                This should hold: (1 <= min_s_d <= max_s_d <= n and min_s_d*ceil(n/nsmax_s_dmax) <= n)
+            max_subspace_length (int): the maximum subspace length, defaults to min(5, n).
+                This should hold: (1 <= min_s_d <= max_s_d <= n and min_s_d*ceil(n/max_s_d) <= n)
+
             adaptive_scales (boolean): if set to True we use adaptive scales instead of the default scale values.
                 This sets the scales to:
 
@@ -64,9 +82,15 @@ class NMSimplex(AbstractParallelOptimizer):
         keyword_values['gamma'] = gamma
         keyword_values['delta'] = delta
         keyword_values['adaptive_scales'] = adaptive_scales
+        keyword_values['psi'] = psi
+        keyword_values['omega'] = omega
+        keyword_values['min_subspace_length'] = min_subspace_length
+        keyword_values['max_subspace_length'] = max_subspace_length
+        keyword_values['patience_nmsimplex'] = patience_nmsimplex
 
         option_defaults = {'alpha': 1.0, 'beta': 0.5, 'gamma': 2.0, 'delta': 0.5, 'scale': 1.0,
-                           'adaptive_scales': True}
+                           'adaptive_scales': True, 'psi': 0.01, 'omega': 0.1, 'min_subspace_length': 'auto',
+                           'max_subspace_length': 'auto', 'patience_nmsimplex': 10}
 
         def get_value(option_name):
             value = keyword_values.get(option_name)
@@ -79,24 +103,32 @@ class NMSimplex(AbstractParallelOptimizer):
         for option in option_defaults:
             optimizer_settings.update({option: get_value(option)})
 
-        super(NMSimplex, self).__init__(patience=patience, optimizer_settings=optimizer_settings, **kwargs)
+        super(SBPlex, self).__init__(patience=patience, optimizer_settings=optimizer_settings, **kwargs)
 
     def minimize(self, model, init_params=None):
+        nmr_params = model.get_nmr_estimable_parameters()
+
         if self._optimizer_settings.get('adaptive_scales', True):
-            nmr_params = model.get_nmr_estimable_parameters()
             self._optimizer_settings.update(
                 {'alpha': 1,
                  'beta': 0.75 - 1.0 / (2 * nmr_params),
                  'gamma': 1 + 2.0 / nmr_params,
                  'delta': 1 - 1.0 / nmr_params}
                 )
-        return super(NMSimplex, self).minimize(model, init_params=init_params)
+
+        if self._optimizer_settings.get('min_subspace_length', 'auto') == 'auto':
+            self._optimizer_settings.update({'min_subspace_length': min(2, nmr_params)})
+
+        if self._optimizer_settings.get('max_subspace_length', 'auto') == 'auto':
+            self._optimizer_settings.update({'max_subspace_length': min(5, nmr_params)})
+
+        return super(SBPlex, self).minimize(model, init_params=init_params)
 
     def _get_worker_generator(self, *args):
-        return lambda cl_environment: NMSimplexWorker(cl_environment, *args)
+        return lambda cl_environment: SBPlexWorker(cl_environment, *args)
 
 
-class NMSimplexWorker(AbstractParallelOptimizerWorker):
+class SBPlexWorker(AbstractParallelOptimizerWorker):
 
     def _get_optimization_function(self):
         params = {'NMR_PARAMS': self._nmr_params, 'PATIENCE': self._parent_optimizer.patience}
@@ -107,24 +139,14 @@ class NMSimplexWorker(AbstractParallelOptimizerWorker):
             else:
                 params.update({option.upper(): value})
 
-        lib_nmsimplex = LibNMSimplex(evaluate_fname='evaluate')
-        body = lib_nmsimplex.get_cl_code()
+        sbplex = open(os.path.abspath(resource_filename('mot', 'data/opencl/sbplex.cl')), 'r').read()
+        if params:
+            sbplex = sbplex % params
 
-        body += '''
-            int nmsimplex(mot_float_type* const model_parameters, const void* const data){
-                mot_float_type initial_simplex_scale[%(NMR_PARAMS)r] = %(INITIAL_SIMPLEX_SCALES)s;
-                mot_float_type fdiff;
-                mot_float_type psi = 0;
-                mot_float_type nmsimplex_scratch[%(NMR_PARAMS)r * 2 + (%(NMR_PARAMS)r + 1) * (%(NMR_PARAMS)r + 1)];
-
-                return lib_nmsimplex(%(NMR_PARAMS)r, model_parameters, data, initial_simplex_scale,
-                                     &fdiff, psi, (int)(%(PATIENCE)r * (%(NMR_PARAMS)r+1)),
-                                     %(ALPHA)r, %(BETA)r, %(GAMMA)r, %(DELTA)r,
-                                     nmsimplex_scratch);
-            }
-        ''' % params
+        body = sbplex
+        body += LibNMSimplex(evaluate_fname='subspace_evaluate').get_cl_code()
 
         return body
 
     def _get_optimizer_call_name(self):
-        return 'nmsimplex'
+        return 'sbplex'

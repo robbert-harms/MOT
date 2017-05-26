@@ -95,3 +95,21 @@ class EuclidianNormFunction(SimpleCLLibraryFromFile):
             self.__class__.__name__ + '_' + memspace + '_' + memtype,
             resource_filename('mot', 'data/opencl/euclidian_norm.cl'),
             var_replace_dict={'MEMSPACE': memspace, 'MEMTYPE': memtype})
+
+
+class LibNMSimplex(SimpleCLLibraryFromFile):
+
+    def __init__(self, evaluate_fname='evaluate'):
+        """A CL functions for calculating the Euclidean distance between n values.
+
+        Args:
+            evaluate_fname (str): the name of the evaluation function to use, default 'evaluate'
+        """
+        params = {
+            'EVALUATE_FNAME': str(evaluate_fname)
+        }
+
+        super(LibNMSimplex, self).__init__(
+            'lib_nmsimplex',
+            resource_filename('mot', 'data/opencl/lib_nmsimplex.cl'),
+            var_replace_dict=params)
