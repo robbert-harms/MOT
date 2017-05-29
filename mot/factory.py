@@ -1,5 +1,6 @@
 from mot.cl_routines.optimizing.multi_step_optimizer import MultiStepOptimizer
 from mot.cl_routines.optimizing.random_restart import RandomRestart
+from mot.cl_routines.optimizing.sbplex import SBPlex
 from mot.cl_routines.sampling.metropolis_hastings import MetropolisHastings
 from mot.model_building.parameter_functions.proposal_updates import NoOperationUpdateFunction, AcceptanceRateScaling, \
     FSLAcceptanceRateScaling, SingleComponentAdaptiveMetropolis
@@ -18,7 +19,7 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-optimizers = [LevenbergMarquardt, Powell, NMSimplex, MultiStepOptimizer, RandomRestart]
+optimizers = [LevenbergMarquardt, Powell, NMSimplex, SBPlex, MultiStepOptimizer, RandomRestart]
 samplers = [MetropolisHastings]
 filters = [GaussianFilter, MeanFilter, MedianFilter]
 load_balance_strategies = [EvenDistribution, RuntimeLoadBalancing, PreferGPU, PreferCPU, PreferSpecificEnvironment]

@@ -688,7 +688,7 @@ class _MCMCKernelBuilder(object):
         kernel_source = '''
             /** Online variance algorithm by Welford
              *  B. P. Welford (1962)."Note on a method for calculating corrected sums of squares
-             *      and products". Technometrics 4(3):419–420.
+             *      and products". Technometrics 4(3):419-420.
              *
              * Also studied in:
              * Chan, Tony F.; Golub, Gene H.; LeVeque, Randall J. (1983).

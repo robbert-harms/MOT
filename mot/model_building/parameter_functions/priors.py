@@ -154,8 +154,8 @@ class VagueGammaPrior(SimplePrior):
             The practice of assigning Gamma(0.001, 0.001) priors on precision parameters is theoretically motivated by
             scale invariance arguments, meaning that priors are chosen so that changing the measurement
             scale of the data does not affect inference.
-            The invariant prior on precision λ corresponds to a uniform distribution on log σ,
-            that is, p (σ2) ∝ 1/σ2, or a Gamma(a → 0, b → 0) distribution.
+            The invariant prior on precision lambda corresponds to a uniform distribution on log sigma,
+            that is, rho(sigma^2) prop. to. 1/sigma^2, or a Gamma(a -> 0, b -> 0) distribution.
             This invariant prior distribution, however, is improper (i.e., the area under the curve is unbounded),
             which means it is not really a distribution, but the limit of a sequence of distributions
             (see Jaynes, 2003). WinBUGS requires the use of proper distributions,

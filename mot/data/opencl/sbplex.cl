@@ -199,14 +199,13 @@ int sbplx_minimize(mot_float_type* model_parameters, /* in: initial guess, out: 
 			       const void* const data,
 			       const mot_float_type* const xstep0/* initial step sizes */){
 
-    mot_float_type scratch[%(NMR_PARAMS)r * 3 // (xstep, xprev, delta_x)
+    mot_float_type scratch[%(NMR_PARAMS)r * 2 // (xstep, delta_x)
                             + MAX_SUBSPACE_LENGTH * 2 // (subspace_model_parameters, subspace_xstep)
                             + (MAX_SUBSPACE_LENGTH+1)*(MAX_SUBSPACE_LENGTH+1) + 2*MAX_SUBSPACE_LENGTH // NMSimplex scratch
                        ];
 
     mot_float_type* xstep = scratch;
-    mot_float_type* xprev = xstep + %(NMR_PARAMS)r;
-    mot_float_type* delta_x = xprev + %(NMR_PARAMS)r;
+    mot_float_type* delta_x = xstep + %(NMR_PARAMS)r;
     mot_float_type* subspace_model_parameters = delta_x + %(NMR_PARAMS)r;
     mot_float_type* subspace_xstep = subspace_model_parameters + MAX_SUBSPACE_LENGTH;
     mot_float_type* nms_scratch = subspace_xstep + MAX_SUBSPACE_LENGTH;
@@ -238,19 +237,19 @@ int sbplx_minimize(mot_float_type* model_parameters, /* in: initial guess, out: 
 
     for(itr=0; itr < MAX_IT; itr++) {
 
-        // save the current set of parameters for computing delta_x after the subspace optimizations
-        for(i = 0; i < %(NMR_PARAMS)r; i++){
-            xprev[i] = model_parameters[i];
-        }
-
+        // first use delta_x to create the subspaces
         _sbplex_get_subspaces(delta_x, x_indices, subspace_dimensions, &nmr_subspaces, %(NMR_PARAMS)r,
                               MIN_SUBSPACE_LENGTH, MAX_SUBSPACE_LENGTH);
 
 
-        subspace_starting_index = 0; // loop variable, keeping track of the subspace index
-        fdiff_max = 0; // records the largest gain in function value over the subspaces
+        // then use delta_x as a temporary container for the current parameters
+        for(i = 0; i < %(NMR_PARAMS)r; i++){
+            delta_x[i] = model_parameters[i];
+        }
 
         // run NMSimplex on each subspace
+        subspace_starting_index = 0; // loop variable, keeping track of the subspace index
+        fdiff_max = 0; // records the largest gain in function value over the subspaces
         for(i = 0; i < nmr_subspaces; i++){
 
             // prepare the subspace data
@@ -280,9 +279,9 @@ int sbplx_minimize(mot_float_type* model_parameters, /* in: initial guess, out: 
             subspace_starting_index += subspace_dimensions[i];
         }
 
-        // compute change in optimal point
+        // compute change in optimal point, the previous delta_x contained the previous set of model parameters
         for (i = 0; i < %(NMR_PARAMS)r; ++i){
-            delta_x[i] = model_parameters[i] - xprev[i];
+            delta_x[i] = model_parameters[i] - delta_x[i];
         }
 
         // stopping criteria using the infinity norm
