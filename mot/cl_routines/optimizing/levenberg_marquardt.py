@@ -89,9 +89,6 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
         kernel_source += get_float_type_def(self._double_precision)
         kernel_source += str(self._model.get_kernel_data_struct(self._cl_environment.device))
 
-        if self._use_param_codec:
-            kernel_source += self._model.get_parameter_decode_function('decodeParameters') + "\n"
-
         kernel_source += self._get_optimizer_cl_code()
         kernel_source += '''
             __kernel void minimize(
@@ -111,8 +108,6 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
                     return_codes[gid] = (char) ''' + self._get_optimizer_call_name() + '''(''' \
                          + optimizer_call_args + ''', fjac);
 
-                    ''' + ('decodeParameters((void*)&data, x);' if self._use_param_codec else '') + '''
-
                     for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
                         params[gid * ''' + str(nmr_params) + ''' + i] = x[i];
                     }
@@ -130,28 +125,13 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
         """
         kernel_source = ''
         kernel_source += self._model.get_objective_per_observation_function('getObjectiveInstanceValue')
-        if self._use_param_codec:
-            kernel_source += '''
-                void evaluate(mot_float_type* x, const void* data, mot_float_type* result){
-                    mot_float_type x_model[''' + str(self._nmr_params) + '''];
-                    for(uint i = 0; i < ''' + str(self._nmr_params) + '''; i++){
-                        x_model[i] = x[i];
-                    }
-                    decodeParameters(data, x_model);
-
-                    for(uint i = 0; i < ''' + str(self._model.get_nmr_inst_per_problem()) + '''; i++){
-                        result[i] = getObjectiveInstanceValue(data, x_model, i);
-                    }
+        kernel_source += '''
+            void evaluate(mot_float_type* x, const void* data, mot_float_type* result){
+                for(uint i = 0; i < ''' + str(self._model.get_nmr_inst_per_problem()) + '''; i++){
+                    result[i] = getObjectiveInstanceValue(data, x, i);
                 }
-            '''
-        else:
-            kernel_source += '''
-                void evaluate(mot_float_type* x, const void* data, mot_float_type* result){
-                    for(uint i = 0; i < ''' + str(self._model.get_nmr_inst_per_problem()) + '''; i++){
-                        result[i] = getObjectiveInstanceValue(data, x_model, i);
-                    }
-                }
-            '''
+            }
+        '''
         return kernel_source
 
     def _get_optimization_function(self):

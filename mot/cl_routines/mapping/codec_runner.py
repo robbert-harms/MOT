@@ -23,7 +23,7 @@ class CodecRunner(CLRoutine):
         super(CodecRunner, self).__init__(**kwargs)
         self._logger = logging.getLogger(__name__)
 
-    def decode(self, model, data):
+    def decode(self, model, data, codec):
         """Decode the given parameters using the given model.
 
         This transforms the data from optimization space to model space.
@@ -31,20 +31,15 @@ class CodecRunner(CLRoutine):
         Args:
             model (mot.model_interfaces.OptimizeModelInterface): The model to use
             data (ndarray): The parameters to transform to model space
+            codec (mot.model_building.utils.ParameterCodec): the parameter codec to use
 
         Returns:
             ndarray: The array with the transformed parameters.
         """
-        if len(data.shape) > 1:
-            from_width = data.shape[1]
-        else:
-            from_width = 1
+        return self._transform_parameters(codec.get_parameter_decode_function('decodeParameters'),
+                                          'decodeParameters', data, model)
 
-        return self._transform_parameters(model.get_parameter_decode_function('decodeParameters'),
-                                          'decodeParameters', data,
-                                          from_width, model)
-
-    def encode(self, model, data):
+    def encode(self, model, data, codec):
         """Encode the given parameters using the given model.
 
         This transforms the data from model space to optimization space.
@@ -52,25 +47,21 @@ class CodecRunner(CLRoutine):
         Args:
             model (mot.model_interfaces.OptimizeModelInterface): The model to use
             data (ndarray): The parameters to transform to optimization space
+            codec (mot.model_building.utils.ParameterCodec): the parameter codec to use
 
         Returns:
             ndarray: The array with the transformed parameters.
         """
-        if len(data.shape) > 1:
-            from_width = data.shape[1]
-        else:
-            from_width = 1
+        return self._transform_parameters(codec.get_parameter_encode_function('encodeParameters'),
+                                          'encodeParameters', data, model)
 
-        return self._transform_parameters(model.get_parameter_encode_function('encodeParameters'),
-                                          'encodeParameters', data,
-                                          from_width, model)
-
-    def _transform_parameters(self, cl_func, cl_func_name, data, nmr_params, model):
+    def _transform_parameters(self, cl_func, cl_func_name, data, model):
         np_dtype = np.float32
         if model.double_precision:
             np_dtype = np.float64
 
         data = np.require(data, np_dtype, requirements=['C', 'A', 'O', 'W'])
+        nmr_params = data.shape[1]
 
         workers = self._create_workers(lambda cl_environment: _CodecWorker(
             cl_environment, self.get_compile_flags_list(model.double_precision),

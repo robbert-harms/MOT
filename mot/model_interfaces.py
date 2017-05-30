@@ -54,7 +54,7 @@ class OptimizeModelInterface(object):
     def get_kernel_data_struct(self, device):
         """Get the CL code for the data structure in the kernel.
 
-        In combination with the :meth:`get_data_buffers`, this returns the data structure matching the buffers.
+        In combination with the :meth:`get_data`, this returns the data structure matching the buffers.
 
         This should generates something like:
 
@@ -78,7 +78,7 @@ class OptimizeModelInterface(object):
     def get_kernel_param_names(self, device):
         """Get for all the data buffers the kernel parameter arguments.
 
-        In combination with the :meth:`get_data_buffers`, this returns a list with kernel arguments for the buffers
+        In combination with the :meth:`get_data`, this returns a list with kernel arguments for the buffers
         For example:
 
         .. code-block: python
@@ -122,42 +122,6 @@ class OptimizeModelInterface(object):
 
         Returns:
             str: the CL type of the data struct
-        """
-        raise NotImplementedError()
-
-    def get_parameter_decode_function(self, fname='decodeParameters'):
-        """Get a CL function that can transform the model parameters from encoded space to model space.
-
-        The signature of the CL function is:
-
-        .. code-block:: c
-
-            void <fname>(const void* data, const mot_float_type* x);
-
-        Args:
-            fname (str): The CL function name to use
-
-        Returns:
-            str: An OpenCL function that is used in the CL kernel to transform the parameters from encoded space to
-                model space so they can be used as input to the model.
-        """
-        raise NotImplementedError()
-
-    def get_parameter_encode_function(self, fname='encodeParameters'):
-        """Get a CL function that can transform the model parameters from model space to an encoded space.
-
-        The signature of the CL function is:
-
-        .. code-block:: c
-
-            void <fname>(const void* data, const mot_float_type* x);
-
-        Args:
-            fname (str): The CL function name to use
-
-        Returns:
-            str: An OpenCL function that is used in the CL kernel to transform the parameters from model space to
-                encoded space so they can be used as input to an CL routine.
         """
         raise NotImplementedError()
 

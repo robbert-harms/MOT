@@ -7,7 +7,6 @@ from mot.cl_routines.mapping.residual_calculator import ResidualCalculator
 from ...utils import get_float_type_def
 from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
-from ...cl_routines.mapping.codec_runner import CodecRunner
 from ...__version__ import __version__
 
 __author__ = 'Robbert Harms'
@@ -35,17 +34,14 @@ return_code_labels = {
 
 class AbstractOptimizer(CLRoutine):
 
-    def __init__(self, cl_environments=None, load_balancer=None, use_param_codec=True, patience=1,
-                 optimizer_settings=None, **kwargs):
-        """Create a new optimizer that will minimize the given model with the given codec using the given environments.
+    def __init__(self, cl_environments=None, load_balancer=None, patience=1, optimizer_settings=None, **kwargs):
+        """Create a new optimizer that will minimize the given model using the given environments.
 
-        If the codec is None it is not used, if the environment is None, a suitable default environment should be
-        created.
+        If the environment is None, a suitable default environment is created.
 
         Args:
             cl_environments (list of CLEnvironment): a list with the cl environments to use
             load_balancer (SimpleLoadBalanceStrategy): the load balance strategy to use
-            use_param_codec (boolean): if this minimization should use the parameter codecs (param transformations)
             patience (int): The patience is used in the calculation of how many iterations to iterate the optimizer.
                 The exact usage of this value of this parameter may change per optimizer.
             optimizer_options (dict): extra options one can set for the optimization routine. These are routine
@@ -55,7 +51,6 @@ class AbstractOptimizer(CLRoutine):
         if not isinstance(self._optimizer_settings, dict):
             raise ValueError('The given optimizer settings is not a dictionary.')
 
-        self._use_param_codec = use_param_codec
         self.patience = patience or 1
 
         if 'patience' in self._optimizer_settings:
@@ -63,24 +58,6 @@ class AbstractOptimizer(CLRoutine):
         self._optimizer_settings['patience'] = self.patience
 
         super(AbstractOptimizer, self).__init__(cl_environments, load_balancer, **kwargs)
-
-    @property
-    def use_param_codec(self):
-        """Check if we will use the codec during optimization
-
-        Returns:
-            boolean: True if we will use the codec, false otherwise.
-        """
-        return self._use_param_codec
-
-    @use_param_codec.setter
-    def use_param_codec(self, use_param_codec):
-        """Set if we will use the codec during optimization
-
-        Args:
-            use_param_codec (boolean): Set the value of use_param_codec.
-        """
-        self._use_param_codec = use_param_codec
 
     @property
     def optimizer_settings(self):
@@ -95,7 +72,7 @@ class AbstractOptimizer(CLRoutine):
         return self._optimizer_settings
 
     def minimize(self, model, init_params=None):
-        """Minimize the given model with the given codec using the given environments.
+        """Minimize the given model using the given environments.
 
         Args:
             model (AbstractModel): The model to minimize, instance of AbstractModel
@@ -216,11 +193,6 @@ class AbstractParallelOptimizer(AbstractOptimizer):
 
         return_codes = np.zeros((starting_points.shape[0],), dtype=np.int8, order='C')
 
-        space_transformer = CodecRunner(cl_environments=self.cl_environments, load_balancer=self.load_balancer)
-        if self.use_param_codec:
-            starting_points = space_transformer.encode(model, starting_points)
-            starting_points = np.require(starting_points, np_dtype, requirements=['C', 'A', 'O', 'W'])
-
         self._logger.info('Finished optimization preliminaries')
         self._logger.info('Starting optimization')
 
@@ -259,8 +231,6 @@ class AbstractParallelOptimizerWorker(Worker):
         self._nmr_params = nmr_params
 
         self._return_codes = return_codes
-
-        self._use_param_codec = self._parent_optimizer.use_param_codec
 
         self._starting_points = starting_points
         self._all_buffers, self._params_buffer, self._return_code_buffer = self._create_buffers()
@@ -315,9 +285,6 @@ class AbstractParallelOptimizerWorker(Worker):
         kernel_source += get_float_type_def(self._double_precision)
         kernel_source += str(self._model.get_kernel_data_struct(self._cl_environment.device))
 
-        if self._use_param_codec:
-            kernel_source += self._model.get_parameter_decode_function('decodeParameters') + "\n"
-
         kernel_source += self._get_optimizer_cl_code()
         kernel_source += '''
             __kernel void minimize(
@@ -335,8 +302,6 @@ class AbstractParallelOptimizerWorker(Worker):
                     ''' + self._model.get_kernel_data_struct_initialization(self._cl_environment.device, 'data') + '''
                     return_codes[gid] = (char) ''' + self._get_optimizer_call_name() + '(' + \
                          ', '.join(self._get_optimizer_call_args()) + ''');
-
-                    ''' + ('decodeParameters((void*)&data, x);' if self._use_param_codec else '') + '''
 
                     for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
                         params[gid * ''' + str(nmr_params) + ''' + i] = x[i];
@@ -376,8 +341,6 @@ class AbstractParallelOptimizerWorker(Worker):
         This is normally called by the default implementation of _get_kernel_source().
 
         By default this creates a CL function named 'evaluation' that can be called by the optimization routine.
-        This default function takes into account the use of the parameter codec and calls the objective function
-        of the model to actually evaluate the model.
 
         Returns:
             str: The kernel source for the optimization routine.
@@ -396,23 +359,11 @@ class AbstractParallelOptimizerWorker(Worker):
         """
         kernel_source = ''
         kernel_source += self._model.get_objective_function('calculateObjective')
-        if self._use_param_codec:
-            kernel_source += '''
-                double evaluate(mot_float_type* x, const void* data){
-                    mot_float_type x_model[''' + str(self._nmr_params) + '''];
-                    for(uint i = 0; i < ''' + str(self._nmr_params) + '''; i++){
-                        x_model[i] = x[i];
-                    }
-                    decodeParameters(data, x_model);
-                    return calculateObjective(data, x_model);
-                }
-            '''
-        else:
-            kernel_source += '''
-                double evaluate(mot_float_type* x, const void* data){
-                    return calculateObjective(data, x);
-                }
-            '''
+        kernel_source += '''
+            double evaluate(mot_float_type* x, const void* data){
+                return calculateObjective(data, x);
+            }
+        '''
         return kernel_source
 
     def _get_optimization_function(self):

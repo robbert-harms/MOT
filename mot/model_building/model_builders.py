@@ -5,12 +5,14 @@ from six import string_types
 
 from mot.cl_data_type import SimpleCLDataType
 from mot.cl_routines.mapping.calc_dependent_params import CalculateDependentParameters
+from mot.cl_routines.mapping.codec_runner import CodecRunner
 from mot.cl_routines.sampling.metropolis_hastings import DefaultMHState
 from mot.model_building.cl_functions.model_functions import Weight
 from mot.model_building.cl_functions.parameters import CurrentObservationParam, StaticMapParameter, ProtocolParameter, \
     ModelDataParameter, FreeParameter
 from mot.model_building.data_adapter import SimpleDataAdapter
 from mot.model_building.parameter_functions.dependencies import SimpleAssignment, AbstractParameterDependency
+from mot.model_building.utils import ParameterCodec
 from mot.model_interfaces import OptimizeModelInterface, SampleModelInterface
 from mot.utils import is_scalar, all_elements_equal, get_single_value, results_to_dict, topological_sort
 
@@ -43,8 +45,6 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             problems_to_analyze (list): the list with problems we want to analyze. Suppose we have a few thousands
                 problems defined in this model, but we want to run the optimization only on a few problems. By setting
                 this attribute to a list of problem indices, only those problems will be analyzed.
-            use_parameter_transformations (boolean): set to False to disable the parameter transformations.
-                This basically sets the encode and decode functions to the identity function.
         """
         super(OptimizeModelBuilder, self).__init__()
         self._name = name
@@ -54,7 +54,6 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         self._enforce_weights_sum_to_one = enforce_weights_sum_to_one
 
-        self.use_parameter_transformations = True
         self._double_precision = False
 
         self._model_functions_info = self._init_model_information_container(
@@ -322,6 +321,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         """See super class for details"""
         return len(self._model_functions_info.get_estimable_parameters_list())
 
+    # todo method get_kernel_data_info()
+
     def get_data(self):
         """See super class for details"""
         data = []
@@ -354,49 +355,14 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         """
         return '_model_data'
 
-    def get_parameter_decode_function(self, fname='decodeParameters'):
-        func = '''
-            void ''' + fname + '''(const void* data_void, mot_float_type* x){
-        '''
-        if self.use_parameter_transformations:
-            func += self.get_kernel_data_struct_type() + \
-                    '* data = (' + self.get_kernel_data_struct_type() + '*)data_void;'
-            for d in self._get_parameter_transformations()[1]:
-                func += "\n" + "\t" * 4 + d.format('x')
-
-        if self._enforce_weights_sum_to_one:
-            func += self._get_weight_sum_to_one_transformation()
-
-        return func + '''
-            }
-        '''
-
-    def get_parameter_encode_function(self, fname='encodeParameters'):
-        func = '''
-            void ''' + fname + '''(const void* data_void, mot_float_type* x){
-        '''
-
-        if self._enforce_weights_sum_to_one:
-            func += self._get_weight_sum_to_one_transformation()
-
-        if self.use_parameter_transformations:
-            func += self.get_kernel_data_struct_type() + \
-                    '* data = (' + self.get_kernel_data_struct_type() + '*)data_void;'
-            for d in self._get_parameter_transformations()[0]:
-                func += "\n" + "\t" * 4 + d.format('x')
-
-        return func + '''
-            }
-        '''
-
-    def get_initial_parameters(self, previous_results=None):
+    def get_initial_parameters(self, results_dict=None):
         """Get the initial parameters to use for model fitting.
 
         Implementation note, when overriding this function, please note that it should adhere
         to the attribute problems_to_analyze.
 
         Args:
-            previous_results (dict or ndarray): the initialization settings for the specific parameters.
+            results_dict (dict or ndarray): the initialization settings for the specific parameters.
                 The number of items per dictionary item should match the number of problems to analyze, or, if an
                 ndarray is given then the length in the first dimension should match the number of problems to analyze.
         """
@@ -404,16 +370,16 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         if self.double_precision:
             np_dtype = np.float64
 
-        if isinstance(previous_results, np.ndarray):
-            previous_results = results_to_dict(previous_results, self.get_free_param_names())
+        if isinstance(results_dict, np.ndarray):
+            results_dict = results_to_dict(results_dict, self.get_free_param_names())
 
         starting_points = []
         for m, p in self._model_functions_info.get_estimable_parameters_list():
             param_name = '{}.{}'.format(m.name, p.name)
             value = self._parameter_values[param_name]
 
-            if previous_results and param_name in previous_results:
-                starting_points.append(previous_results['{}.{}'.format(m.name, p.name)])
+            if results_dict and param_name in results_dict:
+                starting_points.append(results_dict['{}.{}'.format(m.name, p.name)])
             elif is_scalar(value):
                 if self.get_nmr_problems() == 0:
                     starting_points.append(np.full((1, 1), value, dtype=np_dtype))
@@ -567,6 +533,53 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         self._add_finalizing_result_maps(results_dict)
 
         return results_dict
+
+    def get_parameter_codec(self):
+        """Get a parameter codec that can be used to transform the parameters to and from optimization and model space.
+
+        This is typically used as input to the ParameterTransformedModel decorator model.
+
+        Returns:
+            mot.model_building.utils.ParameterCodec: an instance of a parameter codec
+        """
+        model_builder = self
+
+        class Codec(ParameterCodec):
+            def get_parameter_decode_function(self, fname='decodeParameters'):
+                func = '''
+                    void ''' + fname + '''(const void* data_void, mot_float_type* x){
+                '''
+                func += model_builder.get_kernel_data_struct_type() + \
+                        '* data = (' + model_builder.get_kernel_data_struct_type() + '*)data_void;'
+
+                for d in model_builder._get_parameter_transformations()[1]:
+                    func += "\n" + "\t" * 4 + d.format('x')
+
+                if model_builder._enforce_weights_sum_to_one:
+                    func += model_builder._get_weight_sum_to_one_transformation()
+
+                return func + '''
+                    }
+                '''
+
+            def get_parameter_encode_function(self, fname='encodeParameters'):
+                func = '''
+                    void ''' + fname + '''(const void* data_void, mot_float_type* x){
+                '''
+
+                if model_builder._enforce_weights_sum_to_one:
+                    func += model_builder._get_weight_sum_to_one_transformation()
+
+                func += model_builder.get_kernel_data_struct_type() + \
+                        '* data = (' + model_builder.get_kernel_data_struct_type() + '*)data_void;'
+
+                for d in model_builder._get_parameter_transformations()[0]:
+                    func += "\n" + "\t" * 4 + d.format('x')
+
+                return func + '''
+                    }
+                '''
+        return Codec()
 
     def _add_fixed_parameter_maps(self, results_dict):
         """In place add complete maps for the fixed parameters."""
@@ -1894,6 +1907,137 @@ class ModelFunctionsInformation(object):
             if m.name in model_names:
                 raise DoubleModelNameException("Double model name detected in the model tree.", m.name)
             model_names.append(m.name)
+
+
+class ParameterTransformedModel(OptimizeModelInterface):
+
+    def __init__(self, model, parameter_codec):
+        """Decorates the given model with parameter encoding and decoding transformations.
+
+        This decorates a few of the given function calls with the right parameter encoding and decoding transformations
+        such that both the underlying model and the calling routines are unaware that the parameters have been altered.
+
+        Args:
+            model (OptimizeModelInterface): the model to decorate
+            parameter_codec (mot.model_building.utils.ParameterCodec): the parameter codec to use
+        """
+        self._model = model
+        self._parameter_codec = parameter_codec
+
+    def decode_parameters(self, parameters):
+        """Decode the given parameters back to model space.
+
+        Args:
+            parameters (ndarray): the parameters to transform back to model space
+        """
+        space_transformer = CodecRunner()
+        return space_transformer.decode(self._model, parameters, self._parameter_codec)
+
+    def encode_parameters(self, parameters):
+        """Decode the given parameters into optimization space
+
+        Args:
+            parameters (ndarray): the parameters to transform into optimization space
+        """
+        space_transformer = CodecRunner()
+        return space_transformer.encode(self._model, parameters, self._parameter_codec)
+
+    @property
+    def name(self):
+        return self._model.name
+
+    @property
+    def double_precision(self):
+        return self._model.double_precision
+
+    def get_data(self):
+        return self._model.get_data()
+
+    def get_kernel_data_struct(self, device):
+        return self._model.get_kernel_data_struct(device)
+
+    def get_kernel_param_names(self, device):
+        return self._model.get_kernel_param_names(device)
+
+    def get_kernel_data_struct_initialization(self, device, variable_name, problem_id_name='gid'):
+        return self._model.get_kernel_data_struct_initialization(device, variable_name, problem_id_name=problem_id_name)
+
+    def get_kernel_data_struct_type(self):
+        return self._model.get_kernel_data_struct_type()
+
+    def get_nmr_problems(self):
+        return self._model.get_nmr_problems()
+
+    def get_observation_return_function(self, func_name='getObservation'):
+        return self._model.get_observation_return_function(func_name=func_name)
+
+    def get_free_param_names(self):
+        return self._model.get_free_param_names()
+
+    def get_optimization_output_param_names(self):
+        return self._model.get_optimization_output_param_names()
+
+    def get_nmr_inst_per_problem(self):
+        return self._model.get_nmr_inst_per_problem()
+
+    def get_nmr_estimable_parameters(self):
+        return self._model.get_nmr_estimable_parameters()
+
+    def get_model_eval_function(self, func_name='evaluateModel'):
+        code = self._model.get_model_eval_function(func_name=func_name)
+        code += self._parameter_codec.get_parameter_decode_function('_decodeParameters')
+        code += '''
+            double ''' + func_name + '''(const void* const data, const mot_float_type* const x,
+                                         const uint observation_index){
+                mot_float_type x_model[''' + str(self.get_nmr_estimable_parameters()) + '''];
+                for(uint i = 0; i < ''' + str(self.get_nmr_estimable_parameters()) + '''; i++){
+                    x_model[i] = x[i];
+                }
+                _decodeParameters(data, x_model);
+                return ''' + (func_name + '_wrapped') + '''(data, x_model, observation_index);
+            }
+        '''
+
+    def get_objective_function(self, func_name="calculateObjective"):
+        code = self._model.get_objective_function(func_name=func_name + '_wrapped')
+        code += self._parameter_codec.get_parameter_decode_function('_decodeParameters')
+        code += '''
+            double ''' + func_name + '''(const void* data, mot_float_type* x){
+                mot_float_type x_model[''' + str(self.get_nmr_estimable_parameters()) + '''];
+                for(uint i = 0; i < ''' + str(self.get_nmr_estimable_parameters()) + '''; i++){
+                    x_model[i] = x[i];
+                }
+                _decodeParameters(data, x_model);
+                return ''' + (func_name + '_wrapped') + '''(data, x_model);
+            }
+        '''
+        return code
+
+    def get_objective_per_observation_function(self, func_name="getObjectiveInstanceValue"):
+        code = self._model.get_objective_per_observation_function(func_name=func_name + '_wrapped')
+        code += self._parameter_codec.get_parameter_decode_function('_decodeParameters')
+        code += '''
+            double ''' + func_name + '''(const void* const data, mot_float_type* const x, uint observation_index){
+                mot_float_type x_model[''' + str(self.get_nmr_estimable_parameters()) + '''];
+                for(uint i = 0; i < ''' + str(self.get_nmr_estimable_parameters()) + '''; i++){
+                    x_model[i] = x[i];
+                }
+                _decodeParameters(data, x_model);
+                return ''' + (func_name + '_wrapped') + '''(data, x_model, observation_index);
+            }
+        '''
+        return code
+
+    def get_initial_parameters(self, results_dict=None):
+        return self.encode_parameters(self._model.get_initial_parameters(results_dict=results_dict))
+
+    def get_lower_bounds(self):
+        # todo add codec transform here
+        return self._model.get_lower_bounds()
+
+    def get_upper_bounds(self):
+        # todo add codec transform here
+        return self._model.get_upper_bounds()
 
 
 class ParameterNameException(Exception):
