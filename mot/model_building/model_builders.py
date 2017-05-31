@@ -62,12 +62,6 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         self._post_optimization_modifiers = []
         self.problems_to_analyze = None
 
-        # The values to use for the parameters, this is the place subclasses should use for their information.
-        # At init this is filled with the values as defined in the parameters.
-        self._parameter_values = {'{}.{}'.format(m.name, p.name): p.value for m, p in
-                                  self._model_functions_info.get_free_parameters_list() +
-                                  self._model_functions_info.get_static_parameters_list()}
-
         self._lower_bounds = {'{}.{}'.format(m.name, p.name): p.lower_bound for m, p in
                               self._model_functions_info.get_free_parameters_list()}
 
@@ -149,7 +143,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         Returns:
             Returns self for chainability
         """
-        self._parameter_values[model_param_name] = value
+        self._model_functions_info.set_parameter_value(model_param_name, value)
         return self
 
     def set_initial_parameters(self, initial_params):
@@ -246,9 +240,9 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         """
         self._problem_data = problem_data
         if self._problem_data.noise_std is not None:
-            self._parameter_values['{}.{}'.format(
+            self._model_functions_info.set_parameter_value('{}.{}'.format(
                 self._evaluation_model.name,
-                self._evaluation_model.get_noise_std_param_name())] = self._problem_data.noise_std
+                self._evaluation_model.get_noise_std_param_name()), self._problem_data.noise_std)
         return self
 
     def add_post_optimization_modifier(self, model_param_name, mod_routine):
@@ -374,7 +368,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         starting_points = []
         for m, p in self._model_functions_info.get_estimable_parameters_list():
             param_name = '{}.{}'.format(m.name, p.name)
-            value = self._parameter_values[param_name]
+            value = self._model_functions_info.get_parameter_value(param_name)
 
             if results_dict and param_name in results_dict:
                 starting_points.append(results_dict['{}.{}'.format(m.name, p.name)])
@@ -585,7 +579,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         for (m, p) in fixed_params:
             name = '{}.{}'.format(m.name, p.name)
-            value = self._model_functions_info.get_fixed_value(name)
+            value = self._model_functions_info.get_parameter_value(name)
 
             if is_scalar(value):
                 results_dict.update({name: np.tile(np.array([value]), (self.get_nmr_problems(),))})
@@ -728,7 +722,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             if isinstance(param, ProtocolParameter):
                 param_list.append(param.name)
             elif isinstance(param, ModelDataParameter):
-                value = self._parameter_values['{}.{}'.format(model.name, param.name)]
+                value = self._model_functions_info.get_parameter_value('{}.{}'.format(model.name, param.name))
                 if all_elements_equal(value):
                     param_list.append(str(get_single_value(value)))
                 else:
@@ -844,7 +838,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             name = '{}.{}'.format(m.name, p.name).replace('.', '_')
             if name not in exclude_list:
                 data_type = p.data_type.raw_data_type
-                value = self._model_functions_info.get_fixed_value('{}.{}'.format(m.name, p.name))
+                value = self._model_functions_info.get_parameter_value('{}.{}'.format(m.name, p.name))
 
                 if all_elements_equal(value):
                     assignment = '(' + data_type + ')' + str(float(get_single_value(value)))
@@ -867,7 +861,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         func = ''
         for m, p in dependent_param_list:
-            dependency = self._model_functions_info.get_fixed_value('{}.{}'.format(m.name, p.name))
+            dependency = self._model_functions_info.get_parameter_value('{}.{}'.format(m.name, p.name))
 
             if dependency.pre_transform_code:
                 func += "\t"*4 + self._convert_parameters_dot_to_bar(dependency.pre_transform_code)
@@ -883,7 +877,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
     def _get_fixed_parameters_as_var_data(self):
         var_data_dict = {}
         for m, p in self._model_functions_info.get_value_fixed_parameters_list():
-            value = self._model_functions_info.get_fixed_value('{}.{}'.format(m.name, p.name))
+            value = self._model_functions_info.get_parameter_value('{}.{}'.format(m.name, p.name))
 
             if not all_elements_equal(value):
                 if self.problems_to_analyze is not None:
@@ -938,7 +932,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             ndarray or number: the value for the given parameter.
         """
         data = None
-        value = self._parameter_values.get('{}.{}'.format(model.name, parameter.name), None)
+        value = self._model_functions_info.get_parameter_value('{}.{}'.format(model.name, parameter.name))
         if parameter.name in self._problem_data.static_maps:
             data = self._problem_data.static_maps[parameter.name]
         elif value is not None:
@@ -971,7 +965,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         if isinstance(p, ProtocolParameter):
             assignment = 'data->protocol_data_' + p.name + '[observation_index]'
         elif isinstance(p, FreeParameter):
-            value = self._parameter_values['{}.{}'.format(m.name, p.name)]
+            value = self._model_functions_info.get_parameter_value('{}.{}'.format(m.name, p.name))
 
             if self._model_functions_info.is_fixed_to_value('{}.{}'.format(m.name, p.name)):
                 if all_elements_equal(value):
@@ -998,22 +992,24 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         """Find duplicate fixed parameters, and make dependencies of them. This saves data transfer in CL."""
         var_data_dict = {}
         for m, p in self._model_functions_info.get_free_parameters_list():
-            value = self._parameter_values['{}.{}'.format(m.name, p.name)]
+            param_name = '{}.{}'.format(m.name, p.name)
+            if self._model_functions_info.is_fixed_to_value(param_name):
+                value = self._model_functions_info.get_parameter_value(param_name)
 
-            if self._model_functions_info.is_fixed_to_value('{}.{}'.format(m.name, p.name)) and not is_scalar(value):
-                duplicate_found = False
-                duplicate_key = None
+                if not is_scalar(value):
+                    duplicate_found = False
+                    duplicate_key = None
 
-                for key, data in var_data_dict.items():
-                    if np.array_equal(data, value):
-                        duplicate_found = True
-                        duplicate_key = key
-                        break
+                    for key, data in var_data_dict.items():
+                        if np.array_equal(data, value):
+                            duplicate_found = True
+                            duplicate_key = key
+                            break
 
-                if duplicate_found:
-                    self.fix('{}.{}'.format(m.name, p.name), SimpleAssignment(duplicate_key))
-                else:
-                    var_data_dict.update({'{}.{}'.format(m.name, p.name): value})
+                    if duplicate_found:
+                        self.fix(param_name, SimpleAssignment(duplicate_key))
+                    else:
+                        var_data_dict.update({param_name: value})
 
     def _get_variable_data(self):
         """See super class OptimizeModelInterface for details
@@ -1055,13 +1051,13 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         return return_data
 
     def _get_static_data(self):
-        model_data_dict = {}
+        static_data_dict = {}
         for m, p in self._model_functions_info.get_model_parameter_list():
             if isinstance(p, ModelDataParameter):
-                value = self._parameter_values['{}.{}'.format(m.name, p.name)]
+                value = self._model_functions_info.get_parameter_value('{}.{}'.format(m.name, p.name))
                 if not all_elements_equal(value):
-                    model_data_dict.update({p.name: SimpleDataAdapter(value, p.data_type, self._get_mot_float_type())})
-        return model_data_dict
+                    static_data_dict.update({p.name: SimpleDataAdapter(value, p.data_type, self._get_mot_float_type())})
+        return static_data_dict
 
     def _get_all_kernel_source_items(self, device, problem_id_name='gid'):
         """Get the CL strings for the kernel source items for most common CL kernels in this library."""
@@ -1284,7 +1280,7 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
                         estimable_index = self._model_functions_info.get_parameter_estimable_index(m, prior_param)
                         prior_params.append('x[{}]'.format(estimable_index))
                     else:
-                        value = self._parameter_values['{}.{}'.format(m.name, prior_param.name)]
+                        value = self._model_functions_info.get_parameter_value('{}.{}'.format(m.name, prior_param.name))
                         if all_elements_equal(value):
                             prior_params.append(str(get_single_value(value)))
                         else:
@@ -1577,22 +1573,35 @@ class ModelFunctionsInformation(object):
 
         self._fixed_parameters = {'{}.{}'.format(m.name, p.name): p.fixed for m, p in
                                   self.get_model_parameter_list() if isinstance(p, FreeParameter)}
+        self._fixed_values = {'{}.{}'.format(m.name, p.name): p.value for m, p in self.get_free_parameters_list()}
 
-        self._parameter_values = {'{}.{}'.format(m.name, p.name): p.value for m, p in
-                                  self.get_free_parameters_list() +
-                                  self.get_static_parameters_list()}
-        self._fixed_values = copy.copy(self._parameter_values)
+        self._parameter_values = {'{}.{}'.format(m.name, p.name): p.value for m, p in self.get_model_parameter_list()
+                                  if hasattr(p, 'value')}
 
-    def get_fixed_value(self, parameter_name):
-        """Get the fixed value for the given parameter.
+    def set_parameter_value(self, parameter_name, value):
+        """Set the value we will use for the given parameter.
+
+        If the parameter is a fixed free parameter we will set the fixed value to the given value.
 
         Args:
             parameter_name (string): A model.param name like 'Ball.d'
+            value (scalar or vector or string or AbstractParameterDependency): The value or dependency
+                to fix the given parameter to. Dependency objects and strings are only value for fixed free parameters.
+        """
+        if self._fixed_parameters[parameter_name]:
+            self._fixed_values[parameter_name] = value
+        else:
+            self._parameter_values[parameter_name] = value
+
+    def get_parameter_value(self, parameter_name):
+        """Get the parameter value for the given parameter. This is regardless of model fixation.
 
         Returns:
-            float or ndarray: the value the parameter is fixed to
+            float or ndarray: the value for the given parameter
         """
-        return self._fixed_values[parameter_name]
+        if self._fixed_parameters[parameter_name]:
+            return self._fixed_values[parameter_name]
+        return self._parameter_values[parameter_name]
 
     def fix_parameter(self, parameter_name, value):
         """Fix the indicated free parameter to the given value.
