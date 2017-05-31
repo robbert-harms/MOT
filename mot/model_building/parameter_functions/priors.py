@@ -126,7 +126,7 @@ class UniformWithinBoundsPrior(SimplePrior):
     def __init__(self):
         """This prior is 1 within the upper and lower bound of the parameter, 0 outside."""
         super(UniformWithinBoundsPrior, self).__init__(
-            'return (value < lower_bound || value > upper_bound) ? 0.0 : 1.0;',
+            'return value >= lower_bound && value <= upper_bound;',
             'uniform_within_bounds')
 
 

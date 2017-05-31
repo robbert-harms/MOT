@@ -321,8 +321,6 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         """See super class for details"""
         return len(self._model_functions_info.get_estimable_parameters_list())
 
-    # todo method get_kernel_data_info()
-
     def get_data(self):
         """See super class for details"""
         data = []
