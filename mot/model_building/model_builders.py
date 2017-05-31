@@ -1,8 +1,6 @@
 import numpy as np
 import copy
-
 from six import string_types
-
 from mot.cl_data_type import SimpleCLDataType
 from mot.cl_routines.mapping.calc_dependent_params import CalculateDependentParameters
 from mot.cl_routines.mapping.codec_runner import CodecRunner
@@ -143,7 +141,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         Returns:
             Returns self for chainability
         """
-        self._model_functions_info.set_parameter_value(model_param_name, value)
+        if not self._model_functions_info.is_fixed(model_param_name):
+            self._model_functions_info.set_parameter_value(model_param_name, value)
         return self
 
     def set_initial_parameters(self, initial_params):
