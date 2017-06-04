@@ -553,13 +553,14 @@ class _MCMCKernelBuilder(object):
                              rng_state[2 + problem_ind * 6],
                              rng_state[3 + problem_ind * 6],
                              rng_state[4 + problem_ind * 6],
-                             rng_state[5 + problem_ind * 6]});
+                             rng_state[5 + problem_ind * 6],
+                             0, 0}); // last two states reserved for future use
             }
 
             void _rng_data_to_array(rand123_data data, global uint* rng_state){
                 ulong problem_ind = (ulong)(get_global_id(0) / get_local_size(0));
 
-                uint state[6];
+                uint state[8]; // only using 6, other two reserved for future use
                 rand123_data_to_array(data, state);
 
                 for(uint i = 0; i < 6; i++){
@@ -831,14 +832,9 @@ class DefaultMHState(MHState):
         return np.zeros((self._nmr_problems, self._nmr_params), dtype=self._float_dtype, order='C')
 
     def get_rng_state(self):
-        rng = Random()
         dtype_info = np.iinfo(np.uint32)
-
-        starting_point = np.array(list(rng.randrange(dtype_info.min, dtype_info.max + 1) for _ in range(6)),
-                                  dtype=np.uint32)
-
-        return np.tile(np.hstack([starting_point]),
-                       (self._nmr_problems, 1)).astype(np.uint32)
+        return np.random.uniform(low=dtype_info.min, high=dtype_info.max + 1,
+                                 size=(self._nmr_problems, 6)).astype(np.uint32)
 
 
 class SimpleMHState(MHState):

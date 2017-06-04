@@ -10,7 +10,7 @@ from mot.model_building.cl_functions.parameters import CurrentObservationParam, 
     ModelDataParameter, FreeParameter
 from mot.model_building.data_adapter import SimpleDataAdapter
 from mot.model_building.parameter_functions.dependencies import SimpleAssignment, AbstractParameterDependency
-from mot.model_building.utils import ParameterCodec
+from mot.model_building.utils import ParameterCodec, ModelPrior, SimpleModelPrior
 from mot.model_interfaces import OptimizeModelInterface, SampleModelInterface
 from mot.utils import is_scalar, all_elements_equal, get_single_value, results_to_dict, topological_sort
 
@@ -71,6 +71,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             self.set_problem_data(problem_data)
 
         self._set_default_dependencies()
+
 
     def _init_model_information_container(self, model_tree, evaluation_model, signal_noise_model):
         """Get the model information container object.
@@ -1221,8 +1222,21 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
 
     def __init__(self, model_name, model_tree, evaluation_model, signal_noise_model=None, problem_data=None,
                  enforce_weights_sum_to_one=True):
+        """Create a new model builder for sampling purposes.
+
+        Attributes:
+            model_priors (list of mot.model_building.utils.ModelPrior): the list of model priors this class
+                will also use (next to the priors defined in the parameters).
+        """
         super(SampleModelBuilder, self).__init__(model_name, model_tree, evaluation_model, signal_noise_model,
                                                  problem_data, enforce_weights_sum_to_one=enforce_weights_sum_to_one)
+
+        self._model_priors = []
+
+        if self._enforce_weights_sum_to_one:
+            weight_prior = self._get_weight_prior()
+            if weight_prior:
+                self._model_priors.append(weight_prior)
 
     def _init_model_information_container(self, model_tree, evaluation_model, signal_noise_model):
         """Get the model information container object.
@@ -1242,6 +1256,9 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
 
         for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
             prior += p.sampling_prior.get_prior_function()
+
+        for model_prior in self._model_priors:
+            prior += model_prior.get_prior_function()
 
         prior += '''
             mot_float_type {func_name}(const void* data_void,
@@ -1286,22 +1303,20 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
                             prior_params.append('data->var_data_' +
                                                 '{}.{}'.format(m.name, prior_param.name).replace('.', '_'))
 
-                prior += '\tprior *= {}(x[{}], {}, {}, {});\n'.format(function_name, i, lower_bound, upper_bound,
+                prior += 'prior *= {}(x[{}], {}, {}, {});\n'.format(function_name, i, lower_bound, upper_bound,
                                                                       ', '.join(prior_params))
             else:
-                prior += '\tprior *= {}(x[{}], {}, {});\n'.format(function_name, i, lower_bound, upper_bound)
+                prior += 'prior *= {}(x[{}], {}, {});\n'.format(function_name, i, lower_bound, upper_bound)
 
-        weight_indices = []
-        for (m, p) in self._model_functions_info.get_estimable_weights():
-            weight_indices.append(self._model_functions_info.get_parameter_estimable_index(m, p))
+        for model_prior in self._model_priors:
+            function_name = model_prior.get_function_name()
+            parameters = []
 
-        if weight_indices:
-            prior += '''
-                mot_float_type _weight_sum = ''' + ' + '.join('x[{}]'.format(index) for index in weight_indices) + ''';
-                if(_weight_sum > 1.0){
-                    prior *= 0;
-                }
-            '''
+            for param_name in model_prior.get_function_parameters():
+                param_index = self._model_functions_info.get_parameter_estimable_index_by_name(param_name)
+                parameters.append('x[{}]'.format(param_index))
+
+            prior += '\tprior *= {}({});\n'.format(function_name, ', '.join(parameters))
 
         prior += '\n\treturn log(prior);\n}'
         return prior
@@ -1522,15 +1537,6 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
     def get_metropolis_hastings_state(self):
         return DefaultMHState(self.get_nmr_problems(), self.get_nmr_estimable_parameters(), self.double_precision)
 
-    def samples_to_statistics(self, samples_dict):
-        results = {}
-        for key, value in samples_dict.items():
-            _, param = self._model_functions_info.get_model_parameter_by_name(key)
-            stat_mod = param.sampling_statistics
-            results[key] = stat_mod.get_mean(value)
-            results[key + '.std'] = stat_mod.get_std(value)
-        return results
-
     def get_proposal_state_names(self):
         """Get a list of names for the adaptable proposal parameters.
 
@@ -1544,6 +1550,38 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
                 if param.adaptable:
                     return_list.append('{}.{}.proposal.{}'.format(m.name, p.name, param.name))
         return return_list
+
+    def samples_to_statistics(self, samples_dict):
+        """Create statistics out of the given set of samples (in a dictionary).
+
+        Args:
+            samples_dict (dict): Keys being the parameter names, values the roi list in 2d
+                (1st dim. is voxel, 2nd dim. is samples).
+
+        Returns:
+            dict: The same dictionary but with statistical maps (mean, avg etc.) for each parameter, instead of the raw
+            samples. In essence this is where one can place the logic to go from samples to meaningful maps.
+        """
+        results = {}
+        for key, value in samples_dict.items():
+            _, param = self._model_functions_info.get_model_parameter_by_name(key)
+            stat_mod = param.sampling_statistics
+            results[key] = stat_mod.get_mean(value)
+            results[key + '.std'] = stat_mod.get_std(value)
+        return results
+
+    def _get_weight_prior(self):
+        """Get the prior limiting the weights between 0 and 1"""
+        weights = []
+        for (m, p) in self._model_functions_info.get_estimable_weights():
+            weights.append('{}.{}'.format(m.name, p.name))
+
+        if len(weights) > 1:
+            prior = SimpleModelPrior('''
+                return (''' + ' + '.join(el.replace('.', '_') for el in weights) + ''') <= 1;
+            ''', weights, 'prior_estimable_weights_sum_to_one')
+            return prior
+        return None
 
 
 class ModelFunctionsInformation(object):
@@ -1883,6 +1921,27 @@ class ModelFunctionsInformation(object):
             ind += 1
         raise ValueError('The given estimable parameter "{}" could not be found in this model'.format(
             '{}.{}'.format(model.name, param.name)))
+
+    def get_parameter_estimable_index_by_name(self, model_param_name):
+        """Get the index of this parameter in the parameters list
+
+        This returns the position of this parameter in the 'x', parameter vector in the CL kernels.
+
+        Args:
+            model_param_name (str): the model parameter name
+
+        Returns:
+            int: the index of the requested parameter in the list of optimized parameters
+
+        Raises:
+            ValueError: if the given parameter could not be found as an estimable parameter.
+        """
+        ind = 0
+        for m, p in self.get_estimable_parameters_list():
+            if '{}.{}'.format(m.name, p.name) == model_param_name:
+                return ind
+            ind += 1
+        raise ValueError('The given estimable parameter "{}" could not be found in this model'.format(model_param_name))
 
     def has_parameter(self, model_param_name):
         """Check to see if the given parameter is defined in this model.

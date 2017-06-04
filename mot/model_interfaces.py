@@ -501,16 +501,3 @@ class SampleModelInterface(OptimizeModelInterface):
             mot.cl_routines.sampling.metropolis_hastings.MHState: the current Metropolis Hastings state
         """
         raise NotImplementedError()
-
-    def samples_to_statistics(self, samples_dict):
-        """Create statistics out of the given set of samples (in a dictionary).
-
-        Args:
-            samples_dict (dict): Keys being the parameter names, values the roi list in 2d
-                (1st dim. is voxel, 2nd dim. is samples).
-
-        Returns:
-            dict: The same dictionary but with statistical maps (mean, avg etc.) for each parameter, instead of the raw
-            samples. In essence this is where one can place the logic to go from samples to meaningful maps.
-        """
-        raise NotImplementedError()

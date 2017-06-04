@@ -160,7 +160,8 @@ class Random123GeneratorBase(CLRoutine):
                                    global ''' + c_type + '''* samples){
 
                 rand123_data rng_data = rand123_initialize_data(
-                    (uint[]){rng_state[0], rng_state[1], rng_state[2], rng_state[3], rng_state[4], rng_state[5]});
+                    (uint[]){rng_state[0], rng_state[1], rng_state[2], rng_state[3], rng_state[4], rng_state[5],
+                             get_global_id(0), 0});
 
                 ''' + c_type + '''4 randomnr =  rand123_uniform_''' + c_type + '''4(&rng_data);
 
@@ -183,7 +184,8 @@ class Random123GeneratorBase(CLRoutine):
                                    global ''' + c_type + '''* samples){
 
                 rand123_data rng_data = rand123_initialize_data(
-                    (uint[]){rng_state[0], rng_state[1], rng_state[2], rng_state[3], rng_state[4], rng_state[5]});
+                    (uint[]){rng_state[0], rng_state[1], rng_state[2], rng_state[3], rng_state[4], rng_state[5],
+                             get_global_id(0), 0});
 
                 ''' + c_type + '''4 randomnr =  rand123_normal_''' + c_type + '''4(&rng_data);
 

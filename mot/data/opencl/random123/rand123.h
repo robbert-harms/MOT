@@ -39,12 +39,11 @@ uint4 rand123_generate_bits(rand123_data* rng_data){
 /**
  * Initializes the rand123_data structure.
  *
- * The state is implicitly extended with the global id of the kernel such that every work item generates
- * it's own unique random numbers.
+ * The given state is all that will be used for the random numbers, there is no implicit state added.
  */
-rand123_data rand123_initialize_data(uint state[6]){
+rand123_data rand123_initialize_data(uint state[8]){
     %(GENERATOR_NAME)s4x32_ctr_t c = {{state[0], state[1], state[2], state[3]}};
-    %(GENERATOR_NAME)s4x32_key_t k = {{state[4], state[5], get_global_id(0), 0}};
+    %(GENERATOR_NAME)s4x32_key_t k = {{state[4], state[5], state[6], state[7]}};
 
     rand123_data rng_data = {c, k};
     return rng_data;
@@ -53,13 +52,15 @@ rand123_data rand123_initialize_data(uint state[6]){
 /**
  * Convert the rand123 state back into a state array.
  */
-void rand123_data_to_array(rand123_data data, uint rng_state[6]){
+void rand123_data_to_array(rand123_data data, uint rng_state[8]){
     rng_state[0] = data.counter.v[0];
     rng_state[1] = data.counter.v[1];
     rng_state[2] = data.counter.v[2];
     rng_state[3] = data.counter.v[3];
     rng_state[4] = data.key.v[0];
     rng_state[5] = data.key.v[1];
+    rng_state[6] = data.key.v[2];
+    rng_state[7] = data.key.v[3];
 }
 
 
