@@ -201,17 +201,13 @@ class ModelFunction(DependentCLFunction):
 
         Suppose a model has a parameter that can be viewed in multiple ways. It would be nice to be able
         to output maps for that parameter in multiple ways such that the amount of post-processing is as least as
-        possible.
-
-        For example, suppose a model calculates an angle (theta) and a radius (r). Perhaps we would like to return
-        the cartesian coordinate of that point alongside the polar coordinates. This function allows you (indirectly)
-        to add the additional maps.
-
-        Do not modify the dictionary in place.
+        possible. For example, suppose a model calculates an angle (theta) and a radius (r) and typical post-processing
+        is to calculate the cartesian coordinate of the corresponding point. This function allows you to add these
+        additional maps.
 
         Args:
-            results_dict (dict): The result dictionary with all the maps you need and perhaps other maps from other
-                models as well. The maps are 1 dimensional, a long list of values for all the voxels in the ROI.
+            results_dict (dict): The result dictionary with all the maps from this model function.
+                The maps are 1 dimensional and named after the parameters in this model.
 
         Returns:
             dict: A new dictionary with the additional maps to add.

@@ -72,7 +72,6 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         self._set_default_dependencies()
 
-
     def _init_model_information_container(self, model_tree, evaluation_model, signal_noise_model):
         """Get the model information container object.
 
@@ -517,7 +516,10 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         self._add_fixed_parameter_maps(results_dict)
 
         for model in self._model_functions_info.get_model_list():
-            results_dict.update(model.get_extra_results_maps(results_dict))
+            compartment_specific_maps = {k[len(model.name)+1:]: v for k, v in results_dict.items()
+                                         if k.startswith(model.name)}
+            extra_compartment_maps = model.get_extra_results_maps(compartment_specific_maps)
+            results_dict.update({'{}.{}'.format(model.name, k): v for k, v in extra_compartment_maps.items()})
 
         for name, routine in self._post_optimization_modifiers:
             results_dict[name] = routine(results_dict)
