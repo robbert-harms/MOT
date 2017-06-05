@@ -10,7 +10,7 @@ from mot.model_building.cl_functions.parameters import CurrentObservationParam, 
     ModelDataParameter, FreeParameter
 from mot.model_building.data_adapter import SimpleDataAdapter
 from mot.model_building.parameter_functions.dependencies import SimpleAssignment, AbstractParameterDependency
-from mot.model_building.utils import ParameterCodec, ModelPrior, SimpleModelPrior
+from mot.model_building.utils import ParameterCodec, SimpleModelPrior
 from mot.model_interfaces import OptimizeModelInterface, SampleModelInterface
 from mot.utils import is_scalar, all_elements_equal, get_single_value, results_to_dict, topological_sort
 
@@ -25,7 +25,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
     def __init__(self, name, model_tree, evaluation_model, signal_noise_model=None, problem_data=None,
                  enforce_weights_sum_to_one=True):
-        """Create a new model builder that can construct an optimization model using parts.
+        """Create a new model builder that can construct an optimization model from a combination of model functions.
 
         Args:
             name (str): the name of the model
@@ -244,37 +244,41 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 self._evaluation_model.get_noise_std_param_name()), self._problem_data.noise_std)
         return self
 
-    def add_post_optimization_modifier(self, model_param_name, mod_routine):
+    def add_post_optimization_modifier(self, result_names, mod_routine):
         """Add a modification function that can update the results of model optimization.
 
-        The mod routine should be a function accepting a dictionary as input and should return a single map of
-        the same dimension as the maps in the dictionary. The idea is that the mod_routine function gets the
-        result dictionary from the optimization routine and calculates a new map.
-
-        This map is returned and the dictionary is updated with the returned map as value and the here given
+        The mod routine should be a function accepting a dictionary as input and should return one or more maps of
+        the same dimension as the maps in the dictionary. The idea is that the given ``mod_routine`` callback receives
+        the result dictionary from the optimization routine and calculates new maps.
+        These maps are then returned and the dictionary is updated with the returned maps as value and the here provided
         model_param_name as key.
 
         It is possible to add more than one modifier function. In that case, they are called in the order they
         were appended to this model.
 
+        It is possible to add multiple maps in one modification routine, in that case the ``model_param_name`` should
+        be a tuple of map names and the modification routine should also output a list of map names.
+
         Args:
-            model_param_name (str): the parameter to which to add the modification routine
+            result_names (str or tuple of str): the name of the output(s) of the mod_routine.
+                Example ``'Power2'`` or ``('Power2' 'Power3')``.
             mod_routine (python function): the callback function to apply on the results of the referenced parameter.
+                Example: ``lambda d: d**2`` or ``lambda d: (d**2, d**3)``
         """
-        self._post_optimization_modifiers.append((model_param_name, mod_routine))
+        self._post_optimization_modifiers.append((result_names, mod_routine))
         return self
 
     def add_post_optimization_modifiers(self, modifiers):
         """Add a list of modifier functions.
 
-        The same as add_post_optimization_modifier() except that it accepts a list of lists. Every element in the list
-        should be a tuple like (model_param_name, mod_routine)
+        The same as add_post_optimization_modifier() except that it accepts a list of modifiers.
+        Every element in the list should be a tuple like (model_param_name, mod_routine)
 
         Args:
-            modifiers (tuple or list): The list of modifiers to add (in order).
-
+            modifiers (tuple or list): The list of modifiers to add (in the given order).
         """
         self._post_optimization_modifiers.extend(modifiers)
+        return self
 
     def get_required_protocol_names(self):
         """Get a list with the constant data names that are needed for this model to work.
@@ -291,7 +295,12 @@ class OptimizeModelBuilder(OptimizeModelInterface):
     def get_optimization_output_param_names(self):
         """See super class for details"""
         items = ['{}.{}'.format(m.name, p.name) for m, p in self._model_functions_info.get_free_parameters_list()]
-        items.extend(name for name, _ in self._post_optimization_modifiers)
+
+        for name, _ in self._post_optimization_modifiers:
+            if isinstance(name, string_types):
+                items.append(name)
+            else:
+                items.extend(name)
         return items
 
     def get_free_param_names(self):
@@ -514,18 +523,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         """
         self._add_dependent_parameter_maps(results_dict)
         self._add_fixed_parameter_maps(results_dict)
-
-        for model in self._model_functions_info.get_model_list():
-            compartment_specific_maps = {k[len(model.name)+1:]: v for k, v in results_dict.items()
-                                         if k.startswith(model.name)}
-            extra_compartment_maps = model.get_extra_results_maps(compartment_specific_maps)
-            results_dict.update({'{}.{}'.format(model.name, k): v for k, v in extra_compartment_maps.items()})
-
-        for name, routine in self._post_optimization_modifiers:
-            results_dict[name] = routine(results_dict)
-
+        self._add_post_optimization_modifier_maps(results_dict)
         self._add_finalizing_result_maps(results_dict)
-
         return results_dict
 
     def get_parameter_codec(self):
@@ -613,6 +612,23 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
             results_dict.update(dependent_parameters)
 
+    def _add_post_optimization_modifier_maps(self, results_dict):
+        """Add the extra maps defined in the post optimization modifiers to the results."""
+        for names, routine in self._post_optimization_modifiers:
+            if isinstance(names, string_types):
+                results_dict[names] = routine(results_dict)
+            else:
+                results_dict.update(zip(names, routine(results_dict)))
+
+    def _add_finalizing_result_maps(self, results_dict):
+        """Add some final results maps to the results dictionary.
+
+        This called by the function add_extra_result_maps() as last call to add more maps.
+
+        Args:
+            results_dict (args): the results from model optmization. We are to modify this in-place.
+        """
+
     def _get_parameter_transformations(self):
         dep_list = {}
         for m, p in self._model_functions_info.get_estimable_parameters_list():
@@ -654,15 +670,6 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             enc_func_list.append(s)
 
         return tuple(reversed(enc_func_list)), dec_func_list
-
-    def _add_finalizing_result_maps(self, results_dict):
-        """Add some final results maps to the results dictionary.
-
-        This called by the function add_extra_result_maps() as last call to add more maps.
-
-        Args:
-            results_dict (args): the results from model optmization. We are to modify this in-place.
-        """
 
     def _transform_observations(self, observations):
         """Apply a transformation on the observations before fitting.
@@ -1568,8 +1575,9 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         for key, value in samples_dict.items():
             _, param = self._model_functions_info.get_model_parameter_by_name(key)
             stat_mod = param.sampling_statistics
-            results[key] = stat_mod.get_mean(value)
-            results[key + '.std'] = stat_mod.get_std(value)
+            results[key] = stat_mod.get_point_estimate(value)
+            results.update({'{}.{}'.format(key, statistic_key): v
+                            for statistic_key, v in stat_mod.get_additional_statistics(value).items()})
         return results
 
     def _get_weight_prior(self):

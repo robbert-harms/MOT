@@ -193,27 +193,6 @@ class ModelFunction(DependentCLFunction):
                 return e
         raise KeyError('The parameter with the name "{}" could not be found.'.format(param_name))
 
-    def get_extra_results_maps(self, results_dict):
-        """Get extra results maps with extra output from this model function.
-
-        This is used by the function add_extra_result_maps() from the ModelBuilder to add extra maps
-        to the resulting dictionary.
-
-        Suppose a model has a parameter that can be viewed in multiple ways. It would be nice to be able
-        to output maps for that parameter in multiple ways such that the amount of post-processing is as least as
-        possible. For example, suppose a model calculates an angle (theta) and a radius (r) and typical post-processing
-        is to calculate the cartesian coordinate of the corresponding point. This function allows you to add these
-        additional maps.
-
-        Args:
-            results_dict (dict): The result dictionary with all the maps from this model function.
-                The maps are 1 dimensional and named after the parameters in this model.
-
-        Returns:
-            dict: A new dictionary with the additional maps to add.
-        """
-        return {}
-
     def get_cl_dependency_code(self):
         """Get the CL code for all the CL code for all the dependencies.
 

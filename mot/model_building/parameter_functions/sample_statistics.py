@@ -9,36 +9,42 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class ParameterSampleStatistics(object):
 
-    def get_mean(self, samples):
-        """Given the distribution represented by this statistic, get the mean of the samples.
+    def get_point_estimate(self, samples):
+        """Get the map that would represent the point estimate of these samples.
+
+        This map is used for comparison with the point estimates obtained from optimization and typically corresponds
+        to the mean of the distribution.
 
         Args:
             samples (ndarray): The 2d array with the samples per voxel.
 
         Returns:
-            A 1d ndarray with the mean per voxel.
+            ndarray: The point estimate for every voxel.
         """
         raise NotImplementedError()
 
-    def get_std(self, samples):
-        """Given the distribution represented by this statistic, get the standard deviation of the samples.
+    def get_additional_statistics(self, samples):
+        """Get additional statistics about the parameter distribution.
+
+        This normally returns only a dictionary with a standard deviation map, but it can return more statistics
+        if desired.
 
         Args:
             samples (ndarray): The 2d array with the samples per voxel.
 
         Returns:
-            A 1d array with the variance per voxel.
+            dict: dictionary with additional statistics. Example: ``{'std': ...}``
         """
         raise NotImplementedError()
 
 
 class GaussianPSS(ParameterSampleStatistics):
 
-    def get_mean(self, samples):
+    def get_point_estimate(self, samples):
         return np.mean(samples, axis=1)
 
-    def get_std(self, samples):
-        return np.std(samples, axis=1)
+    def get_additional_statistics(self, samples):
+        return {'std': np.std(samples, axis=1)}
 
 
 class CircularGaussianPSS(ParameterSampleStatistics):
@@ -54,11 +60,11 @@ class CircularGaussianPSS(ParameterSampleStatistics):
         super(CircularGaussianPSS, self).__init__()
         self.max_angle = max_angle
 
-    def get_mean(self, samples):
+    def get_point_estimate(self, samples):
         return CircularGaussianPSS.circmean(np.mod(samples, self.max_angle), high=self.max_angle, low=0, axis=1)
 
-    def get_std(self, samples):
-        return CircularGaussianPSS.circstd(np.mod(samples, self.max_angle), high=self.max_angle, low=0, axis=1)
+    def get_additional_statistics(self, samples):
+        return {'std': CircularGaussianPSS.circstd(np.mod(samples, self.max_angle), high=self.max_angle, low=0, axis=1)}
 
     @staticmethod
     def circmean(samples, high=2 * np.pi, low=0, axis=None):
