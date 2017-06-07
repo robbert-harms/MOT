@@ -19,7 +19,7 @@ class AbstractTransformation(object):
         of handling the transformations given all the dependencies.)
 
         Args:
-            dependencies (list of (CLFunction, CLFunctionParameter) pairs): A list of (models, parameters)
+            dependencies (list of (SimpleCLFunction, CLFunctionParameter) pairs): A list of (models, parameters)
                 which are necessary for the operation of the transformation.
         """
         super(AbstractTransformation, self).__init__()
@@ -43,10 +43,10 @@ class AbstractTransformation(object):
 
     @property
     def dependencies(self):
-        """Get a list of (CLFunction, CLFunctionParameter) pairs where this transformation depends on
+        """Get a list of (SimpleCLFunction, CLFunctionParameter) pairs where this transformation depends on
 
         Returns:
-            list of tuple: A list of (CLFunction, CLFunctionParameter) tuples.
+            list of tuple: A list of (SimpleCLFunction, CLFunctionParameter) tuples.
         """
         return self._dependencies
 

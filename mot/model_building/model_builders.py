@@ -2,11 +2,11 @@ import numpy as np
 import copy
 from six import string_types
 from mot.cl_data_type import SimpleCLDataType
-from mot.cl_routines.mapping.calc_dependent_params import CalculateDependentParameters
 from mot.cl_routines.mapping.codec_runner import CodecRunner
 from mot.cl_routines.sampling.metropolis_hastings import DefaultMHState
-from mot.model_building.cl_functions.model_functions import Weight
-from mot.model_building.cl_functions.parameters import CurrentObservationParam, StaticMapParameter, ProtocolParameter, \
+from mot.model_building.model_function_priors import ModelFunctionPrior
+from mot.model_building.model_functions import Weight
+from mot.model_building.parameters import CurrentObservationParam, StaticMapParameter, ProtocolParameter, \
     ModelDataParameter, FreeParameter
 from mot.model_building.data_adapter import SimpleDataAdapter
 from mot.model_building.parameter_functions.dependencies import SimpleAssignment, AbstractParameterDependency
@@ -244,42 +244,6 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 self._evaluation_model.get_noise_std_param_name()), self._problem_data.noise_std)
         return self
 
-    def add_post_optimization_modifier(self, result_names, mod_routine):
-        """Add a modification function that can update the results of model optimization.
-
-        The mod routine should be a function accepting a dictionary as input and should return one or more maps of
-        the same dimension as the maps in the dictionary. The idea is that the given ``mod_routine`` callback receives
-        the result dictionary from the optimization routine and calculates new maps.
-        These maps are then returned and the dictionary is updated with the returned maps as value and the here provided
-        model_param_name as key.
-
-        It is possible to add more than one modifier function. In that case, they are called in the order they
-        were appended to this model.
-
-        It is possible to add multiple maps in one modification routine, in that case the ``model_param_name`` should
-        be a tuple of map names and the modification routine should also output a list of map names.
-
-        Args:
-            result_names (str or tuple of str): the name of the output(s) of the mod_routine.
-                Example ``'Power2'`` or ``('Power2' 'Power3')``.
-            mod_routine (python function): the callback function to apply on the results of the referenced parameter.
-                Example: ``lambda d: d**2`` or ``lambda d: (d**2, d**3)``
-        """
-        self._post_optimization_modifiers.append((result_names, mod_routine))
-        return self
-
-    def add_post_optimization_modifiers(self, modifiers):
-        """Add a list of modifier functions.
-
-        The same as add_post_optimization_modifier() except that it accepts a list of modifiers.
-        Every element in the list should be a tuple like (model_param_name, mod_routine)
-
-        Args:
-            modifiers (tuple or list): The list of modifiers to add (in the given order).
-        """
-        self._post_optimization_modifiers.extend(modifiers)
-        return self
-
     def get_required_protocol_names(self):
         """Get a list with the constant data names that are needed for this model to work.
 
@@ -294,14 +258,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
     def get_optimization_output_param_names(self):
         """See super class for details"""
-        items = ['{}.{}'.format(m.name, p.name) for m, p in self._model_functions_info.get_free_parameters_list()]
-
-        for name, _ in self._post_optimization_modifiers:
-            if isinstance(name, string_types):
-                items.append(name)
-            else:
-                items.extend(name)
-        return items
+        return ['{}.{}'.format(m.name, p.name) for m, p in self._model_functions_info.get_free_parameters_list()]
 
     def get_free_param_names(self):
         """See super class for details"""
@@ -498,35 +455,6 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             func_name, inst_per_problem, eval_func_name, obs_func_name, param_listing))
         return str(func)
 
-    def add_extra_result_maps(self, results_dict):
-        """This adds some extra optimization maps to the results dictionary.
-
-        This function behaves as a procedure and as a function. The input dict can be updated in place, but it should
-        also return a dict but that is merely for the purpose of chaining.
-
-        Steps in finalizing the results dict:
-
-            1) It first adds the maps for the dependent and fixed parameters
-            2) Second it adds the extra maps defined in the models itself.
-            3) Third it loops through the post_optimization_modifiers callback functions for the final updates.
-            4) Finally it adds additional maps defined in this model subclass
-
-        For more documentation see the base method.
-
-        Args:
-            results_dict (dict): A dictionary with as keys the names of the parameters and as values the 1d maps with
-                for each voxel the optimized parameter value. The given dictionary can be altered by this function.
-
-        Returns:
-            dict: The same result dictionary but with updated values or with additional maps.
-                It should at least return the results_dict.
-        """
-        self._add_dependent_parameter_maps(results_dict)
-        self._add_fixed_parameter_maps(results_dict)
-        self._add_post_optimization_modifier_maps(results_dict)
-        self._add_finalizing_result_maps(results_dict)
-        return results_dict
-
     def get_parameter_codec(self):
         """Get a parameter codec that can be used to transform the parameters to and from optimization and model space.
 
@@ -573,61 +501,6 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                     }
                 '''
         return Codec()
-
-    def _add_fixed_parameter_maps(self, results_dict):
-        """In place add complete maps for the fixed parameters."""
-        fixed_params = self._model_functions_info.get_value_fixed_parameters_list(exclude_priors=True)
-
-        for (m, p) in fixed_params:
-            name = '{}.{}'.format(m.name, p.name)
-            value = self._model_functions_info.get_parameter_value(name)
-
-            if is_scalar(value):
-                results_dict.update({name: np.tile(np.array([value]), (self.get_nmr_problems(),))})
-            else:
-                if self.problems_to_analyze is not None:
-                    value = value[self.problems_to_analyze, ...]
-                results_dict.update({name: value})
-
-    def _add_dependent_parameter_maps(self, results_dict):
-        """In place add complete maps for the dependent parameters."""
-        estimable_parameters = self._model_functions_info.get_estimable_parameters_list(exclude_priors=True)
-        dependent_parameters = self._model_functions_info.get_dependency_fixed_parameters_list(exclude_priors=True)
-
-        if len(dependent_parameters):
-            func = ''
-            func += self._get_fixed_parameters_listing()
-            func += self._get_estimable_parameters_listing()
-            func += self._get_dependent_parameters_listing()
-
-            estimable_params = ['{}.{}'.format(m.name, p.name) for m, p in estimable_parameters]
-            estimated_parameters = [results_dict[k] for k in estimable_params]
-
-            dependent_parameter_names = [('{}.{}'.format(m.name, p.name).replace('.', '_'),
-                                          '{}.{}'.format(m.name, p.name))
-                                         for m, p in dependent_parameters]
-
-            cpd = CalculateDependentParameters(double_precision=self.double_precision)
-            dependent_parameters = cpd.calculate(self, estimated_parameters, func, dependent_parameter_names)
-
-            results_dict.update(dependent_parameters)
-
-    def _add_post_optimization_modifier_maps(self, results_dict):
-        """Add the extra maps defined in the post optimization modifiers to the results."""
-        for names, routine in self._post_optimization_modifiers:
-            if isinstance(names, string_types):
-                results_dict[names] = routine(results_dict)
-            else:
-                results_dict.update(zip(names, routine(results_dict)))
-
-    def _add_finalizing_result_maps(self, results_dict):
-        """Add some final results maps to the results dictionary.
-
-        This called by the function add_extra_result_maps() as last call to add more maps.
-
-        Args:
-            results_dict (args): the results from model optmization. We are to modify this in-place.
-        """
 
     def _get_parameter_transformations(self):
         dep_list = {}
@@ -1247,6 +1120,12 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
             if weight_prior:
                 self._model_priors.append(weight_prior)
 
+        for compartment in self._model_functions_info.get_model_list():
+            priors = compartment.get_model_function_priors()
+            if priors:
+                for prior in priors:
+                    self._model_priors.append(_ModelFunctionPriorToCompositeModelPrior(prior, compartment.name))
+
     def _init_model_information_container(self, model_tree, evaluation_model, signal_noise_model):
         """Get the model information container object.
 
@@ -1313,7 +1192,7 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
                                                 '{}.{}'.format(m.name, prior_param.name).replace('.', '_'))
 
                 prior += 'prior *= {}(x[{}], {}, {}, {});\n'.format(function_name, i, lower_bound, upper_bound,
-                                                                      ', '.join(prior_params))
+                                                                    ', '.join(prior_params))
             else:
                 prior += 'prior *= {}(x[{}], {}, {});\n'.format(function_name, i, lower_bound, upper_bound)
 
@@ -1673,7 +1552,7 @@ class ModelFunctionsInformation(object):
         """Get the list of all the applicable model functions
 
         Returns:
-            list of mot.model_building.cl_functions.base.ModelFunction: the list of model functions.
+            list of mot.model_building.model_functions.ModelFunction: the list of model functions.
         """
         return self._model_list
 
@@ -1841,8 +1720,8 @@ class ModelFunctionsInformation(object):
         """Check if the given model and parameter name combo has a dependency.
 
         Args:
-            model (mot.model_building.cl_functions.base.ModelFunction): the model function
-            param (mot.model_building.cl_functions.parameters.CLFunctionParameter): the parameter
+            model (mot.model_building.model_functions.ModelFunction): the model function
+            param (mot.model_building.parameters.CLFunctionParameter): the parameter
 
         Returns:
             boolean: if the given parameter has a dependency
@@ -1858,8 +1737,8 @@ class ModelFunctionsInformation(object):
         A parameter is estimable if it is of the Free parameter type and is not fixed.
 
         Args:
-            model (mot.model_building.cl_functions.base.ModelFunction): the model function
-            param (mot.model_building.cl_functions.parameters.CLFunctionParameter): the parameter
+            model (mot.model_building.model_functions.ModelFunction): the model function
+            param (mot.model_building.parameters.CLFunctionParameter): the parameter
 
         Returns:
             boolean: true if the parameter is estimable, false otherwise
@@ -1915,8 +1794,8 @@ class ModelFunctionsInformation(object):
         This returns the position of this parameter in the 'x', parameter vector in the CL kernels.
 
         Args:
-            model (mot.model_building.cl_functions.base.ModelFunction): the model function
-            param (mot.model_building.cl_functions.parameters.CLFunctionParameter): the parameter
+            model (mot.model_building.model_functions.ModelFunction): the model function
+            param (mot.model_building.parameters.CLFunctionParameter): the parameter
 
         Returns:
             int: the index of the requested parameter in the list of optimized parameters
@@ -2128,4 +2007,23 @@ class ParameterResolutionException(Exception):
 class DoubleModelNameException(Exception):
     """Thrown when there are two models with the same name."""
     pass
+
+
+class _ModelFunctionPriorToCompositeModelPrior(ModelFunctionPrior):
+
+    def __init__(self, model_function_prior, compartment_name):
+        """Simple prior class for easily converting the compartment priors to composite model priors."""
+        self._prior_function = model_function_prior.get_prior_function()
+        self._parameters = ['{}.{}'.format(compartment_name, p)
+                            for p in model_function_prior.get_function_parameters()]
+        self._function_name = model_function_prior.get_prior_function_name()
+
+    def get_prior_function(self):
+        return self._prior_function
+
+    def get_function_parameters(self):
+        return self._parameters
+
+    def get_function_name(self):
+        return self._function_name
 

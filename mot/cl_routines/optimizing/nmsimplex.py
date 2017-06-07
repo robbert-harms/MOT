@@ -1,4 +1,4 @@
-from mot.model_building.cl_functions.library_functions import LibNMSimplex
+from mot.library_functions import LibNMSimplex
 from ...cl_routines.optimizing.base import AbstractParallelOptimizer, AbstractParallelOptimizerWorker
 
 __author__ = 'Robbert Harms'

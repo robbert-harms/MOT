@@ -183,7 +183,7 @@ class NormalPDF(SimplePrior):
 
     def __init__(self):
         r"""Normal PDF on the given value: :math:`P(v) = N(v; \mu, \sigma)`"""
-        from mot.model_building.cl_functions.parameters import FreeParameter
+        from mot.model_building.parameters import FreeParameter
         params = [FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'mu', True, 0, -np.inf, np.inf,
                                 sampling_prior=AlwaysOne()),
                   FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'sigma', True, 1, -np.inf, np.inf,
@@ -221,8 +221,8 @@ class AxialNormalPDF(SimplePrior):
             Barry C. Arnold, Ashis SenGupta (2006). Probability distributions and statistical inference for axial data.
             Environmental and Ecological Statistics, volume 13, issue 3, pages 271-285.
         """
-        from mot.model_building.cl_functions.parameters import FreeParameter
-        from mot.model_building.cl_functions.library_functions import Bessel, Trigonometrics
+        from mot.model_building.parameters import FreeParameter
+        from mot.library_functions import Bessel, Trigonometrics
 
         params = [FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'mu', True, 0, -np.inf, np.inf,
                                 sampling_prior=AlwaysOne()),
@@ -259,7 +259,7 @@ class ARDBeta(SimplePrior):
             B(x; 1, \beta) = \beta * (1 - x)^{\beta - 1}
 
         """
-        from mot.model_building.cl_functions.parameters import FreeParameter
+        from mot.model_building.parameters import FreeParameter
         params = [FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'beta', False, 1, 1e-4, 1000,
                                 sampling_prior=ReciprocalPrior(),
                                 sampling_proposal=GaussianProposal(0.01))]
@@ -281,7 +281,7 @@ class ARDGaussian(SimplePrior):
         This uses a Gaussian prior with mean at zero and a standard deviation determined by the ``alpha`` parameter
         with the relationship :math:`\sigma = 1/\\sqrt(\\alpha)`.
         """
-        from mot.model_building.cl_functions.parameters import FreeParameter
+        from mot.model_building.parameters import FreeParameter
         params = [FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'alpha', False, 8, 1e-5, 1e4,
                                 sampling_prior=UniformWithinBoundsPrior(),
                                 sampling_proposal=GaussianProposal(20))]

@@ -2,7 +2,7 @@ from random import Random
 import warnings
 import numpy as np
 import pyopencl as cl
-from mot.model_building.cl_functions.library_functions import Rand123
+from mot.library_functions import Rand123
 from ...cl_routines.sampling.base import AbstractSampler, SamplingOutput
 from ...load_balance_strategies import Worker
 from ...utils import get_float_type_def

@@ -1,11 +1,81 @@
 import os
 from pkg_resources import resource_filename
-from mot.model_building.cl_functions.base import SimpleCLLibraryFromFile, SimpleCLLibrary
 
 __author__ = 'Robbert Harms'
 __date__ = "2016-10-03"
 __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
+
+
+class CLLibrary(object):
+
+    def get_cl_code(self):
+        """Get the function code for this library and for all its dependencies.
+
+        Returns:
+            str: The CL code for inclusion in a kernel.
+        """
+        raise NotImplementedError()
+
+
+class SimpleCLLibrary(CLLibrary):
+
+    def __init__(self, name, cl_code, dependencies=None):
+        """Python wrapper for library CL code.
+
+        Args:
+            name (str): the name of this library, used to create the inclusion guards
+            cl_code (str): the CL code for this library
+            dependencies (list or tuple of CLLibrary): The list of CL libraries this function depends on
+        """
+        super(SimpleCLLibrary, self).__init__()
+        self._name = name
+        self._cl_code = cl_code
+        self._dependencies = dependencies or {}
+
+    def get_cl_code(self):
+        return '''
+            {dependencies}
+            #ifndef {inclusion_guard_name}
+            #define {inclusion_guard_name}
+            {code}
+            #endif // {inclusion_guard_name}
+        '''.format(dependencies=self._get_cl_dependency_code(),
+                   inclusion_guard_name='LIBRARY_FUNCTION_{}_CL'.format(self._name),
+                   code=self._cl_code)
+
+    def _get_cl_dependency_code(self):
+        """Get the CL code for all the CL code for all the dependencies.
+
+        Returns:
+            str: The CL code with the actual code.
+        """
+        code = ''
+        for d in self._dependencies:
+            code += d.get_cl_code() + "\n"
+        return code
+
+
+class SimpleCLLibraryFromFile(SimpleCLLibrary):
+
+    def __init__(self, name, cl_code_file, var_replace_dict=None, dependencies=None):
+        """Create a CL function for a library function.
+
+        These functions are not meant to be optimized, but can be used a helper functions in models.
+
+        Args:
+            name (str): The name of the CL function
+            cl_code_file (str): The location of the code file
+            var_replace_dict (dict): In the cl_code file these replacements will be made
+                (using the % format function of Python)
+            dependencies (list or tuple of CLLibrary): The list of cl libraries this function depends on
+        """
+        code = open(os.path.abspath(cl_code_file), 'r').read()
+
+        if var_replace_dict is not None:
+            code = code % var_replace_dict
+
+        super(SimpleCLLibraryFromFile, self).__init__(name, code, dependencies)
 
 
 class FirstLegendreTerm(SimpleCLLibraryFromFile):

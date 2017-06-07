@@ -1,5 +1,5 @@
-from mot.model_building.cl_functions.parameters import FreeParameter
-from mot.model_building.cl_functions.base import ModelFunction
+from mot.model_building.parameters import FreeParameter
+from mot.model_building.model_functions import SimpleModelFunction
 from mot.model_building.parameter_functions.transformations import CosSqrClampTransform
 from mot.cl_data_type import SimpleCLDataType
 
@@ -10,7 +10,7 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class SignalNoiseModel(ModelFunction):
+class SignalNoiseModel(SimpleModelFunction):
 
     def __init__(self, name, cl_function_name, parameter_list, dependency_list=()):
         """Signal noise models can add noise to the signal resulting from the model.
@@ -18,7 +18,8 @@ class SignalNoiseModel(ModelFunction):
         They require the signal resulting from the model and zero or more parameters and they return a new signal
         with noise added.
         """
-        super(SignalNoiseModel, self).__init__(name, cl_function_name, parameter_list, dependency_list=dependency_list)
+        super(SignalNoiseModel, self).__init__('double', name, cl_function_name, parameter_list,
+                                               dependency_list=dependency_list)
 
     def get_signal_function(self, fname='signalNoiseModel'):
         """Get the signal function that adds the noise to the signal function.

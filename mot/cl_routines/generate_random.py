@@ -5,7 +5,7 @@ import pyopencl as cl
 
 from mot.cl_routines.base import CLRoutine
 from mot.load_balance_strategies import Worker
-from mot.model_building.cl_functions.library_functions import Rand123
+from mot.library_functions import Rand123
 
 
 __author__ = 'Robbert Harms'

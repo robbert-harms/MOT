@@ -1,6 +1,6 @@
-from mot.model_building.cl_functions.parameters import FreeParameter
-from mot.model_building.cl_functions.base import ModelFunction
-from mot.model_building.cl_functions.library_functions import Bessel
+from mot.model_building.parameters import FreeParameter
+from mot.model_building.model_functions import SimpleModelFunction
+from mot.library_functions import Bessel
 from mot.model_building.parameter_functions.transformations import ClampTransform
 from mot.cl_data_type import SimpleCLDataType
 
@@ -12,14 +12,15 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class EvaluationModel(ModelFunction):
+class EvaluationModel(SimpleModelFunction):
 
     def __init__(self, name, cl_function_name, parameter_list, dependency_list=()):
         """The evaluation model is the model under which you evaluate the estimated results against the data.
 
         This normally embed the noise model assumptions of your data.
         """
-        super(EvaluationModel, self).__init__(name, cl_function_name, parameter_list, dependency_list=dependency_list)
+        super(EvaluationModel, self).__init__('double', name, cl_function_name, parameter_list,
+                                              dependency_list=dependency_list)
 
     def get_objective_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
         """Get the cl code for the objective function under the given noise model.
