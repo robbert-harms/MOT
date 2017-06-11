@@ -18,6 +18,12 @@ class EvaluationModel(SimpleModelFunction):
         """The evaluation model is the model under which you evaluate the estimated results against the data.
 
         This normally embed the noise model assumptions of your data.
+
+        Args:
+            name (str): the name of this evaluation model
+            cl_function_name (str): the name of the function, this is not used atm
+            parameter_list (list or tuple): the list of parameters this model requires to function correctly
+            dependency_list (list or tuple): some dependencies for this model
         """
         super(EvaluationModel, self).__init__('double', name, cl_function_name, parameter_list,
                                               dependency_list=dependency_list)
@@ -51,6 +57,7 @@ class EvaluationModel(SimpleModelFunction):
 
             That is, it always returns a double since the summations may get large.
         """
+        raise NotImplementedError()
 
     def get_objective_per_observation_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing):
         """Get the cl code for the objective function for a given instance under the given noise model.
@@ -83,6 +90,7 @@ class EvaluationModel(SimpleModelFunction):
 
                     double (const void* const data, mot_float_type* const x, const uint observation_index);
         """
+        raise NotImplementedError()
 
     def get_log_likelihood_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing,
                                     full_likelihood=True):
@@ -116,6 +124,7 @@ class EvaluationModel(SimpleModelFunction):
 
             That is, it always returns a double since the summations may get large.
         """
+        raise NotImplementedError()
 
     def get_log_likelihood_per_observation_function(self, fname, inst_per_problem, eval_fname, obs_fname, param_listing,
                                                     full_likelihood=True):
@@ -148,6 +157,7 @@ class EvaluationModel(SimpleModelFunction):
                     double <fname>(const void* const data, mot_float_type* const x,
                                    const uint observation_index);
         """
+        raise NotImplementedError()
 
     def get_noise_std_param_name(self):
         """Get the name of the parameter that is associated with the noise standard deviation in the problem data.

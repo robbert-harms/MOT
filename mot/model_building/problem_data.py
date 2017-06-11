@@ -57,7 +57,7 @@ class AbstractProblemData(object):
         These maps will be loaded by the model builder as the values for the static parameters.
 
         Returns:
-            Dict[str, value]: per static map the value for the static map. This can either be an one or two dimensional
+            dict: per static map the value for the static map. This can either be an one or two dimensional
                 matrix containing the values for each problem instance or it can be a single value we will use
                 for all p
         """

@@ -1,5 +1,5 @@
-mot.parsers package
-===================
+mot\.parsers package
+====================
 
 Subpackages
 -----------

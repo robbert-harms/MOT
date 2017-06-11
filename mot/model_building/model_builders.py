@@ -1439,24 +1439,27 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
                     return_list.append('{}.{}.proposal.{}'.format(m.name, p.name, param.name))
         return return_list
 
-    def samples_to_statistics(self, samples_dict):
+    def samples_to_statistics(self, samples):
         """Create statistics out of the given set of samples (in a dictionary).
 
         Args:
-            samples_dict (dict): Keys being the parameter names, values the roi list in 2d
-                (1st dim. is voxel, 2nd dim. is samples).
+            samples (ndarray): the sampled parameter maps, an (d, p, n) array with for d problems
+                and p parameters n samples.
 
         Returns:
-            dict: The same dictionary but with statistical maps (mean, avg etc.) for each parameter, instead of the raw
-            samples. In essence this is where one can place the logic to go from samples to meaningful maps.
+            dict: A dictionary with point estimates and statistical maps (mean, avg etc.) for each parameter.
         """
         results = {}
-        for key, value in samples_dict.items():
-            _, param = self._model_functions_info.get_model_parameter_by_name(key)
-            stat_mod = param.sampling_statistics
-            results[key] = stat_mod.get_point_estimate(value)
-            results.update({'{}.{}'.format(key, statistic_key): v
-                            for statistic_key, v in stat_mod.get_additional_statistics(value).items()})
+
+        for ind, parameter_name in enumerate(self.get_free_param_names()):
+            parameter_samples = samples[:, ind, ...]
+
+            stat_mod = self._model_functions_info.get_model_parameter_by_name(parameter_name)[1].sampling_statistics
+            statistics = stat_mod.get_statistics(parameter_samples)
+
+            results[parameter_name] = statistics.get_point_estimate()
+            results.update({'{}.{}'.format(parameter_name, statistic_key): v
+                            for statistic_key, v in statistics.get_additional_statistics().items()})
         return results
 
     def _get_weight_prior(self):

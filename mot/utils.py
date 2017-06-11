@@ -1,3 +1,5 @@
+import logging
+from contextlib import contextmanager
 from functools import reduce
 import numpy as np
 import pyopencl as cl
@@ -244,3 +246,20 @@ def get_single_value(value):
     if is_scalar(value):
         return value
     return value.item(0)
+
+
+@contextmanager
+def all_logging_disabled(highest_level=logging.CRITICAL):
+    """Disable all logging temporarily.
+
+    A context manager that will prevent any logging messages triggered during the body from being processed.
+
+    Args:
+        highest_level: the maximum logging level that is being blocked
+    """
+    previous_level = logging.root.manager.disable
+    logging.disable(highest_level)
+    try:
+        yield
+    finally:
+        logging.disable(previous_level)

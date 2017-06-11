@@ -1,67 +1,75 @@
-mot.cl_routines.mapping package
-===============================
+mot\.cl\_routines\.mapping package
+==================================
 
 Submodules
 ----------
 
-mot.cl_routines.mapping.calc_dependent_params module
-----------------------------------------------------
+mot\.cl\_routines\.mapping\.calc\_dependent\_params module
+----------------------------------------------------------
 
 .. automodule:: mot.cl_routines.mapping.calc_dependent_params
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot.cl_routines.mapping.calculate_model_estimates module
---------------------------------------------------------
+mot\.cl\_routines\.mapping\.calculate\_model\_estimates module
+--------------------------------------------------------------
 
 .. automodule:: mot.cl_routines.mapping.calculate_model_estimates
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot.cl_routines.mapping.codec_runner module
--------------------------------------------
+mot\.cl\_routines\.mapping\.codec\_runner module
+------------------------------------------------
 
 .. automodule:: mot.cl_routines.mapping.codec_runner
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot.cl_routines.mapping.error_measures module
----------------------------------------------
+mot\.cl\_routines\.mapping\.error\_measures module
+--------------------------------------------------
 
 .. automodule:: mot.cl_routines.mapping.error_measures
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot.cl_routines.mapping.loglikelihood_calculator module
--------------------------------------------------------
+mot\.cl\_routines\.mapping\.log\_pointwise\_predictive\_density module
+----------------------------------------------------------------------
+
+.. automodule:: mot.cl_routines.mapping.log_pointwise_predictive_density
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+mot\.cl\_routines\.mapping\.loglikelihood\_calculator module
+------------------------------------------------------------
 
 .. automodule:: mot.cl_routines.mapping.loglikelihood_calculator
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot.cl_routines.mapping.objective_calculator module
----------------------------------------------------
+mot\.cl\_routines\.mapping\.objective\_calculator module
+--------------------------------------------------------
 
 .. automodule:: mot.cl_routines.mapping.objective_calculator
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot.cl_routines.mapping.objective_list_calculator module
---------------------------------------------------------
+mot\.cl\_routines\.mapping\.objective\_list\_calculator module
+--------------------------------------------------------------
 
 .. automodule:: mot.cl_routines.mapping.objective_list_calculator
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot.cl_routines.mapping.residual_calculator module
---------------------------------------------------
+mot\.cl\_routines\.mapping\.residual\_calculator module
+-------------------------------------------------------
 
 .. automodule:: mot.cl_routines.mapping.residual_calculator
     :members:

@@ -81,7 +81,7 @@ class _CDPWorker(Worker):
 
         self._estimated_parameters = estimated_parameters
         self._all_buffers, self._results_list_buffer = self._create_buffers()
-        self._kernel = self._build_kernel(compile_flags)
+        self._kernel = self._build_kernel(self._get_kernel_source(), compile_flags)
 
     def __del__(self):
         for buffer in self._all_buffers:

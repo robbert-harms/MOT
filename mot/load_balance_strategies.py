@@ -111,6 +111,7 @@ class Worker(object):
             range_start (int): The start of the processing range
             range_end (int): The end of the processing range
         """
+        raise NotImplementedError()
 
     def post_process(self, range_start, range_end):
         """Apply post processing at the end of the calculation.
@@ -123,26 +124,19 @@ class Worker(object):
             range_end (int): The end of the processing range
         """
 
-    def _build_kernel(self, compile_flags=()):
-        """Build the kernel for this worker.
+    def _build_kernel(self, kernel_source, compile_flags=()):
+        """Convenience function for building the kernel for this worker.
 
-        This assumes that the implementer implements the function _get_kernel_source() to get the source.
+        Args:
+            kernel_source (str): the kernel source to use for building the kernel
 
         Returns:
             cl.Program: a compiled CL kernel
         """
-        kernel_source = self._get_kernel_source()
         from mot import configuration
         if configuration.should_ignore_kernel_compile_warnings():
             warnings.simplefilter("ignore")
         return cl.Program(self._cl_run_context.context, kernel_source).build(' '.join(compile_flags))
-
-    def _get_kernel_source(self):
-        """Calculate the kernel source for this worker.
-
-        Returns:
-            str: the kernel
-        """
 
     def _enqueue_readout(self, buffer, host_array, range_start, range_end, wait_for=None):
         """Enqueue a readout for a buffer created with use_host_ptr.

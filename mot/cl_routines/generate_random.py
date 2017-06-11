@@ -59,7 +59,7 @@ class Random123GeneratorBase(CLRoutine):
         Unlike conventional RNGs, counter-based RNGs are stateless functions (or function classes i.e. functors)
         whose arguments are a counter, and a key and returns a result of the same type as the counter.
 
-        .. code-block: c
+        .. code-block:: c
 
             result = CBRNGname(counter, key)
 
@@ -72,7 +72,7 @@ class Random123GeneratorBase(CLRoutine):
         of W-bit words to scramble its N-word input key.
 
 
-        *Implementation note:
+        *Implementation note*:
 
         In this implementation we generate a counter and key automatically from a single seed.
 
@@ -215,7 +215,7 @@ class _Random123Worker(Worker):
         self._rng_state_buffer = cl.Buffer(self._cl_run_context.context,
                                            cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=self._rng_state)
 
-        self._kernel = self._build_kernel()
+        self._kernel = self._build_kernel(self._get_kernel_source())
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start

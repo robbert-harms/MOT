@@ -234,7 +234,7 @@ class AbstractParallelOptimizerWorker(Worker):
 
         self._starting_points = starting_points
         self._all_buffers, self._params_buffer, self._return_code_buffer = self._create_buffers()
-        self._kernel = self._build_kernel(self._parent_optimizer.get_compile_flags_list())
+        self._kernel = self._build_kernel(self._get_kernel_source(), self._parent_optimizer.get_compile_flags_list())
 
     def __del__(self):
         for buffer in self._all_buffers:
@@ -338,7 +338,7 @@ class AbstractParallelOptimizerWorker(Worker):
     def _get_optimizer_cl_code(self):
         """Get the optimization CL code that is called during optimization for each voxel.
 
-        This is normally called by the default implementation of _get_kernel_source().
+        This is normally called by the default implementation of _get_ll_calculating_kernel().
 
         By default this creates a CL function named 'evaluation' that can be called by the optimization routine.
 

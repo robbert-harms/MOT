@@ -88,7 +88,7 @@ class _CodecWorker(Worker):
             self._all_buffers.append(cl.Buffer(self._cl_run_context.context,
                                                cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data))
 
-        self._kernel = self._build_kernel(compile_flags)
+        self._kernel = self._build_kernel(self._get_kernel_source(), compile_flags)
 
     def __del__(self):
         for buffer in self._all_buffers:

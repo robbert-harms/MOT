@@ -789,7 +789,7 @@ class MHState(object):
         """Get the RNG state array for every problem instance.
 
         Returns:
-            ndarray: a (d, *) state array with for every d problem the state of size > 0
+            ndarray: a (d, \*) state array with for every d problem the state of size > 0
         """
         raise NotImplementedError()
 
@@ -856,7 +856,7 @@ class SimpleMHState(MHState):
                 the current state of the online parameter variance update variable.
             online_parameter_mean (ndarray): a (d, p) array with for d problems and p parameters
                 the current state of the online parameter mean
-            rng_state (ndarray): a (d, *) array with for d problems the rng state vector
+            rng_state (ndarray): a (d, \*) array with for d problems the rng state vector
         """
         self._nmr_samples_drawn = nmr_samples_drawn
         self._proposal_state_sampling_counter = proposal_state_sampling_counter

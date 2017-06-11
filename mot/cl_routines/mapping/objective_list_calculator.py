@@ -19,11 +19,9 @@ class ObjectiveListCalculator(CLRoutine):
     def __init__(self, **kwargs):
         """Calculate the objective list, that is it can compute the get_objective_list_function of the given model.
 
-        This evaluates the model and compares it to the problem data to get objective values. This returns
-        objective values per observation, for a complete objective function summarized over the observations use
+        This evaluates the model and compares it to the problem data to get objective values. As such it will return
+        a value per problem instance per data point. For an objective function summarized over the observations use
         the :class:`~.objective_calculator.ObjectiveCalculator`.
-
-        This returns a value per problem instance per data point.
         """
         super(ObjectiveListCalculator, self).__init__(**kwargs)
 
@@ -73,7 +71,7 @@ class _ObjectiveListCalculatorWorker(Worker):
         self._parameters = parameters
 
         self._all_buffers, self._residuals_buffer = self._create_buffers()
-        self._kernel = self._build_kernel(compile_flags)
+        self._kernel = self._build_kernel(self._get_kernel_source(), compile_flags)
 
     def __del__(self):
         for buffer in self._all_buffers:

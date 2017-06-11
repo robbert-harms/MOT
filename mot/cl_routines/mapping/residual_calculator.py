@@ -63,7 +63,7 @@ class _ResidualCalculatorWorker(Worker):
         self._model_estimates = model_estimates
 
         self._all_buffers, self._residuals_buffer = self._create_buffers()
-        self._kernel = self._build_kernel(compile_flags)
+        self._kernel = self._build_kernel(self._get_kernel_source(), compile_flags)
 
     def __del__(self):
         for buffer in self._all_buffers:

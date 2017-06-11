@@ -44,7 +44,7 @@ class AbstractFilter(CLRoutine):
 
         Args:
             value (dict or array like): an single array to filter (dimensions must match the size specified in
-                the constructor). Can also be a dictionary with a list of ndarrays.
+                the constructor). Can also be a dictionary with a multitude of ndarrays.
             mask (array like): A single array of the same dimension as the input value. This can be used to
                 mask values from being used by the filtering routines. They are not used for filtering other values
                 and are not filtered themselves.
@@ -130,7 +130,7 @@ class AbstractFilterWorker(Worker):
                                        cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
                                        hostbuf=self._mask)
 
-        self._kernel = self._build_kernel(compile_flags)
+        self._kernel = self._build_kernel(self._get_kernel_source(), compile_flags)
 
     def calculate(self, range_start, range_end):
         volumes_to_run = [self._volumes_list[i] for i in range(len(self._volumes_list)) if range_start <= i < range_end]
@@ -160,6 +160,7 @@ class AbstractFilterWorker(Worker):
 
         This should be implemented by the subclass.
         """
+        raise NotImplementedError()
 
     def _get_size_in_dimension(self, dimension):
         if isinstance(self._size, numbers.Number):

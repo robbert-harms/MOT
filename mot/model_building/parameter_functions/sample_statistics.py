@@ -9,42 +9,22 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class ParameterSampleStatistics(object):
 
-    def get_point_estimate(self, samples):
-        """Get the map that would represent the point estimate of these samples.
-
-        This map is used for comparison with the point estimates obtained from optimization and typically corresponds
-        to the mean of the distribution.
+    def get_statistics(self, samples):
+        """Get the statistics for this parameter.
 
         Args:
-            samples (ndarray): The 2d array with the samples per voxel.
+            samples (ndarray): The 2d matrix (v, s) with for v voxels, s samples.
 
         Returns:
-            ndarray: The point estimate for every voxel.
-        """
-        raise NotImplementedError()
-
-    def get_additional_statistics(self, samples):
-        """Get additional statistics about the parameter distribution.
-
-        This normally returns only a dictionary with a standard deviation map, but it can return more statistics
-        if desired.
-
-        Args:
-            samples (ndarray): The 2d array with the samples per voxel.
-
-        Returns:
-            dict: dictionary with additional statistics. Example: ``{'std': ...}``
+            SamplingStatistics: an object containing the sampling statistics
         """
         raise NotImplementedError()
 
 
 class GaussianPSS(ParameterSampleStatistics):
 
-    def get_point_estimate(self, samples):
-        return np.mean(samples, axis=1)
-
-    def get_additional_statistics(self, samples):
-        return {'std': np.std(samples, axis=1)}
+    def get_statistics(self, samples):
+        return SamplingStatisticsContainer(np.mean(samples, axis=1), {'std': np.std(samples, axis=1)})
 
 
 class CircularGaussianPSS(ParameterSampleStatistics):
@@ -60,11 +40,11 @@ class CircularGaussianPSS(ParameterSampleStatistics):
         super(CircularGaussianPSS, self).__init__()
         self.max_angle = max_angle
 
-    def get_point_estimate(self, samples):
-        return CircularGaussianPSS.circmean(np.mod(samples, self.max_angle), high=self.max_angle, low=0, axis=1)
-
-    def get_additional_statistics(self, samples):
-        return {'std': CircularGaussianPSS.circstd(np.mod(samples, self.max_angle), high=self.max_angle, low=0, axis=1)}
+    def get_statistics(self, samples):
+        mean = CircularGaussianPSS.circmean(np.mod(samples, self.max_angle), high=self.max_angle, low=0, axis=1)
+        additional_maps = {'std': CircularGaussianPSS.circstd(np.mod(samples, self.max_angle),
+                                                              high=self.max_angle, low=0, axis=1)}
+        return SamplingStatisticsContainer(mean, additional_maps)
 
     @staticmethod
     def circmean(samples, high=2 * np.pi, low=0, axis=None):
@@ -114,3 +94,47 @@ class CircularGaussianPSS(ParameterSampleStatistics):
         R = abs(res)
         R[R >= 1] = 1 - np.finfo(np.float).eps
         return ((high - low) / 2.0 / np.pi) * np.sqrt(-2 * np.log(R))
+
+
+class SamplingStatistics(object):
+
+    def get_point_estimate(self):
+        """Get the map that would represent the point estimate of these samples.
+
+        This map is used for comparison with the point estimates obtained from optimization and typically corresponds
+        to the mean of the distribution.
+
+        Returns:
+            ndarray: The point estimate for every voxel.
+        """
+        raise NotImplementedError()
+
+    def get_additional_statistics(self):
+        """Get additional statistics about the parameter distribution.
+
+        This normally returns only a dictionary with a standard deviation map, but it can return more statistics
+        if desired.
+
+        Returns:
+            dict: dictionary with additional statistics. Example: ``{'std': ...}``
+        """
+        raise NotImplementedError()
+
+
+class SamplingStatisticsContainer(SamplingStatistics):
+
+    def __init__(self, point_estimate, additional_maps):
+        """Simple container for storing the point estimate and the other maps.
+
+        Args:
+            point_estimate (ndarray): the array with the point estimates
+            additional_maps (dict): the additional maps
+        """
+        self._point_estimate = point_estimate
+        self._additional_maps = additional_maps
+
+    def get_point_estimate(self):
+        return self._point_estimate
+
+    def get_additional_statistics(self):
+        return self._additional_maps
