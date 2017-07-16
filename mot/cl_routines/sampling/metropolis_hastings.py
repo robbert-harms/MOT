@@ -171,6 +171,7 @@ class _MHWorker(Worker):
         super(_MHWorker, self).__init__(cl_environment)
 
         self._model = model
+        self._data_info = self._model.get_kernel_data_info()
         self._current_chain_position = current_chain_position
         self._nmr_params = current_chain_position.shape[1]
         self._samples = samples
@@ -277,7 +278,7 @@ class _MHWorker(Worker):
 
         data_buffers.append(cl.LocalMemory(workgroup_size * np.dtype('double').itemsize))
 
-        for data in self._model.get_data():
+        for data in self._data_info.get_data():
             data_buffers.append(cl.Buffer(self._cl_run_context.context,
                                           cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data))
 
@@ -332,6 +333,7 @@ class _MCMCKernelBuilder(object):
         self._mh_state_dict = mh_state_dict
         self._cl_environment = cl_environment
         self._model = model
+        self._data_info = self._model.get_kernel_data_info()
         self._nmr_params = nmr_params
         self._nmr_samples = nmr_samples
         self._burn_length = burn_length
@@ -375,7 +377,7 @@ class _MCMCKernelBuilder(object):
             kernel_param_names.append('global {}* global_{}'.format(cl_type, mcmc_state_element))
 
         kernel_param_names.append('local double* log_likelihood_tmp')
-        kernel_param_names.extend(self._model.get_kernel_param_names(self._cl_environment.device))
+        kernel_param_names.extend(self._data_info.get_kernel_parameters())
 
         if store_samples:
             kernel_param_names.append('global mot_float_type* samples')
@@ -388,7 +390,7 @@ class _MCMCKernelBuilder(object):
         kernel_source += get_float_type_def(self._model.double_precision)
         kernel_source += self._get_rng_functions()
 
-        kernel_source += self._model.get_kernel_data_struct(self._cl_environment.device)
+        kernel_source += self._data_info.get_kernel_data_struct()
         kernel_source += self._model.get_log_prior_function('getLogPrior', address_space_parameter_vector='local')
         kernel_source += self._model.get_proposal_function('getProposal', address_space_proposal_state='global')
 
@@ -480,8 +482,7 @@ class _MCMCKernelBuilder(object):
 
                 ulong problem_ind = (ulong)(get_global_id(0) / get_local_size(0));
 
-                ''' + self._model.get_kernel_data_struct_initialization(self._cl_environment.device,
-                                                                        'data', 'problem_ind') + '''
+                ''' + self._data_info.get_kernel_data_struct_initialization('data', 'problem_ind') + '''
 
                 rand123_data rand123_rng_data = _rng_data_from_array(global_rng_state);
                 void* rng_data = (void*)&rand123_rng_data;

@@ -227,6 +227,7 @@ class AbstractParallelOptimizerWorker(Worker):
         self._parent_optimizer = parent_optimizer
 
         self._model = model
+        self._data_info = self._model.get_kernel_data_info()
         self._double_precision = model.double_precision
         self._nmr_params = nmr_params
 
@@ -261,7 +262,7 @@ class AbstractParallelOptimizerWorker(Worker):
                                        hostbuf=self._return_codes)
         all_buffers.append(return_code_buffer)
 
-        for data in self._model.get_data():
+        for data in self._data_info.get_data():
             all_buffers.append(cl.Buffer(self._cl_run_context.context,
                                          cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data))
 
@@ -283,7 +284,7 @@ class AbstractParallelOptimizerWorker(Worker):
 
         kernel_source = ''
         kernel_source += get_float_type_def(self._double_precision)
-        kernel_source += str(self._model.get_kernel_data_struct(self._cl_environment.device))
+        kernel_source += str(self._data_info.get_kernel_data_struct())
 
         kernel_source += self._get_optimizer_cl_code()
         kernel_source += '''
@@ -299,7 +300,7 @@ class AbstractParallelOptimizerWorker(Worker):
                         x[i] = params[gid * ''' + str(nmr_params) + ''' + i];
                     }
 
-                    ''' + self._model.get_kernel_data_struct_initialization(self._cl_environment.device, 'data') + '''
+                    ''' + self._data_info.get_kernel_data_struct_initialization('data') + '''
                     return_codes[gid] = (char) ''' + self._get_optimizer_call_name() + '(' + \
                          ', '.join(self._get_optimizer_call_args()) + ''');
 
@@ -320,7 +321,7 @@ class AbstractParallelOptimizerWorker(Worker):
         """
         kernel_param_names = ['global mot_float_type* params',
                               'global char* return_codes']
-        kernel_param_names.extend(self._model.get_kernel_param_names(self._cl_environment.device))
+        kernel_param_names.extend(self._data_info.get_kernel_parameters())
 
         return kernel_param_names
 

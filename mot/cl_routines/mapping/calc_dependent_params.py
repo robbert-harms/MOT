@@ -78,6 +78,7 @@ class _CDPWorker(Worker):
         self._double_precision = double_precision
 
         self._model = model
+        self._data_info = self._model.get_kernel_data_info()
 
         self._estimated_parameters = estimated_parameters
         self._all_buffers, self._results_list_buffer = self._create_buffers()
@@ -105,7 +106,7 @@ class _CDPWorker(Worker):
 
         data_buffers = [estimated_parameters_buf, results_buffer]
 
-        for data in self._model.get_data():
+        for data in self._data_info.get_data():
             data_buffers.append(cl.Buffer(self._cl_run_context.context,
                                           cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data))
 
@@ -120,20 +121,19 @@ class _CDPWorker(Worker):
                                    ' + ' + str(i) + '] = ' + p + ";\n"
 
         kernel_param_names = ['global mot_float_type* params', 'global mot_float_type* results']
-        kernel_param_names.extend(self._model.get_kernel_param_names(self._cl_environment.device))
+        kernel_param_names.extend(self._data_info.get_kernel_parameters())
 
         kernel_source = ''
         kernel_source += get_float_type_def(self._double_precision)
-        kernel_source += self._model.get_kernel_data_struct(self._cl_environment.device)
+        kernel_source += self._data_info.get_kernel_data_struct()
         kernel_source += '''
             __kernel void transform(
                 ''' + ",\n".join(kernel_param_names) + '''
                 ){
                     ulong gid = get_global_id(0);
 
-                    ''' + self._model.get_kernel_data_struct_initialization(self._cl_environment.device,
-                                                                            'data_var') + '''
-                    ''' + self._model.get_kernel_data_struct_type() + '''* data = &data_var;
+                    ''' + self._data_info.get_kernel_data_struct_initialization('data_var') + '''
+                    ''' + self._data_info.get_kernel_data_struct_type() + '''* data = &data_var;
 
                     mot_float_type x[''' + str(self._nmr_estimated_params) + '''];
 

@@ -72,6 +72,7 @@ class _LLWorker(Worker):
         super(_LLWorker, self).__init__(cl_environment)
 
         self._model = model
+        self._data_info = self._model.get_kernel_data_info()
         self._double_precision = model.double_precision
         self._evaluation_model = evaluation_model
 
@@ -159,7 +160,7 @@ class _LLWorker(Worker):
 
         ll_calculating_buffers = [samples_buffer, ll_buffer]
 
-        for data in self._model.get_data():
+        for data in self._data_info.get_data():
             ll_calculating_buffers.append(cl.Buffer(self._cl_run_context.context,
                                          cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data))
 
@@ -171,10 +172,10 @@ class _LLWorker(Worker):
             'getLogLikelihoodPerObs', evaluation_model=self._evaluation_model, full_likelihood=True)
 
         kernel_param_names = ['uint problem_ind', 'global mot_float_type* samples', 'global double* lls']
-        kernel_param_names.extend(self._model.get_kernel_param_names(self._cl_environment.device))
+        kernel_param_names.extend(self._data_info.get_kernel_parameters())
         kernel_source = ''
         kernel_source += get_float_type_def(self._double_precision)
-        kernel_source += self._model.get_kernel_data_struct(self._cl_environment.device)
+        kernel_source += self._data_info.get_kernel_data_struct()
         kernel_source += cl_func
         kernel_source += r'''
             __kernel void run_kernel(
@@ -183,8 +184,8 @@ class _LLWorker(Worker):
                     ulong obs_ind = get_global_id(0);
                     ulong sample_ind = get_global_id(1);
 
-                    ''' + self._model.get_kernel_data_struct_initialization(self._cl_environment.device,
-                                                                            'data', problem_id_name='problem_ind') + '''
+                    ''' + self._data_info.get_kernel_data_struct_initialization(
+                            'data', problem_id_name='problem_ind') + '''
 
                     mot_float_type x[''' + str(self._nmr_params) + '''];
 

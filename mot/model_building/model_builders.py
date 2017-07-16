@@ -11,7 +11,7 @@ from mot.model_building.parameters import CurrentObservationParam, StaticMapPara
 from mot.model_building.data_adapter import SimpleDataAdapter
 from mot.model_building.parameter_functions.dependencies import SimpleAssignment, AbstractParameterDependency
 from mot.model_building.utils import ParameterCodec, SimpleModelPrior
-from mot.model_interfaces import OptimizeModelInterface, SampleModelInterface
+from mot.model_interfaces import OptimizeModelInterface, SampleModelInterface, KernelDataInfo
 from mot.utils import is_scalar, all_elements_equal, get_single_value, results_to_dict, topological_sort
 
 __author__ = 'Robbert Harms'
@@ -83,7 +83,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             ModelFunctionsInformation: the model function information object
         """
         return ModelFunctionsInformation(model_tree, evaluation_model, signal_noise_model)
-    
+
     @property
     def name(self):
         """See super class OptimizeModelInterface for details"""
@@ -280,37 +280,23 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         """See super class for details"""
         return len(self._model_functions_info.get_estimable_parameters_list())
 
-    def get_data(self):
-        """See super class for details"""
+    def get_kernel_data_info(self):
+        info = self._get_all_kernel_source_items()
+
+        data_struct_init = self._get_all_kernel_source_items()['data_struct_init']
+        struct_code = '0'
+        if data_struct_init:
+            struct_code = ', '.join(data_struct_init)
+
         data = []
         for data_dict in [self._get_variable_data(), self._get_protocol_data(), self._get_static_data()]:
             for el in data_dict.values():
                 data.append(el.get_opencl_data())
-        return data
 
-    def get_kernel_data_struct(self, device):
-        """See super class for details"""
-        return self._get_all_kernel_source_items(device)['data_struct']
-
-    def get_kernel_param_names(self, device):
-        """See super class for details"""
-        return self._get_all_kernel_source_items(device)['kernel_param_names']
-
-    def get_kernel_data_struct_initialization(self, device, variable_name, problem_id_name='gid'):
-        """See super class for details"""
-        data_struct_init = self._get_all_kernel_source_items(device, problem_id_name)['data_struct_init']
-        struct_code = '0'
-        if data_struct_init:
-            struct_code = ', '.join(data_struct_init)
-        return self.get_kernel_data_struct_type() + ' ' + variable_name + ' = {' + struct_code + '};'
-
-    def get_kernel_data_struct_type(self):
-        """Get the CL type of the kernel datastruct.
-
-        Returns:
-            str: the CL type of the data struct
-        """
-        return '_model_data'
+        return SimpleKernelDataInfo(
+            data, info['kernel_param_names'], info['data_struct'],
+            self._get_kernel_data_struct_type(),
+            (self._get_kernel_data_struct_type() + ' {variable_name} = {{' + struct_code + '}};'))
 
     def get_initial_parameters(self, results_dict=None):
         """Get the initial parameters to use for model fitting.
@@ -376,14 +362,14 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         if self._problem_data.observations.shape[1] < 2:
             return '''
                 double ''' + func_name + '''(const void* const data, const uint observation_index){
-                    return ((''' + self.get_kernel_data_struct_type() + '''*)data)->var_data_observations;
+                    return ((''' + self._get_kernel_data_struct_type() + '''*)data)->var_data_observations;
                 }
             '''
 
         return '''
             double ''' + func_name + '''(const void* const data, const uint observation_index){
                 return ((''' + \
-                    self.get_kernel_data_struct_type() + '''*)data)->var_data_observations[observation_index];
+                    self._get_kernel_data_struct_type() + '''*)data)->var_data_observations[observation_index];
             }
         '''
 
@@ -398,7 +384,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         func += '''
             double ''' + func_name + \
                 '(const void* const void_data, const mot_float_type* const x, const uint observation_index){' + "\n"
-        func += self.get_kernel_data_struct_type() + '* data = (' + self.get_kernel_data_struct_type() + '*)void_data;'
+        func += self._get_kernel_data_struct_type() + '* data = (' + self._get_kernel_data_struct_type() + '*)void_data;'
 
         func += self._get_parameters_listing(
             exclude_list=['{}.{}'.format(m.name, p.name).replace('.', '_') for (m, p) in
@@ -470,8 +456,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 func = '''
                     void ''' + fname + '''(const void* data_void, mot_float_type* x){
                 '''
-                func += model_builder.get_kernel_data_struct_type() + \
-                        '* data = (' + model_builder.get_kernel_data_struct_type() + '*)data_void;'
+                func += model_builder._get_kernel_data_struct_type() + \
+                        '* data = (' + model_builder._get_kernel_data_struct_type() + '*)data_void;'
 
                 for d in model_builder._get_parameter_transformations()[1]:
                     func += "\n" + "\t" * 4 + d.format('x')
@@ -491,8 +477,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 if model_builder._enforce_weights_sum_to_one:
                     func += model_builder._get_weight_sum_to_one_transformation()
 
-                func += model_builder.get_kernel_data_struct_type() + \
-                        '* data = (' + model_builder.get_kernel_data_struct_type() + '*)data_void;'
+                func += model_builder._get_kernel_data_struct_type() + \
+                        '* data = (' + model_builder._get_kernel_data_struct_type() + '*)data_void;'
 
                 for d in model_builder._get_parameter_transformations()[0]:
                     func += "\n" + "\t" * 4 + d.format('x')
@@ -501,6 +487,14 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                     }
                 '''
         return Codec()
+
+    def _get_kernel_data_struct_type(self):
+        """Get the CL type of the kernel datastruct.
+
+        Returns:
+            str: the CL type of the data struct
+        """
+        return '_model_data'
 
     def _get_parameter_transformations(self):
         dep_list = {}
@@ -941,41 +935,14 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                     static_data_dict.update({p.name: SimpleDataAdapter(value, p.data_type, self._get_mot_float_type())})
         return static_data_dict
 
-    def _get_all_kernel_source_items(self, device, problem_id_name='gid'):
+    def _get_all_kernel_source_items(self):
         """Get the CL strings for the kernel source items for most common CL kernels in this library."""
-        import pyopencl as cl
-
-        max_constant_buffer_size = device.get_info(cl.device_info.MAX_CONSTANT_BUFFER_SIZE)
-        max_constant_args = device.get_info(cl.device_info.MAX_CONSTANT_ARGS)
-
-        def _check_array_fits_constant_buffer(array, dtype):
-            """Check if the given array when casted to the given type can be fit into the given max_size
-
-            Args:
-                array (ndarray): the array we want to fit
-                dtype (np data type): the numpy data type we want to use
-
-            Returns:
-                boolean: if it fits in the constant memory buffer or not
-            """
-            return np.product(array.shape) * np.dtype(dtype).itemsize < max_constant_buffer_size
-
-        constant_args_counter = 0
-
         kernel_param_names = []
         data_struct_init = []
         data_struct_names = []
 
         for key, data_adapter in self._get_variable_data().items():
-            clmemtype = 'global'
-
             cl_data = data_adapter.get_opencl_data()
-
-            if data_adapter.allow_local_pointer():
-                if _check_array_fits_constant_buffer(cl_data, data_adapter.get_opencl_numpy_type()):
-                    if constant_args_counter < max_constant_args:
-                        clmemtype = 'constant'
-                        constant_args_counter += 1
 
             param_name = 'var_data_' + str(key)
             data_type = data_adapter.get_data_type().raw_data_type
@@ -983,39 +950,28 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             if data_adapter.get_data_type().is_vector_type:
                 data_type += data_adapter.get_data_type().vector_length
 
-            kernel_param_names.append(clmemtype + ' ' + data_type + '* ' + param_name)
+            kernel_param_names.append('global ' + data_type + '* ' + param_name)
 
             mult = cl_data.shape[1] if len(cl_data.shape) > 1 else 1
             if len(cl_data.shape) == 1 or cl_data.shape[1] == 1:
                 data_struct_names.append(data_type + ' ' + param_name)
-                data_struct_init.append(param_name + '[{} * {}]'.format(problem_id_name, mult))
+                data_struct_init.append(param_name + '[{{problem_id_name}} * {}]'.format(mult))
             else:
-                data_struct_names.append(clmemtype + ' ' + data_type + '* ' + param_name)
-                data_struct_init.append(param_name + ' + {} * {}'.format(problem_id_name, mult))
+                data_struct_names.append('global ' + data_type + '* ' + param_name)
+                data_struct_init.append(param_name + ' + {{problem_id_name}} * {}'.format(mult))
 
         for key, data_adapter in self._get_protocol_data().items():
-            clmemtype = 'global'
-
-            cl_data = data_adapter.get_opencl_data()
-
-            if data_adapter.allow_local_pointer():
-                if _check_array_fits_constant_buffer(cl_data, data_adapter.get_opencl_numpy_type()):
-                    if constant_args_counter < max_constant_args:
-                        clmemtype = 'constant'
-                        constant_args_counter += 1
-
             param_name = 'protocol_data_' + str(key)
             data_type = data_adapter.get_data_type().raw_data_type
 
             if data_adapter.get_data_type().is_vector_type:
                 data_type += str(data_adapter.get_data_type().vector_length)
 
-            kernel_param_names.append(clmemtype + ' ' + data_type + '* ' + param_name)
+            kernel_param_names.append('global ' + data_type + '* ' + param_name)
             data_struct_init.append(param_name)
-            data_struct_names.append(clmemtype + ' ' + data_type + '* ' + param_name)
+            data_struct_names.append('global ' + data_type + '* ' + param_name)
 
         for key, data_adapter in self._get_static_data().items():
-            clmemtype = 'global'
             param_name = 'model_data_' + str(key)
             data_type = data_adapter.get_data_type().raw_data_type
 
@@ -1025,8 +981,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             data_struct_init.append(param_name)
 
             if isinstance(data_adapter.get_opencl_data(), np.ndarray):
-                kernel_param_names.append(clmemtype + ' ' + data_type + '* ' + param_name)
-                data_struct_names.append(clmemtype + ' ' + data_type + '* ' + param_name)
+                kernel_param_names.append('global ' + data_type + '* ' + param_name)
+                data_struct_names.append('global ' + data_type + '* ' + param_name)
             else:
                 kernel_param_names.append(data_type + ' ' + param_name)
                 data_struct_names.append(data_type + ' ' + param_name)
@@ -1035,7 +991,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             typedef struct{
                 ''' + ('' if data_struct_names else 'constant void* place_holder;') + '''
                 ''' + " ".join((name + ";\n" for name in data_struct_names)) + '''
-            } ''' + self.get_kernel_data_struct_type() + ''';
+            } ''' + self._get_kernel_data_struct_type() + ''';
         '''
 
         return {'kernel_param_names': kernel_param_names,
@@ -1156,7 +1112,7 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
                 mot_float_type prior = 1.0;
 
             '''.format(func_name=func_name, address_space_parameter_vector=address_space_parameter_vector,
-                       kernel_data_struct_type=self.get_kernel_data_struct_type())
+                       kernel_data_struct_type=self._get_kernel_data_struct_type())
 
         for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
             name = '{}.{}'.format(m.name, p.name)
@@ -1907,20 +1863,8 @@ class ParameterTransformedModel(OptimizeModelInterface):
     def double_precision(self):
         return self._model.double_precision
 
-    def get_data(self):
-        return self._model.get_data()
-
-    def get_kernel_data_struct(self, device):
-        return self._model.get_kernel_data_struct(device)
-
-    def get_kernel_param_names(self, device):
-        return self._model.get_kernel_param_names(device)
-
-    def get_kernel_data_struct_initialization(self, device, variable_name, problem_id_name='gid'):
-        return self._model.get_kernel_data_struct_initialization(device, variable_name, problem_id_name=problem_id_name)
-
-    def get_kernel_data_struct_type(self):
-        return self._model.get_kernel_data_struct_type()
+    def get_kernel_data_info(self):
+        return self._model.get_kernel_data_info()
 
     def get_nmr_problems(self):
         return self._model.get_nmr_problems()
@@ -2030,3 +1974,37 @@ class _ModelFunctionPriorToCompositeModelPrior(ModelFunctionPrior):
     def get_prior_function_name(self):
         return self._function_name
 
+
+class SimpleKernelDataInfo(KernelDataInfo):
+
+    def __init__(self, data, kernel_parameters, kernel_struct, struct_type, init_format_str):
+        """Simple kernel data information container.
+
+        Args:
+            data (list): list with ndarrays
+            kernel_parameters (list of str): the kernel parameters for each of the data elements
+            kernel_struct (str): the kernel structure containing all the data in the kernel
+            struct_type (str): the type of the kernel structure
+            init_format_str (str): the kernel data structure initialization string. This is used to
+                format the init string using the python string format function.
+        """
+        self._data = data
+        self._kernel_parameters = kernel_parameters
+        self._kernel_struct = kernel_struct
+        self._init_format_str = init_format_str
+        self._struct_type = struct_type
+
+    def get_data(self):
+        return self._data
+
+    def get_kernel_data_struct(self):
+        return self._kernel_struct
+
+    def get_kernel_parameters(self):
+        return self._kernel_parameters
+
+    def get_kernel_data_struct_initialization(self, variable_name, problem_id_name='gid'):
+        return self._init_format_str.format(variable_name=variable_name, problem_id_name=problem_id_name)
+
+    def get_kernel_data_struct_type(self):
+        return self._struct_type

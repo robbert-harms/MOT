@@ -76,7 +76,10 @@ class _GaussianFilterWorker(AbstractFilterWorker):
                     cl.enqueue_copy(self._cl_run_context.queue, self._results_dict[volume_name],
                                     results_buf_ptr, is_blocking=False)
 
-    def _build_kernel(self, compile_flags=()):
+    def _build_kernel(self, kernel_source, compile_flags=()):
+        pass
+
+    def _get_kernel_source(self):
         pass
 
     def _list_all_buffers(self, input_buffer, filter_kernel_buffer, output_buffer):

@@ -58,6 +58,7 @@ class _EvaluateModelWorker(Worker):
         super(_EvaluateModelWorker, self).__init__(cl_environment)
 
         self._model = model
+        self._data_info = self._model.get_kernel_data_info()
         self._double_precision = model.double_precision
         self._evaluations = evaluations
         self._parameters = parameters
@@ -81,7 +82,7 @@ class _EvaluateModelWorker(Worker):
                                  hostbuf=self._parameters),
                        evaluations_buffer]
 
-        for data in self._model.get_data():
+        for data in self._data_info.get_data():
             all_buffers.append(cl.Buffer(self._cl_run_context.context,
                                          cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data))
 
@@ -92,20 +93,20 @@ class _EvaluateModelWorker(Worker):
         nmr_params = self._parameters.shape[1]
 
         kernel_param_names = ['global mot_float_type* params', 'global mot_float_type* estimates']
-        kernel_param_names.extend(self._model.get_kernel_param_names(self._cl_environment.device))
+        kernel_param_names.extend(self._data_info.get_kernel_parameters())
 
         kernel_source = '''
             #define NMR_INST_PER_PROBLEM ''' + str(self._model.get_nmr_inst_per_problem()) + '''
         '''
         kernel_source += get_float_type_def(self._model.double_precision)
-        kernel_source += self._model.get_kernel_data_struct(self._cl_environment.device)
+        kernel_source += self._data_info.get_kernel_data_struct()
         kernel_source += cl_func
         kernel_source += '''
             __kernel void get_estimates(
                 ''' + ",\n".join(kernel_param_names) + '''
                 ){
                     ulong gid = get_global_id(0);
-                    ''' + self._model.get_kernel_data_struct_initialization(self._cl_environment.device, 'data') + '''
+                    ''' + self._data_info.get_kernel_data_struct_initialization('data') + '''
 
                     mot_float_type x[''' + str(nmr_params) + '''];
                     for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
