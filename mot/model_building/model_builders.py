@@ -83,7 +83,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             ModelFunctionsInformation: the model function information object
         """
         return ModelFunctionsInformation(model_tree, evaluation_model, signal_noise_model)
-
+    
     @property
     def name(self):
         """See super class OptimizeModelInterface for details"""
@@ -2027,6 +2027,6 @@ class _ModelFunctionPriorToCompositeModelPrior(ModelFunctionPrior):
     def get_function_parameters(self):
         return self._parameters
 
-    def get_function_name(self):
+    def get_prior_function_name(self):
         return self._function_name
 
