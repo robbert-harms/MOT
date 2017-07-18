@@ -37,6 +37,18 @@ class OptimizeModelInterface(object):
         """
         raise NotImplementedError()
 
+    def get_free_param_names(self):
+        """Get a list of names with the free parameter names (the parameters that are estimated by the routines).
+
+        The function get_optimization_output_param_names() returns the names of all the parameter names,
+        including fixed and static parameters. This should only return the names of the parameters
+        that are actually used in the optimization.
+
+        Returns:
+            list of str: A list with the parameter names (in dot format) of all the estimated (free) parameters.
+        """
+        raise NotImplementedError()
+
     def get_kernel_data_info(self):
         """Return an information object about the data we need to upload to the kernel for this model to work.
 
@@ -53,23 +65,64 @@ class OptimizeModelInterface(object):
         """
         raise NotImplementedError()
 
-    def get_model_eval_function(self, func_name='evaluateModel'):
+    def get_nmr_inst_per_problem(self):
+        """Get the number of instances/data points per problem.
+
+        The minimum is one instance per problem.
+
+        This number represents the number of data points
+
+        Returns:
+            int: the number of instances per problem.
+        """
+        raise NotImplementedError()
+
+    def get_nmr_estimable_parameters(self):
+        """Get the number of estimable parameters.
+
+        Returns:
+            int: the number of estimable parameters
+        """
+        raise NotImplementedError()
+
+    def get_pre_eval_parameter_modifier(self):
+        """Return code that needs to be run prior to model evaluation or objective function calculation.
+
+        This is meant to contain possible parameter transformations that need to be executed only once for a
+        given set of parameters. Having this in a separate function yields a speed gain.
+
+        Model optimization routines need to be aware that they need to call this function prior to calling any of:
+
+        * :meth:`~get_model_eval_function`
+        * :meth:`~get_objective_per_observation_function`
+
+
+        Returns:
+            mot.utils.NamedCLFunction: a named CL function with the following signature:
+
+                .. code-block:: c
+
+                    double <func_name>(const void* const data, const mot_float_type* x);
+
+                Changes may happen in place in the ``x`` parameter.
+        """
+        raise NotImplementedError()
+
+    def get_model_eval_function(self):
         """Get the evaluation function that evaluates the model at the given parameters.
 
         This returned function should not do any error calculations,
         it should merely return the result of evaluating the model for the given parameters.
 
-        Please make sure the sign of the return value is correct given the following. The minimization
-        routines may make use of this function and get_observation_return_function to build their
-        own objective function. This is always done as: observation() - evaluation(). This means that if you
+        For implementers: please make sure the sign of the return value is correct (namely, positive),
+        given that the minimization routines may make use of this function to build their own objective function as
+        ```observation() - evaluation()```. This means that if you
         want to optimize a function without observation data you need to make sure the evaluation function returns
         the answers with the right sign.
 
-        Args:
-            func_name (string): specifies the name of the function.
-
         Returns:
-            str: An CL function with the signature:
+            mot.utils.NamedCLFunction: a named CL function with the following signature:
+
                 .. code-block:: c
 
                     double <func_name>(const void* const data, const mot_float_type* const x,
@@ -77,49 +130,26 @@ class OptimizeModelInterface(object):
         """
         raise NotImplementedError()
 
-    def get_observation_return_function(self, func_name='getObservation'):
+    def get_observation_return_function(self):
         """Get the CL function that returns the observation for the given problem.
 
-        Args:
-            func_name (string): specifies the name of the function.
-
         Returns:
-            str: An CL function with the signature:
+            mot.utils.NamedCLFunction: An CL function with the signature:
+
                 .. code-block:: c
 
                     double <func_name>(const void* const data, const uint observation_index);
         """
         raise NotImplementedError()
 
-    def get_objective_function(self, func_name="calculateObjective"):
-        """Get the objective function that evaluates the entire problem instance under a noise model.
+    def get_objective_per_observation_function(self):
+        """Get the objective function that returns the objective value for the given measurement instance.
 
-        This CL function should return a double (instead of a mot_float_type) for accuracy reasons.
-
-        Args:
-            func_name (string): specifies the name of the function.
+        This should return the objective values (of each instance point) as such that when the sum of squares is
+        taken we have our objective function value.
 
         Returns:
-            str: A CL function with signature:
-                .. code-block:: c
-
-                    double <func_name>(const void* const data, mot_float_type* const x);
-        """
-        raise NotImplementedError()
-
-    def get_objective_per_observation_function(self, func_name="getObjectiveInstanceValue"):
-        """Get the objective function that returns the objective value at the given instance point.
-
-        This function is used by some evaluation routines (like for example LevenbergMarquardt) that need
-        a list of objective values (one per instance point), instead of a single objective function scalar.
-
-        This function is called with the index of the observation index to evaluate.
-
-        Args:
-            func_name (str): the name of the function
-
-        Returns:
-            str: A CL function with signature:
+            mot.utils.NamedCLFunction: A CL function with signature:
 
                 .. code-block:: c
 
@@ -127,15 +157,8 @@ class OptimizeModelInterface(object):
         """
         raise NotImplementedError()
 
-    def get_initial_parameters(self, results_dict=None):
+    def get_initial_parameters(self):
         """Get a two dimensional matrix with the initial parameters (starting points) for every voxel.
-
-        Optionally, one may specify a list of previously calculated results which may be applicable to the model.
-        If a parameter is found in the results_dict, those values are used for the initial parameters.
-
-        Args:
-            results_dict (dict): a dictionary with for every parameter name, a value per voxel which is (for example)
-                the result of a previous calculation.
 
         Returns:
             ndarray: A two dimensional matrix with on the first axis the problem instances and on the second
@@ -158,50 +181,6 @@ class OptimizeModelInterface(object):
         Returns:
             list: For every estimable parameter a scalar or vector with the the upper bound(s) for that parameter.
                 This value can also be the literal string '-inf' for infinity.
-        """
-        raise NotImplementedError()
-
-    def get_free_param_names(self):
-        """Get a list of names with the free parameter names (the parameters that are estimated by the routines).
-
-        The function get_optimization_output_param_names() returns the names of all the parameter names,
-        including fixed and static parameters. This should only return the names of the parameters
-        that are actually used in the optimization.
-
-        Returns:
-            list of str: A list with the parameter names (in dot format) of all the estimated (free) parameters.
-        """
-        raise NotImplementedError()
-
-    def get_optimization_output_param_names(self):
-        """Get a list with the names of the parameters, this is the list of keys to the titles and results.
-
-        See get_free_param_names() for getting the names of the parameters that are actually being optimized.
-
-        This should be a complete overview of all the maps returned from optimizing this model.
-
-        Returns:
-            list of str: a list with the parameter names
-        """
-        raise NotImplementedError()
-
-    def get_nmr_inst_per_problem(self):
-        """Get the number of instances/data points per problem.
-
-        The minimum is one instance per problem.
-
-        This number represents the number of data points
-
-        Returns:
-            int: the number of instances per problem.
-        """
-        raise NotImplementedError()
-
-    def get_nmr_estimable_parameters(self):
-        """Get the number of estimable parameters.
-
-        Returns:
-            int: the number of estimable parameters
         """
         raise NotImplementedError()
 
@@ -255,37 +234,17 @@ class SampleModelInterface(OptimizeModelInterface):
         """
         raise NotImplementedError()
 
-    def get_log_likelihood_function(self, func_name="getLogLikelihood", evaluation_model=None, full_likelihood=True):
-        """Get the CL Log Likelihood function that evaluates the entire problem instance under a noise model
-
-        Args:
-            func_name (string): specifies the name of the function.
-            evaluation_model (EvaluationModel): the evaluation model to use for the log likelihood. If not given
-                we use the one defined in the model.
-            full_likelihood (boolean): if we want the complete likelihood, or if we can drop the constant terms.
-                The default is the complete likelihood. Disable for speed.
-
-        Returns:
-            str: A function of the kind:
-                .. code-block:: c
-
-                    double <func_name>(const void* const data, mot_float_type* const x);
-        """
-        raise NotImplementedError()
-
-    def get_log_likelihood_per_observation_function(self, func_name="getLogLikelihoodPerObservation",
-                                                    evaluation_model=None, full_likelihood=True):
+    def get_log_likelihood_per_observation_function(self, full_likelihood=True):
         """Get the CL Log Likelihood function that evaluates the given instance under a noise model.
 
+        This should return the LL's such that when linearly summed they yield the total log likelihood of the model.
+
         Args:
-            func_name (string): specifies the name of the function.
-            evaluation_model (EvaluationModel): the evaluation model to use for the log likelihood. If not given
-                we use the one defined in the model.
             full_likelihood (boolean): if we want the complete likelihood, or if we can drop the constant terms.
                 The default is the complete likelihood. Disable for speed.
 
         Returns:
-            str: A function of the kind:
+            mot.utils.NamedCLFunction: A function of the kind:
                 .. code-block:: c
 
                     double <fname>(const void* const data, mot_float_type* const x, const uint observation_index);
@@ -300,23 +259,24 @@ class SampleModelInterface(OptimizeModelInterface):
         """
         raise NotImplementedError()
 
-    def get_proposal_logpdf(self, func_name='getProposalLogPDF', address_space_proposal_state='private'):
+    def get_proposal_logpdf(self, address_space_proposal_state='private'):
         """Get the probability density function of the proposal in log space (as a CL string).
 
         This density function is used if the proposal is not symmetric.
 
         Args:
-            func_name (str): the CL function name of the returned function
             address_space_proposal_state (str): the CL address space of the proposal state vector.
                 Defaults to ``private``.
 
         Returns:
-            str: A function with the signature:
+            mot.utils.NamedCLFunction: A function with the signature:
+
                 .. code-block:: c
 
                     double <func_name>(const uint param_ind, const mot_float_type proposal,
                                        const mot_float_type current,
                                        <address_space_proposal_state> mot_float_type* const proposal_state);
+
 
             Where ``param_ind`` is the index of the parameter we would like to get the proposal from,
             ``current`` is the current value of that parameter and ``proposal`` the proposal value of the parameter.
@@ -327,16 +287,16 @@ class SampleModelInterface(OptimizeModelInterface):
         """
         raise NotImplementedError()
 
-    def get_proposal_function(self, func_name='getProposal', address_space_proposal_state='private'):
+    def get_proposal_function(self, address_space_proposal_state='private'):
         """Get a proposal function that returns proposals for a requested parameter.
 
         Args:
-            func_name (str): the CL function name of the returned function
             address_space_proposal_state (str): the CL address space of the proposal state vector.
                 Defaults to ``private``.
 
         Returns:
-            str: A function with the signature:
+            mot.utils.NamedCLFunction: A function with the signature:
+
                 .. code-block:: c
 
                     mot_float_type <func_name>(
@@ -344,6 +304,7 @@ class SampleModelInterface(OptimizeModelInterface):
                         const mot_float_type current,
                         void* rng_data,
                         <address_space_proposal_state> mot_float_type* const proposal_state);
+
 
             Where ``param_ind`` is the index of the parameter for which we want the proposal and
             ``current`` is the current value of that parameter. The argument ``proposal_state`` is the
@@ -354,15 +315,14 @@ class SampleModelInterface(OptimizeModelInterface):
         """
         raise NotImplementedError()
 
-    def get_proposal_state_update_function(self, func_name='updateProposalState', address_space='private'):
+    def get_proposal_state_update_function(self, address_space='private'):
         """Get the function to update the proposal parameters
 
         Args:
-            func_name (str): the CL function name of the returned function
             address_space (str): the address space of (all) the given arguments, defaults to ``private``
 
         Returns:
-            str: A function with the signature:
+            mot.utils.NamedCLFunction: A function with the signature:
                 .. code-block:: c
 
                     void <func_name>(<address_space> mot_float_type* const proposal_state,
@@ -389,18 +349,17 @@ class SampleModelInterface(OptimizeModelInterface):
         """
         raise NotImplementedError()
 
-    def get_log_prior_function(self, func_name='getLogPrior', address_space_parameter_vector='private'):
+    def get_log_prior_function(self, address_space_parameter_vector='private'):
         """Get the prior function that returns the prior information about the given parameters.
 
         The prior function must be in log space.
 
         Args:
-            func_name (str): the CL function name of the returned function
             address_space_parameter_vector (str): the address space to use for the parameter vector
                 by default this is set to ``private``.
 
         Returns:
-            str: A function with the signature:
+            mot.utils.NamedCLFunction: A function with the signature:
                 .. code-block:: c
 
                     mot_float_type <func_name>(

@@ -23,7 +23,7 @@ from mot.cl_routines.filters.mean import MeanFilter
 from mot.cl_routines.filters.median import MedianFilter
 
 from mot.model_building.model_builders import SimpleKernelDataInfo
-from mot.utils import results_to_dict
+from mot.utils import results_to_dict, SimpleNamedCLFunction
 
 from mot.cl_data_type import SimpleCLDataType
 from mot.model_building.data_adapter import SimpleDataAdapter
@@ -146,8 +146,17 @@ class Rosenbrock(OptimizeModelInterface):
     def get_nmr_problems(self):
         return 1
 
-    def get_model_eval_function(self, fname='evaluateModel'):
-        return '''
+    def get_pre_eval_parameter_modifier(self):
+        func_name = '_modifyParameters'
+        func = '''
+            double ''' + func_name + '''(const void* const data, const mot_float_type* x){
+            }
+        '''
+        return SimpleNamedCLFunction(func, func_name)
+
+    def get_model_eval_function(self):
+        fname = 'evaluateModel'
+        func = '''
             double ''' + fname + '''(const void* const data, const double* const x,
                                      const uint observation_index){
                 double sum = 0;
@@ -157,37 +166,33 @@ class Rosenbrock(OptimizeModelInterface):
                 return -sum;
             }
         '''
+        return SimpleNamedCLFunction(func, fname)
 
-    def get_observation_return_function(self, fname='getObservation'):
-        return '''
+    def get_observation_return_function(self):
+        fname = 'getObservation'
+        func = '''
             double ''' + fname + '''(const void* const data, const uint observation_index){
                 return 0;
             }
         '''
+        return SimpleNamedCLFunction(func, fname)
 
-    def get_objective_function(self, fname="calculateObjective"):
-        eval_fname = fname + '_evaluateModel'
-        obs_fname = fname + '_getObservation'
-        func = self.get_model_eval_function(eval_fname)
-        func += self.get_observation_return_function(obs_fname)
-        return func + '''
-            double ''' + fname + '''(const void* const data, double* const x){
-                return ''' + obs_fname + '''(data, 1) -''' + eval_fname + '''(data, x, 1);
-            }
-        '''
+    def get_objective_per_observation_function(self):
+        eval_func = self.get_model_eval_function()
+        obs_func = self.get_observation_return_function()
 
-    def get_objective_per_observation_function(self, func_name="getObjectiveInstanceValue"):
-        eval_fname = func_name + '_evaluateModel'
-        obs_fname = func_name + '_getObservation'
-        func = self.get_model_eval_function(eval_fname)
-        func += self.get_observation_return_function(obs_fname)
-        return func + '''
+        func = eval_func.get_function()
+        func += obs_func.get_function()
+
+        func_name = "getObjectiveInstanceValue"
+        func += '''
             mot_float_type ''' + func_name + '''(const void* const data, mot_float_type* const x,
                                                  uint observation_index){
-                return ''' + obs_fname + '''(data, observation_index) -
-                            ''' + eval_fname + '''(data, x, observation_index);
+                return ''' + obs_func.get_name() + '''(data, observation_index) -
+                            ''' + eval_func.get_name() + '''(data, x, observation_index);
             }
         '''
+        return SimpleNamedCLFunction(func, func_name)
 
     def get_initial_parameters(self, previous_results=None):
         params = np.ones((1, self.n)) * 3
@@ -246,48 +251,50 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
     def get_nmr_problems(self):
         return 1
 
-    def get_model_eval_function(self, fname='evaluateModel'):
-        return '''
+    def get_pre_eval_parameter_modifier(self):
+        func_name = '_modifyParameters'
+        func = '''
+            double ''' + func_name + '''(const void* const data, const mot_float_type* x){
+            }
+        '''
+        return SimpleNamedCLFunction(func, func_name)
+
+    def get_model_eval_function(self):
+        fname = 'evaluateModel'
+        func = '''
             double ''' + fname + '''(const void* const data, const double* const x,
                                      const uint k){
                 return -(2 + 2 * (k+1) - exp((k+1) * x[0]) - exp((k+1) * x[1]));
             }
         '''
+        return SimpleNamedCLFunction(func, fname)
 
-    def get_observation_return_function(self, fname='getObservation'):
-        return '''
+    def get_observation_return_function(self):
+        fname = 'getObservation'
+        func = '''
             double ''' + fname + '''(const void* const data, const uint observation_index){
                 return 0;
             }
         '''
+        return SimpleNamedCLFunction(func, fname)
 
-    def get_objective_function(self, fname="calculateObjective"):
-        eval_fname = fname + '_evaluateModel'
-        obs_fname = fname + '_getObservation'
-        func = self.get_model_eval_function(eval_fname)
-        func += self.get_observation_return_function(obs_fname)
-        return func + '''
-            double ''' + fname + '''(const void* const data, double* const x){
-                double sum = 0;
-                for(uint i = 0; i < 10; i++){
-                    sum += ''' + obs_fname + '''(data, i) - ''' + eval_fname + '''(data, x, i);
-                }
-                return sum;
-            }
-        '''
+    def get_objective_per_observation_function(self):
+        eval_func = self.get_model_eval_function()
+        obs_func = self.get_observation_return_function()
 
-    def get_objective_per_observation_function(self, func_name="getObjectiveInstanceValue"):
-        eval_fname = func_name + '_evaluateModel'
-        obs_fname = func_name + '_getObservation'
-        func = self.get_model_eval_function(eval_fname)
-        func += self.get_observation_return_function(obs_fname)
-        return func + '''
+        func = eval_func.get_function()
+        func += obs_func.get_function()
+
+        func_name = "getObjectiveInstanceValue"
+
+        func += '''
             mot_float_type ''' + func_name + '''(const void* const data, mot_float_type* const x,
                                                  uint observation_index){
-                return ''' + obs_fname + '''(data, observation_index) -
-                            ''' + eval_fname + '''(data, x, observation_index);
+                return ''' + obs_func.get_name() + '''(data, observation_index) -
+                            ''' + eval_func.get_name() + '''(data, x, observation_index);
             }
         '''
+        return SimpleNamedCLFunction(func, func_name)
 
     def get_initial_parameters(self, previous_results=None):
         params = np.array([[0.3, 0.4]])

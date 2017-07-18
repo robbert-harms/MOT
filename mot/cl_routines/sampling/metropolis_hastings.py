@@ -1,4 +1,3 @@
-from random import Random
 import warnings
 import numpy as np
 import pyopencl as cl
@@ -67,8 +66,10 @@ class MetropolisHastings(AbstractSampler):
 
         self._do_initial_logging(model)
 
-        current_chain_position = np.require(model.get_initial_parameters(init_params), float_dtype,
-                                            requirements=['C', 'A', 'O', 'W'])
+        if init_params is None:
+            init_params = model.get_initial_parameters()
+
+        current_chain_position = np.require(init_params, float_dtype, requirements=['C', 'A', 'O', 'W'])
         samples = np.zeros((model.get_nmr_problems(), current_chain_position.shape[1], self.nmr_samples),
                            dtype=float_dtype, order='C')
 
@@ -340,6 +341,10 @@ class _MCMCKernelBuilder(object):
         self._sample_intervals = sample_intervals
         self._use_adaptive_proposals = use_adaptive_proposals
         self._update_parameter_variances = self._model.proposal_state_update_uses_variance()
+        self._prior_func = self._model.get_log_prior_function(address_space_parameter_vector='local')
+        self._proposal_func = self._model.get_proposal_function(address_space_proposal_state='global')
+        self._proposal_logpdf_func = self._model.get_proposal_logpdf(address_space_proposal_state='global')
+        self._proposal_state_update_func = self._model.get_proposal_state_update_function(address_space='global')
 
     def build_burnin_kernel(self):
         """Build the kernel for the burn in. This kernel only updates the MC state and does not store the samples.
@@ -364,6 +369,7 @@ class _MCMCKernelBuilder(object):
         return cl.Program(self._cl_run_context.context, kernel_source).build(' '.join(self._compile_flags))
 
     def _get_kernel_source(self, store_samples=True):
+
         kernel_param_names = [
             'ulong nmr_iterations',
             'ulong iteration_offset']
@@ -391,15 +397,14 @@ class _MCMCKernelBuilder(object):
         kernel_source += self._get_rng_functions()
 
         kernel_source += self._data_info.get_kernel_data_struct()
-        kernel_source += self._model.get_log_prior_function('getLogPrior', address_space_parameter_vector='local')
-        kernel_source += self._model.get_proposal_function('getProposal', address_space_proposal_state='global')
+        kernel_source += self._prior_func.get_function()
+        kernel_source += self._proposal_func.get_function()
 
         if self._use_adaptive_proposals:
-            kernel_source += self._model.get_proposal_state_update_function('updateProposalState',
-                                                                            address_space='global')
+            kernel_source += self._proposal_state_update_func.get_function()
 
         if not self._model.is_proposal_symmetric():
-            kernel_source += self._model.get_proposal_logpdf('getProposalLogPDF', address_space_proposal_state='global')
+            kernel_source += self._proposal_logpdf_func.get_function()
 
         kernel_source += self._get_log_likelihood_functions()
         kernel_source += self._get_state_update_functions()
@@ -452,7 +457,8 @@ class _MCMCKernelBuilder(object):
                             sampling_counter[j]++;
                         }
 
-                        ''' + ('updateProposalState(proposal_state, sampling_counter, acceptance_counter' +
+                        ''' + (self._proposal_state_update_func.get_name() +
+                               '(proposal_state, sampling_counter, acceptance_counter' +
                                 (', parameter_variance' if self._update_parameter_variances else '')
                                     + ');'
                                if self._use_adaptive_proposals else '') + '''
@@ -515,7 +521,7 @@ class _MCMCKernelBuilder(object):
                         x_local[i] = current_chain_position[problem_ind * ''' + str(self._nmr_params) + ''' + i];
                     }
 
-                    current_prior = getLogPrior((void*)&data, x_local);
+                    current_prior = ''' + self._prior_func.get_name() + '''((void*)&data, x_local);
                 }
 
                 _fill_log_likelihood_tmp((void*)&data, x_local, log_likelihood_tmp);
@@ -572,8 +578,9 @@ class _MCMCKernelBuilder(object):
         return kernel_source
 
     def _get_log_likelihood_functions(self):
-        kernel_source = self._model.get_log_likelihood_per_observation_function('getLogLikelihoodPerObservation',
-                                                                                full_likelihood=False)
+        ll_func = self._model.get_log_likelihood_per_observation_function(full_likelihood=False)
+
+        kernel_source = ll_func.get_function()
         kernel_source += '''
             void _fill_log_likelihood_tmp(const void* const data,
                                           local mot_float_type* const x_local,
@@ -593,7 +600,7 @@ class _MCMCKernelBuilder(object):
                     observation_ind = i * workgroup_size + local_id;
 
                     if(observation_ind < NMR_INST_PER_PROBLEM){
-                        log_likelihood_tmp[local_id] += getLogLikelihoodPerObservation(
+                        log_likelihood_tmp[local_id] += ''' + ll_func.get_name() + '''(
                             data, x_private, observation_ind);
                     }
                 }
@@ -641,9 +648,10 @@ class _MCMCKernelBuilder(object):
                         random_nmr = frand(rng_data);
 
                         old_x = x_local[k];
-                        x_local[k] = getProposal(k, x_local[k], rng_data, proposal_state);
+                        x_local[k] = ''' + self._proposal_func.get_name() + \
+                            '''(k, x_local[k], rng_data, proposal_state);
 
-                        new_prior = getLogPrior(data, x_local);
+                        new_prior = ''' + self._prior_func.get_name() + '''(data, x_local);
                     }
 
                     if(exp(new_prior) > 0){
@@ -659,8 +667,10 @@ class _MCMCKernelBuilder(object):
                 '''
         else:
             kernel_source += '''
-                            mot_float_type x_to_prop = getProposalLogPDF(k, old_x, x_local[k], proposal_state);
-                            mot_float_type prop_to_x = getProposalLogPDF(k, x_local[k], x_local[k], proposal_state);
+                            mot_float_type x_to_prop = ''' + \
+                             self._proposal_logpdf_func.get_name() + '''(k, old_x, x_local[k], proposal_state);
+                            mot_float_type prop_to_x = ''' + \
+                             self._proposal_logpdf_func.get_name() + '''(k, x_local[k], x_local[k], proposal_state);
 
                             bayesian_f = exp((new_likelihood + new_prior + x_to_prop) -
                                                 (*current_likelihood + *current_prior + prop_to_x));

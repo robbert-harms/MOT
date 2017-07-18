@@ -263,3 +263,35 @@ def all_logging_disabled(highest_level=logging.CRITICAL):
         yield
     finally:
         logging.disable(previous_level)
+
+
+class NamedCLFunction(object):
+
+    def get_function(self):
+        """Return the CL function.
+
+        Returns:
+            str: the CL function
+        """
+        raise NotImplementedError()
+
+    def get_name(self):
+        """Get the CL name of this function.
+
+        Returns:
+            str: the name of the function
+        """
+        raise NotImplementedError()
+
+
+class SimpleNamedCLFunction(object):
+
+    def __init__(self, function, name):
+        self._function = function
+        self._name = name
+
+    def get_function(self):
+        return self._function
+
+    def get_name(self):
+        return self._name

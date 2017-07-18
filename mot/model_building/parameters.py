@@ -32,7 +32,7 @@ class CLFunctionParameter(object):
         """Get the CL data type of this parameter
 
         Returns:
-            str: The CL data type.
+            mot.cl_data_type.SimpleCLDataType: The CL data type.
         """
         return self._data_type
 

@@ -14,7 +14,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class WAICCalculator(CLRoutine):
 
-    def calculate(self, model, samples, evaluation_model=None):
+    def calculate(self, model, samples):
         r"""Compute the Watanabe-Akaike information criterion (WAIC; Watanabe, 2010) for the given samples.
 
         See http://www.stat.columbia.edu/~gelman/research/unpublished/waic_stan.pdf for a gentle introduction to
@@ -26,8 +26,6 @@ class WAICCalculator(CLRoutine):
             model (AbstractModel): The model to calculate the WAIC for
             samples (ndarray): The obtained samples per problem. This is supposed to be a matrix
                 of shape (d, p, s) with d problems, p parameters and s samples.
-            evaluation_model (EvaluationModel): the evaluation model to use for the log likelihood. If not given
-                we use the one defined in the model.
 
         Returns:
             ndarray: per problem the calculated WAIC
@@ -48,7 +46,7 @@ class WAICCalculator(CLRoutine):
         workers = self._create_workers(
             lambda cl_environment: _LLWorker(cl_environment,
                                              self.get_compile_flags_list(model.double_precision),
-                                             model, samples, logsumexps, variances, evaluation_model))
+                                             model, samples, logsumexps, variances))
 
         for problem_ind in range(nmr_problems):
 
@@ -68,13 +66,12 @@ class WAICCalculator(CLRoutine):
 
 class _LLWorker(Worker):
 
-    def __init__(self, cl_environment, compile_flags, model, samples, logsumexps, variances, evaluation_model):
+    def __init__(self, cl_environment, compile_flags, model, samples, logsumexps, variances):
         super(_LLWorker, self).__init__(cl_environment)
 
         self._model = model
         self._data_info = self._model.get_kernel_data_info()
         self._double_precision = model.double_precision
-        self._evaluation_model = evaluation_model
 
         self._samples = samples
         self._log_sum_exps = logsumexps
@@ -168,15 +165,14 @@ class _LLWorker(Worker):
 
     def _get_ll_calculating_kernel(self):
         """Kernel to calculate the log likelihoods per sample per observation"""
-        cl_func = self._model.get_log_likelihood_per_observation_function(
-            'getLogLikelihoodPerObs', evaluation_model=self._evaluation_model, full_likelihood=True)
+        obs_func = self._model.get_log_likelihood_per_observation_function(full_likelihood=True)
 
         kernel_param_names = ['uint problem_ind', 'global mot_float_type* samples', 'global double* lls']
         kernel_param_names.extend(self._data_info.get_kernel_parameters())
         kernel_source = ''
         kernel_source += get_float_type_def(self._double_precision)
         kernel_source += self._data_info.get_kernel_data_struct()
-        kernel_source += cl_func
+        kernel_source += obs_func.get_function()
         kernel_source += r'''
             __kernel void run_kernel(
                 ''' + ",\n".join(kernel_param_names) + '''
@@ -195,8 +191,7 @@ class _LLWorker(Worker):
                     }
 
                     lls[obs_ind * ''' + str(self._nmr_samples) + ''' + sample_ind] =
-                        getLogLikelihoodPerObs((void*)&data, x, obs_ind);
-
+                        ''' + obs_func.get_name() + '''((void*)&data, x, obs_ind);
                 }
         '''
         return kernel_source

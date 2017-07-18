@@ -1,5 +1,3 @@
-from collections import Mapping
-
 import pyopencl as cl
 import numpy as np
 from ...utils import get_float_type_def
@@ -25,12 +23,10 @@ class ObjectiveCalculator(CLRoutine):
 
         Args:
             model (AbstractModel): The model to calculate the objective function of.
-            parameters (dict or ndarray): The parameters to use in the evaluation of the model
-                If a dict is given we assume it is with values for a set of parameters
-                If an ndarray is given we assume that we have data for all parameters.
+            parameters (ndarray): The parameters to use for calculating the objective values.
 
         Returns:
-            Return per voxel the objective function value
+            ndarray: Returns per voxel the objective function value
         """
         parameters = self._initialize_parameters(parameters, model)
         objective_values = self._initialize_result_array(model)
@@ -47,10 +43,6 @@ class ObjectiveCalculator(CLRoutine):
         np_dtype = np.float32
         if model.double_precision:
             np_dtype = np.float64
-
-        if isinstance(parameters, Mapping):
-            return np.require(model.get_initial_parameters(parameters), np_dtype, requirements=['C', 'A', 'O'])
-
         return np.require(parameters, np_dtype, requirements=['C', 'A', 'O'])
 
     def _initialize_result_array(self, model):
@@ -74,10 +66,6 @@ class _ObjectiveCalculatorWorker(Worker):
 
         self._all_buffers, self._objective_values_buffer = self._create_buffers()
         self._kernel = self._build_kernel(self._get_kernel_source(), compile_flags)
-
-    def __del__(self):
-        for buffer in self._all_buffers:
-            buffer.release()
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
@@ -103,6 +91,9 @@ class _ObjectiveCalculatorWorker(Worker):
         return all_buffers, objective_value_buffer
 
     def _get_kernel_source(self):
+        objective_function = self._model.get_objective_per_observation_function()
+        param_modifier = self._model.get_pre_eval_parameter_modifier()
+
         nmr_params = self._parameters.shape[1]
 
         kernel_param_names = ['global mot_float_type* params', 'global mot_float_type* objective_values']
@@ -110,7 +101,19 @@ class _ObjectiveCalculatorWorker(Worker):
         kernel_source = ''
         kernel_source += get_float_type_def(self._double_precision)
         kernel_source += self._data_info.get_kernel_data_struct()
-        kernel_source += self._model.get_objective_function('calculateObjective')
+        kernel_source += objective_function.get_function()
+        kernel_source += param_modifier.get_function()
+        kernel_source += '''
+            double _evaluate(const void* data, mot_float_type* x){
+                ''' + param_modifier.get_name() + '''((void*)&data, x);
+                
+                double sum = 0;
+                for(uint i = 0; i < ''' + str(self._model.get_nmr_inst_per_problem()) + '''; i++){
+                    sum += pown(''' + objective_function.get_name() + '''(data, x, i), 2);
+                }
+                return sum;
+            }
+        '''
         kernel_source += '''
             __kernel void run_kernel(
                 ''' + ",\n".join(kernel_param_names) + '''
@@ -123,7 +126,7 @@ class _ObjectiveCalculatorWorker(Worker):
                         x[i] = params[gid * ''' + str(nmr_params) + ''' + i];
                     }
 
-                    objective_values[gid] = calculateObjective((void*)&data, x);
+                    objective_values[gid] = _evaluate((void*)&data, x);
             }
         '''
         return kernel_source

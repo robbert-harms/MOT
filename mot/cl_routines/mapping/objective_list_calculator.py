@@ -1,5 +1,3 @@
-from collections import Mapping
-
 import pyopencl as cl
 import numpy as np
 from ...utils import get_float_type_def
@@ -30,12 +28,10 @@ class ObjectiveListCalculator(CLRoutine):
 
         Args:
             model (AbstractModel): The model to calculate the residuals of.
-            parameters (dict or ndarray): The parameters to use in the evaluation of the model
-                If a dict is given we assume it is with values for a set of parameters
-                If an ndarray is given we assume that we have data for all parameters.
+            parameters (dict or ndarray): The parameters to use in the evaluation of the model.
 
         Returns:
-            Return per voxel the objective value (application of the function: "noise_model(eval - data)")
+            ndarray: Return per voxel the objective value (application of the function: "noise_model(eval - data)")
                 per protocol item.
         """
         np_dtype = np.float32
@@ -45,12 +41,7 @@ class ObjectiveListCalculator(CLRoutine):
         nmr_inst_per_problem = model.get_nmr_inst_per_problem()
         nmr_problems = model.get_nmr_problems()
 
-        if isinstance(parameters, Mapping):
-            parameters = np.require(model.get_initial_parameters(parameters), np_dtype,
-                                    requirements=['C', 'A', 'O'])
-        else:
-            parameters = np.require(parameters, np_dtype, requirements=['C', 'A', 'O'])
-
+        parameters = np.require(parameters, np_dtype, requirements=['C', 'A', 'O'])
         objectives = np.zeros((nmr_problems, nmr_inst_per_problem), dtype=np_dtype, order='C')
 
         workers = self._create_workers(lambda cl_environment: _ObjectiveListCalculatorWorker(
@@ -73,10 +64,6 @@ class _ObjectiveListCalculatorWorker(Worker):
 
         self._all_buffers, self._residuals_buffer = self._create_buffers()
         self._kernel = self._build_kernel(self._get_kernel_source(), compile_flags)
-
-    def __del__(self):
-        for buffer in self._all_buffers:
-            buffer.release()
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
@@ -101,6 +88,9 @@ class _ObjectiveListCalculatorWorker(Worker):
         return all_buffers, objectives_buffer
 
     def _get_kernel_source(self):
+        objective_func = self._model.get_objective_per_observation_function()
+        param_modifier = self._model.get_pre_eval_parameter_modifier()
+
         nmr_inst_per_problem = self._model.get_nmr_inst_per_problem()
         nmr_params = self._parameters.shape[1]
 
@@ -113,7 +103,8 @@ class _ObjectiveListCalculatorWorker(Worker):
 
         kernel_source += get_float_type_def(self._double_precision)
         kernel_source += self._data_info.get_kernel_data_struct()
-        kernel_source += self._model.get_objective_per_observation_function('getObjectiveInstanceValue')
+        kernel_source += objective_func.get_function()
+        kernel_source += param_modifier.get_function()
         kernel_source += '''
             __kernel void get_objectives(
                 ''' + ",\n".join(kernel_param_names) + '''
@@ -125,10 +116,12 @@ class _ObjectiveListCalculatorWorker(Worker):
                     for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
                         x[i] = params[gid * ''' + str(nmr_params) + ''' + i];
                     }
-
+                    
+                    ''' + param_modifier.get_name() + '''((void*)&data, x);
+                    
                     global mot_float_type* result = objectives + gid * NMR_INST_PER_PROBLEM;
                     for(uint i = 0; i < NMR_INST_PER_PROBLEM; i++){
-                        result[i] = getObjectiveInstanceValue((void*)&data, x, i);
+                        result[i] = ''' + objective_func.get_name() + '''((void*)&data, x, i);
                     }
             }
         '''

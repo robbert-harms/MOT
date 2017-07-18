@@ -12,7 +12,8 @@ from mot.model_building.data_adapter import SimpleDataAdapter
 from mot.model_building.parameter_functions.dependencies import SimpleAssignment, AbstractParameterDependency
 from mot.model_building.utils import ParameterCodec, SimpleModelPrior
 from mot.model_interfaces import OptimizeModelInterface, SampleModelInterface, KernelDataInfo
-from mot.utils import is_scalar, all_elements_equal, get_single_value, results_to_dict, topological_sort
+from mot.utils import is_scalar, all_elements_equal, get_single_value, topological_sort, \
+    SimpleNamedCLFunction
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-03-14"
@@ -21,7 +22,7 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class OptimizeModelBuilder(OptimizeModelInterface):
+class OptimizeModelBuilder(object):
 
     def __init__(self, name, model_tree, evaluation_model, signal_noise_model=None, problem_data=None,
                  enforce_weights_sum_to_one=True):
@@ -38,17 +39,13 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             enforce_weights_sum_to_one (boolean): if we want to enforce that weights sum to one. This does the
                 following things; it fixes the first weight to the sum of the others and it adds a transformation
                 that ensures that those other weights sum to at most one.
-
-        Attributes:
-            problems_to_analyze (list): the list with problems we want to analyze. Suppose we have a few thousands
-                problems defined in this model, but we want to run the optimization only on a few problems. By setting
-                this attribute to a list of problem indices, only those problems will be analyzed.
         """
         super(OptimizeModelBuilder, self).__init__()
         self._name = name
         self._model_tree = model_tree
         self._evaluation_model = evaluation_model
         self._signal_noise_model = signal_noise_model
+        self._kernel_data_struct_type = '_model_data'
 
         self._enforce_weights_sum_to_one = enforce_weights_sum_to_one
 
@@ -58,7 +55,6 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             model_tree, evaluation_model, signal_noise_model)
 
         self._post_optimization_modifiers = []
-        self.problems_to_analyze = None
 
         self._lower_bounds = {'{}.{}'.format(m.name, p.name): p.lower_bound for m, p in
                               self._model_functions_info.get_free_parameters_list()}
@@ -83,6 +79,37 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             ModelFunctionsInformation: the model function information object
         """
         return ModelFunctionsInformation(model_tree, evaluation_model, signal_noise_model)
+
+    def build(self, problems_to_analyze=None):
+        """Construct the final immutable model with the current settings.
+
+        Args:
+            problems_to_analyze (ndarray): construct the model such that it analyzes only a subset of the problems
+
+        Returns:
+            OptimizeModelInterface: an implementation an optimization model with all the current settings
+
+        Raises:
+            RuntimeError: if some of the required items are not set prior to building.
+        """
+        if self._problem_data is None:
+            raise RuntimeError('Problem data is not set, can not build the model.')
+
+        return SimpleOptimizeModel(problems_to_analyze,
+                                   self.name,
+                                   self.double_precision,
+                                   self.get_free_param_names(),
+                                   self._get_kernel_data_info(problems_to_analyze),
+                                   self._get_nmr_problems(problems_to_analyze),
+                                   self.get_nmr_inst_per_problem(),
+                                   self.get_nmr_estimable_parameters(),
+                                   self._get_initial_parameters(problems_to_analyze),
+                                   self._get_pre_eval_parameter_modifier(),
+                                   self._get_model_eval_function(problems_to_analyze),
+                                   self._get_observation_return_function(),
+                                   self._get_objective_per_observation_function(problems_to_analyze),
+                                   self.get_lower_bounds(),
+                                   self.get_upper_bounds())
 
     @property
     def name(self):
@@ -231,7 +258,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         This will also call the function set_noise_level_std() with the noise_std from the new problem data.
 
         Args:
-            problem_data (ProblemData):
+            problem_data (mot.model_building.problem_data.AbstractProblemData):
                 The container for the problem data we will use for this model.
 
         Returns:
@@ -243,6 +270,14 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 self._evaluation_model.name,
                 self._evaluation_model.get_noise_std_param_name()), self._problem_data.noise_std)
         return self
+
+    def get_problem_data(self):
+        """Get the problem data actually being used by this model.
+
+        Returns:
+            mot.model_building.problem_data.AbstractProblemData: the problem data being used by this model
+        """
+        return self._problem_data
 
     def get_required_protocol_names(self):
         """Get a list with the constant data names that are needed for this model to work.
@@ -256,21 +291,9 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         return list(set([p.name for m, p in self._model_functions_info.get_model_parameter_list() if
                          isinstance(p, ProtocolParameter)]))
 
-    def get_optimization_output_param_names(self):
-        """See super class for details"""
-        return ['{}.{}'.format(m.name, p.name) for m, p in self._model_functions_info.get_free_parameters_list()]
-
     def get_free_param_names(self):
         """See super class for details"""
         return ['{}.{}'.format(m.name, p.name) for m, p in self._model_functions_info.get_estimable_parameters_list()]
-
-    def get_nmr_problems(self):
-        """See super class for details"""
-        if self.problems_to_analyze is None:
-            if self._problem_data:
-                return self._problem_data.get_nmr_problems()
-            return 0
-        return len(self.problems_to_analyze)
 
     def get_nmr_inst_per_problem(self):
         """See super class for details"""
@@ -280,166 +303,15 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         """See super class for details"""
         return len(self._model_functions_info.get_estimable_parameters_list())
 
-    def get_kernel_data_info(self):
-        info = self._get_all_kernel_source_items()
-
-        data_struct_init = self._get_all_kernel_source_items()['data_struct_init']
-        struct_code = '0'
-        if data_struct_init:
-            struct_code = ', '.join(data_struct_init)
-
-        data = []
-        for data_dict in [self._get_variable_data(), self._get_protocol_data(), self._get_static_data()]:
-            for el in data_dict.values():
-                data.append(el.get_opencl_data())
-
-        return SimpleKernelDataInfo(
-            data, info['kernel_param_names'], info['data_struct'],
-            self._get_kernel_data_struct_type(),
-            (self._get_kernel_data_struct_type() + ' {variable_name} = {{' + struct_code + '}};'))
-
-    def get_initial_parameters(self, results_dict=None):
-        """Get the initial parameters to use for model fitting.
-
-        Implementation note, when overriding this function, please note that it should adhere
-        to the attribute problems_to_analyze.
-
-        Args:
-            results_dict (dict or ndarray): the initialization settings for the specific parameters.
-                The number of items per dictionary item should match the number of problems to analyze, or, if an
-                ndarray is given then the length in the first dimension should match the number of problems to analyze.
-        """
-        np_dtype = np.float32
-        if self.double_precision:
-            np_dtype = np.float64
-
-        if isinstance(results_dict, np.ndarray):
-            results_dict = results_to_dict(results_dict, self.get_free_param_names())
-
-        starting_points = []
-        for m, p in self._model_functions_info.get_estimable_parameters_list():
-            param_name = '{}.{}'.format(m.name, p.name)
-            value = self._model_functions_info.get_parameter_value(param_name)
-
-            if results_dict and param_name in results_dict:
-                starting_points.append(results_dict['{}.{}'.format(m.name, p.name)])
-            elif is_scalar(value):
-                if self.get_nmr_problems() == 0:
-                    starting_points.append(np.full((1, 1), value, dtype=np_dtype))
-                else:
-                    starting_points.append(np.full((self.get_nmr_problems(), 1), value, dtype=np_dtype))
-            else:
-                if len(value.shape) < 2:
-                    value = np.transpose(np.asarray([value]))
-                elif value.shape[1] > value.shape[0]:
-                    value = np.transpose(value)
-                else:
-                    value = value
-
-                if self.problems_to_analyze is None:
-                    starting_points.append(value)
-                else:
-                    starting_points.append(value[self.problems_to_analyze, ...])
-
-        starting_points = np.concatenate([np.transpose(np.array([s]))
-                                          if len(s.shape) < 2 else s for s in starting_points], axis=1)
-
-        data_adapter = SimpleDataAdapter(starting_points, SimpleCLDataType.from_string('mot_float_type'),
-                                         self._get_mot_float_type())
-        return data_adapter.get_opencl_data()
-
     def get_lower_bounds(self):
         """See super class for details"""
-        return list(self._lower_bounds['{}.{}'.format(m.name, p.name)] for m, p in
-                    self._model_functions_info.get_estimable_parameters_list())
+        return [self._lower_bounds['{}.{}'.format(m.name, p.name)] for m, p in
+                self._model_functions_info.get_estimable_parameters_list()]
 
     def get_upper_bounds(self):
         """See super class for details"""
-        return list(self._upper_bounds['{}.{}'.format(m.name, p.name)] for m, p in
-                    self._model_functions_info.get_estimable_parameters_list())
-
-    def get_observation_return_function(self, func_name='getObservation'):
-        if self._problem_data.observations.shape[1] < 2:
-            return '''
-                double ''' + func_name + '''(const void* const data, const uint observation_index){
-                    return ((''' + self._get_kernel_data_struct_type() + '''*)data)->var_data_observations;
-                }
-            '''
-
-        return '''
-            double ''' + func_name + '''(const void* const data, const uint observation_index){
-                return ((''' + \
-                    self._get_kernel_data_struct_type() + '''*)data)->var_data_observations[observation_index];
-            }
-        '''
-
-    def get_model_eval_function(self, func_name='evaluateModel'):
-        noise_func_name = func_name + '_signalNoiseModel'
-        func = self._get_model_functions_cl_code(noise_func_name)
-
-        pre_model_function = self._get_pre_model_expression_eval_function()
-        if pre_model_function:
-            func += pre_model_function
-
-        func += '''
-            double ''' + func_name + \
-                '(const void* const void_data, const mot_float_type* const x, const uint observation_index){' + "\n"
-        func += self._get_kernel_data_struct_type() + '* data = (' + self._get_kernel_data_struct_type() + '*)void_data;'
-
-        func += self._get_parameters_listing(
-            exclude_list=['{}.{}'.format(m.name, p.name).replace('.', '_') for (m, p) in
-                          self._model_functions_info.get_non_model_tree_param_listing()])
-
-        if self._signal_noise_model:
-            noise_params_listing = ''
-            for p in self._signal_noise_model.get_free_parameters():
-                noise_params_listing += "\t" * 4 + self._get_param_listing_for_param(self._signal_noise_model, p)
-            func += "\n"
-            func += noise_params_listing
-
-        pre_model_code = self._get_pre_model_expression_eval_code()
-        if pre_model_code:
-            func += self._get_pre_model_expression_eval_code()
-
-        func += "\n" + "\t"*4 + 'return ' + str(self._construct_model_expression(noise_func_name))
-        func += "\n\t\t\t}"
-        return func
-
-    def get_objective_function(self, func_name="calculateObjective"):
-        inst_per_problem = self.get_nmr_inst_per_problem()
-        eval_func_name = func_name + '_evaluateModel'
-        obs_func_name = func_name + '_getObservation'
-
-        param_listing = ''
-        for p in self._evaluation_model.get_free_parameters():
-            param_listing += self._get_param_listing_for_param(self._evaluation_model, p)
-
-        func = ''
-        func += self._evaluation_model.get_cl_dependency_code()
-
-        func += self.get_model_eval_function(eval_func_name)
-        func += self.get_observation_return_function(obs_func_name)
-        func += str(self._evaluation_model.get_objective_function(func_name, inst_per_problem, eval_func_name,
-                                                                  obs_func_name, param_listing))
-        return str(func)
-
-    def get_objective_per_observation_function(self, func_name="getObjectiveInstanceValue"):
-        inst_per_problem = self.get_nmr_inst_per_problem()
-        eval_func_name = func_name + '_evaluateModel'
-        obs_func_name = func_name + '_getObservation'
-
-        param_listing = ''
-        for p in self._evaluation_model.get_free_parameters():
-            param_listing += self._get_param_listing_for_param(self._evaluation_model, p)
-
-        func = ''
-        func += self._evaluation_model.get_cl_dependency_code()
-
-        func += self.get_model_eval_function(eval_func_name)
-        func += self.get_observation_return_function(obs_func_name)
-        func += str(self._evaluation_model.get_objective_per_observation_function(
-            func_name, inst_per_problem, eval_func_name, obs_func_name, param_listing))
-        return str(func)
+        return [self._upper_bounds['{}.{}'.format(m.name, p.name)] for m, p in
+                self._model_functions_info.get_estimable_parameters_list()]
 
     def get_parameter_codec(self):
         """Get a parameter codec that can be used to transform the parameters to and from optimization and model space.
@@ -452,12 +324,12 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         model_builder = self
 
         class Codec(ParameterCodec):
-            def get_parameter_decode_function(self, fname='decodeParameters'):
+            def get_parameter_decode_function(self, function_name='decodeParameters'):
                 func = '''
-                    void ''' + fname + '''(const void* data_void, mot_float_type* x){
+                    void ''' + function_name + '''(const void* data_void, mot_float_type* x){
                 '''
-                func += model_builder._get_kernel_data_struct_type() + \
-                        '* data = (' + model_builder._get_kernel_data_struct_type() + '*)data_void;'
+                func += model_builder._kernel_data_struct_type
+                func += '* data = (' + model_builder._kernel_data_struct_type + '*)data_void;'
 
                 for d in model_builder._get_parameter_transformations()[1]:
                     func += "\n" + "\t" * 4 + d.format('x')
@@ -469,16 +341,16 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                     }
                 '''
 
-            def get_parameter_encode_function(self, fname='encodeParameters'):
+            def get_parameter_encode_function(self, function_name='encodeParameters'):
                 func = '''
-                    void ''' + fname + '''(const void* data_void, mot_float_type* x){
+                    void ''' + function_name + '''(const void* data_void, mot_float_type* x){
                 '''
 
                 if model_builder._enforce_weights_sum_to_one:
                     func += model_builder._get_weight_sum_to_one_transformation()
 
-                func += model_builder._get_kernel_data_struct_type() + \
-                        '* data = (' + model_builder._get_kernel_data_struct_type() + '*)data_void;'
+                func += model_builder._kernel_data_struct_type
+                func += '* data = (' + model_builder._kernel_data_struct_type + '*)data_void;'
 
                 for d in model_builder._get_parameter_transformations()[0]:
                     func += "\n" + "\t" * 4 + d.format('x')
@@ -488,13 +360,184 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 '''
         return Codec()
 
-    def _get_kernel_data_struct_type(self):
-        """Get the CL type of the kernel datastruct.
+    def _get_nmr_problems(self, problems_to_analyze):
+        """See super class for details"""
+        if problems_to_analyze is None:
+            if self._problem_data:
+                return self._problem_data.get_nmr_problems()
+            return 0
+        return len(problems_to_analyze)
 
-        Returns:
-            str: the CL type of the data struct
-        """
-        return '_model_data'
+    def _get_kernel_data_info(self, problems_to_analyze):
+        info = self._get_all_kernel_source_items(problems_to_analyze)
+
+        data_struct_init = info['data_struct_init']
+        struct_code = '0'
+        if data_struct_init:
+            struct_code = ', '.join(data_struct_init)
+
+        data = []
+        for data_dict in [self._get_variable_data(problems_to_analyze),
+                          self._get_protocol_data(),
+                          self._get_static_data()]:
+            for el in data_dict.values():
+                data.append(el.get_opencl_data())
+
+        return SimpleKernelDataInfo(
+            data, info['kernel_param_names'], info['data_struct'],
+            self._kernel_data_struct_type,
+            (self._kernel_data_struct_type + ' {variable_name} = {{' + struct_code + '}};'))
+
+    def _get_initial_parameters(self, problems_to_analyze):
+        np_dtype = np.float32
+        if self.double_precision:
+            np_dtype = np.float64
+
+        starting_points = []
+        for m, p in self._model_functions_info.get_estimable_parameters_list():
+            param_name = '{}.{}'.format(m.name, p.name)
+            value = self._model_functions_info.get_parameter_value(param_name)
+
+            if is_scalar(value):
+                if self._get_nmr_problems(problems_to_analyze) == 0:
+                    starting_points.append(np.full((1, 1), value, dtype=np_dtype))
+                else:
+                    starting_points.append(np.full((self._get_nmr_problems(problems_to_analyze), 1), value,
+                                                   dtype=np_dtype))
+            else:
+                if len(value.shape) < 2:
+                    value = np.transpose(np.asarray([value]))
+                elif value.shape[1] > value.shape[0]:
+                    value = np.transpose(value)
+                else:
+                    value = value
+
+                if problems_to_analyze is None:
+                    starting_points.append(value)
+                else:
+                    starting_points.append(value[problems_to_analyze, ...])
+
+        starting_points = np.concatenate([np.transpose(np.array([s]))
+                                          if len(s.shape) < 2 else s for s in starting_points], axis=1)
+
+        data_adapter = SimpleDataAdapter(starting_points, SimpleCLDataType.from_string('mot_float_type'),
+                                         self._get_mot_float_type())
+        return data_adapter.get_opencl_data()
+
+    def _get_observation_return_function(self):
+        func_name = '_getObservation'
+        if self._problem_data.observations.shape[1] < 2:
+            func = '''
+                double ''' + func_name + '''(const void* const data, const uint observation_index){
+                    return ((''' + self._kernel_data_struct_type + '''*)data)->var_data_observations;
+                }
+            '''
+        else:
+            func = '''
+                double ''' + func_name + '''(const void* const data, const uint observation_index){
+                    return ((''' + \
+                   self._kernel_data_struct_type + '''*)data)->var_data_observations[observation_index];
+                }
+            '''
+        return SimpleNamedCLFunction(func, func_name)
+
+    def _get_pre_eval_parameter_modifier(self):
+        func_name = '_modifyParameters'
+        func = '''
+            double ''' + func_name + '''(const void* const data, const mot_float_type* x){
+            }
+        '''
+        return SimpleNamedCLFunction(func, func_name)
+
+    def _get_model_eval_function(self, problems_to_analyze):
+        def get_preliminary():
+            cl_preliminary = ''
+            for compartment_model in self._model_tree.get_compartment_models():
+                cl_preliminary += compartment_model.get_cl_code() + "\n"
+
+            if self._signal_noise_model:
+                cl_preliminary += self._signal_noise_model.get_signal_function()
+
+            pre_model_function = self._get_pre_model_expression_eval_function()
+            if pre_model_function:
+                cl_preliminary += pre_model_function
+            return cl_preliminary
+
+        def get_model_expression():
+            model_expression = ''
+            if self._signal_noise_model:
+                noise_params_func = ''
+                for p in self._signal_noise_model.get_free_parameters():
+                    noise_params_func += ', ' + '{}.{}'.format(self._signal_noise_model.name, p.name).replace('.',
+                                                                                                              '_')
+
+                model_expression += self._signal_noise_model.cl_function_name
+                model_expression += '((' + self._build_model_from_tree(self._model_tree, 0, problems_to_analyze) + ')'
+                model_expression += noise_params_func + ');'
+            else:
+                model_expression += '(' + self._build_model_from_tree(self._model_tree, 0, problems_to_analyze) + ');'
+            return model_expression
+
+        def get_function_body():
+            body = ''
+            body += self._kernel_data_struct_type + '* data = ('
+            body += self._kernel_data_struct_type + '*)void_data;'
+
+            body += self._get_parameters_listing(
+                exclude_list=['{}.{}'.format(m.name, p.name).replace('.', '_') for (m, p) in
+                              self._model_functions_info.get_non_model_tree_param_listing()])
+
+            if self._signal_noise_model:
+                noise_params_listing = ''
+                for p in self._signal_noise_model.get_free_parameters():
+                    noise_params_listing += "\t" * 4 + self._get_param_listing_for_param(self._signal_noise_model,
+                                                                                         p)
+                body += "\n"
+                body += noise_params_listing
+
+            pre_model_code = self._get_pre_model_expression_eval_code()
+            if pre_model_code:
+                body += self._get_pre_model_expression_eval_code()
+
+            body += 'return ' + str(get_model_expression())
+            return body
+
+        function_name = '_evaluateModel'
+
+        func = get_preliminary()
+        func += 'double ' + function_name + '('
+        func += 'const void* const void_data, const mot_float_type* const x, const uint observation_index){\n'
+        func += get_function_body()
+        func += "}"
+
+        return SimpleNamedCLFunction(func, function_name)
+
+    def _get_objective_per_observation_function(self, problems_to_analyze):
+        eval_function_info = self._get_model_eval_function(problems_to_analyze)
+        obs_func = self._get_observation_return_function()
+
+        inst_per_problem = self.get_nmr_inst_per_problem()
+
+        param_listing = ''
+        for p in self._evaluation_model.get_free_parameters():
+            param_listing += self._get_param_listing_for_param(self._evaluation_model, p)
+
+        preliminary = ''
+        preliminary += self._evaluation_model.get_cl_dependency_code()
+
+        preliminary += eval_function_info.get_function()
+        preliminary += obs_func.get_function()
+        preliminary += str(self._evaluation_model.get_objective_per_observation_function(
+            '_evaluationModel', eval_function_info.get_name(), obs_func.get_name(), param_listing))
+
+        func_name = 'getObjectiveInstanceValue'
+        func = str(preliminary) + '''
+            double ''' + func_name + '''(const void* const data, mot_float_type* const x,
+                                         const uint observation_index){
+                return _evaluationModel(data, x, observation_index);    
+            }
+        '''
+        return SimpleNamedCLFunction(func, func_name)
 
     def _get_parameter_transformations(self):
         dep_list = {}
@@ -542,47 +585,41 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         """Apply a transformation on the observations before fitting.
 
         This function is called by get_problems_var_data() just before the observations are handed over to the
-        CL routine, and just after the the list has been (optionally) limited with self.problems_to_analyze.
+        CL routine.
 
         To implement any behaviour here, you can override this function and add behaviour that changes the observations.
 
         Args:
             observations (ndarray): the 2d matrix with the observations. This is the list of
-                observations *after* the list has been (optionally) limited with self.problems_to_analyze.
+                observations used to build the model (that is, *after* the list has been optionally
+                limited with problems_to_analyze).
 
         Returns:
             observations (ndarray): a 2d matrix of the same shape as the input. This should hold the transformed data.
         """
         return observations
 
-    def _construct_model_expression(self, noise_func_name):
-        """Construct the model signel expression. This is supposed to be used in get_model_eval_function.
+    def _build_model_from_tree(self, node, depth, problems_to_analyze):
+        """Construct the model equation from the provided model tree.
 
         Args:
-            noise_func_name (str): the name of the noise function.
+            node: the next to to process
+            depth (int): the current tree depth
+            problems_to_analyze (ndarray): the subset of problems we are using for building the model.
+                This is used to adapt the model equation to the specifics of the current data in consideration.
+
+        Returns:
+            str: model (sub-)equation
         """
-        func = ''
-        if self._signal_noise_model:
-            noise_params_func = ''
-            for p in self._signal_noise_model.get_free_parameters():
-                noise_params_func += ', ' + '{}.{}'.format(self._signal_noise_model.name, p.name).replace('.', '_')
-
-            func += noise_func_name + '((' + self._build_model_from_tree(self._model_tree, 0) + ')' + \
-                    noise_params_func + ');'
-        else:
-            func += '(' + self._build_model_from_tree(self._model_tree, 0) + ');'
-        return func
-
-    def _build_model_from_tree(self, node, depth):
         if not node.children:
-            return self._model_to_string(node.data)
+            return self._model_to_string(node.data, problems_to_analyze)
         else:
             subfuncs = []
             for child in node.children:
                 if child.children:
-                    subfuncs.append(self._build_model_from_tree(child, depth+1))
+                    subfuncs.append(self._build_model_from_tree(child, depth+1, problems_to_analyze))
                 else:
-                    subfuncs.append(self._model_to_string(child.data))
+                    subfuncs.append(self._model_to_string(child.data, problems_to_analyze))
 
             operator = node.data
             func = (' ' + operator + ' ').join(subfuncs)
@@ -591,7 +628,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             return '(' + func + ')'
         return '(' + "\n" + ("\t" * int((depth/2)+5)) + func + "\n" + ("\t" * int((depth/2)+4)) + ')'
 
-    def _model_to_string(self, model):
+    def _model_to_string(self, model, problems_to_analyze):
         """Convert a model to CL string."""
         param_list = []
         for param in model.parameter_list:
@@ -604,7 +641,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 else:
                     param_list.append('data->model_data_' + param.name)
             elif isinstance(param, StaticMapParameter):
-                static_map_value = self._get_static_map_value(model, param)
+                static_map_value = self._get_static_map_value(model, param, problems_to_analyze)
                 if all_elements_equal(static_map_value):
                     param_list.append(str(get_single_value(static_map_value)))
                 else:
@@ -620,16 +657,6 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 param_list.append('{}.{}'.format(model.name, param.name).replace('.', '_'))
 
         return model.cl_function_name + '(' + ', '.join(param_list) + ')'
-
-    def _get_model_functions_cl_code(self, noise_func_name):
-        """Get the model functions CL. This is used in get_model_eval_function()."""
-        cl_code = ''
-        for compartment_model in self._model_tree.get_compartment_models():
-            cl_code += compartment_model.get_cl_code() + "\n"
-
-        if self._signal_noise_model:
-            cl_code += self._signal_noise_model.get_signal_function(noise_func_name)
-        return cl_code
 
     def _get_parameters_listing(self, exclude_list=()):
         """Get the CL code for the parameter listing, this goes on top of the evaluate function.
@@ -750,24 +777,24 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                 func += "\t"*4 + data_type + ' ' + name + ' = ' + assignment + ';' + "\n"
         return func
 
-    def _get_fixed_parameters_as_var_data(self):
+    def _get_fixed_parameters_as_var_data(self, problems_to_analyze):
         var_data_dict = {}
         for m, p in self._model_functions_info.get_value_fixed_parameters_list():
             value = self._model_functions_info.get_parameter_value('{}.{}'.format(m.name, p.name))
 
             if not all_elements_equal(value):
-                if self.problems_to_analyze is not None:
-                    value = value[self.problems_to_analyze, ...]
+                if problems_to_analyze is not None:
+                    value = value[problems_to_analyze, ...]
 
-                var_data_dict.update({'{}.{}'.format(m.name, p.name).replace('.', '_'):
-                                          SimpleDataAdapter(value, p.data_type, self._get_mot_float_type())})
+                var_data_dict['{}.{}'.format(m.name, p.name).replace('.', '_')] = SimpleDataAdapter(
+                    value, p.data_type, self._get_mot_float_type())
         return var_data_dict
 
-    def _get_static_parameters_as_var_data(self):
+    def _get_static_parameters_as_var_data(self, problems_to_analyze):
         static_data_dict = {}
 
         for m, p in self._model_functions_info.get_static_parameters_list():
-            static_map_value = self._get_static_map_value(m, p)
+            static_map_value = self._get_static_map_value(m, p, problems_to_analyze)
 
             if not all_elements_equal(static_map_value):
                 data_adapter = SimpleDataAdapter(static_map_value, p.data_type, self._get_mot_float_type())
@@ -792,7 +819,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         return bounds_dict
 
-    def _get_static_map_value(self, model, parameter):
+    def _get_static_map_value(self, model, parameter, problems_to_analyze):
         """Get the map value for the given parameter of the given model.
 
         This first checks if the parameter is defined in the static maps data in the problem data. If not, we try
@@ -803,6 +830,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         Args:
             model (ModelFunction): the model function
             parameter (CLParameter): the parameter for which we want to get the value
+            problems_to_analyze (ndarray): the problems we are interested in
 
         Returns:
             ndarray or number: the value for the given parameter.
@@ -820,8 +848,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         if is_scalar(data):
             return data
 
-        if self.problems_to_analyze is not None:
-            return data[self.problems_to_analyze, ...]
+        if problems_to_analyze is not None:
+            return data[problems_to_analyze, ...]
         return data
 
     def _is_non_model_tree_model(self, model):
@@ -887,7 +915,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                     else:
                         var_data_dict.update({param_name: value})
 
-    def _get_variable_data(self):
+    def _get_variable_data(self, problems_to_analyze):
         """See super class OptimizeModelInterface for details
 
         When overriding this function, please note that it should adhere to the attribute problems_to_analyze.
@@ -896,8 +924,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
 
         observations = self._problem_data.observations
         if observations is not None:
-            if self.problems_to_analyze is not None:
-                observations = observations[self.problems_to_analyze, ...]
+            if problems_to_analyze is not None:
+                observations = observations[problems_to_analyze, ...]
 
             observations = self._transform_observations(observations)
 
@@ -905,8 +933,8 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                                              self._get_mot_float_type())
             var_data_dict.update({'observations': data_adapter})
 
-        var_data_dict.update(self._get_fixed_parameters_as_var_data())
-        var_data_dict.update(self._get_static_parameters_as_var_data())
+        var_data_dict.update(self._get_fixed_parameters_as_var_data(problems_to_analyze))
+        var_data_dict.update(self._get_static_parameters_as_var_data(problems_to_analyze))
         var_data_dict.update(self._get_bounds_as_var_data())
 
         return var_data_dict
@@ -935,13 +963,13 @@ class OptimizeModelBuilder(OptimizeModelInterface):
                     static_data_dict.update({p.name: SimpleDataAdapter(value, p.data_type, self._get_mot_float_type())})
         return static_data_dict
 
-    def _get_all_kernel_source_items(self):
+    def _get_all_kernel_source_items(self, problems_to_analyze):
         """Get the CL strings for the kernel source items for most common CL kernels in this library."""
         kernel_param_names = []
         data_struct_init = []
         data_struct_names = []
 
-        for key, data_adapter in self._get_variable_data().items():
+        for key, data_adapter in self._get_variable_data(problems_to_analyze).items():
             cl_data = data_adapter.get_opencl_data()
 
             param_name = 'var_data_' + str(key)
@@ -991,7 +1019,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
             typedef struct{
                 ''' + ('' if data_struct_names else 'constant void* place_holder;') + '''
                 ''' + " ".join((name + ";\n" for name in data_struct_names)) + '''
-            } ''' + self._get_kernel_data_struct_type() + ''';
+            } ''' + self._kernel_data_struct_type + ''';
         '''
 
         return {'kernel_param_names': kernel_param_names,
@@ -1041,7 +1069,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         return SimpleCLDataType.from_string('float')
 
     def _get_weight_sum_to_one_transformation(self):
-        """Returns a snippit of CL for the encode and decode functions to force the sum of the weights to 1"""
+        """Returns a snippet of CL for the encode and decode functions to force the sum of the weights to 1"""
         weight_indices = []
         for (m, p) in self._model_functions_info.get_estimable_weights():
             weight_indices.append(self._model_functions_info.get_parameter_estimable_index(m, p))
@@ -1056,7 +1084,7 @@ class OptimizeModelBuilder(OptimizeModelInterface):
         return ''
 
 
-class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
+class SampleModelBuilder(OptimizeModelBuilder):
 
     def __init__(self, model_name, model_tree, evaluation_model, signal_noise_model=None, problem_data=None,
                  enforce_weights_sum_to_one=True):
@@ -1095,77 +1123,114 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
         """
         return ModelFunctionsInformation(model_tree, evaluation_model, signal_noise_model, enable_prior_parameters=True)
 
-    def get_log_prior_function(self, func_name='getLogPrior', address_space_parameter_vector='private'):
-        prior = ''
+    def build(self, problems_to_analyze=None):
+        """Construct the final immutable model with the current settings.
 
-        for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
-            prior += p.sampling_prior.get_prior_function()
+        Returns:
+            OptimizeModelInterface: an implementation an optimization model with all the current settings
 
-        for model_prior in self._model_priors:
-            prior += model_prior.get_prior_function()
+        Raises:
+            RuntimeError: if some of the required items are not set prior to building.
+        """
+        simple_optimize_model = super(SampleModelBuilder, self).build(problems_to_analyze)
+        return SimpleSampleModel(simple_optimize_model,
+                                 self._get_proposal_state(problems_to_analyze),
+                                 self._get_log_likelihood_per_observation_function_builder(problems_to_analyze),
+                                 self._is_proposal_symmetric(),
+                                 self._get_log_prior_function_builder(),
+                                 self._get_metropolis_hastings_state(problems_to_analyze),
+                                 self._proposal_state_update_uses_variance(),
+                                 self._get_proposal_logpdf_builder(),
+                                 self._get_proposal_function_builder(),
+                                 self._get_proposal_state_update_function_builder())
 
-        prior += '''
-            mot_float_type {func_name}(const void* data_void,
-                                       {address_space_parameter_vector} const mot_float_type* const x){{
+    def _get_log_prior_function_builder(self):
+        def get_preliminary():
+            cl_str = ''
+            for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
+                cl_str += p.sampling_prior.get_prior_function()
 
-                {kernel_data_struct_type}* data = ({kernel_data_struct_type}*)data_void;
-                mot_float_type prior = 1.0;
+            for model_prior in self._model_priors:
+                cl_str += model_prior.get_prior_function()
+            return cl_str
 
-            '''.format(func_name=func_name, address_space_parameter_vector=address_space_parameter_vector,
-                       kernel_data_struct_type=self._get_kernel_data_struct_type())
+        def get_body():
+            cl_str = ''
+            for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
+                name = '{}.{}'.format(m.name, p.name)
 
-        for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
-            name = '{}.{}'.format(m.name, p.name)
+                if all_elements_equal(self._lower_bounds[name]):
+                    lower_bound = str(get_single_value(self._lower_bounds[name]))
+                    if lower_bound == '-inf':
+                        lower_bound = '-INFINITY'
+                else:
+                    lower_bound = 'data->var_data_lb_' + name.replace('.', '_')
 
-            if all_elements_equal(self._lower_bounds[name]):
-                lower_bound = str(get_single_value(self._lower_bounds[name]))
-                if lower_bound == '-inf':
-                    lower_bound = '-INFINITY'
-            else:
-                lower_bound = 'data->var_data_lb_' + name.replace('.', '_')
+                if all_elements_equal(self._upper_bounds[name]):
+                    upper_bound = str(get_single_value(self._upper_bounds[name]))
+                    if upper_bound == 'inf':
+                        upper_bound = 'INFINITY'
+                else:
+                    upper_bound = 'data->var_data_ub_' + name.replace('.', '_')
 
-            if all_elements_equal(self._upper_bounds[name]):
-                upper_bound = str(get_single_value(self._upper_bounds[name]))
-                if upper_bound == 'inf':
-                    upper_bound = 'INFINITY'
-            else:
-                upper_bound = 'data->var_data_ub_' + name.replace('.', '_')
+                function_name = p.sampling_prior.get_prior_function_name()
 
-            function_name = p.sampling_prior.get_prior_function_name()
-
-            if m.get_prior_parameters(p):
-                prior_params = []
-                for prior_param in m.get_prior_parameters(p):
-                    if self._model_functions_info.is_parameter_estimable(m, prior_param):
-                        estimable_index = self._model_functions_info.get_parameter_estimable_index(m, prior_param)
-                        prior_params.append('x[{}]'.format(estimable_index))
-                    else:
-                        value = self._model_functions_info.get_parameter_value('{}.{}'.format(m.name, prior_param.name))
-                        if all_elements_equal(value):
-                            prior_params.append(str(get_single_value(value)))
+                if m.get_prior_parameters(p):
+                    prior_params = []
+                    for prior_param in m.get_prior_parameters(p):
+                        if self._model_functions_info.is_parameter_estimable(m, prior_param):
+                            estimable_index = self._model_functions_info.get_parameter_estimable_index(m, prior_param)
+                            prior_params.append('x[{}]'.format(estimable_index))
                         else:
-                            prior_params.append('data->var_data_' +
-                                                '{}.{}'.format(m.name, prior_param.name).replace('.', '_'))
+                            value = self._model_functions_info.get_parameter_value(
+                                '{}.{}'.format(m.name, prior_param.name))
+                            if all_elements_equal(value):
+                                prior_params.append(str(get_single_value(value)))
+                            else:
+                                prior_params.append('data->var_data_' +
+                                                    '{}.{}'.format(m.name, prior_param.name).replace('.', '_'))
 
-                prior += 'prior *= {}(x[{}], {}, {}, {});\n'.format(function_name, i, lower_bound, upper_bound,
-                                                                    ', '.join(prior_params))
-            else:
-                prior += 'prior *= {}(x[{}], {}, {});\n'.format(function_name, i, lower_bound, upper_bound)
+                    cl_str += 'prior *= {}(x[{}], {}, {}, {});\n'.format(function_name, i, lower_bound, upper_bound,
+                                                                       ', '.join(prior_params))
+                else:
+                    cl_str += 'prior *= {}(x[{}], {}, {});\n'.format(function_name, i, lower_bound, upper_bound)
 
-        for model_prior in self._model_priors:
-            function_name = model_prior.get_function_name()
-            parameters = []
+            for model_prior in self._model_priors:
+                function_name = model_prior.get_prior_function_name()
+                parameters = []
 
-            for param_name in model_prior.get_function_parameters():
-                param_index = self._model_functions_info.get_parameter_estimable_index_by_name(param_name)
-                parameters.append('x[{}]'.format(param_index))
+                for param_name in model_prior.get_function_parameters():
+                    param_index = self._model_functions_info.get_parameter_estimable_index_by_name(param_name)
+                    parameters.append('x[{}]'.format(param_index))
 
-            prior += '\tprior *= {}({});\n'.format(function_name, ', '.join(parameters))
+                cl_str += '\tprior *= {}({});\n'.format(function_name, ', '.join(parameters))
 
-        prior += '\n\treturn log(prior);\n}'
-        return prior
+            cl_str += '\n\treturn log(prior);'
+            return cl_str
 
-    def get_proposal_state(self):
+        preliminary = get_preliminary()
+        body = get_body()
+
+        def builder(address_space_parameter_vector):
+            func_name = 'getLogPrior'
+            prior = '''
+                {preliminary}
+                
+                mot_float_type {func_name}(const void* data_void,
+                                           {address_space_parameter_vector} const mot_float_type* const x){{
+    
+                    {kernel_data_struct_type}* data = ({kernel_data_struct_type}*)data_void;
+                    mot_float_type prior = 1.0;
+                    
+                    {body}  
+                }}
+                '''.format(func_name=func_name, address_space_parameter_vector=address_space_parameter_vector,
+                           kernel_data_struct_type=self._kernel_data_struct_type,
+                           preliminary=preliminary, body=body)
+            return SimpleNamedCLFunction(prior, func_name)
+        return builder
+
+    def _get_proposal_state(self, problems_to_analyze):
         np_dtype = np.float32
         if self.double_precision:
             np_dtype = np.float64
@@ -1177,10 +1242,11 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
                     value = param.default_value
 
                     if is_scalar(value):
-                        if self.get_nmr_problems() == 0:
+                        if self._get_nmr_problems(problems_to_analyze) == 0:
                             proposal_state.append(np.full((1, 1), value, dtype=np_dtype))
                         else:
-                            proposal_state.append(np.full((self.get_nmr_problems(), 1), value, dtype=np_dtype))
+                            proposal_state.append(np.full((self._get_nmr_problems(problems_to_analyze), 1),
+                                                          value, dtype=np_dtype))
                     else:
                         if len(value.shape) < 2:
                             value = np.transpose(np.asarray([value]))
@@ -1189,142 +1255,192 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
                         else:
                             value = value
 
-                        if self.problems_to_analyze is None:
+                        if problems_to_analyze is None:
                             proposal_state.append(value)
                         else:
-                            proposal_state.append(value[self.problems_to_analyze, ...])
+                            proposal_state.append(value[problems_to_analyze, ...])
 
         proposal_state_matrix = np.concatenate([np.transpose(np.array([s]))
                                                 if len(s.shape) < 2 else s for s in proposal_state], axis=1)
         return proposal_state_matrix
 
-    def is_proposal_symmetric(self):
+    def _is_proposal_symmetric(self):
         return all(p.sampling_proposal.is_symmetric() for m, p in
                    self._model_functions_info.get_estimable_parameters_list())
 
-    def get_proposal_logpdf(self, func_name='getProposalLogPDF', address_space_proposal_state='private'):
-        return_str = ''
-        for _, p in self._model_functions_info.get_estimable_parameters_list():
-            return_str += p.sampling_proposal.get_proposal_logpdf_function()
+    def _get_proposal_logpdf_builder(self):
+        def get_preliminary():
+            cl_str = ''
+            for _, p in self._model_functions_info.get_estimable_parameters_list():
+                cl_str += p.sampling_proposal.get_proposal_logpdf_function()
+            return cl_str
 
-        return_str += '''
-            double {func_name}(
-                const uint param_ind,
-                const mot_float_type proposal,
-                const mot_float_type current,
-                {address_space_proposal_state} mot_float_type* const proposal_state){{
+        def get_body():
+            cl_str = 'switch(param_ind){'
+            adaptable_parameter_count = 0
+            for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
+                cl_str += 'case ' + str(i) + ':'
 
-                switch(param_ind){{
-        '''.format(func_name=func_name, address_space_proposal_state=address_space_proposal_state)
+                param_proposal = p.sampling_proposal
+                logpdf_call = 'return ' + param_proposal.get_proposal_logpdf_function_name() + '(proposal, current'
 
-        adaptable_parameter_count = 0
-        for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
-            return_str += 'case ' + str(i) + ':' + "\n\t\t\t"
+                for param in param_proposal.get_parameters():
+                    if param.adaptable:
+                        logpdf_call += ', proposal_state[' + str(adaptable_parameter_count) + ']'
+                        adaptable_parameter_count += 1
+                    else:
+                        logpdf_call += ', ' + str(param.default_value)
 
-            param_proposal = p.sampling_proposal
-            logpdf_call = 'return ' + param_proposal.get_proposal_logpdf_function_name() + '(proposal, current'
+                logpdf_call += ');'
+                cl_str += logpdf_call + "\n"
+            cl_str += '} return 0;'
+            return cl_str
 
-            for param in param_proposal.get_parameters():
-                if param.adaptable:
-                    logpdf_call += ', proposal_state[' + str(adaptable_parameter_count) + ']'
-                    adaptable_parameter_count += 1
-                else:
-                    logpdf_call += ', ' + str(param.default_value)
+        preliminary = get_preliminary()
+        body = get_body()
 
-            logpdf_call += ');'
-            return_str += logpdf_call + "\n"
+        def builder(address_space_proposal_state):
+            func_name = 'getProposalLogPDF'
+            return_str = '''
+                {preliminary}
+                
+                double {func_name}(
+                    const uint param_ind,
+                    const mot_float_type proposal,
+                    const mot_float_type current,
+                    {address_space_proposal_state} mot_float_type* const proposal_state){{
+    
+                    {body}
+                }}
+            '''.format(func_name=func_name, address_space_proposal_state=address_space_proposal_state,
+                       body=body, preliminary=preliminary)
+            return SimpleNamedCLFunction(return_str, func_name)
+        return builder
 
-        return_str += "\n\t\t" + '}' + "\n" + 'return 0;' + "\n"
-        return_str += '}'
-        return return_str
+    def _get_proposal_function_builder(self):
+        def get_preliminary():
+            cl_str = ''
+            for _, p in self._model_functions_info.get_estimable_parameters_list():
+                cl_str += p.sampling_proposal.get_proposal_function()
+            return cl_str
 
-    def get_proposal_function(self, func_name='getProposal', address_space_proposal_state='private'):
-        return_str = ''
-        for _, p in self._model_functions_info.get_estimable_parameters_list():
-            return_str += p.sampling_proposal.get_proposal_function()
+        def get_body():
+            cl_str = 'switch(param_ind){'
+            adaptable_parameter_count = 0
+            for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
+                cl_str += 'case ' + str(i) + ':' + "\n\t\t\t"
 
-        return_str += '''
-            mot_float_type {func_name}(
-                const uint param_ind,
-                const mot_float_type current,
-                void* rng_data,
-                {address_space_proposal_state} mot_float_type* const proposal_state){{
+                param_proposal = p.sampling_proposal
+                proposal_call = 'return ' + param_proposal.get_proposal_function_name() + '(current, rng_data'
 
-                switch(param_ind){{
-        '''.format(func_name=func_name, address_space_proposal_state=address_space_proposal_state)
+                for param in param_proposal.get_parameters():
+                    if param.adaptable:
+                        proposal_call += ', proposal_state[' + str(adaptable_parameter_count) + ']'
+                        adaptable_parameter_count += 1
+                    else:
+                        proposal_call += ', ' + str(param.default_value)
 
-        adaptable_parameter_count = 0
-        for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
-            return_str += 'case ' + str(i) + ':' + "\n\t\t\t"
+                proposal_call += ');'
+                cl_str += proposal_call + "\n"
 
-            param_proposal = p.sampling_proposal
-            proposal_call = 'return ' + param_proposal.get_proposal_function_name() + '(current, rng_data'
+            cl_str += '}\n return 0;'
+            return cl_str
 
-            for param in param_proposal.get_parameters():
-                if param.adaptable:
-                    proposal_call += ', proposal_state[' + str(adaptable_parameter_count) + ']'
-                    adaptable_parameter_count += 1
-                else:
-                    proposal_call += ', ' + str(param.default_value)
+        preliminary = get_preliminary()
+        body = get_body()
 
-            proposal_call += ');'
-            return_str += proposal_call + "\n"
+        def builder(address_space_proposal_state):
+            func_name = 'getProposal'
+            return_str = '''
+                {preliminary}
+                
+                mot_float_type {func_name}(
+                    const uint param_ind,
+                    const mot_float_type current,
+                    void* rng_data,
+                    {address_space_proposal_state} mot_float_type* const proposal_state){{
+    
+                    {body}
+                }} 
+            '''.format(func_name=func_name, address_space_proposal_state=address_space_proposal_state,
+                       body=body, preliminary=preliminary)
+            return SimpleNamedCLFunction(return_str, func_name)
 
-        return_str += "\n\t\t" + '}' + "\n" + 'return 0;' + "\n"
-        return_str += '}'
-        return return_str
+        return builder
 
-    def get_proposal_state_update_function(self, func_name='updateProposalState', address_space='private'):
-        return_str = ''
-        for _, p in self._model_functions_info.get_estimable_parameters_list():
-            if p.sampling_proposal.is_adaptable():
-                return_str += p.sampling_proposal.get_proposal_update_function().get_update_function(
-                    p.sampling_proposal.get_parameters(), address_space=address_space)
+    def _get_proposal_state_update_function_builder(self):
+        def get_body():
+            cl_str = ''
+            adaptable_parameter_count = 0
+            for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
+                param_proposal = p.sampling_proposal
+                proposal_update_function = param_proposal.get_proposal_update_function()
 
-        if self.proposal_state_update_uses_variance():
-            return_str += '''
-                void {func_name}({address_space} mot_float_type* const proposal_state,
-                                 {address_space} ulong* const sampling_counter,
-                                 {address_space} ulong* const acceptance_counter,
-                                 {address_space} mot_float_type* const parameter_variance){{
-            '''.format(func_name=func_name, address_space=address_space)
-        else:
-            return_str += '''
-                void {func_name}({address_space} mot_float_type* const proposal_state,
-                                 {address_space} ulong* const sampling_counter,
-                                 {address_space} ulong* const acceptance_counter){{
-            '''.format(func_name=func_name, address_space=address_space)
+                state_params = []
 
-        adaptable_parameter_count = 0
-        for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
-            param_proposal = p.sampling_proposal
-            proposal_update_function = param_proposal.get_proposal_update_function()
+                for param in param_proposal.get_parameters():
+                    if param.adaptable:
+                        state_params.append('proposal_state + {}'.format(adaptable_parameter_count))
+                        adaptable_parameter_count += 1
 
-            state_params = []
+                if state_params:
+                    if proposal_update_function.uses_jump_counters():
+                        state_params.extend(['sampling_counter + {}'.format(i),
+                                             'acceptance_counter + {}'.format(i)])
 
-            for param in param_proposal.get_parameters():
-                if param.adaptable:
-                    state_params.append('proposal_state + {}'.format(adaptable_parameter_count))
-                    adaptable_parameter_count += 1
+                    if proposal_update_function.uses_parameter_variance():
+                        state_params.append('parameter_variance[{}]'.format(i))
 
-            if state_params:
-                if proposal_update_function.uses_jump_counters():
-                    state_params.extend(['sampling_counter + {}'.format(i),
-                                         'acceptance_counter + {}'.format(i)])
+                    cl_str += '''
+                        // {param_name}
+                        {update_func_name}({params});
+                    '''.format(
+                        update_func_name=proposal_update_function.get_function_name(param_proposal.get_parameters()),
+                        params=', '.join(state_params), param_name='{}.{}'.format(m.name, p.name))
+            return cl_str
 
-                if proposal_update_function.uses_parameter_variance():
-                    state_params.append('parameter_variance[{}]'.format(i))
+        body = get_body()
 
+        def builder(address_space):
+            def get_preliminary():
+                cl_str = ''
+                for _, p in self._model_functions_info.get_estimable_parameters_list():
+                    if p.sampling_proposal.is_adaptable():
+                        cl_str += p.sampling_proposal.get_proposal_update_function().get_update_function(
+                            p.sampling_proposal.get_parameters(), address_space=address_space)
+                return cl_str
+
+            preliminary = get_preliminary()
+
+            func_name = 'updateProposalState'
+            return_str = ''
+            if self._proposal_state_update_uses_variance():
                 return_str += '''
-                    // {param_name}
-                    {update_func_name}({params});
-                '''.format(update_func_name=proposal_update_function.get_function_name(param_proposal.get_parameters()),
-                           params=', '.join(state_params), param_name='{}.{}'.format(m.name, p.name))
+                    {preliminary}
+                    
+                    void {func_name}({address_space} mot_float_type* const proposal_state,
+                                     {address_space} ulong* const sampling_counter,
+                                     {address_space} ulong* const acceptance_counter,
+                                     {address_space} mot_float_type* const parameter_variance){{
+                        {body}
+                    }}
+                '''.format(func_name=func_name, address_space=address_space, body=body, preliminary=preliminary)
+            else:
+                return_str += '''
+                    {preliminary}
+                    
+                    void {func_name}({address_space} mot_float_type* const proposal_state,
+                                     {address_space} ulong* const sampling_counter,
+                                     {address_space} ulong* const acceptance_counter){{
+                        {body}
+                    }}
+                '''.format(func_name=func_name, address_space=address_space, body=body, preliminary=preliminary)
 
-        return_str += '}'
-        return return_str
+            return SimpleNamedCLFunction(return_str, func_name)
 
-    def proposal_state_update_uses_variance(self):
+        return builder
+
+    def _proposal_state_update_uses_variance(self):
         for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
             param_proposal = p.sampling_proposal
             proposal_update_function = param_proposal.get_proposal_update_function()
@@ -1334,89 +1450,34 @@ class SampleModelBuilder(OptimizeModelBuilder, SampleModelInterface):
                     return True
         return False
 
-    def get_log_likelihood_function(self, func_name='getLogLikelihood', evaluation_model=None, full_likelihood=True):
-        evaluation_model = evaluation_model or self._evaluation_model
-
-        inst_per_problem = self.get_nmr_inst_per_problem()
-        eval_func_name = func_name + '_evaluateModel'
-        obs_func_name = func_name + '_getObservation'
+    def _get_log_likelihood_per_observation_function_builder(self, problems_to_analyze):
+        eval_function_info = self._get_model_eval_function(problems_to_analyze)
+        obs_func = self._get_observation_return_function()
 
         param_listing = ''
-        for p in evaluation_model.get_free_parameters():
-            param_listing += self._get_param_listing_for_param(evaluation_model, p)
+        for p in self._evaluation_model.get_free_parameters():
+            param_listing += self._get_param_listing_for_param(self._evaluation_model, p)
 
-        func = ''
-        func += evaluation_model.get_cl_dependency_code()
+        func_name = "getLogLikelihoodPerObservation"
 
-        func += self.get_model_eval_function(eval_func_name)
-        func += self.get_observation_return_function(obs_func_name)
-        func += evaluation_model.get_log_likelihood_function(func_name, inst_per_problem, eval_func_name,
-                                                             obs_func_name, param_listing,
-                                                             full_likelihood=full_likelihood)
-        return func
+        preliminary = ''
+        preliminary += self._evaluation_model.get_cl_dependency_code()
 
-    def get_log_likelihood_per_observation_function(self, func_name="getLogLikelihoodPerObservation",
-                                                    evaluation_model=None, full_likelihood=True):
-        evaluation_model = evaluation_model or self._evaluation_model
+        preliminary += eval_function_info.get_function()
+        preliminary += obs_func.get_function()
 
-        inst_per_problem = self.get_nmr_inst_per_problem()
-        eval_func_name = func_name + '_evaluateModel'
-        obs_func_name = func_name + '_getObservation'
+        def builder(full_likelihood):
+            func = preliminary + self._evaluation_model.get_log_likelihood_per_observation_function(
+                func_name, eval_function_info.get_name(),
+                obs_func.get_name(), param_listing,
+                full_likelihood=full_likelihood)
+            return SimpleNamedCLFunction(func, func_name)
 
-        param_listing = ''
-        for p in evaluation_model.get_free_parameters():
-            param_listing += self._get_param_listing_for_param(evaluation_model, p)
+        return builder
 
-        func = ''
-        func += evaluation_model.get_cl_dependency_code()
-
-        func += self.get_model_eval_function(eval_func_name)
-        func += self.get_observation_return_function(obs_func_name)
-        func += evaluation_model.get_log_likelihood_per_observation_function(
-            func_name, inst_per_problem, eval_func_name,
-            obs_func_name, param_listing,
-            full_likelihood=full_likelihood)
-        return func
-
-    def get_metropolis_hastings_state(self):
-        return DefaultMHState(self.get_nmr_problems(), self.get_nmr_estimable_parameters(), self.double_precision)
-
-    def get_proposal_state_names(self):
-        """Get a list of names for the adaptable proposal parameters.
-
-        Returns:
-            list: list of str with the name for each of the adaptable proposal parameters.
-                This is used by the sampler to create a dictionary of final proposal states.
-        """
-        return_list = []
-        for m, p in self._model_functions_info.get_estimable_parameters_list():
-            for param in p.sampling_proposal.get_parameters():
-                if param.adaptable:
-                    return_list.append('{}.{}.proposal.{}'.format(m.name, p.name, param.name))
-        return return_list
-
-    def samples_to_statistics(self, samples):
-        """Create statistics out of the given set of samples (in a dictionary).
-
-        Args:
-            samples (ndarray): the sampled parameter maps, an (d, p, n) array with for d problems
-                and p parameters n samples.
-
-        Returns:
-            dict: A dictionary with point estimates and statistical maps (mean, avg etc.) for each parameter.
-        """
-        results = {}
-
-        for ind, parameter_name in enumerate(self.get_free_param_names()):
-            parameter_samples = samples[:, ind, ...]
-
-            stat_mod = self._model_functions_info.get_model_parameter_by_name(parameter_name)[1].sampling_statistics
-            statistics = stat_mod.get_statistics(parameter_samples)
-
-            results[parameter_name] = statistics.get_point_estimate()
-            results.update({'{}.{}'.format(parameter_name, statistic_key): v
-                            for statistic_key, v in statistics.get_additional_statistics().items()})
-        return results
+    def _get_metropolis_hastings_state(self, problems_to_analyze):
+        return DefaultMHState(self._get_nmr_problems(problems_to_analyze),
+                              self.get_nmr_estimable_parameters(), self.double_precision)
 
     def _get_weight_prior(self):
         """Get the prior limiting the weights between 0 and 1"""
@@ -1863,20 +1924,14 @@ class ParameterTransformedModel(OptimizeModelInterface):
     def double_precision(self):
         return self._model.double_precision
 
+    def get_free_param_names(self):
+        return self._model.get_free_param_names()
+
     def get_kernel_data_info(self):
         return self._model.get_kernel_data_info()
 
     def get_nmr_problems(self):
         return self._model.get_nmr_problems()
-
-    def get_observation_return_function(self, func_name='getObservation'):
-        return self._model.get_observation_return_function(func_name=func_name)
-
-    def get_free_param_names(self):
-        return self._model.get_free_param_names()
-
-    def get_optimization_output_param_names(self):
-        return self._model.get_optimization_output_param_names()
 
     def get_nmr_inst_per_problem(self):
         return self._model.get_nmr_inst_per_problem()
@@ -1884,53 +1939,31 @@ class ParameterTransformedModel(OptimizeModelInterface):
     def get_nmr_estimable_parameters(self):
         return self._model.get_nmr_estimable_parameters()
 
-    def get_model_eval_function(self, func_name='evaluateModel'):
-        code = self._model.get_model_eval_function(func_name=func_name)
+    def get_observation_return_function(self):
+        return self._model.get_observation_return_function()
+
+    def get_pre_eval_parameter_modifier(self):
+        old_modifier = self._model.get_pre_eval_parameter_modifier()
+        new_fname = 'wrapped_' + old_modifier.get_name()
+
+        code = old_modifier.get_function()
         code += self._parameter_codec.get_parameter_decode_function('_decodeParameters')
         code += '''
-            double ''' + func_name + '''(const void* const data, const mot_float_type* const x,
-                                         const uint observation_index){
-                mot_float_type x_model[''' + str(self.get_nmr_estimable_parameters()) + '''];
-                for(uint i = 0; i < ''' + str(self.get_nmr_estimable_parameters()) + '''; i++){
-                    x_model[i] = x[i];
-                }
-                _decodeParameters(data, x_model);
-                return ''' + (func_name + '_wrapped') + '''(data, x_model, observation_index);
+            double ''' + new_fname + '''(const void* const data, const mot_float_type* x){
+                _decodeParameters(data, x);
+                ''' + old_modifier.get_name() + '''(data, x);
             }
         '''
+        return SimpleNamedCLFunction(code, new_fname)
 
-    def get_objective_function(self, func_name="calculateObjective"):
-        code = self._model.get_objective_function(func_name=func_name + '_wrapped')
-        code += self._parameter_codec.get_parameter_decode_function('_decodeParameters')
-        code += '''
-            double ''' + func_name + '''(const void* data, mot_float_type* x){
-                mot_float_type x_model[''' + str(self.get_nmr_estimable_parameters()) + '''];
-                for(uint i = 0; i < ''' + str(self.get_nmr_estimable_parameters()) + '''; i++){
-                    x_model[i] = x[i];
-                }
-                _decodeParameters(data, x_model);
-                return ''' + (func_name + '_wrapped') + '''(data, x_model);
-            }
-        '''
-        return code
+    def get_model_eval_function(self):
+        return self._model.get_model_eval_function()
 
-    def get_objective_per_observation_function(self, func_name="getObjectiveInstanceValue"):
-        code = self._model.get_objective_per_observation_function(func_name=func_name + '_wrapped')
-        code += self._parameter_codec.get_parameter_decode_function('_decodeParameters')
-        code += '''
-            double ''' + func_name + '''(const void* const data, mot_float_type* const x, uint observation_index){
-                mot_float_type x_model[''' + str(self.get_nmr_estimable_parameters()) + '''];
-                for(uint i = 0; i < ''' + str(self.get_nmr_estimable_parameters()) + '''; i++){
-                    x_model[i] = x[i];
-                }
-                _decodeParameters(data, x_model);
-                return ''' + (func_name + '_wrapped') + '''(data, x_model, observation_index);
-            }
-        '''
-        return code
+    def get_objective_per_observation_function(self):
+        return self._model.get_objective_per_observation_function()
 
-    def get_initial_parameters(self, results_dict=None):
-        return self.encode_parameters(self._model.get_initial_parameters(results_dict=results_dict))
+    def get_initial_parameters(self):
+        return self.encode_parameters(self._model.get_initial_parameters())
 
     def get_lower_bounds(self):
         # todo add codec transform here
@@ -2008,3 +2041,160 @@ class SimpleKernelDataInfo(KernelDataInfo):
 
     def get_kernel_data_struct_type(self):
         return self._struct_type
+
+
+class SimpleOptimizeModel(OptimizeModelInterface):
+
+    def __init__(self, used_problem_indices,
+                 name, double_precision, free_param_names, kernel_data_info, nmr_problems, nmr_inst_per_problem,
+                 nmr_estimable_parameters, initial_parameters, pre_eval_parameter_modifier, eval_function,
+                 observation_return_function, objective_per_observation_function,
+                 lower_bounds, upper_bounds):
+        self.used_problem_indices = used_problem_indices
+        self._name = name
+        self._double_precision = double_precision
+        self._free_param_names = free_param_names
+        self._kernel_data_info = kernel_data_info
+        self._nmr_problems = nmr_problems
+        self._nmr_inst_per_problem = nmr_inst_per_problem
+        self._nmr_estimable_parameters = nmr_estimable_parameters
+        self._initial_parameters = initial_parameters
+        self._pre_eval_parameter_modifier = pre_eval_parameter_modifier
+        self._eval_function = eval_function
+        self._observation_return_function = observation_return_function
+        self._objective_per_observation_function = objective_per_observation_function
+        self._lower_bounds = lower_bounds
+        self._upper_bounds = upper_bounds
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def double_precision(self):
+        return self._double_precision
+
+    def get_free_param_names(self):
+        return self._free_param_names
+
+    def get_kernel_data_info(self):
+        return self._kernel_data_info
+
+    def get_nmr_problems(self):
+        return self._nmr_problems
+
+    def get_nmr_inst_per_problem(self):
+        return self._nmr_inst_per_problem
+
+    def get_nmr_estimable_parameters(self):
+        return self._nmr_estimable_parameters
+
+    def get_pre_eval_parameter_modifier(self):
+        return self._pre_eval_parameter_modifier
+
+    def get_model_eval_function(self):
+        return self._eval_function
+
+    def get_observation_return_function(self):
+        return self._observation_return_function
+
+    def get_objective_per_observation_function(self):
+        return self._objective_per_observation_function
+
+    def get_initial_parameters(self):
+        return self._initial_parameters
+
+    def get_lower_bounds(self):
+        return self._lower_bounds
+
+    def get_upper_bounds(self):
+        return self._upper_bounds
+
+
+class SimpleSampleModel(SampleModelInterface):
+
+    def __init__(self, wrapped_optimize_model, proposal_state, ll_per_obs_func_builder,
+                 is_proposal_symmetric, log_prior_function_builder, metropolis_hastings_state,
+                 proposal_state_update_uses_variance, proposal_logpdf_builder, proposal_function_builder,
+                 proposal_state_update_function_builder):
+        self._wrapped_optimize_model = wrapped_optimize_model
+        self._proposal_state = proposal_state
+        self._ll_per_obs_func_builder = ll_per_obs_func_builder
+        self._is_proposal_symmetric = is_proposal_symmetric
+        self._log_prior_function_builder = log_prior_function_builder
+        self._metropolis_hastings_state = metropolis_hastings_state
+        self._proposal_state_update_uses_variance = proposal_state_update_uses_variance
+        self._proposal_logpdf_builder = proposal_logpdf_builder
+        self._proposal_function_builder = proposal_function_builder
+        self._proposal_state_update_function_builder = proposal_state_update_function_builder
+
+    @property
+    def name(self):
+        return self._wrapped_optimize_model.name
+
+    @property
+    def double_precision(self):
+        return self._wrapped_optimize_model.double_precision
+
+    def get_free_param_names(self):
+        return self._wrapped_optimize_model.get_free_param_names()
+
+    def get_kernel_data_info(self):
+        return self._wrapped_optimize_model.get_kernel_data_info()
+
+    def get_nmr_problems(self):
+        return self._wrapped_optimize_model.get_nmr_problems()
+
+    def get_nmr_inst_per_problem(self):
+        return self._wrapped_optimize_model.get_nmr_inst_per_problem()
+
+    def get_nmr_estimable_parameters(self):
+        return self._wrapped_optimize_model.get_nmr_estimable_parameters()
+
+    def get_pre_eval_parameter_modifier(self):
+        return self._wrapped_optimize_model.get_pre_eval_parameter_modifier()
+
+    def get_model_eval_function(self):
+        return self._wrapped_optimize_model.get_model_eval_function()
+
+    def get_observation_return_function(self):
+        return self._wrapped_optimize_model.get_observation_return_function()
+
+    def get_objective_per_observation_function(self):
+        return self._wrapped_optimize_model.get_objective_per_observation_function()
+
+    def get_initial_parameters(self):
+        return self._wrapped_optimize_model.get_initial_parameters()
+
+    def get_lower_bounds(self):
+        return self._wrapped_optimize_model.get_lower_bounds()
+
+    def get_upper_bounds(self):
+        return self._wrapped_optimize_model.get_upper_bounds()
+
+    def get_proposal_state(self):
+        return self._proposal_state
+
+    def get_log_likelihood_per_observation_function(self, full_likelihood=True):
+        return self._ll_per_obs_func_builder(full_likelihood)
+
+    def is_proposal_symmetric(self):
+        return self._is_proposal_symmetric
+
+    def get_proposal_logpdf(self, address_space_proposal_state='private'):
+        return self._proposal_logpdf_builder(address_space_proposal_state)
+
+    def get_proposal_function(self, address_space_proposal_state='private'):
+        return self._proposal_function_builder(address_space_proposal_state)
+
+    def get_proposal_state_update_function(self, address_space='private'):
+        return self._proposal_state_update_function_builder(address_space)
+
+    def proposal_state_update_uses_variance(self):
+        return self._proposal_state_update_uses_variance
+
+    def get_log_prior_function(self, address_space_parameter_vector='private'):
+        return self._log_prior_function_builder(address_space_parameter_vector)
+
+    def get_metropolis_hastings_state(self):
+        return self._metropolis_hastings_state

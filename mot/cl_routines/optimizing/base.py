@@ -76,11 +76,9 @@ class AbstractOptimizer(CLRoutine):
 
         Args:
             model (AbstractModel): The model to minimize, instance of AbstractModel
-            init_params (dict or ndarray): A starting point for every problem in the model.
-                This expects the same input as that can be used in the method
-                :meth:`mot.model_interfaces.OptimizeModelInterface#get_initial_parameters`
-                of the model. That is, either a dict with per parameter a array with starting points for every problem,
-                or a ndarray of shape (d, p) with for every d problems the p parameter starting points.
+            init_params (ndarray): A starting point for every problem in the model, if not set we take
+                the default from the model itself. If given, it should be an matrix of shape (d, p) with d problems and
+                p parameter starting points.
 
         Returns:
             OptimizationResults: the container with the optimization results
@@ -187,8 +185,12 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         if model.double_precision:
             np_dtype = np.float64
 
-        starting_points = np.require(model.get_initial_parameters(init_params), np_dtype,
+        if init_params is None:
+            init_params = model.get_initial_parameters()
+
+        starting_points = np.require(init_params, np_dtype,
                                      requirements=['C', 'A', 'O', 'W'])
+
         nmr_params = starting_points.shape[1]
 
         return_codes = np.zeros((starting_points.shape[0],), dtype=np.int8, order='C')
@@ -358,11 +360,26 @@ class AbstractParallelOptimizerWorker(Worker):
         Returns:
             str: the evaluation function.
         """
+        objective_function = self._model.get_objective_per_observation_function()
+        param_modifier = self._model.get_pre_eval_parameter_modifier()
+
         kernel_source = ''
-        kernel_source += self._model.get_objective_function('calculateObjective')
+        kernel_source += objective_function.get_function()
+        kernel_source += param_modifier.get_function()
         kernel_source += '''
             double evaluate(mot_float_type* x, const void* data){
-                return calculateObjective(data, x);
+                
+                mot_float_type x_model[''' + str(self._model.get_nmr_estimable_parameters()) + '''];
+                for(uint i = 0; i < ''' + str(self._model.get_nmr_estimable_parameters()) + '''; i++){
+                    x_model[i] = x[i];
+                }
+                ''' + param_modifier.get_name() + '''((void*)&data, x_model);
+                
+                double sum = 0;
+                for(uint i = 0; i < ''' + str(self._model.get_nmr_inst_per_problem()) + '''; i++){
+                    sum += pown(''' + objective_function.get_name() + '''(data, x_model, i), 2);
+                }
+                return sum;
             }
         '''
         return kernel_source

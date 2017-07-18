@@ -1,4 +1,3 @@
-from collections import Mapping
 import pyopencl as cl
 import numpy as np
 from ...utils import get_float_type_def
@@ -23,9 +22,7 @@ class CalculateModelEstimates(CLRoutine):
 
         Args:
             model (AbstractModel): The model to evaluate.
-            parameters (dict or ndarray): The parameters to use in the evaluation of the model
-                If a dict is given we assume it is with values for a set of parameters
-                If an ndarray is given we assume that we have data for all parameters.
+            parameters (ndarray): The parameters to use in the evaluation of the model
 
         Returns:
             ndarray: Return per problem instance the evaluation per data point.
@@ -36,11 +33,7 @@ class CalculateModelEstimates(CLRoutine):
 
         nmr_inst_per_problem = model.get_nmr_inst_per_problem()
 
-        if isinstance(parameters, Mapping):
-            parameters = np.require(model.get_initial_parameters(parameters), np_dtype,
-                                    requirements=['C', 'A', 'O'])
-        else:
-            parameters = np.require(parameters, np_dtype, requirements=['C', 'A', 'O'])
+        parameters = np.require(parameters, np_dtype, requirements=['C', 'A', 'O'])
 
         nmr_problems = parameters.shape[0]
         evaluations = np.zeros((nmr_problems, nmr_inst_per_problem), dtype=np_dtype, order='C')
@@ -89,7 +82,9 @@ class _EvaluateModelWorker(Worker):
         return all_buffers, evaluations_buffer
 
     def _get_kernel_source(self):
-        cl_func = self._model.get_model_eval_function('evaluateModel')
+        eval_function_info = self._model.get_model_eval_function()
+        param_modifier = self._model.get_pre_eval_parameter_modifier()
+
         nmr_params = self._parameters.shape[1]
 
         kernel_param_names = ['global mot_float_type* params', 'global mot_float_type* estimates']
@@ -100,7 +95,8 @@ class _EvaluateModelWorker(Worker):
         '''
         kernel_source += get_float_type_def(self._model.double_precision)
         kernel_source += self._data_info.get_kernel_data_struct()
-        kernel_source += cl_func
+        kernel_source += eval_function_info.get_function()
+        kernel_source += param_modifier.get_function()
         kernel_source += '''
             __kernel void get_estimates(
                 ''' + ",\n".join(kernel_param_names) + '''
@@ -114,9 +110,11 @@ class _EvaluateModelWorker(Worker):
                     }
 
                     global mot_float_type* result = estimates + gid * NMR_INST_PER_PROBLEM;
-
+                    
+                    ''' + param_modifier.get_name() + '''((void*)&data, x);
+                    
                     for(uint i = 0; i < NMR_INST_PER_PROBLEM; i++){
-                        result[i] = evaluateModel((void*)&data, x, i);
+                        result[i] = ''' + eval_function_info.get_name() + '''((void*)&data, x, i);
                     }
             }
         '''

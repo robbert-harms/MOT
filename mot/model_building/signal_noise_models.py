@@ -21,11 +21,8 @@ class SignalNoiseModel(SimpleModelFunction):
         super(SignalNoiseModel, self).__init__('double', name, cl_function_name, parameter_list,
                                                dependency_list=dependency_list)
 
-    def get_signal_function(self, fname='signalNoiseModel'):
+    def get_signal_function(self):
         """Get the signal function that adds the noise to the signal function.
-
-        Args:
-            fname (str, optional): The function name of the function in OpenCL.
 
         Returns:
             str: A function with signature:
@@ -45,7 +42,7 @@ class SignalNoiseModel(SimpleModelFunction):
         """
 
 
-class JohnsonSignalNoise(SignalNoiseModel):
+class JohnsonNoise(SignalNoiseModel):
 
     def __init__(self):
         """Johnson noise adds noise to the signal using the formula:
@@ -55,15 +52,15 @@ class JohnsonSignalNoise(SignalNoiseModel):
             sqrt(signal^2 + eta^2)
 
         """
-        super(JohnsonSignalNoise, self).__init__(
+        super(JohnsonNoise, self).__init__(
             'JohnsonNoise',
-            'johnsonNoiseModel',
+            'johnsonNoise',
             (FreeParameter(SimpleCLDataType.from_string('double'), 'eta', False, 0.1, 0, 100,
                            parameter_transform=CosSqrClampTransform()),), ())
 
-    def get_signal_function(self, fname='signalNoiseModel'):
+    def get_signal_function(self):
         return '''
-            double ''' + fname + '''(const double signal, const double eta){
+            double ''' + self.cl_function_name + '''(const double signal, const double eta){
                 return sqrt((signal * signal) + (eta * eta));
             }
         '''

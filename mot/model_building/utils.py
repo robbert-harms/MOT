@@ -67,7 +67,7 @@ class ModelPrior(object):
         """
         raise NotImplementedError()
 
-    def get_function_name(self):
+    def get_prior_function_name(self):
         """Get the name of this prior function
 
         Returns:
@@ -102,5 +102,5 @@ class SimpleModelPrior(ModelPrior):
     def get_function_parameters(self):
         return self._parameters
 
-    def get_function_name(self):
+    def get_prior_function_name(self):
         return self._function_name

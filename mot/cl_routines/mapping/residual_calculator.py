@@ -18,12 +18,12 @@ class ResidualCalculator(CLRoutine):
         """Calculate the residuals, that is the errors, per problem instance per data point."""
         super(ResidualCalculator, self).__init__(cl_environments=cl_environments, load_balancer=load_balancer)
 
-    def calculate(self, model, parameters_dict, model_estimates=None):
+    def calculate(self, model, parameters, model_estimates=None):
         """Calculate and return the residuals.
 
         Args:
             model (AbstractModel): The model to calculate the residuals of.
-            parameters_dict (dict): The parameters to use in the evaluation of the model
+            parameters (ndarray): The parameters to use in the evaluation of the model
             model_estimates (ndarray): The model estimates of the model if available. If not given we
                 calculate the model estimates using the initial parameters from the model.
 
@@ -38,7 +38,7 @@ class ResidualCalculator(CLRoutine):
         nmr_problems = model.get_nmr_problems()
 
         residuals = np.zeros((nmr_problems, nmr_inst_per_problem), dtype=np_dtype, order='C')
-        parameters = np.require(model.get_initial_parameters(parameters_dict), np_dtype, requirements=['C', 'A', 'O'])
+        parameters = np.require(parameters, np_dtype, requirements=['C', 'A', 'O'])
 
         if model_estimates is not None:
             model_estimates = np.require(model_estimates, np_dtype, requirements=['C', 'A', 'O'])
@@ -65,10 +65,6 @@ class _ResidualCalculatorWorker(Worker):
 
         self._all_buffers, self._residuals_buffer = self._create_buffers()
         self._kernel = self._build_kernel(self._get_kernel_source(), compile_flags)
-
-    def __del__(self):
-        for buffer in self._all_buffers:
-            buffer.release()
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
@@ -99,6 +95,8 @@ class _ResidualCalculatorWorker(Worker):
         return all_buffers, errors_buffer
 
     def _get_kernel_source(self):
+        obs_function = self._model.get_observation_return_function()
+
         nmr_inst_per_problem = self._model.get_nmr_inst_per_problem()
         nmr_params = self._parameters.shape[1]
 
@@ -115,9 +113,13 @@ class _ResidualCalculatorWorker(Worker):
 
         kernel_source += get_float_type_def(self._double_precision)
         kernel_source += self._data_info.get_kernel_data_struct()
-        kernel_source += self._model.get_observation_return_function('getObservation')
+        kernel_source += obs_function.get_function()
         if self._model_estimates is None:
-            kernel_source += self._model.get_model_eval_function('evaluateModel')
+            eval_function_info = self._model.get_model_eval_function()
+            param_modifier = self._model.get_pre_eval_parameter_modifier()
+
+            kernel_source += eval_function_info.get_function()
+            kernel_source += param_modifier.get_function()
             kernel_source += '''
                 __kernel void get_errors(
                     ''' + ",\n".join(kernel_param_names) + '''
@@ -131,9 +133,12 @@ class _ResidualCalculatorWorker(Worker):
                         }
 
                         global mot_float_type* result = errors + gid * NMR_INST_PER_PROBLEM;
-
+                        
+                        ''' + param_modifier.get_name() + '''((void*)&data, x);
+                        
                         for(uint i = 0; i < NMR_INST_PER_PROBLEM; i++){
-                            result[i] = getObservation((void*)&data, i) - evaluateModel((void*)&data, x, i);
+                            result[i] = ''' + obs_function.get_name() + '''((void*)&data, i) - ''' + \
+                                eval_function_info.get_name() + '''((void*)&data, x, i);
                         }
                 }
             '''
@@ -148,7 +153,8 @@ class _ResidualCalculatorWorker(Worker):
                         global mot_float_type* result = errors + gid * NMR_INST_PER_PROBLEM;
 
                         for(uint i = 0; i < NMR_INST_PER_PROBLEM; i++){
-                            result[i] = getObservation(&data, i) - model_estimates[i + gid * NMR_INST_PER_PROBLEM];
+                            result[i] = ''' + obs_function.get_name() + '''(&data, i) - 
+                                model_estimates[i + gid * NMR_INST_PER_PROBLEM];
                         }
                 }
             '''
