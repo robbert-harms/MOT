@@ -272,7 +272,7 @@ class SimpleLoadBalanceStrategy(LoadBalanceStrategy):
             current_percentage = problems_seen / float(total_nmr_problems)
             remaining_time = (run_time / current_percentage) - run_time
 
-            self._logger.info('Processing is at {0:.2%}, time spent: {1}, time left: {2} (h:m:s).'.format(
+            self._logger.debug('Processing is at {0:.2%}, time spent: {1}, time left: {2} (h:m:s).'.format(
                 current_percentage,
                 time.strftime('%H:%M:%S', time.gmtime(run_time)),
                 time.strftime('%H:%M:%S', time.gmtime(remaining_time))))
