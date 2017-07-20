@@ -516,8 +516,6 @@ class OptimizeModelBuilder(object):
         eval_function_info = self._get_model_eval_function(problems_to_analyze)
         obs_func = self._get_observation_return_function()
 
-        inst_per_problem = self.get_nmr_inst_per_problem()
-
         param_listing = ''
         for p in self._evaluation_model.get_free_parameters():
             param_listing += self._get_param_listing_for_param(self._evaluation_model, p)
@@ -1060,7 +1058,7 @@ class OptimizeModelBuilder(object):
         if self._enforce_weights_sum_to_one:
             names = ['{}.{}'.format(m.name, p.name) for (m, p) in self._model_functions_info.get_weights()]
             if len(names):
-                self.fix(names[0], SimpleAssignment('1 - ({})'.format(' + '.join(names[1:]))))
+                self.fix(names[0], SimpleAssignment('max((double)1 - ({}), (double)0)'.format(' + '.join(names[1:]))))
 
     def _get_mot_float_type(self):
         """Get the data type for the mot_float_type"""
