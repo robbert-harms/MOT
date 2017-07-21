@@ -291,6 +291,21 @@ class OptimizeModelBuilder(object):
         return list(set([p.name for m, p in self._model_functions_info.get_model_parameter_list() if
                          isinstance(p, ProtocolParameter)]))
 
+    def set_fixed_parameter_values(self, fixed_values):
+        """Given a dictionary with static maps, initialize the values of the static parameters with these values.
+
+        Make sure that if vectors are given, the lengt of the vector should match the length of the number of problems
+        (in the problem data).
+
+        Args:
+            fixed_values (dict): the dictionary with the static maps.
+        """
+        static_params = self._model_functions_info.get_static_parameters_list()
+        for m, p in static_params:
+            if p.name in fixed_values:
+                self._model_functions_info.set_parameter_value('{}.{}'.format(m.name, p.name), fixed_values[p.name])
+        return self
+
     def get_free_param_names(self):
         """See super class for details"""
         return ['{}.{}'.format(m.name, p.name) for m, p in self._model_functions_info.get_estimable_parameters_list()]
@@ -426,7 +441,7 @@ class OptimizeModelBuilder(object):
 
     def _get_observation_return_function(self):
         func_name = '_getObservation'
-        if self._problem_data.observations.shape[1] < 2:
+        if self.get_nmr_inst_per_problem() < 2:
             func = '''
                 double ''' + func_name + '''(const void* const data, const uint observation_index){
                     return ((''' + self._kernel_data_struct_type + '''*)data)->var_data_observations;
@@ -644,7 +659,7 @@ class OptimizeModelBuilder(object):
                     param_list.append(str(get_single_value(static_map_value)))
                 else:
                     if len(static_map_value.shape) > 1 \
-                            and static_map_value.shape[1] == self._problem_data.observations.shape[1]:
+                            and static_map_value.shape[1] == self.get_nmr_inst_per_problem():
                         param_list.append('data->var_data_' + '{}.{}'.format(model.name, param.name).replace('.', '_')
                                           + '[observation_index]')
                     else:
@@ -1532,7 +1547,7 @@ class ModelFunctionsInformation(object):
             value (scalar or vector or string or AbstractParameterDependency): The value or dependency
                 to fix the given parameter to. Dependency objects and strings are only value for fixed free parameters.
         """
-        if self._fixed_parameters[parameter_name]:
+        if parameter_name in self._fixed_parameters and self._fixed_parameters[parameter_name]:
             self._fixed_values[parameter_name] = value
         else:
             self._parameter_values[parameter_name] = value
@@ -1543,7 +1558,7 @@ class ModelFunctionsInformation(object):
         Returns:
             float or ndarray: the value for the given parameter
         """
-        if self._fixed_parameters[parameter_name]:
+        if parameter_name in self._fixed_parameters and self._fixed_parameters[parameter_name]:
             return self._fixed_values[parameter_name]
         return self._parameter_values[parameter_name]
 
