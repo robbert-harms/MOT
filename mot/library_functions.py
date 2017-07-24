@@ -1,4 +1,6 @@
 import os
+from textwrap import indent, dedent
+
 from pkg_resources import resource_filename
 
 __author__ = 'Robbert Harms'
@@ -34,15 +36,15 @@ class SimpleCLLibrary(CLLibrary):
         self._dependencies = dependencies or {}
 
     def get_cl_code(self):
-        return '''
+        return dedent('''
             {dependencies}
             #ifndef {inclusion_guard_name}
             #define {inclusion_guard_name}
             {code}
             #endif // {inclusion_guard_name}
-        '''.format(dependencies=self._get_cl_dependency_code(),
+        '''.format(dependencies=indent(self._get_cl_dependency_code(), ' '*4*3),
                    inclusion_guard_name='LIBRARY_FUNCTION_{}_CL'.format(self._name),
-                   code=self._cl_code)
+                   code=indent('\n' + self._cl_code.strip() + '\n', ' '*4*3)))
 
     def _get_cl_dependency_code(self):
         """Get the CL code for all the CL code for all the dependencies.
@@ -70,7 +72,8 @@ class SimpleCLLibraryFromFile(SimpleCLLibrary):
                 (using the % format function of Python)
             dependencies (list or tuple of CLLibrary): The list of cl libraries this function depends on
         """
-        code = open(os.path.abspath(cl_code_file), 'r').read()
+        with open(os.path.abspath(cl_code_file), 'r') as f:
+            code = f.read()
 
         if var_replace_dict is not None:
             code = code % var_replace_dict
@@ -91,6 +94,14 @@ class Bessel(SimpleCLLibraryFromFile):
     def __init__(self):
         """Function library for the bessel functions."""
         super(Bessel, self).__init__(self.__class__.__name__, resource_filename('mot', 'data/opencl/bessel.cl'))
+
+
+class GammaFunctions(SimpleCLLibraryFromFile):
+
+    def __init__(self):
+        """Function library for the bessel functions."""
+        super(GammaFunctions, self).__init__(self.__class__.__name__,
+                                             resource_filename('mot', 'data/opencl/gammaFunctions.cl'))
 
 
 class Trigonometrics(SimpleCLLibraryFromFile):

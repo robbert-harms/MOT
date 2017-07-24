@@ -54,8 +54,6 @@ class OptimizeModelBuilder(object):
         self._model_functions_info = self._init_model_information_container(
             model_tree, evaluation_model, signal_noise_model)
 
-        self._post_optimization_modifiers = []
-
         self._lower_bounds = {'{}.{}'.format(m.name, p.name): p.lower_bound for m, p in
                               self._model_functions_info.get_free_parameters_list()}
 
