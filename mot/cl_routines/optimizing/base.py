@@ -376,14 +376,8 @@ class AbstractParallelOptimizerWorker(Worker):
                 ''' + param_modifier.get_name() + '''((void*)&data, x_model);
                 
                 double sum = 0;
-                double objective = 0;
                 for(uint i = 0; i < ''' + str(self._model.get_nmr_inst_per_problem()) + '''; i++){
-                    objective = ''' + objective_function.get_name() + '''(data, x_model, i);
-                        
-                    if(isinf(objective)){
-                        return HUGE_VAL;
-                    }   
-                    sum += pown(objective, 2);
+                    sum += pown(''' + objective_function.get_name() + '''(data, x_model, i), 2);
                 }
                 return sum;
             }
