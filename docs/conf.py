@@ -167,7 +167,7 @@ html_theme_options = {
     'show_powered_by': False,
     'description': "Maastricht Optimization Toolbox",
     'logo_name': True,
-    'sidebar_collapse': False,
+    'sidebar_collapse': True,
     'fixed_sidebar': True,
     'extra_nav_links': {'Module index': 'py-modindex.html'}
 }

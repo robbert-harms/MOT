@@ -36,14 +36,6 @@ mot\.cl\_routines\.mapping\.error\_measures module
     :undoc-members:
     :show-inheritance:
 
-mot\.cl\_routines\.mapping\.log\_pointwise\_predictive\_density module
-----------------------------------------------------------------------
-
-.. automodule:: mot.cl_routines.mapping.log_pointwise_predictive_density
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
 mot\.cl\_routines\.mapping\.loglikelihood\_calculator module
 ------------------------------------------------------------
 
@@ -72,6 +64,14 @@ mot\.cl\_routines\.mapping\.residual\_calculator module
 -------------------------------------------------------
 
 .. automodule:: mot.cl_routines.mapping.residual_calculator
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+mot\.cl\_routines\.mapping\.waic\_calculator module
+---------------------------------------------------
+
+.. automodule:: mot.cl_routines.mapping.waic_calculator
     :members:
     :undoc-members:
     :show-inheritance:

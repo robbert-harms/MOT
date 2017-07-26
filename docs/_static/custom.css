@@ -1,5 +1,7 @@
 .toctree-l1{
-    padding-top:10px;
+    padding-top:1px;
+    list-style: circle;
+    font-family: sans-serif;
 }
 
 .toctree-l1:first-child {
@@ -11,13 +13,34 @@ p + ul {
     margin-bottom:15px;
 }
 
+div.sphinxsidebar ul{
+    margin: 10px 0 0 15px;
+}
+
+div.sphinxsidebar ul.extra_sidebar_items{
+    margin-top:3px;
+}
+
+div.sphinxsidebar{
+    width: 240px;
+    font-size: 13px;
+}
+
+div.sphinxsidebar a{
+    border-bottom: none;
+}
+
 div.body p{
     margin-bottom:7px;
     margin-top:7px;
 }
 
 div.body h3{
-    font-size: 140%;
+    font-size: 145%;
+}
+
+div.body h4{
+    font-size: 135%;
 }
 
 .highlight pre{
@@ -33,9 +56,37 @@ div.body h3{
 }
 
 #table-of-contents > ul > li{
-    margin-top:15px;
+    margin-top:8px;
 }
 
 #table-of-contents > ul > li:first-child{
     margin-top:0px;
+}
+
+.caption-text{
+    font-style:italic;
+}
+
+#searchbox{
+    margin-top: 15px;
+}
+
+#searchbox h3{
+    font-size: 1em;
+}
+
+a{
+    color: #007BB0;
+}
+
+a.reference{
+    border-bottom: none;
+}
+
+div.body > .section{
+    text-align: justify;
+}
+
+div.body h1{
+    text-align:left;
 }
