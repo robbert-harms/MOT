@@ -126,7 +126,8 @@ class SimpleDataAdapter(DataAdapter):
         """Create a CL vector type of the given array.
 
         Returns:
-            ndarray: An array of the same length as the given array, but with only one column per row, the opencl vector.
+            ndarray: An array of the same length as the given array, but with only one column per row,
+                the opencl vector.
         """
         s = self._data.shape
         if len(s) > 1:

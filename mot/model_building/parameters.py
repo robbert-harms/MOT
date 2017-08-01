@@ -1,5 +1,7 @@
 from copy import copy
 
+import six
+
 from mot.cl_data_type import SimpleCLDataType
 from mot.model_building.parameter_functions.priors import UniformWithinBoundsPrior
 from mot.model_building.parameter_functions.proposals import GaussianProposal
@@ -18,13 +20,18 @@ class CLFunctionParameter(object):
         """Creates a new function parameter for the CL functions.
 
         Args:
-            data_type (mot.cl_data_type.SimpleCLDataType): the data type expected by this parameter
+            data_type (mot.cl_data_type.SimpleCLDataType or str): the data type expected by this parameter
+                If a string is given we will use ``SimpleCLDataType.from_string`` for translating the data_type.
             name (str): The name of this parameter
 
         Attributes:
             name (str): The name of this parameter
         """
-        self._data_type = data_type
+        if isinstance(data_type, six.string_types):
+            self._data_type = SimpleCLDataType.from_string(data_type)
+        else:
+            self._data_type = data_type
+
         self.name = name
 
     @property
