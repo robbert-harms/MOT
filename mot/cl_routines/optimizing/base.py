@@ -146,12 +146,13 @@ class SimpleOptimizationResult(OptimizationResults):
         return self._return_codes
 
     def get_residuals(self):
-        return ResidualCalculator().calculate(self._model, self._optimization_results)
+        return np.nan_to_num(ResidualCalculator().calculate(self._model, self._optimization_results))
 
     def get_error_measures(self):
         if self._error_measures is None:
             self._error_measures = ErrorMeasures(
                 double_precision=self._model.double_precision).calculate(self.get_residuals())
+        self._error_measures = {k: np.nan_to_num(v) for k, v in self._error_measures.items()}
         return self._error_measures
 
 
