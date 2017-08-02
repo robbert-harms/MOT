@@ -457,7 +457,7 @@ class OptimizeModelBuilder(object):
     def _get_pre_eval_parameter_modifier(self):
         func_name = '_modifyParameters'
         func = '''
-            double ''' + func_name + '''(const void* const data, const mot_float_type* x){
+            void ''' + func_name + '''(const void* const data, mot_float_type* x){
             }
         '''
         return SimpleNamedCLFunction(func, func_name)
@@ -880,20 +880,36 @@ class OptimizeModelBuilder(object):
         if isinstance(p, ProtocolParameter):
             assignment = 'data->protocol_data_' + p.name + '[observation_index]'
         elif isinstance(p, FreeParameter):
-            value = self._model_functions_info.get_parameter_value('{}.{}'.format(m.name, p.name))
-
-            if self._model_functions_info.is_fixed_to_value('{}.{}'.format(m.name, p.name)):
-                if all_elements_equal(value):
-                    assignment = '(' + data_type + ')' + str(float(get_single_value(value)))
-                else:
-                    assignment = '(' + data_type + ') data->var_data_{}.{}'.format(m.name, p.name).replace('.', '_')
-            elif self._model_functions_info.is_fixed_to_dependency(m, p):
-                return self._get_dependent_parameters_listing(((m, p),))
-            else:
-                ind = self._model_functions_info.get_parameter_estimable_index(m, p)
-                assignment += 'x[' + str(ind) + ']'
+            assignment = self._get_free_parameter_assignment_value(m, p)
 
         return data_type + ' ' + name + ' = ' + assignment + ';' + "\n"
+
+    def _get_free_parameter_assignment_value(self, m, p):
+        """Get the assignment value for one of the free parameters.
+
+        Since the free parameters can be fixed we need an auxiliary routine to get the assignment value.
+
+        Args:
+            m: model
+            p: parameter
+        """
+        data_type = p.data_type.raw_data_type
+        value = self._model_functions_info.get_parameter_value('{}.{}'.format(m.name, p.name))
+
+        assignment = ''
+
+        if self._model_functions_info.is_fixed_to_value('{}.{}'.format(m.name, p.name)):
+            if all_elements_equal(value):
+                assignment = '(' + data_type + ')' + str(float(get_single_value(value)))
+            else:
+                assignment = '(' + data_type + ') data->var_data_{}.{}'.format(m.name, p.name).replace('.', '_')
+        elif self._model_functions_info.is_fixed_to_dependency(m, p):
+            return self._get_dependent_parameters_listing(((m, p),))
+        else:
+            ind = self._model_functions_info.get_parameter_estimable_index(m, p)
+            assignment += 'x[' + str(ind) + ']'
+
+        return assignment
 
     def _convert_parameters_dot_to_bar(self, string):
         """Convert a string containing parameters with . to parameter names with _"""
@@ -1211,8 +1227,9 @@ class SampleModelBuilder(OptimizeModelBuilder):
                 parameters = []
 
                 for param_name in model_prior.get_function_parameters():
-                    param_index = self._model_functions_info.get_parameter_estimable_index_by_name(param_name)
-                    parameters.append('x[{}]'.format(param_index))
+                    assignment_value = self._get_free_parameter_assignment_value(
+                        *self._model_functions_info.get_model_parameter_by_name(param_name))
+                    parameters.append(assignment_value)
 
                 cl_str += '\tprior *= {}({});\n'.format(function_name, ', '.join(parameters))
 
@@ -1960,7 +1977,7 @@ class ParameterTransformedModel(OptimizeModelInterface):
         code = old_modifier.get_function()
         code += self._parameter_codec.get_parameter_decode_function('_decodeParameters')
         code += '''
-            double ''' + new_fname + '''(const void* const data, const mot_float_type* x){
+            void ''' + new_fname + '''(const void* const data, mot_float_type* x){
                 _decodeParameters(data, x);
                 ''' + old_modifier.get_name() + '''(data, x);
             }
