@@ -108,6 +108,19 @@ class IdentityTransform(AbstractTransformation):
         return FormatAssignmentConstructor('{parameter_variable}')
 
 
+class PositiveTransform(AbstractTransformation):
+
+    def __init__(self, *args, **kwargs):
+        """The identity transform does no transformation and returns the input given."""
+        super(PositiveTransform, self).__init__(*args, **kwargs)
+
+    def get_cl_encode(self):
+        return FormatAssignmentConstructor('max({parameter_variable}, (mot_float_type)0)')
+
+    def get_cl_decode(self):
+        return FormatAssignmentConstructor('max({parameter_variable}, (mot_float_type)0)')
+
+
 class ClampTransform(AbstractTransformation):
     """The clamp transformation limits the parameter between its lower and upper bound using the clamp function."""
 
