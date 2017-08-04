@@ -499,12 +499,12 @@ class OptimizeModelBuilder(object):
         function_name = '_evaluateModel'
 
         cl_function = '''
-            double {function_name}(            
-                    const void* const void_data, 
-                    const mot_float_type* const x, 
+            double {function_name}(
+                    const void* const void_data,
+                    const mot_float_type* const x,
                     const uint observation_index){{
-                
-                {body}      
+
+                {body}
             }}
         '''.format(function_name=function_name, body=indent(get_function_body(), ' '*4*4)[4*4:])
         cl_function = dedent(cl_function.replace('\t', ' '*4))
@@ -532,7 +532,7 @@ class OptimizeModelBuilder(object):
         func = str(preliminary) + '''
             double ''' + func_name + '''(const void* const data, mot_float_type* const x,
                                          const uint observation_index){
-                return _evaluationModel(data, x, observation_index);    
+                return _evaluationModel(data, x, observation_index);
             }
         '''
         return SimpleNamedCLFunction(func, func_name)
@@ -621,7 +621,7 @@ class OptimizeModelBuilder(object):
                 if all_elements_equal(static_map_value):
                     param_list.append(str(get_single_value(static_map_value)))
                 else:
-                    if len(static_map_value.shape) > 1 \
+                    if len(static_map_value.shape) > 1 and static_map_value.shape[1] != 1 \
                             and static_map_value.shape[1] == self.get_nmr_inst_per_problem():
                         param_list.append('data->var_data_' + '{}.{}'.format(model.name, param.name).replace('.', '_')
                                           + '[observation_index]')
@@ -1210,14 +1210,14 @@ class SampleModelBuilder(OptimizeModelBuilder):
             func_name = 'getLogPrior'
             prior = '''
                 {preliminary}
-                
+
                 mot_float_type {func_name}(const void* data_void,
                                            {address_space_parameter_vector} const mot_float_type* const x){{
-    
+
                     {kernel_data_struct_type}* data = ({kernel_data_struct_type}*)data_void;
                     mot_float_type prior = 1.0;
-                    
-                    {body}  
+
+                    {body}
                 }}
                 '''.format(func_name=func_name, address_space_parameter_vector=address_space_parameter_vector,
                            kernel_data_struct_type=self._kernel_data_struct_type,
@@ -1298,13 +1298,13 @@ class SampleModelBuilder(OptimizeModelBuilder):
             func_name = 'getProposalLogPDF'
             return_str = '''
                 {preliminary}
-                
+
                 double {func_name}(
                     const uint param_ind,
                     const mot_float_type proposal,
                     const mot_float_type current,
                     {address_space_proposal_state} mot_float_type* const proposal_state){{
-    
+
                     {body}
                 }}
             '''.format(func_name=func_name, address_space_proposal_state=address_space_proposal_state,
@@ -1348,15 +1348,15 @@ class SampleModelBuilder(OptimizeModelBuilder):
             func_name = 'getProposal'
             return_str = '''
                 {preliminary}
-                
+
                 mot_float_type {func_name}(
                     const uint param_ind,
                     const mot_float_type current,
                     void* rng_data,
                     {address_space_proposal_state} mot_float_type* const proposal_state){{
-    
+
                     {body}
-                }} 
+                }}
             '''.format(func_name=func_name, address_space_proposal_state=address_space_proposal_state,
                        body=body, preliminary=preliminary)
             return SimpleNamedCLFunction(return_str, func_name)
@@ -1412,7 +1412,7 @@ class SampleModelBuilder(OptimizeModelBuilder):
             if self._proposal_state_update_uses_variance():
                 return_str += '''
                     {preliminary}
-                    
+
                     void {func_name}({address_space} mot_float_type* const proposal_state,
                                      {address_space} ulong* const sampling_counter,
                                      {address_space} ulong* const acceptance_counter,
@@ -1423,7 +1423,7 @@ class SampleModelBuilder(OptimizeModelBuilder):
             else:
                 return_str += '''
                     {preliminary}
-                    
+
                     void {func_name}({address_space} mot_float_type* const proposal_state,
                                      {address_space} ulong* const sampling_counter,
                                      {address_space} ulong* const acceptance_counter){{
@@ -1587,7 +1587,7 @@ class CompositeModelFunction(ModelFunction):
             double {func_name}(
                     {params}){{
 
-                return {model_expression} 
+                return {model_expression}
             }}
         '''.format(func_name=self.cl_function_name, params=indent(', \n'.join(build_parameters()), '    ' * 5)[20:],
                    model_expression=build_model_expression())
