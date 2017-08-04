@@ -103,6 +103,14 @@ class EvaluationModel(SimpleModelFunction):
         """
         return 'sigma'
 
+    def get_cl_dependency_code(self):
+        """Get the CL code for all the CL code for all the dependencies.
+
+        Returns:
+            str: The CL code with the actual code.
+        """
+        return self._get_cl_dependency_code()
+
 
 class SumOfSquaresEvaluationModel(EvaluationModel):
 

@@ -1,3 +1,5 @@
+from textwrap import dedent, indent
+
 import numpy as np
 import copy
 from six import string_types
@@ -5,7 +7,7 @@ from mot.cl_data_type import SimpleCLDataType
 from mot.cl_routines.mapping.codec_runner import CodecRunner
 from mot.cl_routines.sampling.metropolis_hastings import DefaultMHState
 from mot.model_building.model_function_priors import ModelFunctionPrior
-from mot.model_building.model_functions import Weight
+from mot.model_building.model_functions import Weight, ModelFunction
 from mot.model_building.parameters import CurrentObservationParam, StaticMapParameter, ProtocolParameter, \
     ModelDataParameter, FreeParameter
 from mot.model_building.data_adapter import SimpleDataAdapter
@@ -24,8 +26,8 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class OptimizeModelBuilder(object):
 
-    def __init__(self, name, model_tree, evaluation_model, signal_noise_model=None, problem_data=None,
-                 enforce_weights_sum_to_one=True):
+    def __init__(self, name, model_tree, evaluation_model, signal_noise_model=None,
+                 problem_data=None, enforce_weights_sum_to_one=True):
         """Create a new model builder that can construct an optimization model from a combination of model functions.
 
         Args:
@@ -77,6 +79,14 @@ class OptimizeModelBuilder(object):
             ModelFunctionsInformation: the model function information object
         """
         return ModelFunctionsInformation(model_tree, evaluation_model, signal_noise_model)
+
+    def get_composite_model_function(self):
+        """Get the composite model function for the current model tree and possible signal noise model.
+
+        Returns:
+            CompositeModelFunction: the model function for the composite model
+        """
+        return CompositeModelFunction(self._model_tree, signal_noise_model=self._signal_noise_model)
 
     def build(self, problems_to_analyze=None):
         """Construct the final immutable model with the current settings.
@@ -463,67 +473,44 @@ class OptimizeModelBuilder(object):
         return SimpleNamedCLFunction(func, func_name)
 
     def _get_model_eval_function(self, problems_to_analyze):
+        composite_model_function = self.get_composite_model_function()
+
         def get_preliminary():
             cl_preliminary = ''
-            for compartment_model in self._model_tree.get_compartment_models():
-                cl_preliminary += compartment_model.get_cl_code() + "\n"
-
-            if self._signal_noise_model:
-                cl_preliminary += self._signal_noise_model.get_signal_function()
-
+            cl_preliminary += composite_model_function.get_cl_code()
             pre_model_function = self._get_pre_model_expression_eval_function()
             if pre_model_function:
                 cl_preliminary += pre_model_function
             return cl_preliminary
 
-        def get_model_expression():
-            model_expression = ''
-            if self._signal_noise_model:
-                noise_params_func = ''
-                for p in self._signal_noise_model.get_free_parameters():
-                    noise_params_func += ', ' + '{}.{}'.format(self._signal_noise_model.name, p.name).replace('.',
-                                                                                                              '_')
-
-                model_expression += self._signal_noise_model.cl_function_name
-                model_expression += '((' + self._build_model_from_tree(self._model_tree, 0, problems_to_analyze) + ')'
-                model_expression += noise_params_func + ');'
-            else:
-                model_expression += '(' + self._build_model_from_tree(self._model_tree, 0, problems_to_analyze) + ');'
-            return model_expression
-
         def get_function_body():
-            body = ''
-            body += self._kernel_data_struct_type + '* data = ('
-            body += self._kernel_data_struct_type + '*)void_data;'
-
-            body += self._get_parameters_listing(
+            param_listing = self._get_parameters_listing(
                 exclude_list=['{}.{}'.format(m.name, p.name).replace('.', '_') for (m, p) in
-                              self._model_functions_info.get_non_model_tree_param_listing()])
+                              self._model_functions_info.get_non_model_eval_param_listing()])
 
-            if self._signal_noise_model:
-                noise_params_listing = ''
-                for p in self._signal_noise_model.get_free_parameters():
-                    noise_params_listing += "\t" * 4 + self._get_param_listing_for_param(self._signal_noise_model,
-                                                                                         p)
-                body += "\n"
-                body += noise_params_listing
-
-            pre_model_code = self._get_pre_model_expression_eval_code()
-            if pre_model_code:
-                body += self._get_pre_model_expression_eval_code()
-
-            body += 'return ' + str(get_model_expression())
+            body = ''
+            body += self._kernel_data_struct_type + '* data = (' + self._kernel_data_struct_type + '*)void_data; \n'
+            body += dedent(param_listing.replace('\t', ' '*4))
+            body += self._get_pre_model_expression_eval_code() or ''
+            body += '\n'
+            body += 'return ' + self._composite_model_to_string(composite_model_function, problems_to_analyze) + ';'
             return body
 
         function_name = '_evaluateModel'
 
-        func = get_preliminary()
-        func += 'double ' + function_name + '('
-        func += 'const void* const void_data, const mot_float_type* const x, const uint observation_index){\n'
-        func += get_function_body()
-        func += "}"
+        cl_function = '''
+            double {function_name}(            
+                    const void* const void_data, 
+                    const mot_float_type* const x, 
+                    const uint observation_index){{
+                
+                {body}      
+            }}
+        '''.format(function_name=function_name, body=indent(get_function_body(), ' '*4*4)[4*4:])
+        cl_function = dedent(cl_function.replace('\t', ' '*4))
 
-        return SimpleNamedCLFunction(func, function_name)
+        return_str = get_preliminary() + cl_function
+        return SimpleNamedCLFunction(return_str, function_name)
 
     def _get_objective_per_observation_function(self, problems_to_analyze):
         eval_function_info = self._get_model_eval_function(problems_to_analyze)
@@ -610,47 +597,25 @@ class OptimizeModelBuilder(object):
         """
         return observations
 
-    def _build_model_from_tree(self, node, depth, problems_to_analyze):
-        """Construct the model equation from the provided model tree.
+    def _composite_model_to_string(self, composite_model, problems_to_analyze):
+        """Create the parameter call code for the composite model.
 
         Args:
-            node: the next to to process
-            depth (int): the current tree depth
-            problems_to_analyze (ndarray): the subset of problems we are using for building the model.
-                This is used to adapt the model equation to the specifics of the current data in consideration.
-
-        Returns:
-            str: model (sub-)equation
+            composite_model (CompositeModelFunction): the composite model function
+            problems_to_analyze (list): the problems we are analyzing in this round
         """
-        if not node.children:
-            return self._model_to_string(node.data, problems_to_analyze)
-        else:
-            subfuncs = []
-            for child in node.children:
-                if child.children:
-                    subfuncs.append(self._build_model_from_tree(child, depth+1, problems_to_analyze))
-                else:
-                    subfuncs.append(self._model_to_string(child.data, problems_to_analyze))
-
-            operator = node.data
-            func = (' ' + operator + ' ').join(subfuncs)
-
-        if func[0] == '(':
-            return '(' + func + ')'
-        return '(' + "\n" + ("\t" * int((depth/2)+5)) + func + "\n" + ("\t" * int((depth/2)+4)) + ')'
-
-    def _model_to_string(self, model, problems_to_analyze):
-        """Convert a model to CL string."""
         param_list = []
-        for param in model.parameter_list:
+        for model, param in composite_model.get_original_model_parameter_list():
             if isinstance(param, ProtocolParameter):
                 param_list.append(param.name)
+
             elif isinstance(param, ModelDataParameter):
                 value = self._model_functions_info.get_parameter_value('{}.{}'.format(model.name, param.name))
                 if all_elements_equal(value):
                     param_list.append(str(get_single_value(value)))
                 else:
                     param_list.append('data->model_data_' + param.name)
+
             elif isinstance(param, StaticMapParameter):
                 static_map_value = self._get_static_map_value(model, param, problems_to_analyze)
                 if all_elements_equal(static_map_value):
@@ -662,12 +627,14 @@ class OptimizeModelBuilder(object):
                                           + '[observation_index]')
                     else:
                         param_list.append('data->var_data_' + '{}.{}'.format(model.name, param.name).replace('.', '_'))
+
             elif isinstance(param, CurrentObservationParam):
                 param_list.append('data->var_data_observations[observation_index]')
+
             else:
                 param_list.append('{}.{}'.format(model.name, param.name).replace('.', '_'))
 
-        return model.cl_function_name + '(' + ', '.join(param_list) + ')'
+        return composite_model.cl_function_name + '(' + ', '.join(param_list) + ')'
 
     def _get_parameters_listing(self, exclude_list=()):
         """Get the CL code for the parameter listing, this goes on top of the evaluate function.
@@ -1521,6 +1488,174 @@ class SampleModelBuilder(OptimizeModelBuilder):
         return None
 
 
+class CompositeModelFunction(ModelFunction):
+
+    def __init__(self, model_tree, signal_noise_model=None):
+        """The model function for the total constructed model.
+
+        This combines all the functions in the model tree into one big function and exposes that function and
+        its parameters.
+
+        Args:
+            model_tree (mot.model_building.trees.CompartmentModelTree): the model tree object
+            signal_noise_model (mot.model_building.signal_noise_models.SignalNoiseModel): the optional signal
+                noise model to use to add noise to the model prediction
+        """
+        self._model_tree = model_tree
+        self._signal_noise_model = signal_noise_model
+
+        self._models = list(self._model_tree.get_compartment_models())
+        if self._signal_noise_model:
+            self._models.append(self._signal_noise_model)
+        self._parameter_model_list = list((m, p) for m in self._models for p in m.parameter_list)
+
+    @property
+    def return_type(self):
+        return 'double'
+
+    @property
+    def cl_function_name(self):
+        return '_composite_model_function'
+
+    @property
+    def parameter_list(self):
+        return [p.get_renamed(cl_name) for m, p, cl_name in self._get_model_function_parameters()]
+
+    def get_original_model_parameter_list(self):
+        """Get the model and parameter tuples for the model out of which this composite model was constructed."""
+        return [(m, p) for m, p, cl_name in self._get_model_function_parameters()]
+
+    def get_cl_code(self):
+        dependencies = []
+        for model in self._models:
+            dependencies.append(model.get_cl_code())
+
+        return_str = ''
+        return_str += '\n'.join(dependencies)
+        return_str += self._get_model_function_cl_code()
+        return return_str
+
+    def get_free_parameters(self):
+        return list([p for p in self.parameter_list if isinstance(p, FreeParameter)])
+
+    def get_parameter_by_name(self, param_name):
+        for e in self.parameter_list:
+            if e.name == param_name:
+                return e
+        raise KeyError('The parameter with the name "{}" could not be found.'.format(param_name))
+
+    def _get_model_function_cl_code(self):
+        """Get the CL code for the model function as build by this model.
+
+        This returns the CL code for ONLY the model, that is it will return a function with the signature:
+
+        .. code-block:: c
+
+            double <func_name>(<param0>, <param1>, <param2>, ...);
+
+        Which as output returns the model evaluated at that set of parameters.
+        The model returned by this function knows nothing about the different types of parameters, it just returns
+        the model equation as constructed using the model tree.
+
+        Returns:
+            str: the CL code for the model
+        """
+        def build_model_expression():
+            tree = self._build_model_from_tree(self._model_tree, 0)
+
+            model_expression = ''
+            if self._signal_noise_model:
+                noise_params = ''
+                for p in self._signal_noise_model.get_free_parameters():
+                    noise_params += '{}.{}'.format(self._signal_noise_model.name, p.name).replace('.', '_')
+                model_expression += '{}(({}), {});'.format(self._signal_noise_model.cl_function_name,
+                                                           tree, noise_params)
+            else:
+                model_expression += '(' + tree + ');'
+            return model_expression
+
+        def build_parameters():
+            params = self._get_model_function_parameters()
+            cl_parameters = []
+
+            for m, p, name in params:
+                cl_type = p.data_type.cl_type
+                cl_parameters.append('{} {}'.format(cl_type, name))
+            return cl_parameters
+
+        return_str = '''
+            double {func_name}(
+                    {params}){{
+
+                return {model_expression} 
+            }}
+        '''.format(func_name=self.cl_function_name, params=indent(', \n'.join(build_parameters()), '    ' * 5)[20:],
+                   model_expression=build_model_expression())
+        return dedent(return_str.replace('\t', '    '))
+
+    def _get_model_parameters_list(self):
+        pass
+
+    def _get_model_function_parameters(self):
+        """Get the parameters to use in the model function.
+
+        Returns:
+            list of tuples: per parameter a tuple with (model, parameter, cl_name)
+                with the cl_name the name for this parameter in this CL function and the model and parameter
+                the original model and parameter.
+        """
+        seen_shared_params = []
+
+        shared_params = []
+        other_params = []
+
+        for m, p in self._parameter_model_list:
+            if isinstance(p, (ProtocolParameter, CurrentObservationParam)):
+                if p.name not in seen_shared_params:
+                    shared_params.append((m, p, p.name))
+                    seen_shared_params.append(p.name)
+            else:
+                other_params.append((m, p, '{}_{}'.format(m.name, p.name)))
+        return shared_params + other_params
+
+    def _build_model_from_tree(self, node, depth):
+        """Construct the model equation from the provided model tree.
+
+        Args:
+            node: the next to to process
+            depth (int): the current tree depth
+
+        Returns:
+            str: model (sub-)equation
+        """
+        def model_to_string(model):
+            """Convert a model to CL string."""
+            param_list = []
+            for param in model.parameter_list:
+                if isinstance(param, (ProtocolParameter, CurrentObservationParam)):
+                    param_list.append(param.name)
+                else:
+                    param_list.append('{}.{}'.format(model.name, param.name).replace('.', '_'))
+            return model.cl_function_name + '(' + ', '.join(param_list) + ')'
+
+        if not node.children:
+            return model_to_string(node.data)
+        else:
+            subfuncs = []
+            for child in node.children:
+                if child.children:
+                    subfuncs.append(self._build_model_from_tree(child, depth + 1))
+                else:
+                    subfuncs.append(model_to_string(child.data))
+
+            operator = node.data
+            func = (' ' + operator + ' ').join(subfuncs)
+
+        if func[0] == '(':
+            return '(' + func + ')'
+        return '(' + "\n" + ("\t" * int((depth/2)+5)) + func + "\n" + ("\t" * int((depth/2)+4)) + ')'
+
+
 class ModelFunctionsInformation(object):
 
     def __init__(self, model_tree, evaluation_model, signal_noise_model=None, enable_prior_parameters=False):
@@ -1722,22 +1857,17 @@ class ModelFunctionsInformation(object):
                 return m, p
         raise ValueError('The parameter with the name "{}" could not be found in this model.'.format(parameter_name))
 
-    def get_non_model_tree_param_listing(self):
-        """Get the model, parameter tuples for all parameters not in the model tree.
+    def get_non_model_eval_param_listing(self):
+        """Get the model, parameter tuples for all parameters that are not used in the model evaluation function.
 
-        Basically this returns the parameters of the evaluation and signal noise model.
+        Basically this returns the parameters of the evaluation model.
 
         Returns:
-            tuple: the (model, parameter) tuple for all non model tree parameters
+            tuple: the (model, parameter) tuple for all non model evaluation parameters
         """
         listing = []
         for p in self._evaluation_model.parameter_list:
             listing.append((self._evaluation_model, p))
-
-        if self._signal_noise_model:
-            for p in self._signal_noise_model.parameter_list:
-                listing.append((self._signal_noise_model, p))
-
         return listing
 
     def is_fixed(self, parameter_name):

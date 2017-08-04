@@ -1,5 +1,4 @@
-import os
-from pkg_resources import resource_filename
+from textwrap import dedent
 from mot.cl_data_type import SimpleCLDataType
 from mot.library_functions import CLLibrary
 from mot.model_building.model_function_priors import ModelFunctionPrior
@@ -15,6 +14,10 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
 class ModelFunction(object):
+    """Interface for a basic model function just for optimization purposes.
+
+    If you need to sample the model, use the extended version of this interface :class:`SampleModelFunction`.
+    """
 
     @property
     def return_type(self):
@@ -58,28 +61,6 @@ class ModelFunction(object):
         """
         raise NotImplementedError()
 
-    def get_prior_parameters(self, parameter):
-        """Get the parameters referred to by the priors of the free parameters.
-
-        This returns a list of all the parameters referenced by the prior parameters, recursively.
-
-        Returns:
-            list of parameters: the list of additional parameters in the prior for the given parameter
-        """
-        raise NotImplementedError()
-
-    def get_parameters_of_type(self, instance_types):
-        """Get all parameters whose state instance is one of the given types.
-
-        Args:
-            instance_types (list of DataType class names, or single DataType classname);
-                The instance type we want to get all the parameters of.
-
-        Returns:
-            A list of parameters whose type matches one or more of the given types.
-        """
-        raise NotImplementedError()
-
     def get_parameter_by_name(self, param_name):
         """Get a parameter by name.
 
@@ -94,11 +75,21 @@ class ModelFunction(object):
         """
         raise NotImplementedError()
 
-    def get_cl_dependency_code(self):
-        """Get the CL code for all the CL code for all the dependencies.
+
+class SampleModelFunction(ModelFunction):
+    """Extended version of a model function for use in sampling.
+
+    This adds functions to retrieve priors about this function.
+    """
+
+    def get_prior_parameters(self, parameter):
+        """Get the prior parameters of the given parameter.
+
+        Args:
+            parameter (FreeParameter): one of the parameters of this model function
 
         Returns:
-            str: The CL code with the actual code.
+            list of parameters: the list of prior parameters for the given parameter
         """
         raise NotImplementedError()
 
@@ -112,7 +103,7 @@ class ModelFunction(object):
         raise NotImplementedError()
 
 
-class SimpleModelFunction(ModelFunction):
+class SimpleModelFunction(SampleModelFunction):
 
     def __init__(self, return_type, name, cl_function_name, parameter_list, dependency_list=(),
                  model_function_priors=None):
@@ -186,7 +177,7 @@ class SimpleModelFunction(ModelFunction):
         Returns:
             list: the list of free parameters in this model
         """
-        return self.get_parameters_of_type(FreeParameter)
+        return list([p for p in self.parameter_list if isinstance(p, FreeParameter)])
 
     def get_prior_parameters(self, parameter):
         """Get the parameters referred to by the priors of the free parameters.
@@ -213,18 +204,6 @@ class SimpleModelFunction(ModelFunction):
 
         return get_prior_parameters([parameter])
 
-    def get_parameters_of_type(self, instance_types):
-        """Get all parameters whose state instance is one of the given types.
-
-        Args:
-            instance_types (list of DataType class names, or single DataType classname);
-                The instance type we want to get all the parameters of.
-
-        Returns:
-            A list of parameters whose type matches one or more of the given types.
-        """
-        return list([p for p in self.parameter_list if isinstance(p, instance_types)])
-
     def get_parameter_by_name(self, param_name):
         """Get a parameter by name.
 
@@ -241,14 +220,6 @@ class SimpleModelFunction(ModelFunction):
             if e.name == param_name:
                 return e
         raise KeyError('The parameter with the name "{}" could not be found.'.format(param_name))
-
-    def get_cl_dependency_code(self):
-        """Get the CL code for all the CL code for all the dependencies.
-
-        Returns:
-            str: The CL code with the actual code.
-        """
-        return self._get_cl_dependency_code()
 
     def get_cl_code(self):
         """Get the function code for this function and all its dependencies.
@@ -299,14 +270,22 @@ class Scalar(SimpleModelFunction):
         super(Scalar, self).__init__(
             'double',
             name,
-            'cmScalar',
+            'Scalar',
             (FreeParameter(SimpleCLDataType.from_string('mot_float_type'), param_name,
                            False, value, lower_bound, upper_bound, **parameter_settings),))
 
     def get_cl_code(self):
-        """See base class for details"""
-        path = resource_filename('mot', 'data/opencl/model_functions/Scalar.cl')
-        return self._get_cl_dependency_code() + "\n" + open(os.path.abspath(path), 'r').read()
+        return_str = '''
+            #ifndef SCALAR_CL
+            #define SCALAR_CL
+            
+            mot_float_type {func_name}(mot_float_type c){{
+                return c;
+            }}
+            
+            #endif // SCALAR_CL
+        '''.format(func_name=self.cl_function_name)
+        return dedent(return_str.replace('\t', ' '*4))
 
 
 class Weight(Scalar):

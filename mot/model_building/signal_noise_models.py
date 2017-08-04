@@ -1,3 +1,5 @@
+from textwrap import dedent
+
 from mot.model_building.parameters import FreeParameter
 from mot.model_building.model_functions import SimpleModelFunction
 from mot.model_building.parameter_functions.transformations import CosSqrClampTransform
@@ -53,14 +55,22 @@ class JohnsonNoise(SignalNoiseModel):
 
         """
         super(JohnsonNoise, self).__init__(
-            'JohnsonNoise',
-            'johnsonNoise',
-            (FreeParameter(SimpleCLDataType.from_string('double'), 'eta', False, 0.1, 0, 100,
+            'JohnsonNoise', 'JohnsonNoise',
+            (FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'eta', False, 0.1, 0, 100,
                            parameter_transform=CosSqrClampTransform()),), ())
 
+    def get_cl_code(self):
+        return self.get_signal_function()
+
     def get_signal_function(self):
-        return '''
+        return_str = '''
+            #ifndef JOHNSON_NOISE_MODEL
+            #define JOHNSON_NOISE_MODEL
+        
             double ''' + self.cl_function_name + '''(const double signal, const double eta){
                 return sqrt((signal * signal) + (eta * eta));
             }
+            
+            #endif // JOHNSON_NOISE_MODEL
         '''
+        return dedent(return_str.replace('\t', ' '*4))

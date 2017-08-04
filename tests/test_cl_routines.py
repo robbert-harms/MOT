@@ -149,7 +149,7 @@ class Rosenbrock(OptimizeModelInterface):
     def get_pre_eval_parameter_modifier(self):
         func_name = '_modifyParameters'
         func = '''
-            double ''' + func_name + '''(const void* const data, const mot_float_type* x){
+            void ''' + func_name + '''(const void* const data, mot_float_type* x){
             }
         '''
         return SimpleNamedCLFunction(func, func_name)
@@ -254,7 +254,7 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
     def get_pre_eval_parameter_modifier(self):
         func_name = '_modifyParameters'
         func = '''
-            double ''' + func_name + '''(const void* const data, const mot_float_type* x){
+            void ''' + func_name + '''(const void* const data, mot_float_type* x){
             }
         '''
         return SimpleNamedCLFunction(func, func_name)
