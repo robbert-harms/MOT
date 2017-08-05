@@ -6,24 +6,10 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
 class AbstractTransformation(object):
+    """The transformations define the encode and decode operations needed to build a codec.
 
-    def __init__(self, dependencies=()):
-        """The transformations define the encode and decode operations needed to build a codec.
-
-        These objects define the basic transformation from and to model and optimization space.
-
-        The state of the parameters is extrinsic. Calling the encode and decode functions needs a reference to a
-        parameter, these should be handled by the client code.
-
-        The transformation function may depend on other parameters. (Client code should handle the correct order
-        of handling the transformations given all the dependencies.)
-
-        Args:
-            dependencies (list of (SimpleCLFunction, CLFunctionParameter) pairs): A list of (models, parameters)
-                which are necessary for the operation of the transformation.
-        """
-        super(AbstractTransformation, self).__init__()
-        self._dependencies = dependencies
+    These objects define the basic transformation from and to model and optimization space.
+    """
 
     def get_cl_encode(self):
         """Get the CL encode assignment constructor
@@ -40,15 +26,6 @@ class AbstractTransformation(object):
             AssignmentConstructor: The cl code assignment constructor for decoding the parameter.
         """
         raise NotImplementedError()
-
-    @property
-    def dependencies(self):
-        """Get a list of (SimpleCLFunction, CLFunctionParameter) pairs where this transformation depends on
-
-        Returns:
-            list of tuple: A list of (SimpleCLFunction, CLFunctionParameter) tuples.
-        """
-        return self._dependencies
 
 
 class AssignmentConstructor(object):
@@ -77,29 +54,21 @@ class FormatAssignmentConstructor(AssignmentConstructor):
         * ``{parameter_variable}``: for the parameter variable
         * ``{lower_bound}``: for the lower bound
         * ``{upper_bound}``: for the upper bound
-        * ``{dependency_variable_<n>}``: for the dependency variable names
 
         Args:
             assignment (str): the string containing the assignment template.
         """
         self._assignment = assignment
 
-    def create_assignment(self, parameter_variable, lower_bound, upper_bound, dependency_variables=()):
+    def create_assignment(self, parameter_variable, lower_bound, upper_bound):
         assignment = self._assignment.replace('{parameter_variable}', parameter_variable)
         assignment = assignment.replace('{lower_bound}', lower_bound)
         assignment = assignment.replace('{upper_bound}', upper_bound)
-
-        for ind, var_name in enumerate(dependency_variables):
-            assignment = assignment.replace('{dependency_variable_' + str(ind) + '}', var_name)
-
         return assignment
 
 
 class IdentityTransform(AbstractTransformation):
-
-    def __init__(self, *args, **kwargs):
-        """The identity transform does no transformation and returns the input given."""
-        super(IdentityTransform, self).__init__(*args, **kwargs)
+    """The identity transform does no transformation and returns the input given."""
 
     def get_cl_encode(self):
         return FormatAssignmentConstructor('{parameter_variable}')
@@ -109,10 +78,7 @@ class IdentityTransform(AbstractTransformation):
 
 
 class PositiveTransform(AbstractTransformation):
-
-    def __init__(self, *args, **kwargs):
-        """The identity transform does no transformation and returns the input given."""
-        super(PositiveTransform, self).__init__(*args, **kwargs)
+    """The identity transform does no transformation and returns the input given."""
 
     def get_cl_encode(self):
         return FormatAssignmentConstructor('max({parameter_variable}, (mot_float_type)0)')
@@ -200,23 +166,11 @@ class SqrClampTransform(AbstractTransformation):
                                            '      (mot_float_type){upper_bound})')
 
 
-class SinSqrClampDependentTransform(AbstractTransformation):
-    """The clamp transformation limits the parameter between 0 and the given parameter with the sin(sqr()) transform."""
-
-    def get_cl_encode(self):
-        return FormatAssignmentConstructor('asin(sqrt(fabs(({parameter_variable} - {lower_bound}) / '
-                                           '               ({dependency_variable_0} - {lower_bound}))))')
-
-    def get_cl_decode(self):
-        return FormatAssignmentConstructor('pown(sin({parameter_variable}), 2) * {dependency_variable_0} '
-                                           '        + {lower_bound}')
-
-
 class AbsModXTransform(AbstractTransformation):
 
-    def __init__(self, x, dependencies=()):
+    def __init__(self, x):
         """Create an transformation that returns the absolute modulo x value of the input."""
-        super(AbsModXTransform, self).__init__(dependencies)
+        super(AbsModXTransform, self).__init__()
         self._x = x
 
     def get_cl_encode(self):

@@ -538,24 +538,13 @@ class OptimizeModelBuilder(object):
         return SimpleNamedCLFunction(func, func_name)
 
     def _get_parameter_transformations(self):
-        dep_list = {}
-        for m, p in self._model_functions_info.get_estimable_parameters_list():
-            dep_list.update({(m, p): (tuple(dep) for dep in p.parameter_transform.dependencies)})
-
-        dep_list = topological_sort(dep_list)
-
         dec_func_list = []
         enc_func_list = []
-        for m, p in dep_list:
+        for m, p in self._model_functions_info.get_estimable_parameters_list():
             name = '{}.{}'.format(m.name, p.name)
             parameter = p
             ind = self._model_functions_info.get_parameter_estimable_index(m, p)
             transform = parameter.parameter_transform
-
-            dependency_names = []
-            for dep in transform.dependencies:
-                dep_ind = self._model_functions_info.get_parameter_estimable_index(dep[0], dep[1])
-                dependency_names.append('{0}[' + str(dep_ind) + ']')
 
             if all_elements_equal(self._lower_bounds[name]):
                 lower_bound = str(get_single_value(self._lower_bounds[name]))
@@ -568,12 +557,12 @@ class OptimizeModelBuilder(object):
                 upper_bound = 'data->var_data_ub_' + name.replace('.', '_')
 
             s = '{0}[' + str(ind) + '] = ' + transform.get_cl_decode().create_assignment(
-                '{0}[' + str(ind) + ']', lower_bound, upper_bound, dependency_names) + ';'
+                '{0}[' + str(ind) + ']', lower_bound, upper_bound) + ';'
 
             dec_func_list.append(s)
 
             s = '{0}[' + str(ind) + '] = ' + transform.get_cl_encode().create_assignment(
-                '{0}[' + str(ind) + ']', lower_bound, upper_bound, dependency_names) + ';'
+                '{0}[' + str(ind) + ']', lower_bound, upper_bound) + ';'
 
             enc_func_list.append(s)
 
