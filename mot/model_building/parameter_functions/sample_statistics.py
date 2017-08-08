@@ -22,9 +22,14 @@ class ParameterSampleStatistics(object):
 
 
 class GaussianPSS(ParameterSampleStatistics):
+    """Calculates the mean and the standard deviation of the given samples.
+
+    The standard deviation is calculated with a degree of freedom of one, meaning we are returning the unbiased
+    estimator.
+    """
 
     def get_statistics(self, samples):
-        return SamplingStatisticsContainer(np.mean(samples, axis=1), {'std': np.std(samples, axis=1)})
+        return SamplingStatisticsContainer(np.mean(samples, axis=1), {'std': np.std(samples, axis=1, ddof=1)})
 
 
 class CircularGaussianPSS(ParameterSampleStatistics):

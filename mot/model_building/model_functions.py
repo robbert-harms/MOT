@@ -37,12 +37,11 @@ class ModelFunction(object):
         """
         raise NotImplementedError()
 
-    @property
-    def parameter_list(self):
+    def get_parameters(self):
         """Return the list of parameters from this CL function.
 
         Returns:
-            A list containing instances of CLFunctionParameter."""
+            list of CLFunctionParameter: list of the parameters in this model in the same order as in the CL function"""
         raise NotImplementedError()
 
     def get_cl_code(self):
@@ -57,21 +56,7 @@ class ModelFunction(object):
         """Get all the free parameters in this model
 
         Returns:
-            list: the list of free parameters in this model
-        """
-        raise NotImplementedError()
-
-    def get_parameter_by_name(self, param_name):
-        """Get a parameter by name.
-
-        Args:
-            param_name (str): The name of the parameter to return
-
-        Returns:
-            ClFunctionParameter: the parameter of the given name
-
-        Raises:
-            KeyError: if the parameter could not be found.
+            list of CLFunctionParameter: list of all the model parameters of type FreeParameter in this model
         """
         raise NotImplementedError()
 
@@ -146,14 +131,6 @@ class SimpleModelFunction(SampleModelFunction):
         return self._function_name
 
     @property
-    def parameter_list(self):
-        """Return the list of parameters from this CL function.
-
-        Returns:
-            A list containing instances of CLFunctionParameter."""
-        return self._parameter_list
-
-    @property
     def name(self):
         """Get the name of this model function.
 
@@ -161,6 +138,13 @@ class SimpleModelFunction(SampleModelFunction):
             str: The name of this model function.
         """
         return self._name
+
+    def get_parameters(self):
+        """Return the list of parameters from this CL function.
+
+        Returns:
+            A list containing instances of CLFunctionParameter."""
+        return self._parameter_list
 
     def get_model_function_priors(self):
         """Get all the model function priors.
@@ -177,7 +161,7 @@ class SimpleModelFunction(SampleModelFunction):
         Returns:
             list: the list of free parameters in this model
         """
-        return list([p for p in self.parameter_list if isinstance(p, FreeParameter)])
+        return list([p for p in self.get_parameters() if isinstance(p, FreeParameter)])
 
     def get_prior_parameters(self, parameter):
         """Get the parameters referred to by the priors of the free parameters.
@@ -203,23 +187,6 @@ class SimpleModelFunction(SampleModelFunction):
             return return_params
 
         return get_prior_parameters([parameter])
-
-    def get_parameter_by_name(self, param_name):
-        """Get a parameter by name.
-
-        Args:
-            param_name (str): The name of the parameter to return
-
-        Returns:
-            ClFunctionParameter: the parameter of the given name
-
-        Raises:
-            KeyError: if the parameter could not be found.
-        """
-        for e in self.parameter_list:
-            if e.name == param_name:
-                return e
-        raise KeyError('The parameter with the name "{}" could not be found.'.format(param_name))
 
     def get_cl_code(self):
         """Get the function code for this function and all its dependencies.
@@ -268,7 +235,7 @@ class Scalar(SimpleModelFunction):
         parameter_settings.update(parameter_kwargs or {})
 
         super(Scalar, self).__init__(
-            'double',
+            'mot_float_type',
             name,
             'Scalar',
             (FreeParameter(SimpleCLDataType.from_string('mot_float_type'), param_name,
@@ -279,12 +246,13 @@ class Scalar(SimpleModelFunction):
             #ifndef SCALAR_CL
             #define SCALAR_CL
             
-            mot_float_type {func_name}(mot_float_type c){{
-                return c;
+            {return_type} {func_name}({input_type} scalar){{
+                return scalar;
             }}
             
             #endif // SCALAR_CL
-        '''.format(func_name=self.cl_function_name)
+        '''.format(return_type=self.return_type, func_name=self.cl_function_name,
+                   input_type=self._parameter_list[0].data_type.get_declaration())
         return dedent(return_str.replace('\t', ' '*4))
 
 

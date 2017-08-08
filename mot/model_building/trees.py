@@ -131,4 +131,4 @@ class CompartmentModelTree(Tree):
                    operator.join([child.__str__(level + 1) for child in self.children]) + \
                    "\n" + "\t" * level + ')'
         else:
-            return self.data.name + '(' + ', '.join([p.name for p in self.data.parameter_list]) + ')'
+            return self.data.name + '(' + ', '.join([p.name for p in self.data.get_parameters()]) + ')'

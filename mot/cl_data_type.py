@@ -35,7 +35,7 @@ class CLDataType(object):
 
     @property
     def is_vector_type(self):
-        """Check if this data type is a vector type
+        """Check if this data type is a vector type (like for example double4, float2, int8, etc.).
 
         Returns:
             boolean: True if it is a vector type, false otherwise

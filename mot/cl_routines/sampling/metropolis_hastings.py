@@ -69,27 +69,43 @@ class MetropolisHastings(AbstractSampler):
         if init_params is None:
             init_params = model.get_initial_parameters()
 
-        current_chain_position = np.require(init_params, float_dtype, requirements=['C', 'A', 'O', 'W'])
-        samples = np.zeros((model.get_nmr_problems(), current_chain_position.shape[1], self.nmr_samples),
-                           dtype=float_dtype, order='C')
+        nmr_params = init_params.shape[1]
 
+        current_chain_position = np.require(init_params, float_dtype, requirements=['C', 'A', 'O', 'W'])
         proposal_state = np.require(model.get_proposal_state(), float_dtype, requirements=['C', 'A', 'O', 'W'])
         mh_state = _prepare_mh_state(model.get_metropolis_hastings_state(), float_dtype)
+        samples = np.zeros((model.get_nmr_problems(), nmr_params, self.nmr_samples),
+                           dtype=float_dtype, order='C')
+
+        def run(_samples, _mh_state, nmr_samples, in_burnin=False):
+            """Create the worker, process it, store the results in the given sample array and return a new mh state."""
+            if in_burnin:
+                sample_interval = 0
+            else:
+                sample_interval = self.sample_intervals
+
+            workers = self._create_workers(lambda cl_environment: _MHWorker(
+                cl_environment, self.get_compile_flags_list(model.double_precision), model, current_chain_position,
+                _samples, proposal_state, _mh_state, nmr_samples, in_burnin,
+                sample_interval, self.use_adaptive_proposals))
+            self.load_balancer.process(workers, model.get_nmr_problems())
+            return _mh_state.with_nmr_samples_drawn(_mh_state.nmr_samples_drawn + nmr_samples * (sample_interval + 1))
 
         self._logger.info('Starting sampling with method {0}'.format(self.__class__.__name__))
 
-        workers = self._create_workers(lambda cl_environment: _MHWorker(
-            cl_environment, self.get_compile_flags_list(model.double_precision), model, current_chain_position,
-            samples, proposal_state, mh_state,
-            self.nmr_samples, self.burn_length, self.sample_intervals, self.use_adaptive_proposals))
-        self.load_balancer.process(workers, model.get_nmr_problems())
+        mh_state = run(samples, mh_state, self.burn_length, in_burnin=True)
+
+        max_batch_size = 1000
+        samples_subset = np.zeros((model.get_nmr_problems(), nmr_params, max_batch_size),
+                                  dtype=float_dtype, order='C')
+        for batch_ind, batch_size in enumerate(self._get_sampling_batch_sizes(self.nmr_samples, max_batch_size)):
+            samples_subset.fill(0)
+            mh_state = run(samples_subset, mh_state, batch_size)
+            samples[..., (batch_ind * batch_size):((batch_ind + 1) * batch_size)] = samples_subset[..., :batch_size]
 
         self._logger.info('Finished sampling')
 
-        new_mh_state = mh_state.with_nmr_samples_drawn(
-            mh_state.nmr_samples_drawn + self._nmr_samples * (self.sample_intervals + 1) + self.burn_length)
-
-        return MHSampleOutput(samples, proposal_state, new_mh_state, current_chain_position)
+        return MHSampleOutput(samples, proposal_state, mh_state, current_chain_position)
 
     def _do_initial_logging(self, model):
         self._logger.info('Entered sampling routine.')
@@ -115,6 +131,22 @@ class MetropolisHastings(AbstractSampler):
                              samples_returned=self.nmr_samples)
         self._logger.info('Total samples drawn: {samples_drawn}, total samples returned: '
                           '{samples_returned} (per problem).'.format(**samples_drawn))
+
+    def _get_sampling_batch_sizes(self, total_nmr_samples, max_batch_length):
+        """Cuts the total number of samples into smaller batches.
+
+        This returns the size of every batch, which can be used as the ``nmr_samples`` input in running a kernel.
+
+        Examples:
+            self._get_sampling_batch_sizes(30, 8) -> [8, 8, 8, 6]
+
+        Returns:
+            list: the list of batch sizes
+        """
+        batch_sizes = [max_batch_length] * (total_nmr_samples // max_batch_length)
+        if total_nmr_samples % max_batch_length > 0:
+            batch_sizes.append(total_nmr_samples % max_batch_length)
+        return batch_sizes
 
 
 class MHSampleOutput(SamplingOutput):
@@ -168,7 +200,7 @@ class MHSampleOutput(SamplingOutput):
 class _MHWorker(Worker):
 
     def __init__(self, cl_environment, compile_flags, model, current_chain_position, samples, proposal_state,
-                 mh_state, nmr_samples, burn_length, sample_intervals, use_adaptive_proposals):
+                 mh_state, nmr_samples, in_burnin, sample_intervals, use_adaptive_proposals):
         super(_MHWorker, self).__init__(cl_environment)
 
         self._model = model
@@ -182,72 +214,44 @@ class _MHWorker(Worker):
         self._mh_state_dict = self._get_mh_state_dict()
 
         self._nmr_samples = nmr_samples
-        self._burn_length = burn_length
+        self._in_burnin = in_burnin
         self._sample_intervals = sample_intervals
-
-        # We split the kernel into multiple batches to (try to) prevent screen freezing.
-        # This does not mean that the computations are interruptable. We enqueue all operations at once
-        # and they will run until completion.
-        self._max_samples_per_batch = np.ceil(5000 / (self._sample_intervals + 1))
-        self._max_iterations_per_batch = self._max_samples_per_batch * (self._sample_intervals + 1)
 
         kernel_builder = _MCMCKernelBuilder(
             compile_flags, self._mh_state_dict, cl_environment, model,
-            nmr_samples, burn_length, sample_intervals, use_adaptive_proposals, self._nmr_params)
+            nmr_samples, not in_burnin, sample_intervals, use_adaptive_proposals, self._nmr_params)
 
-        self._burnin_kernel = kernel_builder.build_burnin_kernel()
-        self._sampling_kernel = kernel_builder.build_sampling_kernel()
+        self._kernel = kernel_builder.build()
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
 
-        workgroup_size = cl.Kernel(self._sampling_kernel, 'sample').get_work_group_info(
+        workgroup_size = cl.Kernel(self._kernel, 'sample').get_work_group_info(
             cl.kernel_work_group_info.PREFERRED_WORK_GROUP_SIZE_MULTIPLE, self._cl_environment.device)
 
         data_buffers, readout_items = self._get_buffers(workgroup_size)
 
-        iteration_offset = self._mh_state.nmr_samples_drawn
+        if self._in_burnin:
+            nmr_iterations = self._nmr_samples
+        else:
+            nmr_iterations = self._nmr_samples * (self._sample_intervals + 1)
+            samples_buf = cl.Buffer(self._cl_run_context.context,
+                                    cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
+                                    hostbuf=self._samples)
+            data_buffers.append(samples_buf)
+            readout_items.append([samples_buf, self._samples])
 
-        if self._burn_length > 0:
-            iteration_offset = self._enqueue_burnin(range_start, range_end, workgroup_size,
-                                                    data_buffers, iteration_offset)
-
-        samples_buf = cl.Buffer(self._cl_run_context.context,
-                                cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
-                                hostbuf=self._samples)
-        data_buffers.append(samples_buf)
-        readout_items.append([samples_buf, self._samples])
-
-        iteration_batch_sizes = self._get_sampling_batch_sizes(
-            self._nmr_samples * (self._sample_intervals + 1), self._max_iterations_per_batch)
-
-        for nmr_iterations in iteration_batch_sizes:
-            self._sampling_kernel.sample(self._cl_run_context.queue,
-                                         (int(nmr_problems * workgroup_size),),
-                                         (int(workgroup_size),),
-                                         np.uint64(nmr_iterations),
-                                         np.uint64(iteration_offset),
-                                         *data_buffers,
-                                         global_offset=(range_start * workgroup_size,))
-
-            iteration_offset += nmr_iterations
+        self._kernel.sample(
+            self._cl_run_context.queue,
+            (int(nmr_problems * workgroup_size),),
+            (int(workgroup_size),),
+            np.uint64(nmr_iterations),
+            np.uint64(self._mh_state.nmr_samples_drawn),
+            *data_buffers,
+            global_offset=(range_start * workgroup_size,))
 
         for buffer, host_array in readout_items:
             self._enqueue_readout(buffer, host_array, range_start, range_end)
-
-    def _enqueue_burnin(self, range_start, range_end, workgroup_size, data_buffers,
-                        iteration_offset):
-        nmr_problems = range_end - range_start
-        batch_sizes = self._get_sampling_batch_sizes(self._burn_length, self._max_iterations_per_batch)
-
-        for nmr_iterations in batch_sizes:
-            self._burnin_kernel.sample(
-                self._cl_run_context.queue, (int(nmr_problems * workgroup_size),), (int(workgroup_size),),
-                np.uint64(nmr_iterations), np.uint64(iteration_offset), *data_buffers,
-                global_offset=(range_start * workgroup_size,))
-            iteration_offset += nmr_iterations
-
-        return iteration_offset
 
     def _get_buffers(self, workgroup_size):
         data_buffers = []
@@ -285,22 +289,6 @@ class _MHWorker(Worker):
 
         return data_buffers, readout_items
 
-    def _get_sampling_batch_sizes(self, total_nmr_samples, max_batch_length):
-        """Cuts the total number of samples into smaller batches.
-
-        This returns the size of every batch, which can be used as the ``nmr_samples`` input in running a kernel.
-
-        Examples:
-            self._get_sampling_batch_sizes(30, 8) -> [8, 8, 8, 6]
-
-        Returns:
-            list: the list of batch sizes
-        """
-        batch_sizes = [max_batch_length] * (total_nmr_samples // max_batch_length)
-        if total_nmr_samples % max_batch_length > 0:
-            batch_sizes.append(total_nmr_samples % max_batch_length)
-        return batch_sizes
-
     def _get_mh_state_dict(self):
         """Get a dictionary with the MH state kernel arrays"""
         state_dict = {
@@ -328,7 +316,7 @@ class _MHWorker(Worker):
 class _MCMCKernelBuilder(object):
 
     def __init__(self, compile_flags, mh_state_dict, cl_environment, model,
-                 nmr_samples, burn_length, sample_intervals, use_adaptive_proposals, nmr_params):
+                 nmr_samples, store_samples, sample_intervals, use_adaptive_proposals, nmr_params):
         self._cl_run_context = cl_environment.get_cl_context()
         self._compile_flags = compile_flags
         self._mh_state_dict = mh_state_dict
@@ -337,7 +325,7 @@ class _MCMCKernelBuilder(object):
         self._data_info = self._model.get_kernel_data_info()
         self._nmr_params = nmr_params
         self._nmr_samples = nmr_samples
-        self._burn_length = burn_length
+        self._store_samples = store_samples
         self._sample_intervals = sample_intervals
         self._use_adaptive_proposals = use_adaptive_proposals
         self._update_parameter_variances = self._model.proposal_state_update_uses_variance()
@@ -346,21 +334,13 @@ class _MCMCKernelBuilder(object):
         self._proposal_logpdf_func = self._model.get_proposal_logpdf(address_space_proposal_state='global')
         self._proposal_state_update_func = self._model.get_proposal_state_update_function(address_space='global')
 
-    def build_burnin_kernel(self):
-        """Build the kernel for the burn in. This kernel only updates the MC state and does not store the samples.
+    def build(self):
+        """Build the kernel according to the desired specifications.
 
         Returns:
             cl.Program: a compiled CL kernel
         """
-        return self._compile_kernel(self._get_kernel_source(store_samples=False))
-
-    def build_sampling_kernel(self):
-        """Build the kernel for the sampling.
-
-        Returns:
-            cl.Program: a compiled CL kernel
-        """
-        return self._compile_kernel(self._get_kernel_source(store_samples=True))
+        return self._compile_kernel(self._get_kernel_source())
 
     def _compile_kernel(self, kernel_source):
         from mot import configuration
@@ -368,7 +348,7 @@ class _MCMCKernelBuilder(object):
             warnings.simplefilter("ignore")
         return cl.Program(self._cl_run_context.context, kernel_source).build(' '.join(self._compile_flags))
 
-    def _get_kernel_source(self, store_samples=True):
+    def _get_kernel_source(self):
 
         kernel_param_names = [
             'ulong nmr_iterations',
@@ -385,7 +365,7 @@ class _MCMCKernelBuilder(object):
         kernel_param_names.append('local double* log_likelihood_tmp')
         kernel_param_names.extend(self._data_info.get_kernel_parameters())
 
-        if store_samples:
+        if self._store_samples:
             kernel_param_names.append('global mot_float_type* samples')
 
         proposal_state_size = self._model.get_proposal_state().shape[1]
@@ -427,7 +407,7 @@ class _MCMCKernelBuilder(object):
                                    global mot_float_type* parameter_variance,
                                    global mot_float_type* parameter_variance_update_m2,'''
                                 if self._update_parameter_variances else '') + '''
-                         ''' + ('global mot_float_type* samples, ' if store_samples else '') + '''
+                         ''' + ('global mot_float_type* samples, ' if self._store_samples else '') + '''
                          local double* log_likelihood_tmp){
 
                 ulong i;
@@ -463,13 +443,11 @@ class _MCMCKernelBuilder(object):
                                     + ');'
                                if self._use_adaptive_proposals else '') + '''
         '''
-        if store_samples:
+        if self._store_samples:
             kernel_source += '''
-                        if((i - ''' + str(self._burn_length) + ''' + iteration_offset) % ''' + \
-                             str(self._sample_intervals + 1) + ''' == 0){
+                        if(i % ''' + str(self._sample_intervals + 1) + ''' == 0){
                             for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
-                                samples[(ulong)((i - ''' + str(self._burn_length) + ''' + iteration_offset)
-                                                / ''' + str(self._sample_intervals + 1) + ''') // remove the interval
+                                samples[(ulong)(i / ''' + str(self._sample_intervals + 1) + ''') // remove the interval
                                         + j * ''' + str(self._nmr_samples) + '''  // parameter index
                                         + problem_ind * ''' + str(self._nmr_params * self._nmr_samples) + '''
                                     ] = x_local[j];
@@ -532,7 +510,7 @@ class _MCMCKernelBuilder(object):
                         proposal_state, sampling_counter, acceptance_counter,
                     ''' + ('parameter_mean, parameter_variance, parameter_variance_update_m2,'
                             if self._update_parameter_variances else '') + '''
-                    ''' + ('samples, ' if store_samples else '') + '''
+                    ''' + ('samples, ' if self._store_samples else '') + '''
                     log_likelihood_tmp);
 
                 if(get_local_id(0) == 0){

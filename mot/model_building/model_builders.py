@@ -1496,7 +1496,7 @@ class CompositeModelFunction(ModelFunction):
         self._models = list(self._model_tree.get_compartment_models())
         if self._signal_noise_model:
             self._models.append(self._signal_noise_model)
-        self._parameter_model_list = list((m, p) for m in self._models for p in m.parameter_list)
+        self._parameter_model_list = list((m, p) for m in self._models for p in m.get_parameters())
 
     @property
     def return_type(self):
@@ -1506,8 +1506,7 @@ class CompositeModelFunction(ModelFunction):
     def cl_function_name(self):
         return '_composite_model_function'
 
-    @property
-    def parameter_list(self):
+    def get_parameters(self):
         return [p.get_renamed(cl_name) for m, p, cl_name in self._get_model_function_parameters()]
 
     def get_original_model_parameter_list(self):
@@ -1525,13 +1524,7 @@ class CompositeModelFunction(ModelFunction):
         return return_str
 
     def get_free_parameters(self):
-        return list([p for p in self.parameter_list if isinstance(p, FreeParameter)])
-
-    def get_parameter_by_name(self, param_name):
-        for e in self.parameter_list:
-            if e.name == param_name:
-                return e
-        raise KeyError('The parameter with the name "{}" could not be found.'.format(param_name))
+        return list([p for p in self.get_parameters() if isinstance(p, FreeParameter)])
 
     def _get_model_function_cl_code(self):
         """Get the CL code for the model function as build by this model.
@@ -1620,7 +1613,7 @@ class CompositeModelFunction(ModelFunction):
         def model_to_string(model):
             """Convert a model to CL string."""
             param_list = []
-            for param in model.parameter_list:
+            for param in model.get_parameters():
                 if isinstance(param, (ProtocolParameter, CurrentObservationParam)):
                     param_list.append(param.name)
                 else:
@@ -1855,7 +1848,7 @@ class ModelFunctionsInformation(object):
             tuple: the (model, parameter) tuple for all non model evaluation parameters
         """
         listing = []
-        for p in self._evaluation_model.parameter_list:
+        for p in self._evaluation_model.get_parameters():
             listing.append((self._evaluation_model, p))
         return listing
 
@@ -1939,7 +1932,7 @@ class ModelFunctionsInformation(object):
         Returns:
             list of tuple: the list of tuples containing (model, parameters)
         """
-        return list((m, p) for m in self._model_list for p in m.parameter_list)
+        return list((m, p) for m in self._model_list for p in m.get_parameters())
 
     def _get_prior_parameters_info(self):
         """Get a dictionary with the prior parameters for each of the model parameters.
