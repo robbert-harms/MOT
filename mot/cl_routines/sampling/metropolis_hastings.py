@@ -95,13 +95,12 @@ class MetropolisHastings(AbstractSampler):
 
         mh_state = run(samples, mh_state, self.burn_length, in_burnin=True)
 
-        max_batch_size = 1000
-        samples_subset = np.zeros((model.get_nmr_problems(), nmr_params, max_batch_size),
-                                  dtype=float_dtype, order='C')
+        max_batch_size = np.min([self.nmr_samples, 1000])
         for batch_ind, batch_size in enumerate(self._get_sampling_batch_sizes(self.nmr_samples, max_batch_size)):
-            samples_subset.fill(0)
+            samples_subset = np.zeros((model.get_nmr_problems(), nmr_params, batch_size),
+                                      dtype=float_dtype, order='C')
             mh_state = run(samples_subset, mh_state, batch_size)
-            samples[..., (batch_ind * batch_size):((batch_ind + 1) * batch_size)] = samples_subset[..., :batch_size]
+            samples[..., (batch_ind * batch_size):((batch_ind + 1) * batch_size)] = samples_subset
 
         self._logger.info('Finished sampling')
 
