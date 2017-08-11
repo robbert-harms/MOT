@@ -69,11 +69,14 @@ class _LLWorker(Worker):
     def __init__(self, cl_environment, compile_flags, model, samples, logsumexps, variances):
         super(_LLWorker, self).__init__(cl_environment)
 
+        self._problem_index = 0
+
         self._model = model
         self._data_info = self._model.get_kernel_data_info()
         self._double_precision = model.double_precision
 
         self._samples = samples
+        self._samples_per_voxel = self._samples[self._problem_index]
         self._log_sum_exps = logsumexps
         self._variances = variances
 
@@ -81,7 +84,7 @@ class _LLWorker(Worker):
         self._nmr_params = self._samples.shape[1]
         self._nmr_observations = self._log_sum_exps.shape[0]
 
-        self._problem_index = 0
+        self._log_likelihoods = np.zeros([self._nmr_observations, self._nmr_samples], dtype=np.float64, order='C')
 
         self._ll_calculating_buffers, self._ll_buffer, self._lse_buffer, self._variances_buffer = self._create_buffers()
 
@@ -91,6 +94,7 @@ class _LLWorker(Worker):
     def set_problem_index(self, problem_index):
         """Set the problem index of the samples we are currently working on."""
         self._problem_index = problem_index
+        self._samples_per_voxel[:] = self._samples[self._problem_index]
 
     def calculate(self, range_start, range_end):
         self._calculate_lls(range_start, range_end)
@@ -101,6 +105,7 @@ class _LLWorker(Worker):
 
     def _calculate_lls(self, range_start, range_end):
         nmr_problems = range_end - range_start
+
         buffers = copy(self._ll_calculating_buffers)
         buffers.insert(0, np.uint32(self._problem_index))
 
@@ -108,11 +113,10 @@ class _LLWorker(Worker):
         arg_dtypes[0] = np.uint32
 
         kernel = self._ll_calculating_kernel.run_kernel
-
         kernel.set_scalar_arg_dtypes(arg_dtypes)
 
         kernel(self._cl_run_context.queue, (int(nmr_problems), int(self._nmr_samples)), None,
-                                    *buffers, global_offset=(int(range_start), 0))
+               *buffers, global_offset=(int(range_start), 0))
 
     def _calculate_statistics(self, range_start, range_end):
         nmr_problems = range_end - range_start
@@ -153,13 +157,13 @@ class _LLWorker(Worker):
 
         samples_buffer = cl.Buffer(self._cl_run_context.context,
                                    cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR,
-                                   hostbuf=self._samples)
+                                   hostbuf=self._samples_per_voxel)
 
         ll_calculating_buffers = [samples_buffer, ll_buffer]
 
         for data in self._data_info.get_data():
             ll_calculating_buffers.append(cl.Buffer(self._cl_run_context.context,
-                                         cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data))
+                                          cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data))
 
         return ll_calculating_buffers, ll_buffer, lse_buffer, variances_buffer
 
@@ -186,8 +190,7 @@ class _LLWorker(Worker):
                     mot_float_type x[''' + str(self._nmr_params) + '''];
 
                     for(uint i = 0; i < ''' + str(self._nmr_params) + '''; i++){
-                        x[i] = samples[problem_ind * ''' + str(self._nmr_params * self._nmr_samples) + ''' +
-                                       i * ''' + str(self._nmr_samples) + ''' + sample_ind];
+                        x[i] = samples[i * ''' + str(self._nmr_samples) + ''' + sample_ind];
                     }
 
                     lls[obs_ind * ''' + str(self._nmr_samples) + ''' + sample_ind] =

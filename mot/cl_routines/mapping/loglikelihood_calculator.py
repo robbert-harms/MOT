@@ -31,34 +31,52 @@ class LogLikelihoodCalculator(CLRoutine):
         Returns:
             ndarray: per problem the log likelihood, or, per problem per sample the calculate log likelihood.
         """
-        parameters = self._initialize_parameters(parameters, model.double_precision)
-        log_likelihoods = self._initialize_result_array(parameters, model.double_precision)
+        np_dtype = np.float32
+        if model.double_precision:
+            np_dtype = np.float64
 
-        workers = self._create_workers(
-            lambda cl_environment: _LogLikelihoodCalculatorWorker(cl_environment,
-                                                                  self.get_compile_flags_list(model.double_precision),
-                                                                  model, parameters,
-                                                                  log_likelihoods))
-        self.load_balancer.process(workers, model.get_nmr_problems())
+        parameters = np.require(parameters, np_dtype, requirements=['C', 'A', 'O'])
+        log_likelihoods = self._initialize_result_array(parameters, np_dtype)
+
+        def process(params, lls):
+            workers = self._create_workers(
+                lambda cl_environment: _LogLikelihoodCalculatorWorker(
+                    cl_environment, self.get_compile_flags_list(model.double_precision), model, params, lls))
+            self.load_balancer.process(workers, model.get_nmr_problems())
+
+        if len(parameters.shape) < 3:
+            process(parameters, log_likelihoods)
+        else:
+            max_batch_size = np.min([parameters.shape[2], 1000])
+            for batch_ind, batch_size in enumerate(self._get_batch_sizes(parameters.shape[2], max_batch_size)):
+                params_subset = np.require(parameters[..., (batch_ind * batch_size):((batch_ind + 1) * batch_size)],
+                                           np_dtype, requirements=['C', 'A', 'O'])
+                lls_subset = np.zeros((parameters.shape[0], batch_size), dtype=np_dtype, order='C')
+
+                process(params_subset, lls_subset)
+                log_likelihoods[..., (batch_ind * batch_size):((batch_ind + 1) * batch_size)] = lls_subset
 
         return log_likelihoods
 
-    def _initialize_parameters(self, parameters, double_precision):
-        np_dtype = np.float32
-        if double_precision:
-            np_dtype = np.float64
-        return np.require(parameters, np_dtype, requirements=['C', 'A', 'O'])
-
-    def _initialize_result_array(self, parameters, double_precision):
-        np_dtype = np.float32
-        if double_precision:
-            np_dtype = np.float64
-
+    def _initialize_result_array(self, parameters, np_dtype):
         shape = list(parameters.shape)
         if len(shape) > 1:
             del shape[1]
-
         return np.zeros(shape, dtype=np_dtype, order='C')
+
+    def _get_batch_sizes(self, nmr_elements, max_batch_length):
+        """Split the total number of elements into batches of the given maximum size.
+
+        Examples:
+            self._get_batch_sizes(30, 8) -> [8, 8, 8, 6]
+
+        Returns:
+            list: the list of batch sizes
+        """
+        batch_sizes = [max_batch_length] * (nmr_elements // max_batch_length)
+        if nmr_elements % max_batch_length > 0:
+            batch_sizes.append(nmr_elements % max_batch_length)
+        return batch_sizes
 
 
 class _LogLikelihoodCalculatorWorker(Worker):

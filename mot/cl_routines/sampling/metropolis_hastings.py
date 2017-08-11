@@ -31,9 +31,9 @@ class MetropolisHastings(AbstractSampler):
             use_adaptive_proposals (boolean): if we use the adaptive proposals (set to True) or not (set to False).
         """
         super(MetropolisHastings, self).__init__(**kwargs)
-        self._nmr_samples = nmr_samples or 500
-        self.burn_length = burn_length
-        self.sample_intervals = sample_intervals
+        self._nmr_samples = nmr_samples or 1000
+        self.burn_length = burn_length or 0
+        self.sample_intervals = sample_intervals or 0
         self.use_adaptive_proposals = use_adaptive_proposals
 
         if self.burn_length is None:
@@ -95,8 +95,7 @@ class MetropolisHastings(AbstractSampler):
 
         mh_state = run(samples, mh_state, self.burn_length, in_burnin=True)
 
-        max_batch_size = np.min([self.nmr_samples, 1000])
-        for batch_ind, batch_size in enumerate(self._get_sampling_batch_sizes(self.nmr_samples, max_batch_size)):
+        for batch_ind, batch_size in enumerate(self._get_sampling_batch_sizes(self.nmr_samples, 1000)):
             samples_subset = np.zeros((model.get_nmr_problems(), nmr_params, batch_size),
                                       dtype=float_dtype, order='C')
             mh_state = run(samples_subset, mh_state, batch_size)

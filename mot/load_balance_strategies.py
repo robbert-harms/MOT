@@ -138,7 +138,7 @@ class Worker(object):
             warnings.simplefilter("ignore")
         return cl.Program(self._cl_run_context.context, kernel_source).build(' '.join(compile_flags))
 
-    def _enqueue_readout(self, buffer, host_array, range_start, range_end, wait_for=None):
+    def _enqueue_readout(self, buffer, host_array, range_start, range_end, wait_for=None, is_blocking=False):
         """Enqueue a readout for a buffer created with use_host_ptr.
 
         This encapsulates all the low level details needed to readout the given range of values.
@@ -149,15 +149,16 @@ class Worker(object):
             range_start (int): the start of the range to read out (in the first dimension)
             range_end (int): the end of the range to read out (in the first dimension)
             wait_for (list of event): the list of events to wait for
+            is_blocking (boolean): if this is supposed to be a blocking call or not
 
         Returns:
-            event; the event of the readout
+            event: the event of the readout
         """
         nmr_problems = range_end - range_start
         return cl.enqueue_map_buffer(
             self._cl_run_context.queue, buffer, cl.map_flags.READ, range_start * host_array.strides[0],
             (nmr_problems, ) + host_array.shape[1:], host_array.dtype, order="C", wait_for=wait_for,
-            is_blocking=False)[1]
+            is_blocking=is_blocking)[1]
 
 
 class SimpleLoadBalanceStrategy(LoadBalanceStrategy):
