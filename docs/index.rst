@@ -15,4 +15,5 @@ Introduction
     :hidden:
 
     install
+    changelog
     credits

@@ -7,4 +7,5 @@ Maastricht Optimization Toolbox
 
     readme_latex
     install
+    changelog
     credits

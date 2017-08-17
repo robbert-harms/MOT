@@ -93,7 +93,8 @@ class MetropolisHastings(AbstractSampler):
 
         self._logger.info('Starting sampling with method {0}'.format(self.__class__.__name__))
 
-        mh_state = run(samples, mh_state, self.burn_length, in_burnin=True)
+        if self.burn_length > 0:
+            mh_state = run(samples, mh_state, self.burn_length, in_burnin=True)
 
         for batch_ind, batch_size in enumerate(self._get_sampling_batch_sizes(self.nmr_samples, 1000)):
             samples_subset = np.zeros((model.get_nmr_problems(), nmr_params, batch_size),

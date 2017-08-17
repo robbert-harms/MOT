@@ -1,11 +1,11 @@
 import logging
 from .__version__ import VERSION, VERSION_STATUS, __version__
 
-__author__ = 'Robbert Harms'
-__date__ = '2015-01-01'
-__email__ = 'robbert.harms@maastrichtuniversity.nl'
-__license__ = "LGPL v3"
-__maintainer__ = "Robbert Harms"
+from mot.cl_routines.sampling.metropolis_hastings import MetropolisHastings
+from mot.cl_routines.optimizing.levenberg_marquardt import LevenbergMarquardt
+from mot.cl_routines.optimizing.powell import Powell
+from mot.cl_routines.optimizing.nmsimplex import NMSimplex
+
 
 try:
     from logging import NullHandler
