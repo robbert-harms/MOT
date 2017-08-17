@@ -3,11 +3,12 @@ Changelog
 *********
 
 
-v0.3.2 (2017-08-17)
+v0.3.3 (2017-08-17)
 ===================
 
 Added
 -----
+- Adds gitchangelog support for automatic changelog generation.
 - Adds a positive constraint to the library.
 - Adds the get_composite_model_function() function to the model builder returning a barebones CL version of the constructed model.
 
