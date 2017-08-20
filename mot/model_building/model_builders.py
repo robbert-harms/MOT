@@ -115,6 +115,7 @@ class OptimizeModelBuilder(object):
                                    self._get_pre_eval_parameter_modifier(),
                                    self._get_model_eval_function(problems_to_analyze),
                                    self._get_observation_return_function(),
+                                   self._get_residual_per_observation_function(problems_to_analyze),
                                    self._get_objective_per_observation_function(problems_to_analyze),
                                    self.get_lower_bounds(),
                                    self.get_upper_bounds())
@@ -447,6 +448,19 @@ class OptimizeModelBuilder(object):
                                          self._get_mot_float_type())
         return data_adapter.get_opencl_data()
 
+    def _get_residual_per_observation_function(self, problems_to_analyze):
+        eval_function_info = self._get_model_eval_function(problems_to_analyze)
+
+        func_name = '_getResidual'
+        func = eval_function_info.get_function()
+        func += '''
+            double ''' + func_name + '''(const void* const data, mot_float_type* const x, uint observation_index){
+                return ((''' + self._kernel_data_struct_type + '''*)data)->var_data_observations[observation_index] - 
+                    ''' + eval_function_info.get_name() + '''(data, x, observation_index);
+            }
+        '''
+        return SimpleNamedCLFunction(func, func_name)
+
     def _get_observation_return_function(self):
         func_name = '_getObservation'
         if self.get_nmr_inst_per_problem() < 2:
@@ -458,8 +472,7 @@ class OptimizeModelBuilder(object):
         else:
             func = '''
                 double ''' + func_name + '''(const void* const data, const uint observation_index){
-                    return ((''' + \
-                   self._kernel_data_struct_type + '''*)data)->var_data_observations[observation_index];
+                    return ((''' + self._kernel_data_struct_type + '''*)data)->var_data_observations[observation_index];
                 }
             '''
         return SimpleNamedCLFunction(func, func_name)
@@ -2082,6 +2095,9 @@ class ParameterTransformedModel(OptimizeModelInterface):
     def get_observation_return_function(self):
         return self._model.get_observation_return_function()
 
+    def get_residual_per_observation_function(self):
+        return self._model.get_residual_per_observation_function()
+
     def get_pre_eval_parameter_modifier(self):
         old_modifier = self._model.get_pre_eval_parameter_modifier()
         new_fname = 'wrapped_' + old_modifier.get_name()
@@ -2188,7 +2204,7 @@ class SimpleOptimizeModel(OptimizeModelInterface):
     def __init__(self, used_problem_indices,
                  name, double_precision, free_param_names, kernel_data_info, nmr_problems, nmr_inst_per_problem,
                  nmr_estimable_parameters, initial_parameters, pre_eval_parameter_modifier, eval_function,
-                 observation_return_function, objective_per_observation_function,
+                 observation_return_function, residual_function, objective_per_observation_function,
                  lower_bounds, upper_bounds):
         self.used_problem_indices = used_problem_indices
         self._name = name
@@ -2202,6 +2218,7 @@ class SimpleOptimizeModel(OptimizeModelInterface):
         self._pre_eval_parameter_modifier = pre_eval_parameter_modifier
         self._eval_function = eval_function
         self._observation_return_function = observation_return_function
+        self._residual_function = residual_function
         self._objective_per_observation_function = objective_per_observation_function
         self._lower_bounds = lower_bounds
         self._upper_bounds = upper_bounds
@@ -2240,6 +2257,9 @@ class SimpleOptimizeModel(OptimizeModelInterface):
 
     def get_objective_per_observation_function(self):
         return self._objective_per_observation_function
+
+    def get_residual_per_observation_function(self):
+        return self._residual_function
 
     def get_initial_parameters(self):
         return self._initial_parameters
@@ -2299,6 +2319,9 @@ class SimpleSampleModel(SampleModelInterface):
 
     def get_observation_return_function(self):
         return self._wrapped_optimize_model.get_observation_return_function()
+
+    def get_residual_per_observation_function(self):
+        return self._wrapped_optimize_model.get_residual_per_observation_function()
 
     def get_objective_per_observation_function(self):
         return self._wrapped_optimize_model.get_objective_per_observation_function()

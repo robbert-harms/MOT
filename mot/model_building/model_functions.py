@@ -3,7 +3,7 @@ from mot.cl_data_type import SimpleCLDataType
 from mot.library_functions import CLLibrary
 from mot.model_building.model_function_priors import ModelFunctionPrior
 from mot.model_building.parameters import FreeParameter
-from mot.model_building.parameter_functions.priors import ARDGaussian, UniformWithinBoundsPrior
+from mot.model_building.parameter_functions.priors import ARDGaussian, UniformWithinBoundsPrior, ARDBeta
 from mot.model_building.parameter_functions.proposals import GaussianProposal
 from mot.model_building.parameter_functions.transformations import ClampTransform, CosSqrClampTransform
 
@@ -294,7 +294,7 @@ class ARD_Beta_Weight(Weight):
             lower_bound (number or ndarray): The initial lower bound for the single free parameter of this function.
             upper_bound (number or ndarray): The initial upper bound for the single free parameter of this function.
         """
-        parameter_settings = dict(sampling_prior=ARDGaussian())
+        parameter_settings = dict(sampling_prior=ARDBeta())
 
         super(ARD_Beta_Weight, self).__init__(name=name, value=value, lower_bound=lower_bound,
                                               upper_bound=upper_bound, parameter_kwargs=parameter_settings)

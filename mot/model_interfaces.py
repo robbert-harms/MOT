@@ -89,7 +89,7 @@ class OptimizeModelInterface(object):
         """Return code that needs to be run prior to model evaluation or objective function calculation.
 
         This is meant to contain possible parameter transformations that need to be executed only once for a
-        given set of parameters. Having this in a separate function yields a speed gain.
+        given set of parameters. Having this in a separate function gives a speed gain.
 
         Model optimization routines need to be aware that they need to call this function prior to calling any of:
 
@@ -102,7 +102,7 @@ class OptimizeModelInterface(object):
 
                 .. code-block:: c
 
-                    double <func_name>(const void* const data, const mot_float_type* x);
+                    void <func_name>(const void* const data, const mot_float_type* x);
 
                 Changes may happen in place in the ``x`` parameter.
         """
@@ -138,7 +138,7 @@ class OptimizeModelInterface(object):
 
                 .. code-block:: c
 
-                    double <func_name>(const void* const data, const uint observation_index);
+                    <dtype> <func_name>(const void* const data, const uint observation_index);
         """
         raise NotImplementedError()
 
@@ -147,6 +147,18 @@ class OptimizeModelInterface(object):
 
         This should return the objective values (of each instance point) as such that when the sum of squares is
         taken we have our objective function value.
+
+        Returns:
+            mot.utils.NamedCLFunction: A CL function with signature:
+
+                .. code-block:: c
+
+                    double <func_name>(const void* const data, mot_float_type* const x, uint observation_index);
+        """
+        raise NotImplementedError()
+
+    def get_residual_per_observation_function(self):
+        """Get a function that can calculate the residual for every measurement instance.
 
         Returns:
             mot.utils.NamedCLFunction: A CL function with signature:
