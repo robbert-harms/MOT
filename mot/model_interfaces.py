@@ -130,18 +130,6 @@ class OptimizeModelInterface(object):
         """
         raise NotImplementedError()
 
-    def get_observation_return_function(self):
-        """Get the CL function that returns the observation for the given problem.
-
-        Returns:
-            mot.utils.NamedCLFunction: An CL function with the signature:
-
-                .. code-block:: c
-
-                    <dtype> <func_name>(const void* const data, const uint observation_index);
-        """
-        raise NotImplementedError()
-
     def get_objective_per_observation_function(self):
         """Get the objective function that returns the objective value for the given measurement instance.
 

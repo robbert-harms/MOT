@@ -168,7 +168,24 @@ class Rosenbrock(OptimizeModelInterface):
         '''
         return SimpleNamedCLFunction(func, fname)
 
-    def get_observation_return_function(self):
+    def get_residual_per_observation_function(self):
+        eval_func = self.get_model_eval_function()
+        obs_func = self._get_observation_return_function()
+
+        func = eval_func.get_function()
+        func += obs_func.get_function()
+
+        func_name = "getResidual"
+        func += '''
+            mot_float_type ''' + func_name + '''(const void* const data, mot_float_type* const x,
+                                                 uint observation_index){
+                return ''' + obs_func.get_name() + '''(data, observation_index) -
+                            ''' + eval_func.get_name() + '''(data, x, observation_index);
+            }
+        '''
+        return SimpleNamedCLFunction(func, func_name)
+
+    def _get_observation_return_function(self):
         fname = 'getObservation'
         func = '''
             double ''' + fname + '''(const void* const data, const uint observation_index){
@@ -179,7 +196,7 @@ class Rosenbrock(OptimizeModelInterface):
 
     def get_objective_per_observation_function(self):
         eval_func = self.get_model_eval_function()
-        obs_func = self.get_observation_return_function()
+        obs_func = self._get_observation_return_function()
 
         func = eval_func.get_function()
         func += obs_func.get_function()
@@ -269,7 +286,7 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
         '''
         return SimpleNamedCLFunction(func, fname)
 
-    def get_observation_return_function(self):
+    def _get_observation_return_function(self):
         fname = 'getObservation'
         func = '''
             double ''' + fname + '''(const void* const data, const uint observation_index){
@@ -278,9 +295,26 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
         '''
         return SimpleNamedCLFunction(func, fname)
 
+    def get_residual_per_observation_function(self):
+        eval_func = self.get_model_eval_function()
+        obs_func = self._get_observation_return_function()
+
+        func = eval_func.get_function()
+        func += obs_func.get_function()
+
+        func_name = "getResidual"
+        func += '''
+            mot_float_type ''' + func_name + '''(const void* const data, mot_float_type* const x,
+                                                 uint observation_index){
+                return ''' + obs_func.get_name() + '''(data, observation_index) -
+                            ''' + eval_func.get_name() + '''(data, x, observation_index);
+            }
+        '''
+        return SimpleNamedCLFunction(func, func_name)
+
     def get_objective_per_observation_function(self):
         eval_func = self.get_model_eval_function()
-        obs_func = self.get_observation_return_function()
+        obs_func = self._get_observation_return_function()
 
         func = eval_func.get_function()
         func += obs_func.get_function()

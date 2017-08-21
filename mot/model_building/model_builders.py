@@ -114,7 +114,6 @@ class OptimizeModelBuilder(object):
                                    self._get_initial_parameters(problems_to_analyze),
                                    self._get_pre_eval_parameter_modifier(),
                                    self._get_model_eval_function(problems_to_analyze),
-                                   self._get_observation_return_function(),
                                    self._get_residual_per_observation_function(problems_to_analyze),
                                    self._get_objective_per_observation_function(problems_to_analyze),
                                    self.get_lower_bounds(),
@@ -455,26 +454,11 @@ class OptimizeModelBuilder(object):
         func = eval_function_info.get_function()
         func += '''
             double ''' + func_name + '''(const void* const data, mot_float_type* const x, uint observation_index){
-                return ((''' + self._kernel_data_struct_type + '''*)data)->var_data_observations[observation_index] - 
+                return ((''' + self._kernel_data_struct_type + '''*)data)->var_data_observations''' \
+                    + ('[observation_index]' if self.get_nmr_inst_per_problem() > 1 else '') + ''' - 
                     ''' + eval_function_info.get_name() + '''(data, x, observation_index);
             }
         '''
-        return SimpleNamedCLFunction(func, func_name)
-
-    def _get_observation_return_function(self):
-        func_name = '_getObservation'
-        if self.get_nmr_inst_per_problem() < 2:
-            func = '''
-                double ''' + func_name + '''(const void* const data, const uint observation_index){
-                    return ((''' + self._kernel_data_struct_type + '''*)data)->var_data_observations;
-                }
-            '''
-        else:
-            func = '''
-                double ''' + func_name + '''(const void* const data, const uint observation_index){
-                    return ((''' + self._kernel_data_struct_type + '''*)data)->var_data_observations[observation_index];
-                }
-            '''
         return SimpleNamedCLFunction(func, func_name)
 
     def _get_pre_eval_parameter_modifier(self):
@@ -581,6 +565,16 @@ class OptimizeModelBuilder(object):
 
         return tuple(reversed(enc_func_list)), dec_func_list
 
+    def _get_observation_return_function(self):
+        func_name = '_getObservation'
+        func = '''
+            double ''' + func_name + '''(const void* const data, const uint observation_index){
+                return ((''' + self._kernel_data_struct_type + '''*)data)->var_data_observations''' \
+                    + ('[observation_index]' if self.get_nmr_inst_per_problem() > 1 else '') + ''';
+            }
+        '''
+        return SimpleNamedCLFunction(func, func_name)
+
     def _transform_observations(self, observations):
         """Apply a transformation on the observations before fitting.
 
@@ -631,7 +625,8 @@ class OptimizeModelBuilder(object):
                         param_list.append('data->var_data_' + '{}.{}'.format(model.name, param.name).replace('.', '_'))
 
             elif isinstance(param, CurrentObservationParam):
-                param_list.append('data->var_data_observations[observation_index]')
+                param_list.append('data->var_data_observations'
+                                  + ('[observation_index]' if self.get_nmr_inst_per_problem() > 1 else ''))
 
             else:
                 param_list.append('{}.{}'.format(model.name, param.name).replace('.', '_'))
@@ -2092,9 +2087,6 @@ class ParameterTransformedModel(OptimizeModelInterface):
     def get_nmr_estimable_parameters(self):
         return self._model.get_nmr_estimable_parameters()
 
-    def get_observation_return_function(self):
-        return self._model.get_observation_return_function()
-
     def get_residual_per_observation_function(self):
         return self._model.get_residual_per_observation_function()
 
@@ -2204,7 +2196,7 @@ class SimpleOptimizeModel(OptimizeModelInterface):
     def __init__(self, used_problem_indices,
                  name, double_precision, free_param_names, kernel_data_info, nmr_problems, nmr_inst_per_problem,
                  nmr_estimable_parameters, initial_parameters, pre_eval_parameter_modifier, eval_function,
-                 observation_return_function, residual_function, objective_per_observation_function,
+                 residual_function, objective_per_observation_function,
                  lower_bounds, upper_bounds):
         self.used_problem_indices = used_problem_indices
         self._name = name
@@ -2217,7 +2209,6 @@ class SimpleOptimizeModel(OptimizeModelInterface):
         self._initial_parameters = initial_parameters
         self._pre_eval_parameter_modifier = pre_eval_parameter_modifier
         self._eval_function = eval_function
-        self._observation_return_function = observation_return_function
         self._residual_function = residual_function
         self._objective_per_observation_function = objective_per_observation_function
         self._lower_bounds = lower_bounds
@@ -2251,9 +2242,6 @@ class SimpleOptimizeModel(OptimizeModelInterface):
 
     def get_model_eval_function(self):
         return self._eval_function
-
-    def get_observation_return_function(self):
-        return self._observation_return_function
 
     def get_objective_per_observation_function(self):
         return self._objective_per_observation_function
@@ -2316,9 +2304,6 @@ class SimpleSampleModel(SampleModelInterface):
 
     def get_model_eval_function(self):
         return self._wrapped_optimize_model.get_model_eval_function()
-
-    def get_observation_return_function(self):
-        return self._wrapped_optimize_model.get_observation_return_function()
 
     def get_residual_per_observation_function(self):
         return self._wrapped_optimize_model.get_residual_per_observation_function()

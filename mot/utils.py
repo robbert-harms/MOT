@@ -3,12 +3,25 @@ from contextlib import contextmanager
 from functools import reduce
 import numpy as np
 import pyopencl as cl
+from pyopencl.tools import dtype_to_ctype
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-05-13"
 __license__ = "LGPL v3"
 __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
+
+
+def numpy_type_to_cl_type(dtype):
+    """Get the CL type of the given numpy data type.
+
+    Args:
+        dtype (np.dtype): the numpy data type
+
+    Returns:
+        str: the CL type string for the corresponding type
+    """
+    return dtype_to_ctype(dtype)
 
 
 def device_type_from_string(cl_device_type_str):

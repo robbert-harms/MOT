@@ -104,8 +104,8 @@ class _ObjectiveCalculatorWorker(Worker):
         kernel_source += objective_function.get_function()
         kernel_source += param_modifier.get_function()
         kernel_source += '''
-            double _evaluate(const void* data, mot_float_type* x){
-                ''' + param_modifier.get_name() + '''((void*)&data, x);
+            double _evaluate(void* data, mot_float_type* x){
+                ''' + param_modifier.get_name() + '''(data, x);
                 
                 double sum = 0;
                 for(uint i = 0; i < ''' + str(self._model.get_nmr_inst_per_problem()) + '''; i++){
