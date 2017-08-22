@@ -102,7 +102,7 @@ class OptimizeModelInterface(object):
 
                 .. code-block:: c
 
-                    void <func_name>(const void* const data, const mot_float_type* x);
+                    void <func_name>(void* data, mot_float_type* x);
 
                 Changes may happen in place in the ``x`` parameter.
         """
@@ -125,8 +125,7 @@ class OptimizeModelInterface(object):
 
                 .. code-block:: c
 
-                    double <func_name>(const void* const data, const mot_float_type* const x,
-                                       const uint observation_index);
+                    double <func_name>(void* data, const mot_float_type* const x, uint observation_index);
         """
         raise NotImplementedError()
 
@@ -141,7 +140,7 @@ class OptimizeModelInterface(object):
 
                 .. code-block:: c
 
-                    double <func_name>(const void* const data, mot_float_type* const x, uint observation_index);
+                    double <func_name>(void* data, const mot_float_type* const x, uint observation_index);
         """
         raise NotImplementedError()
 
@@ -153,7 +152,7 @@ class OptimizeModelInterface(object):
 
                 .. code-block:: c
 
-                    double <func_name>(const void* const data, mot_float_type* const x, uint observation_index);
+                    double <func_name>(void* data, const mot_float_type* const x, uint observation_index);
         """
         raise NotImplementedError()
 
@@ -247,7 +246,7 @@ class SampleModelInterface(OptimizeModelInterface):
             mot.utils.NamedCLFunction: A function of the kind:
                 .. code-block:: c
 
-                    double <fname>(const void* const data, mot_float_type* const x, const uint observation_index);
+                    double <fname>(void* data, const mot_float_type* const x, uint observation_index);
         """
         raise NotImplementedError()
 
@@ -273,8 +272,8 @@ class SampleModelInterface(OptimizeModelInterface):
 
                 .. code-block:: c
 
-                    double <func_name>(const uint param_ind, const mot_float_type proposal,
-                                       const mot_float_type current,
+                    double <func_name>(uint param_ind, mot_float_type proposal,
+                                       mot_float_type current,
                                        <address_space_proposal_state> mot_float_type* const proposal_state);
 
 
@@ -300,8 +299,8 @@ class SampleModelInterface(OptimizeModelInterface):
                 .. code-block:: c
 
                     mot_float_type <func_name>(
-                        const uint param_ind,
-                        const mot_float_type current,
+                        uint param_ind,
+                        mot_float_type current,
                         void* rng_data,
                         <address_space_proposal_state> mot_float_type* const proposal_state);
 
@@ -363,7 +362,7 @@ class SampleModelInterface(OptimizeModelInterface):
                 .. code-block:: c
 
                     mot_float_type <func_name>(
-                        const void* data_void,
+                        void* data_void,
                         <address_space_parameter_vector> const mot_float_type* const x
                     );
 

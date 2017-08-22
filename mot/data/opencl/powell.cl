@@ -45,7 +45,7 @@
 typedef struct{
     const mot_float_type* const point_0;
     const mot_float_type* const point_1;
-    const void* const data;
+    void* data;
 } linear_function_data;
 
 /**
@@ -122,7 +122,7 @@ bool powell_fval_diff_within_threshold(mot_float_type previous_fval, mot_float_t
 mot_float_type powell_find_linear_minimum(
         mot_float_type* const point_0,
         mot_float_type* const point_1,
-        const void* const data){
+        void* data){
 
     linear_function_data eval_data = {point_0, point_1, data};
 
@@ -150,7 +150,7 @@ mot_float_type powell_find_linear_minimum(
  * Returns:
  *  the function value at the given point
  */
-double powell_linear_eval_function(mot_float_type x, const void* const eval_data){
+double powell_linear_eval_function(mot_float_type x, void* eval_data){
 
     linear_function_data f_data = *((linear_function_data*)eval_data);
 
@@ -189,7 +189,7 @@ double powell_linear_eval_function(mot_float_type x, const void* const eval_data
  */
 mot_float_type powell_do_line_searches(
         mot_float_type search_directions[%(NMR_PARAMS)r][%(NMR_PARAMS)r],
-        const void* const data,
+        void* data,
         mot_float_type fval,
         mot_float_type* starting_point,
         mot_float_type* largest_decrease,
@@ -233,7 +233,7 @@ mot_float_type powell_do_line_searches(
  * Returns:
  *  the function value at the extrapolated point
  */
-mot_float_type powell_evaluate_extrapolated(mot_float_type* new_best_point, mot_float_type* old_point, const void* const data){
+mot_float_type powell_evaluate_extrapolated(mot_float_type* new_best_point, mot_float_type* old_point, void* data){
     int i;
     mot_float_type tmp[%(NMR_PARAMS)r];
     for(i = 0; i < %(NMR_PARAMS)r; i++){
@@ -271,7 +271,7 @@ bool powell_should_exchange_search_directions(
 #define SHOULD_EXCHANGE_SEARCH_DIRECTION true
 #endif
 
-int powell(mot_float_type* model_parameters, const void* const data){
+int powell(mot_float_type* model_parameters, void* data){
     int i, j, index_largest_decrease;
     int iteration = 0;
     mot_float_type largest_decrease, fval_at_start_of_iteration, fval_extrapolated;

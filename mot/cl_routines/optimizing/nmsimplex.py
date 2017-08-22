@@ -111,7 +111,7 @@ class NMSimplexWorker(AbstractParallelOptimizerWorker):
         body = lib_nmsimplex.get_cl_code()
 
         body += '''
-            int nmsimplex(mot_float_type* const model_parameters, const void* const data){
+            int nmsimplex(mot_float_type* const model_parameters, void* data){
                 mot_float_type initial_simplex_scale[%(NMR_PARAMS)r] = %(INITIAL_SIMPLEX_SCALES)s;
                 mot_float_type fdiff;
                 mot_float_type psi = 0;

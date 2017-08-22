@@ -149,7 +149,7 @@ class Rosenbrock(OptimizeModelInterface):
     def get_pre_eval_parameter_modifier(self):
         func_name = '_modifyParameters'
         func = '''
-            void ''' + func_name + '''(const void* const data, mot_float_type* x){
+            void ''' + func_name + '''(void* data, mot_float_type* x){
             }
         '''
         return SimpleNamedCLFunction(func, func_name)
@@ -157,8 +157,7 @@ class Rosenbrock(OptimizeModelInterface):
     def get_model_eval_function(self):
         fname = 'evaluateModel'
         func = '''
-            double ''' + fname + '''(const void* const data, const double* const x,
-                                     const uint observation_index){
+            double ''' + fname + '''(void* data, const double* const x, uint observation_index){
                 double sum = 0;
                 for(uint i = 0; i < ''' + str(self.n) + ''' - 1; i++){
                     sum += 100 * pown((x[i + 1] - pown(x[i], 2)), 2) + pown((x[i] - 1), 2);
@@ -177,8 +176,7 @@ class Rosenbrock(OptimizeModelInterface):
 
         func_name = "getResidual"
         func += '''
-            mot_float_type ''' + func_name + '''(const void* const data, mot_float_type* const x,
-                                                 uint observation_index){
+            mot_float_type ''' + func_name + '''(void* data, const mot_float_type* const x, observation_index){
                 return ''' + obs_func.get_name() + '''(data, observation_index) -
                             ''' + eval_func.get_name() + '''(data, x, observation_index);
             }
@@ -188,7 +186,7 @@ class Rosenbrock(OptimizeModelInterface):
     def _get_observation_return_function(self):
         fname = 'getObservation'
         func = '''
-            double ''' + fname + '''(const void* const data, const uint observation_index){
+            double ''' + fname + '''(void* data, const uint observation_index){
                 return 0;
             }
         '''
@@ -203,8 +201,7 @@ class Rosenbrock(OptimizeModelInterface):
 
         func_name = "getObjectiveInstanceValue"
         func += '''
-            mot_float_type ''' + func_name + '''(const void* const data, mot_float_type* const x,
-                                                 uint observation_index){
+            mot_float_type ''' + func_name + '''(void* data, const mot_float_type* const x, uint observation_index){
                 return ''' + obs_func.get_name() + '''(data, observation_index) -
                             ''' + eval_func.get_name() + '''(data, x, observation_index);
             }
@@ -271,7 +268,7 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
     def get_pre_eval_parameter_modifier(self):
         func_name = '_modifyParameters'
         func = '''
-            void ''' + func_name + '''(const void* const data, mot_float_type* x){
+            void ''' + func_name + '''(void* data, mot_float_type* x){
             }
         '''
         return SimpleNamedCLFunction(func, func_name)
@@ -279,8 +276,7 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
     def get_model_eval_function(self):
         fname = 'evaluateModel'
         func = '''
-            double ''' + fname + '''(const void* const data, const double* const x,
-                                     const uint k){
+            double ''' + fname + '''(void* data, const double* const x, uint k){
                 return -(2 + 2 * (k+1) - exp((k+1) * x[0]) - exp((k+1) * x[1]));
             }
         '''
@@ -289,7 +285,7 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
     def _get_observation_return_function(self):
         fname = 'getObservation'
         func = '''
-            double ''' + fname + '''(const void* const data, const uint observation_index){
+            double ''' + fname + '''(void* data, uint observation_index){
                 return 0;
             }
         '''
@@ -304,8 +300,7 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
 
         func_name = "getResidual"
         func += '''
-            mot_float_type ''' + func_name + '''(const void* const data, mot_float_type* const x,
-                                                 uint observation_index){
+            mot_float_type ''' + func_name + '''(void* data, const mot_float_type* const x, uint observation_index){
                 return ''' + obs_func.get_name() + '''(data, observation_index) -
                             ''' + eval_func.get_name() + '''(data, x, observation_index);
             }
@@ -322,8 +317,7 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
         func_name = "getObjectiveInstanceValue"
 
         func += '''
-            mot_float_type ''' + func_name + '''(const void* const data, mot_float_type* const x,
-                                                 uint observation_index){
+            mot_float_type ''' + func_name + '''(void* data, const mot_float_type* const x, uint observation_index){
                 return ''' + obs_func.get_name() + '''(data, observation_index) -
                             ''' + eval_func.get_name() + '''(data, x, observation_index);
             }
@@ -357,7 +351,6 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
 
     def get_nmr_estimable_parameters(self):
         return 2
-
 
 
 if __name__ == '__main__':

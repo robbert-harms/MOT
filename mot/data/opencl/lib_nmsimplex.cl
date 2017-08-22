@@ -101,7 +101,7 @@ void _libnms_initialize_function_values(
         int nmr_parameters,
         mot_float_type* vertices, // [n+1,n],
         mot_float_type* func_vals, // [n+1]
-        const void* const data
+        void* data
 ){
 	for (int j=0; j < nmr_parameters + 1; j++) {
 		func_vals[j] = %(EVALUATE_FNAME)s(vertices + j * nmr_parameters, data);
@@ -232,7 +232,7 @@ bool _libnms_simplex_reflect(
         const int ind_second_worst,
         const int ind_worst,
         const mot_float_type alpha,
-        const void* const data){
+        void* data){
 
     int j;
 
@@ -270,7 +270,7 @@ void _libnms_simplex_expand(
         const int ind_second_worst,
         const int ind_worst,
         const mot_float_type gamma,
-        const void* const data){
+        void* data){
 
     int j;
     mot_float_type expansion_fval;
@@ -315,7 +315,7 @@ bool _libnms_simplex_contract(
         const int ind_second_worst,
         const int ind_worst,
         const mot_float_type beta,
-        const void* const data){
+        void* data){
 
     int j;
     mot_float_type contraction_fval;
@@ -366,7 +366,7 @@ bool _libnms_simplex_contract(
 int lib_nmsimplex(
         int nmr_parameters,
         mot_float_type* const model_parameters,
-        const void* const data,
+        void* data,
         mot_float_type* initial_simplex_scale,
         mot_float_type* fdiff,
         mot_float_type psi,

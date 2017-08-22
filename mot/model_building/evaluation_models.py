@@ -125,8 +125,7 @@ class SumOfSquaresEvaluationModel(EvaluationModel):
 
     def get_objective_per_observation_function(self, fname, eval_fname, obs_fname, param_listing):
         return '''
-            double ''' + fname + '''(const void* const data, mot_float_type* const x,
-                                     const uint observation_index){
+            double ''' + fname + '''(void* data, const mot_float_type* const x, uint observation_index){
                 ''' + param_listing + '''
                 return ''' + obs_fname + '''(data, observation_index) -
                         ''' + eval_fname + '''(data, x, observation_index);
@@ -136,8 +135,7 @@ class SumOfSquaresEvaluationModel(EvaluationModel):
     def get_log_likelihood_per_observation_function(self, fname, eval_fname, obs_fname, param_listing,
                                                     full_likelihood=True):
         return '''
-            double ''' + fname + '''(const void* const data, const mot_float_type* const x,
-                                     const uint observation_index){
+            double ''' + fname + '''(void* data, const mot_float_type* const x, uint observation_index){
                 ''' + param_listing + '''
                 return - (pown(''' + obs_fname + '''(data, observation_index)
                             - ''' + eval_fname + '''(data, x, observation_index), 2));
@@ -199,8 +197,7 @@ class GaussianEvaluationModel(EvaluationModel):
 
         """
         return '''
-            double ''' + fname + '''(const void* const data, mot_float_type* const x,
-                                     const uint observation_index){
+            double ''' + fname + '''(void* data, const mot_float_type* const x, uint observation_index){
                 ''' + param_listing + '''
                 return (''' + obs_fname + '''(data, observation_index) -
                         ''' + eval_fname + '''(data, x, observation_index)) 
@@ -211,8 +208,7 @@ class GaussianEvaluationModel(EvaluationModel):
     def get_log_likelihood_per_observation_function(self, fname, eval_fname, obs_fname, param_listing,
                                                     full_likelihood=True):
         return '''
-            double ''' + fname + '''(const void* const data, const mot_float_type* const x,
-                                     const uint observation_index){
+            double ''' + fname + '''(void* data, const mot_float_type* const x, uint observation_index){
                 ''' + param_listing + '''
                 return - pown(''' + obs_fname + '''(data, observation_index)
                                 - ''' + eval_fname + '''(data, x, observation_index), 2)
@@ -273,8 +269,7 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
             (+ log(OffsetGaussianNoise_sigma * sqrt(2 * M_PI)))
         """
         return '''
-            double ''' + fname + '''(const void* const data, mot_float_type* const x,
-                                     const uint observation_index){
+            double ''' + fname + '''(void* data, const mot_float_type* const x, uint observation_index){
                 ''' + param_listing + '''
                 return (''' + obs_fname + '''(data, observation_index) -
                          sqrt(pown(''' + eval_fname + '''(data, x, observation_index), 2)
@@ -286,7 +281,7 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
     def get_log_likelihood_per_observation_function(self, fname, eval_fname, obs_fname, param_listing,
                                                     full_likelihood=True):
         return '''
-            double ''' + fname + '''(const void* const data, mot_float_type* const x, const uint observation_index){
+            double ''' + fname + '''(void* data, const mot_float_type* const x, uint observation_index){
                 ''' + param_listing + '''
                 return - (pown(''' + obs_fname + '''(data, observation_index) -
                                 sqrt(pown(''' + eval_fname + '''(data, x, observation_index), 2) +
@@ -358,8 +353,7 @@ class RicianEvaluationModel(EvaluationModel):
 
         """
         return '''
-            double ''' + fname + '''(const void* const data, mot_float_type* const x,
-                                     const uint observation_index){
+            double ''' + fname + '''(void* data, const mot_float_type* const x, uint observation_index){
                 ''' + param_listing + '''
 
                 double observation = (double)''' + obs_fname + '''(data, observation_index);
@@ -373,8 +367,7 @@ class RicianEvaluationModel(EvaluationModel):
     def get_log_likelihood_per_observation_function(self, fname, eval_fname, obs_fname, param_listing,
                                                     full_likelihood=True):
         return '''
-            double ''' + fname + '''(const void* const data, const mot_float_type* const x,
-                                     const uint observation_index){
+            double ''' + fname + '''(void* data, const mot_float_type* const x, uint observation_index){
                 ''' + param_listing + '''
                 double observation = (double)''' + obs_fname + '''(data, observation_index);
                 double evaluation = (double)''' + eval_fname + '''(data, x, observation_index);

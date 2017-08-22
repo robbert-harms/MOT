@@ -60,7 +60,7 @@ class SimpleModelFunctionPrior(ModelFunctionPrior):
                 {body}
             }}
         '''.format(function_name=self._function_name,
-                   parameters=', '.join('const mot_float_type {}'.format(p) for p in self._parameters),
+                   parameters=', '.join('mot_float_type {}'.format(p) for p in self._parameters),
                    body=self._body)
 
     def get_prior_function_name(self):

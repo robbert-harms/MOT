@@ -142,7 +142,7 @@ class _LogLikelihoodCalculatorWorker(Worker):
         kernel_source += cl_func
 
         kernel_source += '''
-            double _calculate_log_likelihood(const void* const data, const mot_float_type* const x){
+            double _calculate_log_likelihood(void* data, const mot_float_type* const x){
                 double ll = 0;
                 for(uint i = 0; i < ''' + str(self._model.get_nmr_inst_per_problem()) + '''; i++){
                     ll += ''' + ll_func.get_name() + '''(data, x, i);

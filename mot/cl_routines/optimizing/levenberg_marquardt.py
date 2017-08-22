@@ -83,7 +83,7 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
         kernel_param_names.extend(self._data_info.get_kernel_parameters())
         kernel_param_names.append('global mot_float_type* fjac_all')
 
-        optimizer_call_args = 'x, (const void*) &data'
+        optimizer_call_args = 'x, (void*) &data'
 
         kernel_source = ''
         kernel_source += get_float_type_def(self._double_precision)
@@ -130,12 +130,12 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
         kernel_source += objective_func.get_function()
         kernel_source += param_modifier.get_function()
         kernel_source += '''
-            void evaluate(mot_float_type* x, const void* data, mot_float_type* result){
+            void evaluate(mot_float_type* x, void* data, mot_float_type* result){
                 mot_float_type x_model[''' + str(self._model.get_nmr_estimable_parameters()) + '''];
                 for(uint i = 0; i < ''' + str(self._model.get_nmr_estimable_parameters()) + '''; i++){
                     x_model[i] = x[i];
                 }
-                ''' + param_modifier.get_name() + '''((void*)&data, x_model);
+                ''' + param_modifier.get_name() + '''(data, x_model);
                 
                 for(uint i = 0; i < ''' + str(self._model.get_nmr_inst_per_problem()) + '''; i++){
                     result[i] = ''' + objective_func.get_name() + '''(data, x_model, i);

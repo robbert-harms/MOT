@@ -607,7 +607,7 @@ class _MCMCKernelBuilder(object):
                                void* rng_data,
                                local double* const current_likelihood,
                                local mot_float_type* const current_prior,
-                               const void* const data,
+                               void* data,
                                global mot_float_type* const proposal_state,
                                global ulong * const acceptance_counter,
                                local double* log_likelihood_tmp){

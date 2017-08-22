@@ -349,7 +349,7 @@ class OptimizeModelBuilder(object):
         class Codec(ParameterCodec):
             def get_parameter_decode_function(self, function_name='decodeParameters'):
                 func = '''
-                    void ''' + function_name + '''(const void* data_void, mot_float_type* x){
+                    void ''' + function_name + '''(void* data_void, mot_float_type* x){
                 '''
                 func += model_builder._kernel_data_struct_type
                 func += '* data = (' + model_builder._kernel_data_struct_type + '*)data_void;'
@@ -366,7 +366,7 @@ class OptimizeModelBuilder(object):
 
             def get_parameter_encode_function(self, function_name='encodeParameters'):
                 func = '''
-                    void ''' + function_name + '''(const void* data_void, mot_float_type* x){
+                    void ''' + function_name + '''(void* data_void, mot_float_type* x){
                 '''
 
                 if model_builder._enforce_weights_sum_to_one:
@@ -453,7 +453,7 @@ class OptimizeModelBuilder(object):
         func_name = '_getResidual'
         func = eval_function_info.get_function()
         func += '''
-            double ''' + func_name + '''(const void* const data, mot_float_type* const x, uint observation_index){
+            double ''' + func_name + '''(void* data, const mot_float_type* const x, uint observation_index){
                 return ((''' + self._kernel_data_struct_type + '''*)data)->var_data_observations''' \
                     + ('[observation_index]' if self.get_nmr_inst_per_problem() > 1 else '') + ''' - 
                     ''' + eval_function_info.get_name() + '''(data, x, observation_index);
@@ -464,7 +464,7 @@ class OptimizeModelBuilder(object):
     def _get_pre_eval_parameter_modifier(self):
         func_name = '_modifyParameters'
         func = '''
-            void ''' + func_name + '''(const void* const data, mot_float_type* x){
+            void ''' + func_name + '''(void* data, mot_float_type* x){
             }
         '''
         return SimpleNamedCLFunction(func, func_name)
@@ -497,9 +497,9 @@ class OptimizeModelBuilder(object):
 
         cl_function = '''
             double {function_name}(
-                    const void* const void_data,
+                    void* void_data,
                     const mot_float_type* const x,
-                    const uint observation_index){{
+                    uint observation_index){{
 
                 {body}
             }}
@@ -527,8 +527,7 @@ class OptimizeModelBuilder(object):
 
         func_name = 'getObjectiveInstanceValue'
         func = str(preliminary) + '''
-            double ''' + func_name + '''(const void* const data, mot_float_type* const x,
-                                         const uint observation_index){
+            double ''' + func_name + '''(void* data, const mot_float_type* const x, uint observation_index){
                 return _evaluationModel(data, x, observation_index);
             }
         '''
@@ -568,7 +567,7 @@ class OptimizeModelBuilder(object):
     def _get_observation_return_function(self):
         func_name = '_getObservation'
         func = '''
-            double ''' + func_name + '''(const void* const data, const uint observation_index){
+            double ''' + func_name + '''(void* data, uint observation_index){
                 return ((''' + self._kernel_data_struct_type + '''*)data)->var_data_observations''' \
                     + ('[observation_index]' if self.get_nmr_inst_per_problem() > 1 else '') + ''';
             }
@@ -1208,7 +1207,7 @@ class SampleModelBuilder(OptimizeModelBuilder):
             prior = '''
                 {preliminary}
 
-                mot_float_type {func_name}(const void* data_void,
+                mot_float_type {func_name}(void* data_void,
                                            {address_space_parameter_vector} const mot_float_type* const x){{
 
                     {kernel_data_struct_type}* data = ({kernel_data_struct_type}*)data_void;
@@ -1297,9 +1296,9 @@ class SampleModelBuilder(OptimizeModelBuilder):
                 {preliminary}
 
                 double {func_name}(
-                    const uint param_ind,
-                    const mot_float_type proposal,
-                    const mot_float_type current,
+                    uint param_ind,
+                    mot_float_type proposal,
+                    mot_float_type current,
                     {address_space_proposal_state} mot_float_type* const proposal_state){{
 
                     {body}
@@ -1347,8 +1346,8 @@ class SampleModelBuilder(OptimizeModelBuilder):
                 {preliminary}
 
                 mot_float_type {func_name}(
-                    const uint param_ind,
-                    const mot_float_type current,
+                    uint param_ind,
+                    mot_float_type current,
                     void* rng_data,
                     {address_space_proposal_state} mot_float_type* const proposal_state){{
 
@@ -2097,7 +2096,7 @@ class ParameterTransformedModel(OptimizeModelInterface):
         code = old_modifier.get_function()
         code += self._parameter_codec.get_parameter_decode_function('_decodeParameters')
         code += '''
-            void ''' + new_fname + '''(const void* const data, mot_float_type* x){
+            void ''' + new_fname + '''(void* data, mot_float_type* x){
                 _decodeParameters(data, x);
                 ''' + old_modifier.get_name() + '''(data, x);
             }

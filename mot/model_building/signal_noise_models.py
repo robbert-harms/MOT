@@ -31,13 +31,13 @@ class SignalNoiseModel(SimpleModelFunction):
 
             .. code-block:: c
 
-                double fname(const double signal, <noise model parameters ...>);
+                double fname(double signal, <noise model parameters ...>);
 
             For example, if the noise model has only one parameter 'sigma' the function should look like:
 
             .. code-block:: c
 
-                double fname(const double signal, const double sigma);
+                double fname(double signal, double sigma);
 
             The CL function should return a single double that represents the signal with the signal noise
                 added to it.
@@ -67,7 +67,7 @@ class JohnsonNoise(SignalNoiseModel):
             #ifndef JOHNSON_NOISE_MODEL
             #define JOHNSON_NOISE_MODEL
         
-            double ''' + self.cl_function_name + '''(const double signal, const double eta){
+            double ''' + self.cl_function_name + '''(double signal, double eta){
                 return sqrt((signal * signal) + (eta * eta));
             }
             

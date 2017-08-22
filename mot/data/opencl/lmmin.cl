@@ -99,7 +99,7 @@ double lm_euclidian_norm_global(global const mot_float_type* const x, const int 
 /******************************************************************************/
 /*  lmmin (main minimization routine)                                         */
 /******************************************************************************/
-int lmmin(mot_float_type * const x, const void* const data, global mot_float_type* fjac){
+int lmmin(mot_float_type * const x, void* data, global mot_float_type* fjac){
 
 	int j, i;
     mot_float_type actred, dirder, fnorm, fnorm1, gnorm, pnorm, prered, ratio, step, temp, temp1, temp2, temp3;

@@ -62,8 +62,8 @@ class FormatAssignmentConstructor(AssignmentConstructor):
 
     def create_assignment(self, parameter_variable, lower_bound, upper_bound):
         assignment = self._assignment.replace('{parameter_variable}', parameter_variable)
-        assignment = assignment.replace('{lower_bound}', lower_bound)
-        assignment = assignment.replace('{upper_bound}', upper_bound)
+        assignment = assignment.replace('{lower_bound}', str(lower_bound))
+        assignment = assignment.replace('{upper_bound}', str(upper_bound))
         return assignment
 
 
