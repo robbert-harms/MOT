@@ -10,12 +10,11 @@ from mot.model_building.model_function_priors import ModelFunctionPrior
 from mot.model_building.model_functions import Weight, ModelFunction
 from mot.model_building.parameters import CurrentObservationParam, StaticMapParameter, ProtocolParameter, \
     ModelDataParameter, FreeParameter
-from mot.model_building.data_adapter import SimpleDataAdapter
 from mot.model_building.parameter_functions.dependencies import SimpleAssignment, AbstractParameterDependency
 from mot.model_building.utils import ParameterCodec, SimpleModelPrior
 from mot.model_interfaces import OptimizeModelInterface, SampleModelInterface, KernelDataInfo
-from mot.utils import is_scalar, all_elements_equal, get_single_value, topological_sort, \
-    SimpleNamedCLFunction
+from mot.utils import is_scalar, all_elements_equal, get_single_value, SimpleNamedCLFunction, convert_data_to_dtype, \
+    dtype_to_ctype
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-03-14"
@@ -404,7 +403,7 @@ class OptimizeModelBuilder(object):
                           self._get_protocol_data(),
                           self._get_static_data()]:
             for el in data_dict.values():
-                data.append(el.get_opencl_data())
+                data.append(el)
 
         return SimpleKernelDataInfo(
             data, info['kernel_param_names'], info['data_struct'],
@@ -443,9 +442,7 @@ class OptimizeModelBuilder(object):
         starting_points = np.concatenate([np.transpose(np.array([s]))
                                           if len(s.shape) < 2 else s for s in starting_points], axis=1)
 
-        data_adapter = SimpleDataAdapter(starting_points, SimpleCLDataType.from_string('mot_float_type'),
-                                         self._get_mot_float_type())
-        return data_adapter.get_opencl_data()
+        return convert_data_to_dtype(starting_points, 'mot_float_type', self._get_mot_float_type())
 
     def _get_residual_per_observation_function(self, problems_to_analyze):
         eval_function_info = self._get_model_eval_function(problems_to_analyze)
@@ -760,7 +757,7 @@ class OptimizeModelBuilder(object):
                 if problems_to_analyze is not None:
                     value = value[problems_to_analyze, ...]
 
-                var_data_dict['{}.{}'.format(m.name, p.name).replace('.', '_')] = SimpleDataAdapter(
+                var_data_dict['{}.{}'.format(m.name, p.name).replace('.', '_')] = convert_data_to_dtype(
                     value, p.data_type, self._get_mot_float_type())
         return var_data_dict
 
@@ -771,8 +768,8 @@ class OptimizeModelBuilder(object):
             static_map_value = self._get_static_map_value(m, p, problems_to_analyze)
 
             if not all_elements_equal(static_map_value):
-                data_adapter = SimpleDataAdapter(static_map_value, p.data_type, self._get_mot_float_type())
-                static_data_dict.update({'{}.{}'.format(m.name, p.name).replace('.', '_'): data_adapter})
+                data = convert_data_to_dtype(static_map_value, p.data_type, self._get_mot_float_type())
+                static_data_dict.update({'{}.{}'.format(m.name, p.name).replace('.', '_'): data})
 
         return static_data_dict
 
@@ -784,12 +781,12 @@ class OptimizeModelBuilder(object):
             upper_bound = self._upper_bounds['{}.{}'.format(m.name, p.name)]
 
             if not all_elements_equal(lower_bound):
-                data_adapter = SimpleDataAdapter(lower_bound, p.data_type, self._get_mot_float_type())
-                bounds_dict.update({'lb_' + '{}.{}'.format(m.name, p.name).replace('.', '_'): data_adapter})
+                data = convert_data_to_dtype(lower_bound, p.data_type, self._get_mot_float_type())
+                bounds_dict.update({'lb_' + '{}.{}'.format(m.name, p.name).replace('.', '_'): data})
 
             if not all_elements_equal(upper_bound):
-                data_adapter = SimpleDataAdapter(upper_bound, p.data_type, self._get_mot_float_type())
-                bounds_dict.update({'ub_' + '{}.{}'.format(m.name, p.name).replace('.', '_'): data_adapter})
+                data = convert_data_to_dtype(upper_bound, p.data_type, self._get_mot_float_type())
+                bounds_dict.update({'ub_' + '{}.{}'.format(m.name, p.name).replace('.', '_'): data})
 
         return bounds_dict
 
@@ -918,10 +915,8 @@ class OptimizeModelBuilder(object):
                 observations = observations[problems_to_analyze, ...]
 
             observations = self._transform_observations(observations)
-
-            data_adapter = SimpleDataAdapter(observations, SimpleCLDataType.from_string('mot_float_type*'),
-                                             self._get_mot_float_type())
-            var_data_dict.update({'observations': data_adapter})
+            observations = convert_data_to_dtype(observations, 'mot_float_type*', self._get_mot_float_type())
+            var_data_dict.update({'observations': observations})
 
         var_data_dict.update(self._get_fixed_parameters_as_var_data(problems_to_analyze))
         var_data_dict.update(self._get_static_parameters_as_var_data(problems_to_analyze))
@@ -936,8 +931,8 @@ class OptimizeModelBuilder(object):
             if isinstance(p, ProtocolParameter):
                 if p.name in protocol_info:
                     if not all_elements_equal(protocol_info[p.name]):
-                        const_d = {p.name: SimpleDataAdapter(protocol_info[p.name],
-                                                             p.data_type, self._get_mot_float_type())}
+                        const_d = {p.name: convert_data_to_dtype(protocol_info[p.name], p.data_type,
+                                                                 self._get_mot_float_type())}
                         return_data.update(const_d)
                 else:
                     exception = 'Protocol parameter "{}" could not be resolved'.format('{}.{}'.format(m.name, p.name))
@@ -950,7 +945,8 @@ class OptimizeModelBuilder(object):
             if isinstance(p, ModelDataParameter):
                 value = self._model_functions_info.get_parameter_value('{}.{}'.format(m.name, p.name))
                 if not all_elements_equal(value):
-                    static_data_dict.update({p.name: SimpleDataAdapter(value, p.data_type, self._get_mot_float_type())})
+                    static_data_dict.update({p.name: convert_data_to_dtype(value, p.data_type,
+                                                                           self._get_mot_float_type())})
         return static_data_dict
 
     def _get_all_kernel_source_items(self, problems_to_analyze):
@@ -959,14 +955,9 @@ class OptimizeModelBuilder(object):
         data_struct_init = []
         data_struct_names = []
 
-        for key, data_adapter in self._get_variable_data(problems_to_analyze).items():
-            cl_data = data_adapter.get_opencl_data()
-
+        for key, cl_data in self._get_variable_data(problems_to_analyze).items():
             param_name = 'var_data_' + str(key)
-            data_type = data_adapter.get_data_type().raw_data_type
-
-            if data_adapter.get_data_type().is_vector_type:
-                data_type += data_adapter.get_data_type().vector_length
+            data_type = dtype_to_ctype(cl_data.dtype)
 
             kernel_param_names.append('global ' + data_type + '* ' + param_name)
 
@@ -978,27 +969,21 @@ class OptimizeModelBuilder(object):
                 data_struct_names.append('global ' + data_type + '* ' + param_name)
                 data_struct_init.append(param_name + ' + {{problem_id_name}} * {}'.format(mult))
 
-        for key, data_adapter in self._get_protocol_data().items():
+        for key, cl_data in self._get_protocol_data().items():
             param_name = 'protocol_data_' + str(key)
-            data_type = data_adapter.get_data_type().raw_data_type
-
-            if data_adapter.get_data_type().is_vector_type:
-                data_type += str(data_adapter.get_data_type().vector_length)
+            data_type = dtype_to_ctype(cl_data.dtype)
 
             kernel_param_names.append('global ' + data_type + '* ' + param_name)
             data_struct_init.append(param_name)
             data_struct_names.append('global ' + data_type + '* ' + param_name)
 
-        for key, data_adapter in self._get_static_data().items():
+        for key, cl_data in self._get_static_data().items():
             param_name = 'model_data_' + str(key)
-            data_type = data_adapter.get_data_type().raw_data_type
-
-            if data_adapter.get_data_type().is_vector_type:
-                data_type += data_adapter.get_data_type().vector_length
+            data_type = dtype_to_ctype(cl_data.dtype)
 
             data_struct_init.append(param_name)
 
-            if isinstance(data_adapter.get_opencl_data(), np.ndarray):
+            if isinstance(cl_data, np.ndarray):
                 kernel_param_names.append('global ' + data_type + '* ' + param_name)
                 data_struct_names.append('global ' + data_type + '* ' + param_name)
             else:

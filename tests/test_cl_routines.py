@@ -23,10 +23,8 @@ from mot.cl_routines.filters.mean import MeanFilter
 from mot.cl_routines.filters.median import MedianFilter
 
 from mot.model_building.model_builders import SimpleKernelDataInfo
-from mot.utils import results_to_dict, SimpleNamedCLFunction
+from mot.utils import results_to_dict, SimpleNamedCLFunction, convert_data_to_dtype
 
-from mot.cl_data_type import SimpleCLDataType
-from mot.model_building.data_adapter import SimpleDataAdapter
 from mot.model_interfaces import OptimizeModelInterface
 
 
@@ -218,8 +216,7 @@ class Rosenbrock(OptimizeModelInterface):
             for i in range(self.n):
                 if i in previous_results:
                     params[0, i] = previous_results[i]
-        return SimpleDataAdapter(params, SimpleCLDataType.from_string('double'),
-                                 SimpleCLDataType.from_string('double')).get_opencl_data()
+        return convert_data_to_dtype(params, 'double')
 
     def get_lower_bounds(self):
         return ['-inf'] * self.n
@@ -334,8 +331,7 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
             for i in range(2):
                 if i in previous_results:
                     params[0, i] = previous_results[i]
-        return SimpleDataAdapter(params, SimpleCLDataType.from_string('double'),
-                                 SimpleCLDataType.from_string('double')).get_opencl_data()
+        return convert_data_to_dtype(params, 'double')
 
     def get_lower_bounds(self):
         return [0, 0]

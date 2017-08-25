@@ -3,7 +3,9 @@ from contextlib import contextmanager
 from functools import reduce
 import numpy as np
 import pyopencl as cl
-from pyopencl.tools import dtype_to_ctype
+import numbers
+from mot.cl_data_type import SimpleCLDataType
+import pyopencl.array as cl_array
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-05-13"
@@ -12,7 +14,7 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-def numpy_type_to_cl_type(dtype):
+def dtype_to_ctype(dtype):
     """Get the CL type of the given numpy data type.
 
     Args:
@@ -21,7 +23,80 @@ def numpy_type_to_cl_type(dtype):
     Returns:
         str: the CL type string for the corresponding type
     """
+    from pyopencl.tools import dtype_to_ctype
     return dtype_to_ctype(dtype)
+
+
+def ctype_to_dtype(cl_type, mot_float_type='float'):
+    """Get the numpy dtype of the given cl_type string.
+
+    Args:
+        cl_type (str): the CL data type to match, for example 'float' or 'float4'.
+        mot_float_type (str): the C name of the ``mot_float_type``. The dtype will be looked up recursively.
+
+    Returns:
+        dtype: the numpy datatype
+    """
+    data_type = SimpleCLDataType.from_string(cl_type)
+
+    if data_type.is_vector_type:
+        if data_type.raw_data_type.startswith('mot_float_type'):
+            data_type = SimpleCLDataType.from_string(mot_float_type + str(data_type.vector_length))
+        vector_type = data_type.raw_data_type + str(data_type.vector_length)
+        return getattr(cl_array.vec, vector_type)
+    else:
+        if data_type.raw_data_type.startswith('mot_float_type'):
+            data_type = SimpleCLDataType.from_string(mot_float_type)
+        data_types = [
+            ('char', np.int8),
+            ('uchar', np.uint8),
+            ('short', np.int16),
+            ('ushort', np.uint16),
+            ('int', np.int32),
+            ('uint', np.uint32),
+            ('long', np.int64),
+            ('ulong', np.uint64),
+            ('float', np.float32),
+            ('double', np.float64),
+        ]
+        for ctype, dtype in data_types:
+            if ctype == data_type.raw_data_type:
+                return dtype
+
+
+def convert_data_to_dtype(data, data_type, mot_float_type='float'):
+    """Convert the given input data to the correct numpy type.
+
+    Args:
+        value (ndarray): The value to convert to the correct numpy type
+        data_type (str or mot.cl_data_type.CLDataType): the data type we need to convert the data to
+        mot_float_type (str or mot.cl_data_type.CLDataType): the data type of the current ``mot_float_type``
+
+    Returns:
+        ndarray: the input data but then converted to the desired numpy data type
+    """
+    if isinstance(data_type, str):
+        data_type = SimpleCLDataType.from_string(data_type)
+    if isinstance(mot_float_type, str):
+        mot_float_type = SimpleCLDataType.from_string(mot_float_type)
+
+    scalar_dtype = ctype_to_dtype(data_type.raw_data_type, mot_float_type.raw_data_type)
+
+    if isinstance(data, numbers.Number):
+        data = scalar_dtype(data)
+
+    if data_type.is_vector_type:
+        if len(data.shape) < 2:
+            data = data[..., None]
+
+        dtype = ctype_to_dtype(data_type, mot_float_type.raw_data_type)
+
+        ve = np.zeros((data.shape[0], 1), dtype=dtype, order='C')
+        for i in range(data.shape[0]):
+            for j in range(data.shape[1]):
+                ve[i, 0][j] = data[i, j]
+        return np.require(ve, requirements=['C', 'A', 'O'])
+    return np.require(data, scalar_dtype, ['C', 'A', 'O'])
 
 
 def device_type_from_string(cl_device_type_str):
