@@ -1,8 +1,8 @@
 result = expr;
 expr = [address_space_qualifier] {pre_data_type_type_qualifiers}* data_type [is_pointer [post_data_type_type_qualifier]];
-data_type = scalar_data_type | vector_data_type | user_data_type;
+data_type = vector_data_type | user_data_type | scalar_data_type;
 is_pointer = '*';
-scalar_data_type = 'mot_float_type' | bool' | 'char' | 'cl_char' | 'unsigned char' | 'uchar' | 'cl_uchar' | 'short' | 'cl_short' | 'unsigned short' | 'ushort' | 'int' | 'unsigned int' | 'uint' | 'long' | 'unsigned long' | 'ulong' | 'float' | 'half' | 'size_t' | 'ptrdiff_t' | 'intptr_t' | 'uintptr_t' | 'void' | 'double' | 'half';
+scalar_data_type = 'mot_float_type' | 'bool' | 'char' | 'cl_char' | 'unsigned char' | 'uchar' | 'cl_uchar' | 'short' | 'cl_short' | 'unsigned short' | 'ushort' | 'int' | 'unsigned int' | 'uint' | 'long' | 'unsigned long' | 'ulong' | 'float' | 'half' | 'size_t' | 'ptrdiff_t' | 'intptr_t' | 'uintptr_t' | 'void' | 'double' | 'half';
 vector_data_type = /(char|uchar|short|ushort|int|uint|long|ulong|float|double|half|mot_float_type)\d+/;
 user_data_type = /\w+/;
 address_space_qualifier = '__local' | 'local' | '__global' | 'global' | '__constant' | 'constant' | '__private' | 'private';

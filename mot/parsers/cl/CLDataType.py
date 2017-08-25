@@ -13,28 +13,54 @@
 
 from __future__ import print_function, division, absolute_import, unicode_literals
 
+from grako.buffering import Buffer
 from grako.parsing import graken, Parser
-from grako.util import re, RE_FLAGS
 
 
-__version__ = (2016, 1, 5, 17, 39, 0, 1)
+KEYWORDS = {}
 
-__all__ = [
-    'CLDataTypeParser',
-    'CLDataTypeSemantics',
-    'main'
-]
+
+class CLDataTypeBuffer(Buffer):
+    def __init__(
+        self,
+        text,
+        whitespace=None,
+        nameguard=None,
+        comments_re=None,
+        eol_comments_re=None,
+        ignorecase=None,
+        namechars='',
+        **kwargs
+    ):
+        super(CLDataTypeBuffer, self).__init__(
+            text,
+            whitespace=whitespace,
+            nameguard=nameguard,
+            comments_re=comments_re,
+            eol_comments_re=eol_comments_re,
+            ignorecase=ignorecase,
+            namechars=namechars,
+            **kwargs
+        )
 
 
 class CLDataTypeParser(Parser):
-    def __init__(self,
-                 whitespace=None,
-                 nameguard=None,
-                 comments_re=None,
-                 eol_comments_re=None,
-                 ignorecase=None,
-                 left_recursion=True,
-                 **kwargs):
+    def __init__(
+        self,
+        whitespace=None,
+        nameguard=None,
+        comments_re=None,
+        eol_comments_re=None,
+        ignorecase=None,
+        left_recursion=False,
+        parseinfo=True,
+        keywords=None,
+        namechars='',
+        buffer_class=CLDataTypeBuffer,
+        **kwargs
+    ):
+        if keywords is None:
+            keywords = KEYWORDS
         super(CLDataTypeParser, self).__init__(
             whitespace=whitespace,
             nameguard=nameguard,
@@ -42,6 +68,10 @@ class CLDataTypeParser(Parser):
             eol_comments_re=eol_comments_re,
             ignorecase=ignorecase,
             left_recursion=left_recursion,
+            parseinfo=parseinfo,
+            keywords=keywords,
+            namechars=namechars,
+            buffer_class=buffer_class,
             **kwargs
         )
 
@@ -67,11 +97,11 @@ class CLDataTypeParser(Parser):
     def _data_type_(self):
         with self._choice():
             with self._option():
-                self._scalar_data_type_()
-            with self._option():
                 self._vector_data_type_()
             with self._option():
                 self._user_data_type_()
+            with self._option():
+                self._scalar_data_type_()
             self._error('no available options')
 
     @graken()
@@ -81,6 +111,8 @@ class CLDataTypeParser(Parser):
     @graken()
     def _scalar_data_type_(self):
         with self._choice():
+            with self._option():
+                self._token('mot_float_type')
             with self._option():
                 self._token('bool')
             with self._option():
@@ -131,7 +163,7 @@ class CLDataTypeParser(Parser):
                 self._token('double')
             with self._option():
                 self._token('half')
-            self._error('expecting one of: bool char cl_char cl_short cl_uchar double float half int intptr_t long ptrdiff_t short size_t uchar uint uintptr_t ulong unsigned char unsigned int unsigned long unsigned short ushort void')
+            self._error('expecting one of: bool char cl_char cl_short cl_uchar double float half int intptr_t long mot_float_type ptrdiff_t short size_t uchar uint uintptr_t ulong unsigned char unsigned int unsigned long unsigned short ushort void')
 
     @graken()
     def _vector_data_type_(self):
@@ -208,59 +240,3 @@ class CLDataTypeSemantics(object):
 
     def post_data_type_type_qualifier(self, ast):
         return ast
-
-
-def main(filename, startrule, trace=False, whitespace=None, nameguard=None):
-    import json
-    with open(filename) as f:
-        text = f.read()
-    parser = CLDataTypeParser(parseinfo=False)
-    ast = parser.parse(
-        text,
-        startrule,
-        filename=filename,
-        trace=trace,
-        whitespace=whitespace,
-        nameguard=nameguard)
-    print('AST:')
-    print(ast)
-    print()
-    print('JSON:')
-    print(json.dumps(ast, indent=2))
-    print()
-
-if __name__ == '__main__':
-    import argparse
-    import string
-    import sys
-
-    class ListRules(argparse.Action):
-        def __call__(self, parser, namespace, values, option_string):
-            print('Rules:')
-            for r in CLDataTypeParser.rule_list():
-                print(r)
-            print()
-            sys.exit(0)
-
-    parser = argparse.ArgumentParser(description="Simple parser for SimpleCLDataType.")
-    parser.add_argument('-l', '--list', action=ListRules, nargs=0,
-                        help="list all rules and exit")
-    parser.add_argument('-n', '--no-nameguard', action='store_true',
-                        dest='no_nameguard',
-                        help="disable the 'nameguard' feature")
-    parser.add_argument('-t', '--trace', action='store_true',
-                        help="output trace information")
-    parser.add_argument('-w', '--whitespace', type=str, default=string.whitespace,
-                        help="whitespace specification")
-    parser.add_argument('file', metavar="FILE", help="the input file to parse")
-    parser.add_argument('startrule', metavar="STARTRULE",
-                        help="the start rule for parsing")
-    args = parser.parse_args()
-
-    main(
-        args.file,
-        args.startrule,
-        trace=args.trace,
-        whitespace=args.whitespace,
-        nameguard=not args.no_nameguard
-    )
