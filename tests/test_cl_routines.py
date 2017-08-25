@@ -225,7 +225,7 @@ class Rosenbrock(OptimizeModelInterface):
         return ['inf'] * self.n
 
     def get_free_param_names(self):
-        return range(self.n)
+        return list(map(str, range(self.n)))
 
     def get_nmr_inst_per_problem(self):
         return 1
@@ -340,7 +340,7 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
         return ['inf', 'inf']
 
     def get_free_param_names(self):
-        return [0, 1]
+        return ['0', '1']
 
     def get_nmr_inst_per_problem(self):
         return 10

@@ -105,7 +105,6 @@ class OptimizeModelBuilder(object):
         return SimpleOptimizeModel(problems_to_analyze,
                                    self.name,
                                    self.double_precision,
-                                   self.get_free_param_names(),
                                    self._get_kernel_data_info(problems_to_analyze),
                                    self._get_nmr_problems(problems_to_analyze),
                                    self.get_nmr_inst_per_problem(),
@@ -2056,9 +2055,6 @@ class ParameterTransformedModel(OptimizeModelInterface):
     def double_precision(self):
         return self._model.double_precision
 
-    def get_free_param_names(self):
-        return self._model.get_free_param_names()
-
     def get_kernel_data_info(self):
         return self._model.get_kernel_data_info()
 
@@ -2178,14 +2174,13 @@ class SimpleKernelDataInfo(KernelDataInfo):
 class SimpleOptimizeModel(OptimizeModelInterface):
 
     def __init__(self, used_problem_indices,
-                 name, double_precision, free_param_names, kernel_data_info, nmr_problems, nmr_inst_per_problem,
+                 name, double_precision, kernel_data_info, nmr_problems, nmr_inst_per_problem,
                  nmr_estimable_parameters, initial_parameters, pre_eval_parameter_modifier, eval_function,
                  residual_function, objective_per_observation_function,
                  lower_bounds, upper_bounds):
         self.used_problem_indices = used_problem_indices
         self._name = name
         self._double_precision = double_precision
-        self._free_param_names = free_param_names
         self._kernel_data_info = kernel_data_info
         self._nmr_problems = nmr_problems
         self._nmr_inst_per_problem = nmr_inst_per_problem
@@ -2205,9 +2200,6 @@ class SimpleOptimizeModel(OptimizeModelInterface):
     @property
     def double_precision(self):
         return self._double_precision
-
-    def get_free_param_names(self):
-        return self._free_param_names
 
     def get_kernel_data_info(self):
         return self._kernel_data_info
@@ -2267,9 +2259,6 @@ class SimpleSampleModel(SampleModelInterface):
     @property
     def double_precision(self):
         return self._wrapped_optimize_model.double_precision
-
-    def get_free_param_names(self):
-        return self._wrapped_optimize_model.get_free_param_names()
 
     def get_kernel_data_info(self):
         return self._wrapped_optimize_model.get_kernel_data_info()

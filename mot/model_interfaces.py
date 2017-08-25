@@ -37,18 +37,6 @@ class OptimizeModelInterface(object):
         """
         raise NotImplementedError()
 
-    def get_free_param_names(self):
-        """Get a list of names with the free parameter names (the parameters that are estimated by the routines).
-
-        The function get_optimization_output_param_names() returns the names of all the parameter names,
-        including fixed and static parameters. This should only return the names of the parameters
-        that are actually used in the optimization.
-
-        Returns:
-            list of str: A list with the parameter names (in dot format) of all the estimated (free) parameters.
-        """
-        raise NotImplementedError()
-
     def get_kernel_data_info(self):
         """Return an information object about the data we need to upload to the kernel for this model to work.
 

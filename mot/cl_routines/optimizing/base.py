@@ -175,7 +175,6 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         for env in self.load_balancer.get_used_cl_environments(self.cl_environments):
             self._logger.info('Using device \'{}\'.'.format(str(env)))
         self._logger.info('Using compile flags: {}'.format(self.get_compile_flags_list(model.double_precision)))
-        self._logger.info('The parameters we will optimize are: {0}'.format(model.get_free_param_names()))
         self._logger.info('We will use the optimizer {} '
                           'with optimizer settings {}'.format(self.__class__.__name__,
                                                               self._optimizer_settings))
