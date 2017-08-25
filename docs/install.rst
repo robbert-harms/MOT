@@ -159,7 +159,7 @@ If you already have Visual Studio 2015 installed and are unsure if these options
 After this installation please download and install an OpenCL software development kit (SDK) matching the vendor of your graphics card or processor:
 
 * For Intel, see https://software.intel.com/en-us/intel-opencl
-* For AMD, see http://developer.amd.com/tools-and-sdks/opencl-zone/amd-accelerated-parallel-processing-app-sdk/
+* For AMD, see https://github.com/GPUOpen-LibrariesAndSDKs/OCL-SDK/releases
 * For NVidia, see https://developer.nvidia.com/cuda-downloads
 
 With Visual Studio 2015 and an OpenCL SDK installed we can proceed to install PyOpenCL. Open an Anaconda Prompt or a Windows CMD and type:
