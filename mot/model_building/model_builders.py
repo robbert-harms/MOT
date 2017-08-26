@@ -187,7 +187,7 @@ class OptimizeModelBuilder(object):
             initial_params (dict): a dictionary containing as keys full parameter names (<model>.<param>) and as values
                 numbers or arrays to be used as starting point
         """
-        for m, p in self._model_functions_info.get_free_parameters_list():
+        for m, p in self._model_functions_info.get_model_parameter_list():
             param_name = '{}.{}'.format(m.name, p.name)
 
             if param_name in initial_params:
@@ -792,10 +792,17 @@ class OptimizeModelBuilder(object):
     def _get_static_map_value(self, model, parameter, problems_to_analyze):
         """Get the map value for the given parameter of the given model.
 
-        This first checks if the parameter is defined in the static maps data in the problem data. If not, we try
-        to get it from the value stored in the parameter itself. If that fails as well we raise an error.
+        The resolution order is as follows, with a latter stage taking preference over an earlier stage
 
-        Also, this only returns the problems for which problems_to_analyze is set.
+        1. the value defined in the parameter definition
+        2. the <param_name> in the static maps of the problem data
+        3. the <model_name>.<param_name> in the static maps of the problem data
+        4. the <param_name> in the provided initial values
+        5. the <model_name>.<param_name> in the provided initial values
+        6. the <param_name> in the provided fixed values
+        7. the <model_name>.<param_name> in the provided fixed values
+
+        This only returns the problems for which problems_to_analyze is set.
 
         Args:
             model (ModelFunction): the model function
@@ -805,22 +812,28 @@ class OptimizeModelBuilder(object):
         Returns:
             ndarray or number: the value for the given parameter.
         """
-        data = None
-        value = self._model_functions_info.get_parameter_value('{}.{}'.format(model.name, parameter.name))
-        if parameter.name in self._problem_data.static_maps:
-            data = self._problem_data.static_maps[parameter.name]
-        elif value is not None:
-            data = value
+        def resolve_value():
+            value = self._model_functions_info.get_parameter_value('{}.{}'.format(model.name, parameter.name))
 
-        if data is None:
+            if parameter.name in self._problem_data.static_maps:
+                value = self._problem_data.static_maps[parameter.name]
+            if '{}.{}'.format(model.name, parameter.name) in self._problem_data.static_maps:
+                value = self._problem_data.static_maps['{}.{}'.format(model.name, parameter.name)]
+
+            return value
+
+        param_data = resolve_value()
+
+        if param_data is None:
             raise ValueError('No suitable data could be found for the static parameter {}.'.format(parameter.name))
 
-        if is_scalar(data):
-            return data
+        if is_scalar(param_data):
+            return get_single_value(param_data)
 
         if problems_to_analyze is not None:
-            return data[problems_to_analyze, ...]
-        return data
+            return param_data[problems_to_analyze, ...]
+
+        return param_data
 
     def _is_non_model_tree_model(self, model):
         return model is self._evaluation_model or (self._signal_noise_model is not None and
