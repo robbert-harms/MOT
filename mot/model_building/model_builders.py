@@ -400,7 +400,7 @@ class OptimizeModelBuilder(object):
         data = []
         for data_dict in [self._get_variable_data(problems_to_analyze),
                           self._get_protocol_data(),
-                          self._get_static_data()]:
+                          self._get_model_data()]:
             for el in data_dict.values():
                 data.append(el)
 
@@ -496,7 +496,7 @@ class OptimizeModelBuilder(object):
                     void* void_data,
                     const mot_float_type* const x,
                     uint observation_index){{
-
+                
                 {body}
             }}
         '''.format(function_name=function_name, body=indent(get_function_body(), ' '*4*4)[4*4:])
@@ -938,15 +938,15 @@ class OptimizeModelBuilder(object):
                     raise ParameterResolutionException(exception)
         return return_data
 
-    def _get_static_data(self):
-        static_data_dict = {}
+    def _get_model_data(self):
+        data_dict = {}
         for m, p in self._model_functions_info.get_model_parameter_list():
             if isinstance(p, ModelDataParameter):
                 value = self._model_functions_info.get_parameter_value('{}.{}'.format(m.name, p.name))
                 if not all_elements_equal(value):
-                    static_data_dict.update({p.name: convert_data_to_dtype(value, p.data_type,
-                                                                           self._get_mot_float_type())})
-        return static_data_dict
+                    data_dict.update({p.name: convert_data_to_dtype(value, p.data_type,
+                                                                    self._get_mot_float_type())})
+        return data_dict
 
     def _get_all_kernel_source_items(self, problems_to_analyze):
         """Get the CL strings for the kernel source items for most common CL kernels in this library."""
@@ -976,7 +976,7 @@ class OptimizeModelBuilder(object):
             data_struct_init.append(param_name)
             data_struct_names.append('global ' + data_type + '* ' + param_name)
 
-        for key, cl_data in self._get_static_data().items():
+        for key, cl_data in self._get_model_data().items():
             param_name = 'model_data_' + str(key)
             data_type = dtype_to_ctype(cl_data.dtype)
 

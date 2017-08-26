@@ -58,7 +58,7 @@ void swap(mot_float_type* a, mot_float_type* b){
    *a = temp;
 }
 
-mot_float_type bracket_and_brent(mot_float_type *xmin, const void* const eval_data);
+mot_float_type bracket_and_brent(mot_float_type *xmin, void* eval_data);
 
 /**
  * Initializes the starting vectors.
@@ -127,7 +127,7 @@ mot_float_type powell_find_linear_minimum(
     linear_function_data eval_data = {point_0, point_1, data};
 
     mot_float_type xmin = 0;
-    mot_float_type fval = bracket_and_brent(&xmin, (const void*) &eval_data);
+    mot_float_type fval = bracket_and_brent(&xmin, (void*)&eval_data);
 
     for(int j=0; j < %(NMR_PARAMS)r; j++){
         point_1[j] *= xmin;
@@ -337,7 +337,7 @@ int powell(mot_float_type* model_parameters, void* data){
 }
 
 
-mot_float_type bracket_and_brent(mot_float_type* xmin, const void* const eval_data){
+mot_float_type bracket_and_brent(mot_float_type* xmin, void* eval_data){
 
     mot_float_type ax = 0.0;
     mot_float_type bx = 1.0;

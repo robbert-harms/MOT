@@ -310,7 +310,7 @@ def all_elements_equal(value):
     """
     if is_scalar(value):
         return True
-    return (value == value[0]).all()
+    return np.array(value == value[..., 0]).all()
 
 
 def get_single_value(value):
