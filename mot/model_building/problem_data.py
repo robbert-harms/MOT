@@ -18,7 +18,7 @@ class AbstractProblemData(object):
         Returns:
             collections.Mapping: The protocol data information mapping.
         """
-        return {}
+        raise NotImplementedError()
 
     def get_nmr_inst_per_problem(self):
         """Get the number of instances/data points per problem.
@@ -30,7 +30,7 @@ class AbstractProblemData(object):
         Returns:
             int: the number of instances per problem.
         """
-        return np.array(self.protocol[list(self.protocol.keys())[0]]).shape[0]
+        raise NotImplementedError()
 
     def get_nmr_problems(self):
         """Get the number of problems present in this problem data.
@@ -38,17 +38,17 @@ class AbstractProblemData(object):
         Returns:
             int: the number of problem instances
         """
-        return self.observations.shape[0]
+        raise NotImplementedError()
 
     @property
     def observations(self):
         """Return the observations stored in this problem data container.
 
         Returns:
-            ndarray: The list of observed instances per problem. Should be a 2d matrix with as columns the observations
-                and as rows the problems.
+            ndarray: The list of observed instances per problem. Should be a 2d matrix of type float with as
+                columns the observations and as rows the problems.
         """
-        return np.array([[]])
+        raise NotImplementedError()
 
     @property
     def static_maps(self):
@@ -57,11 +57,11 @@ class AbstractProblemData(object):
         These maps will be loaded by the model builder as the values for the static parameters.
 
         Returns:
-            dict: per static map the value for the static map. This can either be an one or two dimensional
-                matrix containing the values for each problem instance or it can be a single value we will use
-                for all p
+            dict: per static map the value for the static map. This value can either be a scalar or a one or a two
+                dimensional matrix containing the values for each problem instance. The static maps can be linked
+                to parameters by their full name (<model>.<parameter>) or just by their parameter name (<parameter>).
         """
-        return {}
+        raise NotImplementedError()
 
     @property
     def noise_std(self):
@@ -73,7 +73,7 @@ class AbstractProblemData(object):
         Returns:
             number of ndarray: either a scalar or a 2d matrix with one value per problem instance.
         """
-        return 1
+        raise NotImplementedError()
 
 
 class SimpleProblemData(AbstractProblemData):
@@ -108,3 +108,9 @@ class SimpleProblemData(AbstractProblemData):
     @property
     def noise_std(self):
         return self._noise_std
+
+    def get_nmr_inst_per_problem(self):
+        return np.array(self.protocol[list(self.protocol.keys())[0]]).shape[0]
+
+    def get_nmr_problems(self):
+        return self.observations.shape[0]
