@@ -26,7 +26,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 class OptimizeModelBuilder(object):
 
     def __init__(self, name, model_tree, evaluation_model, signal_noise_model=None,
-                 problem_data=None, enforce_weights_sum_to_one=True):
+                 input_data=None, enforce_weights_sum_to_one=True):
         """Create a new model builder that can construct an optimization model from a combination of model functions.
 
         Args:
@@ -36,7 +36,7 @@ class OptimizeModelBuilder(object):
                 use for the resulting complete model
             signal_noise_model (mot.model_building.signal_noise_models.SignalNoiseModel): the optional signal
                 noise model to use to add noise to the model prediction
-            problem_data (ProblemData): the problem data object
+            input_data (mot.model_building.input_data.AbstractInputData): the input data container
             enforce_weights_sum_to_one (boolean): if we want to enforce that weights sum to one. This does the
                 following things; it fixes the first weight to the sum of the others and it adds a transformation
                 that ensures that those other weights sum to at most one.
@@ -61,9 +61,9 @@ class OptimizeModelBuilder(object):
         self._upper_bounds = {'{}.{}'.format(m.name, p.name): p.upper_bound for m, p in
                               self._model_functions_info.get_free_parameters_list()}
 
-        self._problem_data = None
-        if problem_data:
-            self.set_problem_data(problem_data)
+        self._input_data = None
+        if input_data:
+            self.set_input_data(input_data)
 
         self._set_default_dependencies()
 
@@ -99,7 +99,7 @@ class OptimizeModelBuilder(object):
         Raises:
             RuntimeError: if some of the required items are not set prior to building.
         """
-        if self._problem_data is None:
+        if self._input_data is None:
             raise RuntimeError('Problem data is not set, can not build the model.')
 
         return SimpleOptimizeModel(problems_to_analyze,
@@ -258,32 +258,32 @@ class OptimizeModelBuilder(object):
         """
         return self._model_functions_info.has_parameter(model_param_name)
 
-    def set_problem_data(self, problem_data):
-        """Set the problem data this model will deal with.
+    def set_input_data(self, input_data):
+        """Set the input data this model will deal with.
 
-        This will also call the function set_noise_level_std() with the noise_std from the new problem data.
+        This will also call the function set_noise_level_std() with the noise_std from the new input data.
 
         Args:
-            problem_data (mot.model_building.problem_data.AbstractProblemData):
-                The container for the problem data we will use for this model.
+            input_data (mot.model_building.input_data.AbstractInputData):
+                The container for the data we will use for this model.
 
         Returns:
             Returns self for chainability
         """
-        self._problem_data = problem_data
-        if self._problem_data.noise_std is not None:
+        self._input_data = input_data
+        if self._input_data.noise_std is not None:
             self._model_functions_info.set_parameter_value('{}.{}'.format(
                 self._evaluation_model.name,
-                self._evaluation_model.get_noise_std_param_name()), self._problem_data.noise_std)
+                self._evaluation_model.get_noise_std_param_name()), self._input_data.noise_std)
         return self
 
-    def get_problem_data(self):
-        """Get the problem data actually being used by this model.
+    def get_input_data(self):
+        """Get the input data actually being used by this model.
 
         Returns:
-            mot.model_building.problem_data.AbstractProblemData: the problem data being used by this model
+            mot.model_building.input_data.AbstractInputData: the input data being used by this model
         """
-        return self._problem_data
+        return self._input_data
 
     def get_required_protocol_names(self):
         """Get a list with the constant data names that are needed for this model to work.
@@ -301,7 +301,7 @@ class OptimizeModelBuilder(object):
         """Given a dictionary with static maps, initialize the values of the static parameters with these values.
 
         Make sure that if vectors are given, the lengt of the vector should match the length of the number of problems
-        (in the problem data).
+        (in the input data).
 
         Args:
             fixed_values (dict): the dictionary with the static maps.
@@ -318,7 +318,7 @@ class OptimizeModelBuilder(object):
 
     def get_nmr_inst_per_problem(self):
         """See super class for details"""
-        return self._problem_data.get_nmr_inst_per_problem()
+        return self._input_data.get_nmr_inst_per_problem()
 
     def get_nmr_estimable_parameters(self):
         """See super class for details"""
@@ -384,8 +384,8 @@ class OptimizeModelBuilder(object):
     def _get_nmr_problems(self, problems_to_analyze):
         """See super class for details"""
         if problems_to_analyze is None:
-            if self._problem_data:
-                return self._problem_data.get_nmr_problems()
+            if self._input_data:
+                return self._input_data.get_nmr_problems()
             return 0
         return len(problems_to_analyze)
 
@@ -670,7 +670,7 @@ class OptimizeModelBuilder(object):
         Args:
             exclude_list: a list of parameters to exclude from this listing
         """
-        protocol_info = self._problem_data.protocol
+        protocol_info = self._input_data.protocol
         param_list = self._model_functions_info.get_protocol_parameters_list()
 
         const_params_seen = []
@@ -795,8 +795,8 @@ class OptimizeModelBuilder(object):
         The resolution order is as follows, with a latter stage taking preference over an earlier stage
 
         1. the value defined in the parameter definition
-        2. the <param_name> in the static maps of the problem data
-        3. the <model_name>.<param_name> in the static maps of the problem data
+        2. the <param_name> in the static maps of the input data
+        3. the <model_name>.<param_name> in the static maps of the input data
         4. the <param_name> in the provided initial values
         5. the <model_name>.<param_name> in the provided initial values
         6. the <param_name> in the provided fixed values
@@ -815,10 +815,10 @@ class OptimizeModelBuilder(object):
         def resolve_value():
             value = self._model_functions_info.get_parameter_value('{}.{}'.format(model.name, parameter.name))
 
-            if parameter.name in self._problem_data.static_maps:
-                value = self._problem_data.static_maps[parameter.name]
-            if '{}.{}'.format(model.name, parameter.name) in self._problem_data.static_maps:
-                value = self._problem_data.static_maps['{}.{}'.format(model.name, parameter.name)]
+            if parameter.name in self._input_data.static_maps:
+                value = self._input_data.static_maps[parameter.name]
+            if '{}.{}'.format(model.name, parameter.name) in self._input_data.static_maps:
+                value = self._input_data.static_maps['{}.{}'.format(model.name, parameter.name)]
 
             return value
 
@@ -921,7 +921,7 @@ class OptimizeModelBuilder(object):
         """
         var_data_dict = {}
 
-        observations = self._problem_data.observations
+        observations = self._input_data.observations
         if observations is not None:
             if problems_to_analyze is not None:
                 observations = observations[problems_to_analyze, ...]
@@ -937,7 +937,7 @@ class OptimizeModelBuilder(object):
         return var_data_dict
 
     def _get_protocol_data(self):
-        protocol_info = self._problem_data.protocol
+        protocol_info = self._input_data.protocol
         return_data = {}
         for m, p in self._model_functions_info.get_model_parameter_list():
             if isinstance(p, ProtocolParameter):
@@ -1073,7 +1073,7 @@ class OptimizeModelBuilder(object):
 
 class SampleModelBuilder(OptimizeModelBuilder):
 
-    def __init__(self, model_name, model_tree, evaluation_model, signal_noise_model=None, problem_data=None,
+    def __init__(self, model_name, model_tree, evaluation_model, signal_noise_model=None, input_data=None,
                  enforce_weights_sum_to_one=True):
         """Create a new model builder for sampling purposes.
 
@@ -1082,7 +1082,8 @@ class SampleModelBuilder(OptimizeModelBuilder):
                 will also use (next to the priors defined in the parameters).
         """
         super(SampleModelBuilder, self).__init__(model_name, model_tree, evaluation_model, signal_noise_model,
-                                                 problem_data, enforce_weights_sum_to_one=enforce_weights_sum_to_one)
+                                                 input_data=input_data,
+                                                 enforce_weights_sum_to_one=enforce_weights_sum_to_one)
 
         self._model_priors = []
 

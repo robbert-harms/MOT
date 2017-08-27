@@ -6,12 +6,12 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class AbstractProblemData(object):
-    """A simple data container for the data for optimization/sampling models."""
+class AbstractInputData(object):
+    """A simple container for the input data for optimization/sampling models."""
 
     @property
     def protocol(self):
-        """Return the protocol data stored in this problem data container.
+        """Return the protocol data stored in this input data container.
 
         The protocol data contains information about the experimental setup. In MRI this is the scanner protocol.
 
@@ -25,15 +25,13 @@ class AbstractProblemData(object):
 
         The minimum is one instance per problem.
 
-        This number represents the number of data points
-
         Returns:
-            int: the number of instances per problem.
+            int: the number of instances per problem (aka data points)
         """
         raise NotImplementedError()
 
     def get_nmr_problems(self):
-        """Get the number of problems present in this problem data.
+        """Get the number of problems present in this input data.
 
         Returns:
             int: the number of problem instances
@@ -42,7 +40,7 @@ class AbstractProblemData(object):
 
     @property
     def observations(self):
-        """Return the observations stored in this problem data container.
+        """Return the observations stored in this input data container.
 
         Returns:
             ndarray: The list of observed instances per problem. Should be a 2d matrix of type float with as
@@ -76,7 +74,7 @@ class AbstractProblemData(object):
         raise NotImplementedError()
 
 
-class SimpleProblemData(AbstractProblemData):
+class SimpleInputData(AbstractInputData):
 
     def __init__(self, protocol, observations, static_maps=None, noise_std=None):
         """A simple data container for the data for optimization/sampling models.
