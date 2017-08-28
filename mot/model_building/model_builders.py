@@ -36,7 +36,7 @@ class OptimizeModelBuilder(object):
                 use for the resulting complete model
             signal_noise_model (mot.model_building.signal_noise_models.SignalNoiseModel): the optional signal
                 noise model to use to add noise to the model prediction
-            input_data (mot.model_building.input_data.AbstractInputData): the input data container
+            input_data (mot.model_building.input_data.InputData): the input data container
             enforce_weights_sum_to_one (boolean): if we want to enforce that weights sum to one. This does the
                 following things; it fixes the first weight to the sum of the others and it adds a transformation
                 that ensures that those other weights sum to at most one.
@@ -264,7 +264,7 @@ class OptimizeModelBuilder(object):
         This will also call the function set_noise_level_std() with the noise_std from the new input data.
 
         Args:
-            input_data (mot.model_building.input_data.AbstractInputData):
+            input_data (mot.model_building.input_data.InputData):
                 The container for the data we will use for this model.
 
         Returns:
@@ -281,7 +281,7 @@ class OptimizeModelBuilder(object):
         """Get the input data actually being used by this model.
 
         Returns:
-            mot.model_building.input_data.AbstractInputData: the input data being used by this model
+            mot.model_building.input_data.InputData: the input data being used by this model
         """
         return self._input_data
 

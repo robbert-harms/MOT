@@ -6,7 +6,7 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class AbstractInputData(object):
+class InputData(object):
     """A simple container for the input data for optimization/sampling models."""
 
     @property
@@ -74,7 +74,7 @@ class AbstractInputData(object):
         raise NotImplementedError()
 
 
-class SimpleInputData(AbstractInputData):
+class SimpleInputData(InputData):
 
     def __init__(self, protocol, observations, static_maps=None, noise_std=None):
         """A simple data container for the data for optimization/sampling models.
