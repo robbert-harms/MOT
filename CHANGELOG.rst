@@ -3,6 +3,31 @@ Changelog
 *********
 
 
+v0.3.5 (2017-08-29)
+===================
+
+Added
+-----
+- Adds support for static maps per compartments, that will if given override the static maps per parameter.
+
+Changed
+-------
+- Updated the changelog generation slightly.
+- Updated the problem data to be a perfect interface.
+- Updates the parser to the latest version of Grako.
+- Changed the DataAdapter and in return added a util function convert_data_to_dtype.
+
+Fixed
+-----
+- Fixed the link to the AMD site in the docs.
+
+Other
+-----
+- Renamed AbstractInputData to just InputData, which is more in line with the rest of the naming scheme.
+- Renamed problem data to input data.
+- Removed get_free_param_names as a required function of a model.
+
+
 v0.3.4 (2017-08-22)
 ===================
 
@@ -12,6 +37,7 @@ Added
 
 Other
 -----
+- Version bump.
 - Removed the const keyword from the data pointer in the model functions. Allows the user more freedom.
 - Removed the get observation return function from the model interface.
 
@@ -239,9 +265,6 @@ Changed
 - Changed the lower bound to 0 in the clamp in sinsqrclamptransform (from -1), it does not change anything.
 - Changed the default NMSimplex functioning to use adaptive coefficients.
 - Updates to the install guide.
-- Update install.rst.
-  Adds an install dependency
-- Update README.rst.
 - Updates to the rng.
 - Updates to the documentation structure.
 - Updates to install.
@@ -324,7 +347,6 @@ Changed
 - Updates to readme.
 - Updates to readme.
 - Updates to readme.
-- Update README.rst.
 - Updates to readme.
 - Updates to readme.
 - Updates to the first legendre term function.
@@ -436,6 +458,9 @@ Other
 - Removed a few old methods, updates to some comments.
 - Small fix to the Powell identity reset method.
 - Merge branch 'master' of github.com:cbclab/MOT.
+- Update install.rst.
+  Adds an install dependency
+- Update README.rst.
 - Replaces the old RanLux RNG with the Random123 RNG.
 - Finished adding the Random123 RNG.
 - Created the RNG with Random123, now proceeding with adding it to the code.
@@ -466,6 +491,7 @@ Other
 - Moved all model building aspects into a separate subpackage.
 - Some restructuring of the codebase, updates to the documentation, version bump.
 - Merge branch 'master' of github.com:robbert-harms/MOT.
+- Update README.rst.
 - First public version.
 - Moved one of the big private arrays in the LM method to global memory. The problem was that the compiler sometimes failed to find a contiguous memory block and returnd a out of resources error.
 - Version bump.

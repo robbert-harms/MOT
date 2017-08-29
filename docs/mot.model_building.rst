@@ -11,18 +11,18 @@ Subpackages
 Submodules
 ----------
 
-mot\.model\_building\.data\_adapter module
-------------------------------------------
-
-.. automodule:: mot.model_building.data_adapter
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
 mot\.model\_building\.evaluation\_models module
 -----------------------------------------------
 
 .. automodule:: mot.model_building.evaluation_models
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+mot\.model\_building\.input\_data module
+----------------------------------------
+
+.. automodule:: mot.model_building.input_data
     :members:
     :undoc-members:
     :show-inheritance:
@@ -55,14 +55,6 @@ mot\.model\_building\.parameters module
 ---------------------------------------
 
 .. automodule:: mot.model_building.parameters
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-mot\.model\_building\.problem\_data module
-------------------------------------------
-
-.. automodule:: mot.model_building.problem_data
     :members:
     :undoc-members:
     :show-inheritance:
