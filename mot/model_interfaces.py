@@ -90,7 +90,7 @@ class OptimizeModelInterface(object):
 
                 .. code-block:: c
 
-                    void <func_name>(void* data, mot_float_type* x);
+                    void <func_name>(mot_data_struct* data, mot_float_type* x);
 
                 Changes may happen in place in the ``x`` parameter.
         """
@@ -113,7 +113,7 @@ class OptimizeModelInterface(object):
 
                 .. code-block:: c
 
-                    double <func_name>(void* data, const mot_float_type* const x, uint observation_index);
+                    double <func_name>(mot_data_struct* data, const mot_float_type* const x, uint observation_index);
         """
         raise NotImplementedError()
 
@@ -128,7 +128,7 @@ class OptimizeModelInterface(object):
 
                 .. code-block:: c
 
-                    double <func_name>(void* data, const mot_float_type* const x, uint observation_index);
+                    double <func_name>(mot_data_struct* data, const mot_float_type* const x, uint observation_index);
         """
         raise NotImplementedError()
 
@@ -140,7 +140,7 @@ class OptimizeModelInterface(object):
 
                 .. code-block:: c
 
-                    double <func_name>(void* data, const mot_float_type* const x, uint observation_index);
+                    double <func_name>(mot_data_struct* data, const mot_float_type* const x, uint observation_index);
         """
         raise NotImplementedError()
 
@@ -234,7 +234,7 @@ class SampleModelInterface(OptimizeModelInterface):
             mot.utils.NamedCLFunction: A function of the kind:
                 .. code-block:: c
 
-                    double <fname>(void* data, const mot_float_type* const x, uint observation_index);
+                    double <fname>(mot_data_struct* data, const mot_float_type* const x, uint observation_index);
         """
         raise NotImplementedError()
 
@@ -350,7 +350,7 @@ class SampleModelInterface(OptimizeModelInterface):
                 .. code-block:: c
 
                     mot_float_type <func_name>(
-                        void* data_void,
+                        mot_data_struct* data,
                         <address_space_parameter_vector> const mot_float_type* const x
                     );
 

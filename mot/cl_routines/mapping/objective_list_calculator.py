@@ -117,11 +117,11 @@ class _ObjectiveListCalculatorWorker(Worker):
                         x[i] = params[gid * ''' + str(nmr_params) + ''' + i];
                     }
                     
-                    ''' + param_modifier.get_name() + '''((void*)&data, x);
+                    ''' + param_modifier.get_name() + '''(&data, x);
                     
                     global mot_float_type* result = objectives + gid * NMR_INST_PER_PROBLEM;
                     for(uint i = 0; i < NMR_INST_PER_PROBLEM; i++){
-                        result[i] = ''' + objective_func.get_name() + '''((void*)&data, x, i);
+                        result[i] = ''' + objective_func.get_name() + '''(&data, x, i);
                     }
             }
         '''

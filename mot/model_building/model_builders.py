@@ -46,7 +46,6 @@ class OptimizeModelBuilder(object):
         self._model_tree = model_tree
         self._evaluation_model = evaluation_model
         self._signal_noise_model = signal_noise_model
-        self._kernel_data_struct_type = '_model_data'
 
         self._enforce_weights_sum_to_one = enforce_weights_sum_to_one
 
@@ -347,11 +346,8 @@ class OptimizeModelBuilder(object):
         class Codec(ParameterCodec):
             def get_parameter_decode_function(self, function_name='decodeParameters'):
                 func = '''
-                    void ''' + function_name + '''(void* data_void, mot_float_type* x){
+                    void ''' + function_name + '''(mot_data_struct* data, mot_float_type* x){
                 '''
-                func += model_builder._kernel_data_struct_type
-                func += '* data = (' + model_builder._kernel_data_struct_type + '*)data_void;'
-
                 for d in model_builder._get_parameter_transformations()[1]:
                     func += "\n" + "\t" * 4 + d.format('x')
 
@@ -364,14 +360,11 @@ class OptimizeModelBuilder(object):
 
             def get_parameter_encode_function(self, function_name='encodeParameters'):
                 func = '''
-                    void ''' + function_name + '''(void* data_void, mot_float_type* x){
+                    void ''' + function_name + '''(mot_data_struct* data, mot_float_type* x){
                 '''
 
                 if model_builder._enforce_weights_sum_to_one:
                     func += model_builder._get_weight_sum_to_one_transformation()
-
-                func += model_builder._kernel_data_struct_type
-                func += '* data = (' + model_builder._kernel_data_struct_type + '*)data_void;'
 
                 for d in model_builder._get_parameter_transformations()[0]:
                     func += "\n" + "\t" * 4 + d.format('x')
@@ -406,8 +399,8 @@ class OptimizeModelBuilder(object):
 
         return SimpleKernelDataInfo(
             data, info['kernel_param_names'], info['data_struct'],
-            self._kernel_data_struct_type,
-            (self._kernel_data_struct_type + ' {variable_name} = {{' + struct_code + '}};'))
+            'mot_data_struct',
+            ('mot_data_struct {variable_name} = {{' + struct_code + '}};'))
 
     def _get_initial_parameters(self, problems_to_analyze):
         np_dtype = np.float32
@@ -449,8 +442,8 @@ class OptimizeModelBuilder(object):
         func_name = '_getResidual'
         func = eval_function_info.get_function()
         func += '''
-            double ''' + func_name + '''(void* data, const mot_float_type* const x, uint observation_index){
-                return ((''' + self._kernel_data_struct_type + '''*)data)->var_data_observations''' \
+            double ''' + func_name + '''(mot_data_struct* data, const mot_float_type* const x, uint observation_index){
+                return data->var_data_observations''' \
                     + ('[observation_index]' if self.get_nmr_inst_per_problem() > 1 else '') + ''' - 
                     ''' + eval_function_info.get_name() + '''(data, x, observation_index);
             }
@@ -460,7 +453,7 @@ class OptimizeModelBuilder(object):
     def _get_pre_eval_parameter_modifier(self):
         func_name = '_modifyParameters'
         func = '''
-            void ''' + func_name + '''(void* data, mot_float_type* x){
+            void ''' + func_name + '''(mot_data_struct* data, mot_float_type* x){
             }
         '''
         return SimpleNamedCLFunction(func, func_name)
@@ -482,7 +475,6 @@ class OptimizeModelBuilder(object):
                               self._model_functions_info.get_non_model_eval_param_listing()])
 
             body = ''
-            body += self._kernel_data_struct_type + '* data = (' + self._kernel_data_struct_type + '*)void_data; \n'
             body += dedent(param_listing.replace('\t', ' '*4))
             body += self._get_pre_model_expression_eval_code() or ''
             body += '\n'
@@ -493,7 +485,7 @@ class OptimizeModelBuilder(object):
 
         cl_function = '''
             double {function_name}(
-                    void* void_data,
+                    mot_data_struct* data,
                     const mot_float_type* const x,
                     uint observation_index){{
                 
@@ -523,7 +515,7 @@ class OptimizeModelBuilder(object):
 
         func_name = 'getObjectiveInstanceValue'
         func = str(preliminary) + '''
-            double ''' + func_name + '''(void* data, const mot_float_type* const x, uint observation_index){
+            double ''' + func_name + '''(mot_data_struct* data, const mot_float_type* const x, uint observation_index){
                 return _evaluationModel(data, x, observation_index);
             }
         '''
@@ -563,8 +555,8 @@ class OptimizeModelBuilder(object):
     def _get_observation_return_function(self):
         func_name = '_getObservation'
         func = '''
-            double ''' + func_name + '''(void* data, uint observation_index){
-                return ((''' + self._kernel_data_struct_type + '''*)data)->var_data_observations''' \
+            double ''' + func_name + '''(mot_data_struct* data, uint observation_index){
+                return data->var_data_observations''' \
                     + ('[observation_index]' if self.get_nmr_inst_per_problem() > 1 else '') + ''';
             }
         '''
@@ -1006,7 +998,7 @@ class OptimizeModelBuilder(object):
             typedef struct{
                 ''' + ('' if data_struct_names else 'constant void* place_holder;') + '''
                 ''' + " ".join((name + ";\n" for name in data_struct_names)) + '''
-            } ''' + self._kernel_data_struct_type + ''';
+            } mot_data_struct;
         '''
 
         return {'kernel_param_names': kernel_param_names,
@@ -1205,16 +1197,14 @@ class SampleModelBuilder(OptimizeModelBuilder):
             prior = '''
                 {preliminary}
 
-                mot_float_type {func_name}(void* data_void,
+                mot_float_type {func_name}(mot_data_struct* data,
                                            {address_space_parameter_vector} const mot_float_type* const x){{
 
-                    {kernel_data_struct_type}* data = ({kernel_data_struct_type}*)data_void;
                     mot_float_type prior = 1.0;
 
                     {body}
                 }}
                 '''.format(func_name=func_name, address_space_parameter_vector=address_space_parameter_vector,
-                           kernel_data_struct_type=self._kernel_data_struct_type,
                            preliminary=preliminary, body=body)
             return SimpleNamedCLFunction(prior, func_name)
         return builder
@@ -2091,7 +2081,7 @@ class ParameterTransformedModel(OptimizeModelInterface):
         code = old_modifier.get_function()
         code += self._parameter_codec.get_parameter_decode_function('_decodeParameters')
         code += '''
-            void ''' + new_fname + '''(void* data, mot_float_type* x){
+            void ''' + new_fname + '''(mot_data_struct* data, mot_float_type* x){
                 _decodeParameters(data, x);
                 ''' + old_modifier.get_name() + '''(data, x);
             }
@@ -2180,9 +2170,6 @@ class SimpleKernelDataInfo(KernelDataInfo):
 
     def get_kernel_data_struct_initialization(self, variable_name, problem_id_name='gid'):
         return self._init_format_str.format(variable_name=variable_name, problem_id_name=problem_id_name)
-
-    def get_kernel_data_struct_type(self):
-        return self._struct_type
 
 
 class SimpleOptimizeModel(OptimizeModelInterface):

@@ -133,7 +133,7 @@ class _CDPWorker(Worker):
                     ulong gid = get_global_id(0);
 
                     ''' + self._data_info.get_kernel_data_struct_initialization('data_var') + '''
-                    ''' + self._data_info.get_kernel_data_struct_type() + '''* data = &data_var;
+                    mot_data_struct* data = &data_var;
 
                     mot_float_type x[''' + str(self._nmr_estimated_params) + '''];
 

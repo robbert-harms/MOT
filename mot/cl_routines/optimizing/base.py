@@ -335,7 +335,7 @@ class AbstractParallelOptimizerWorker(Worker):
         Returns:
             list of str: the list of optimizer call arguments
         """
-        call_args = ['x', '(void*) &data']
+        call_args = ['x', '(void*)&data']
         return call_args
 
     def _get_optimizer_cl_code(self):
@@ -367,7 +367,9 @@ class AbstractParallelOptimizerWorker(Worker):
         kernel_source += objective_function.get_function()
         kernel_source += param_modifier.get_function()
         kernel_source += '''
-            double evaluate(mot_float_type* x, void* data){
+            double evaluate(mot_float_type* x, void* data_void){
+                
+                mot_data_struct* data = (mot_data_struct*)data_void;
                 
                 mot_float_type x_model[''' + str(self._model.get_nmr_estimable_parameters()) + '''];
                 for(uint i = 0; i < ''' + str(self._model.get_nmr_estimable_parameters()) + '''; i++){

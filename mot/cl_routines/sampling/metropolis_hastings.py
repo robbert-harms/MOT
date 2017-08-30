@@ -394,7 +394,7 @@ class _MCMCKernelBuilder(object):
                          void* rng_data,
                          local double* const current_likelihood,
                          local mot_float_type* const current_prior,
-                         const void* const data,
+                         mot_data_struct* data,
                          ulong nmr_iterations,
                          ulong iteration_offset,
                          global mot_float_type* const proposal_state,
@@ -496,13 +496,13 @@ class _MCMCKernelBuilder(object):
                         x_local[i] = current_chain_position[problem_ind * ''' + str(self._nmr_params) + ''' + i];
                     }
 
-                    current_prior = ''' + self._prior_func.get_name() + '''((void*)&data, x_local);
+                    current_prior = ''' + self._prior_func.get_name() + '''(&data, x_local);
                 }
 
-                _fill_log_likelihood_tmp((void*)&data, x_local, log_likelihood_tmp);
+                _fill_log_likelihood_tmp(&data, x_local, log_likelihood_tmp);
                 _sum_log_likelihood_tmp_local(log_likelihood_tmp, &current_likelihood);
 
-                _sample(x_local, rng_data, &current_likelihood, &current_prior, (void*)&data, nmr_iterations,
+                _sample(x_local, rng_data, &current_likelihood, &current_prior, &data, nmr_iterations,
                         iteration_offset,
                         proposal_state, sampling_counter, acceptance_counter,
                     ''' + ('parameter_mean, parameter_variance, parameter_variance_update_m2,'
@@ -557,7 +557,7 @@ class _MCMCKernelBuilder(object):
 
         kernel_source = ll_func.get_function()
         kernel_source += '''
-            void _fill_log_likelihood_tmp(const void* const data,
+            void _fill_log_likelihood_tmp(mot_data_struct* data,
                                           local mot_float_type* const x_local,
                                           local double* log_likelihood_tmp){
 
@@ -605,7 +605,7 @@ class _MCMCKernelBuilder(object):
                                void* rng_data,
                                local double* const current_likelihood,
                                local mot_float_type* const current_prior,
-                               void* data,
+                               mot_data_struct* data,
                                global mot_float_type* const proposal_state,
                                global ulong * const acceptance_counter,
                                local double* log_likelihood_tmp){

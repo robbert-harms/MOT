@@ -128,7 +128,7 @@ class _LogLikelihoodCalculatorWorker(Worker):
         kernel_source += cl_func
 
         kernel_source += '''
-            double _calculate_log_likelihood(void* data, const mot_float_type* const x){
+            double _calculate_log_likelihood(mot_data_struct* data, const mot_float_type* const x){
                 double ll = 0;
                 for(uint i = 0; i < ''' + str(self._model.get_nmr_inst_per_problem()) + '''; i++){
                     ll += ''' + ll_func.get_name() + '''(data, x, i);
@@ -150,7 +150,7 @@ class _LogLikelihoodCalculatorWorker(Worker):
                             x[i] = params[gid * ''' + str(nmr_params) + ''' + i];
                         }
 
-                        log_likelihoods[gid] = _calculate_log_likelihood((void*)&data, x);
+                        log_likelihoods[gid] = _calculate_log_likelihood(&data, x);
                 }
             '''
         else:
@@ -171,7 +171,7 @@ class _LogLikelihoodCalculatorWorker(Worker):
                         }
 
                         log_likelihoods[problem_ind * ''' + str(self._nmr_ll_per_problem) + ''' + sample_ind] =
-                            _calculate_log_likelihood((void*)&data, x);
+                            _calculate_log_likelihood(&data, x);
                 }
             '''
 

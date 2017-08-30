@@ -111,10 +111,10 @@ class _EvaluateModelWorker(Worker):
 
                     global mot_float_type* result = estimates + gid * NMR_INST_PER_PROBLEM;
                     
-                    ''' + param_modifier.get_name() + '''((void*)&data, x);
+                    ''' + param_modifier.get_name() + '''(&data, x);
                     
                     for(uint i = 0; i < NMR_INST_PER_PROBLEM; i++){
-                        result[i] = ''' + eval_function_info.get_name() + '''((void*)&data, x, i);
+                        result[i] = ''' + eval_function_info.get_name() + '''(&data, x, i);
                     }
             }
         '''

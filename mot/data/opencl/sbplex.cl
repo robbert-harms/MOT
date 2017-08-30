@@ -32,7 +32,7 @@
 extern int lib_nmsimplex(
         int nmr_parameters,
         mot_float_type* const model_parameters,
-        const void* const data,
+        void* data,
         mot_float_type* initial_simplex_scale,
         mot_float_type* fdiff,
         mot_float_type psi,
@@ -50,12 +50,12 @@ typedef struct {
      int subspace_starting_index; /* starting index for this subspace */
      int subspace_length; /* dimension of subspace */
      mot_float_type *x; /* current x vector */
-     const void* data; /* the "actual" underlying function data */
+     void* data; /* the "actual" underlying function data */
 } SubspaceData;
 
 
 // the evaluation function used by the simplex calls
-double subspace_evaluate(mot_float_type* subspace_model_parameters, const void* subspace_data){
+double subspace_evaluate(mot_float_type* subspace_model_parameters, void* subspace_data){
 
     SubspaceData* d = (SubspaceData*) subspace_data;
     mot_float_type* x = d->x;
@@ -196,7 +196,7 @@ void _sbplex_get_subspaces(const mot_float_type* const delta_x,
 
 
 int sbplx_minimize(mot_float_type* model_parameters, /* in: initial guess, out: minimizer */
-			       const void* const data,
+			       void* data,
 			       const mot_float_type* const xstep0/* initial step sizes */){
 
     mot_float_type scratch[%(NMR_PARAMS)r * 2 // (xstep, delta_x)
@@ -324,7 +324,7 @@ int sbplx_minimize(mot_float_type* model_parameters, /* in: initial guess, out: 
     return 6;
 }
 
-int sbplex(mot_float_type* const model_parameters, const void* const data){
+int sbplex(mot_float_type* const model_parameters, void* data){
     const mot_float_type initial_simplex_scale[%(NMR_PARAMS)r] = %(INITIAL_SIMPLEX_SCALES)s;
     return sbplx_minimize(model_parameters, data, initial_simplex_scale);
 }

@@ -104,7 +104,7 @@ class _ObjectiveCalculatorWorker(Worker):
         kernel_source += objective_function.get_function()
         kernel_source += param_modifier.get_function()
         kernel_source += '''
-            double _evaluate(void* data, mot_float_type* x){
+            double _evaluate(mot_data_struct* data, mot_float_type* x){
                 ''' + param_modifier.get_name() + '''(data, x);
                 
                 double sum = 0;
@@ -126,7 +126,7 @@ class _ObjectiveCalculatorWorker(Worker):
                         x[i] = params[gid * ''' + str(nmr_params) + ''' + i];
                     }
 
-                    objective_values[gid] = _evaluate((void*)&data, x);
+                    objective_values[gid] = _evaluate(&data, x);
             }
         '''
         return kernel_source

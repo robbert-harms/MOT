@@ -119,7 +119,7 @@ class _CodecWorker(Worker):
                     x[i] = x_global[gid * ''' + str(self._nmr_params) + ''' + i];
                 }
 
-                ''' + self._cl_func_name + '''((void*)&data, x);
+                ''' + self._cl_func_name + '''(&data, x);
 
                 for(uint i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                     x_global[gid * ''' + str(self._nmr_params) + ''' + i] = x[i];

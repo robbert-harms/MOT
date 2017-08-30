@@ -14,7 +14,7 @@ class ParameterCodec(object):
 
         .. code-block:: c
 
-            void <fname>(const void* data, const mot_float_type* x);
+            void <fname>(mot_data_struct* data, mot_float_type* x);
 
         Args:
             fname (str): The CL function name to use
@@ -32,7 +32,7 @@ class ParameterCodec(object):
 
         .. code-block:: c
 
-            void <fname>(const void* data, const mot_float_type* x);
+            void <fname>(mot_data_struct* data, mot_float_type* x);
 
         Args:
             fname (str): The CL function name to use
