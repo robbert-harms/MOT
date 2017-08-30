@@ -399,7 +399,6 @@ class OptimizeModelBuilder(object):
 
         return SimpleKernelDataInfo(
             data, info['kernel_param_names'], info['data_struct'],
-            'mot_data_struct',
             ('mot_data_struct {variable_name} = {{' + struct_code + '}};'))
 
     def _get_initial_parameters(self, problems_to_analyze):
@@ -2142,14 +2141,13 @@ class _ModelFunctionPriorToCompositeModelPrior(ModelFunctionPrior):
 
 class SimpleKernelDataInfo(KernelDataInfo):
 
-    def __init__(self, data, kernel_parameters, kernel_struct, struct_type, init_format_str):
+    def __init__(self, data, kernel_parameters, kernel_struct, init_format_str):
         """Simple kernel data information container.
 
         Args:
             data (list): list with ndarrays
             kernel_parameters (list of str): the kernel parameters for each of the data elements
             kernel_struct (str): the kernel structure containing all the data in the kernel
-            struct_type (str): the type of the kernel structure
             init_format_str (str): the kernel data structure initialization string. This is used to
                 format the init string using the python string format function.
         """
@@ -2157,7 +2155,6 @@ class SimpleKernelDataInfo(KernelDataInfo):
         self._kernel_parameters = kernel_parameters
         self._kernel_struct = kernel_struct
         self._init_format_str = init_format_str
-        self._struct_type = struct_type
 
     def get_data(self):
         return self._data
