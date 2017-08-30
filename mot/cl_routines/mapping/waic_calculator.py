@@ -94,7 +94,11 @@ class _LLWorker(Worker):
     def set_problem_index(self, problem_index):
         """Set the problem index of the samples we are currently working on."""
         self._problem_index = problem_index
-        self._samples_per_voxel[:] = self._samples[self._problem_index]
+        samples = self._samples[self._problem_index]
+        mapped_buf = cl.enqueue_map_buffer(
+            self._cl_run_context.queue, self._ll_calculating_buffers[0],
+            cl.map_flags.WRITE, 0, samples.shape, samples.dtype)[0]
+        mapped_buf[:] = samples
 
     def calculate(self, range_start, range_end):
         self._calculate_lls(range_start, range_end)
@@ -127,7 +131,7 @@ class _LLWorker(Worker):
             cl.Kernel(self._statistic_kernels, 'logsum_variance').get_work_group_info(
                 cl.kernel_work_group_info.WORK_GROUP_SIZE, self._cl_environment.device)
         ]
-        workgroup_size = max(max_work_group_sizes)
+        workgroup_size = min(max_work_group_sizes)
 
         lse_tmp_buffer = cl.LocalMemory(workgroup_size * np.dtype('double').itemsize)
         var_tmp_buffer = cl.LocalMemory(workgroup_size * np.dtype('double').itemsize)

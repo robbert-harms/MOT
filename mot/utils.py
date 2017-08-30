@@ -427,3 +427,18 @@ def cartesian(arrays, out=None):
         for j in range(1, arrays[0].size):
             out[j*m:(j+1)*m, 1:] = out[0:m, 1:]
     return out
+
+
+def split_in_batches(nmr_elements, max_batch_size):
+    """Split the total number of elements into batches of the specified maximum size or smaller.
+
+    Examples:
+        split_in_batches(30, 8) -> [8, 8, 8, 6]
+
+    Returns:
+        list: the list of batch sizes
+    """
+    batch_sizes = [max_batch_size] * (nmr_elements // max_batch_size)
+    if nmr_elements % max_batch_size > 0:
+        batch_sizes.append(nmr_elements % max_batch_size)
+    return batch_sizes

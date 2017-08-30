@@ -1,6 +1,6 @@
 import pyopencl as cl
 import numpy as np
-from ...utils import get_float_type_def
+from ...utils import get_float_type_def, split_in_batches
 from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
 
@@ -48,7 +48,7 @@ class LogLikelihoodCalculator(CLRoutine):
             process(parameters, log_likelihoods)
         else:
             max_batch_size = np.min([parameters.shape[2], 1000])
-            for batch_ind, batch_size in enumerate(self._get_batch_sizes(parameters.shape[2], max_batch_size)):
+            for batch_ind, batch_size in enumerate(split_in_batches(parameters.shape[2], max_batch_size)):
                 params_subset = np.require(parameters[..., (batch_ind * batch_size):((batch_ind + 1) * batch_size)],
                                            np_dtype, requirements=['C', 'A', 'O'])
                 lls_subset = np.zeros((parameters.shape[0], batch_size), dtype=np_dtype, order='C')
@@ -63,20 +63,6 @@ class LogLikelihoodCalculator(CLRoutine):
         if len(shape) > 1:
             del shape[1]
         return np.zeros(shape, dtype=np_dtype, order='C')
-
-    def _get_batch_sizes(self, nmr_elements, max_batch_length):
-        """Split the total number of elements into batches of the given maximum size.
-
-        Examples:
-            self._get_batch_sizes(30, 8) -> [8, 8, 8, 6]
-
-        Returns:
-            list: the list of batch sizes
-        """
-        batch_sizes = [max_batch_length] * (nmr_elements // max_batch_length)
-        if nmr_elements % max_batch_length > 0:
-            batch_sizes.append(nmr_elements % max_batch_length)
-        return batch_sizes
 
 
 class _LogLikelihoodCalculatorWorker(Worker):
