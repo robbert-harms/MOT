@@ -14,7 +14,7 @@ from mot.model_building.parameter_functions.dependencies import SimpleAssignment
 from mot.model_building.utils import ParameterCodec, SimpleModelPrior
 from mot.model_interfaces import OptimizeModelInterface, SampleModelInterface
 from mot.utils import is_scalar, all_elements_equal, get_single_value, SimpleNamedCLFunction, convert_data_to_dtype, \
-    dtype_to_ctype, SimpleKernelInputData
+    SimpleKernelInputData
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-03-14"
@@ -643,7 +643,7 @@ class OptimizeModelBuilder(object):
         for m, p in param_list:
             name = '{}.{}'.format(m.name, p.name).replace('.', '_')
             if name not in exclude_list:
-                data_type = p.data_type.cl_type
+                data_type = p.data_type.declaration_type
                 assignment = 'x[' + str(estimable_param_counter) + ']'
                 func += "\t"*4 + data_type + ' ' + name + ' = ' + assignment + ';' + "\n"
                 estimable_param_counter += 1
@@ -662,7 +662,7 @@ class OptimizeModelBuilder(object):
         func = ''
         for m, p in param_list:
             if ('{}.{}'.format(m.name, p.name).replace('.', '_')) not in exclude_list:
-                data_type = p.data_type.cl_type
+                data_type = p.data_type.declaration_type
                 if p.name not in const_params_seen:
                     if all_elements_equal(protocol_info[p.name]):
                         if p.data_type.is_vector_type:
@@ -1496,7 +1496,7 @@ class CompositeModelFunction(ModelFunction):
             cl_parameters = []
 
             for m, p, name in params:
-                cl_type = p.data_type.cl_type
+                cl_type = p.data_type.declaration_type
                 cl_parameters.append('{} {}'.format(cl_type, name))
             return cl_parameters
 
@@ -1816,7 +1816,7 @@ class ModelFunctionsInformation(object):
 
         Args:
             model (mot.model_building.model_functions.ModelFunction): the model function
-            param (mot.model_building.parameters.CLFunctionParameter): the parameter
+            param (mot.cl_parameter.CLFunctionParameter): the parameter
 
         Returns:
             boolean: if the given parameter has a dependency
@@ -1833,7 +1833,7 @@ class ModelFunctionsInformation(object):
 
         Args:
             model (mot.model_building.model_functions.ModelFunction): the model function
-            param (mot.model_building.parameters.CLFunctionParameter): the parameter
+            param (mot.cl_parameter.CLFunctionParameter): the parameter
 
         Returns:
             boolean: true if the parameter is estimable, false otherwise
@@ -1890,7 +1890,7 @@ class ModelFunctionsInformation(object):
 
         Args:
             model (mot.model_building.model_functions.ModelFunction): the model function
-            param (mot.model_building.parameters.CLFunctionParameter): the parameter
+            param (mot.cl_parameter.CLFunctionParameter): the parameter
 
         Returns:
             int: the index of the requested parameter in the list of optimized parameters
@@ -1980,7 +1980,8 @@ class ParameterTransformedModel(OptimizeModelInterface):
             parameters (ndarray): the parameters to transform back to model space
         """
         space_transformer = CodecRunner()
-        return space_transformer.decode(self._model, parameters, self._parameter_codec)
+        return space_transformer.decode(parameters, self.get_kernel_data(),
+                                        self._parameter_codec, self.double_precision)
 
     def encode_parameters(self, parameters):
         """Decode the given parameters into optimization space
@@ -1989,7 +1990,8 @@ class ParameterTransformedModel(OptimizeModelInterface):
             parameters (ndarray): the parameters to transform into optimization space
         """
         space_transformer = CodecRunner()
-        return space_transformer.encode(self._model, parameters, self._parameter_codec)
+        return space_transformer.encode(parameters, self.get_kernel_data(),
+                                        self._parameter_codec, self.double_precision)
 
     @property
     def name(self):

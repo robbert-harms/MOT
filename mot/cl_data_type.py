@@ -22,7 +22,7 @@ class CLDataType(object):
         raise NotImplementedError()
 
     @property
-    def cl_type(self):
+    def declaration_type(self):
         """Get the type of this parameter in CL language
 
         This only returns the parameter type (like ``double`` or ``int*`` or ``float4*`` ...). It does not include other
@@ -34,11 +34,49 @@ class CLDataType(object):
         raise NotImplementedError()
 
     @property
+    def raw_data_type(self):
+        """Get the raw data type without the vector and pointer additions.
+
+        For example, if the data type is float4*, we will only return float here.
+
+        Returns:
+            str: the raw CL data type
+        """
+        raise NotImplementedError()
+
+    @property
+    def ctype(self):
+        """Get the ctype of this data type.
+
+        Returns:
+            str: the full ctype of this data type
+        """
+        raise NotImplementedError()
+
+    @property
     def is_vector_type(self):
         """Check if this data type is a vector type (like for example double4, float2, int8, etc.).
 
         Returns:
             boolean: True if it is a vector type, false otherwise
+        """
+        raise NotImplementedError()
+
+    @property
+    def is_pointer_type(self):
+        """Check if this parameter is a pointer type (appended by a ``*``)
+
+        Returns:
+            boolean: True if it is a pointer type, false otherwise
+        """
+        raise NotImplementedError()
+
+    @property
+    def vector_length(self):
+        """Get the length of this vector, returns None if not a vector type.
+
+        Returns:
+            int: the length of the vector type (for example, if the data type is float4, this returns 4).
         """
         raise NotImplementedError()
 
@@ -66,12 +104,12 @@ class SimpleCLDataType(CLDataType):
             post_data_type_type_qualifier (str or None): the type qualifier to use after the data type.
                 Can only be 'const'
         """
-        self.raw_data_type = str(raw_data_type)
-        self.is_pointer_type = is_pointer_type
-        self.vector_length = vector_length
+        self._raw_data_type = str(raw_data_type)
+        self._is_pointer_type = is_pointer_type
+        self._vector_length = vector_length
 
         if self.vector_length:
-            self.vector_length = int(self.vector_length)
+            self._vector_length = int(self.vector_length)
 
         self.address_space_qualifier = address_space_qualifier
         self.pre_data_type_type_qualifiers = pre_data_type_type_qualifiers
@@ -100,13 +138,13 @@ class SimpleCLDataType(CLDataType):
             declaration += str(self.address_space_qualifier) + ' '
         if self.pre_data_type_type_qualifiers:
             declaration += str(' '.join(self.pre_data_type_type_qualifiers)) + ' '
-        declaration += str(self.cl_type)
+        declaration += str(self.declaration_type)
         if self.post_data_type_type_qualifier:
             declaration += ' ' + str(self.post_data_type_type_qualifier)
         return declaration
 
     @property
-    def cl_type(self):
+    def declaration_type(self):
         s = self.raw_data_type
 
         if self.vector_length is not None:
@@ -120,6 +158,24 @@ class SimpleCLDataType(CLDataType):
     @property
     def is_vector_type(self):
         return self.vector_length is not None
+
+    @property
+    def is_pointer_type(self):
+        return self._is_pointer_type
+
+    @property
+    def vector_length(self):
+        return self._vector_length
+
+    @property
+    def raw_data_type(self):
+        return self._raw_data_type
+
+    @property
+    def ctype(self):
+        if self.is_vector_type:
+            return self._raw_data_type + str(self.vector_length)
+        return self._raw_data_type
 
     def __str__(self):
         return self.get_declaration()

@@ -1,6 +1,6 @@
 from textwrap import dedent
 from mot.cl_data_type import SimpleCLDataType
-from mot.library_functions import CLLibrary
+from mot.cl_function import CLFunction, SimpleCLFunction
 from mot.model_building.model_function_priors import ModelFunctionPrior
 from mot.model_building.parameters import FreeParameter
 from mot.model_building.parameter_functions.priors import ARDGaussian, UniformWithinBoundsPrior, ARDBeta
@@ -13,44 +13,11 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class ModelFunction(object):
+class ModelFunction(CLFunction):
     """Interface for a basic model function just for optimization purposes.
 
     If you need to sample the model, use the extended version of this interface :class:`SampleModelFunction`.
     """
-
-    @property
-    def return_type(self):
-        """Get the type (in CL naming) of the returned value from this function.
-
-        Returns:
-            str: The return type of this CL function. (Examples: double, int, double4, ...)
-        """
-        raise NotImplementedError()
-
-    @property
-    def cl_function_name(self):
-        """Return the name of the implemented CL function
-
-        Returns:
-            str: The name of this CL function
-        """
-        raise NotImplementedError()
-
-    def get_parameters(self):
-        """Return the list of parameters from this CL function.
-
-        Returns:
-            list of CLFunctionParameter: list of the parameters in this model in the same order as in the CL function"""
-        raise NotImplementedError()
-
-    def get_cl_code(self):
-        """Get the function code for this function and all its dependencies.
-
-        Returns:
-            str: The CL code for inclusion in a kernel.
-        """
-        raise NotImplementedError()
 
     def get_free_parameters(self):
         """Get all the free parameters in this model
@@ -88,7 +55,7 @@ class SampleModelFunction(ModelFunction):
         raise NotImplementedError()
 
 
-class SimpleModelFunction(SampleModelFunction):
+class SimpleModelFunction(SampleModelFunction, SimpleCLFunction):
 
     def __init__(self, return_type, name, cl_function_name, parameter_list, dependency_list=(),
                  model_function_priors=None):
@@ -99,36 +66,16 @@ class SimpleModelFunction(SampleModelFunction):
             name (str): The name of the model
             cl_function_name (string): The name of the CL function
             parameter_list (list or tuple of CLFunctionParameter): The list of parameters required for this function
-            dependency_list (list or tuple of CLLibrary): The list of CL libraries this function depends on
+            dependency_list (list or tuple of CLFunction): The list of CL libraries this function depends on
             model_function_priors (list of mot.model_building.model_function_priors.ModelFunctionPrior):
                 list of priors concerning this whole model function
         """
+        super(SimpleModelFunction, self).__init__(return_type, cl_function_name, parameter_list,
+                                                  dependency_list=dependency_list)
         self._name = name
-        self._return_type = return_type
-        self._function_name = cl_function_name
-        self._parameter_list = parameter_list
-        self._dependency_list = dependency_list
         self._model_function_priors = model_function_priors or []
         if isinstance(self._model_function_priors, ModelFunctionPrior):
             self._model_function_priors = [self._model_function_priors]
-
-    @property
-    def return_type(self):
-        """Get the type (in CL naming) of the returned value from this function.
-
-        Returns:
-            str: The return type of this CL function. (Examples: double, int, double4, ...)
-        """
-        return self._return_type
-
-    @property
-    def cl_function_name(self):
-        """Return the name of the implemented CL function
-
-        Returns:
-            str: The name of this CL function
-        """
-        return self._function_name
 
     @property
     def name(self):
@@ -138,13 +85,6 @@ class SimpleModelFunction(SampleModelFunction):
             str: The name of this model function.
         """
         return self._name
-
-    def get_parameters(self):
-        """Return the list of parameters from this CL function.
-
-        Returns:
-            A list containing instances of CLFunctionParameter."""
-        return self._parameter_list
 
     def get_model_function_priors(self):
         """Get all the model function priors.
@@ -194,27 +134,7 @@ class SimpleModelFunction(SampleModelFunction):
         Returns:
             str: The CL code for inclusion in a kernel.
         """
-        return ''
-
-    def _get_cl_dependency_code(self):
-        """Get the CL code for all the CL code for all the dependencies.
-
-        Returns:
-            str: The CL code with the actual code.
-        """
-        code = ''
-        for d in self._dependency_list:
-            code += d.get_cl_code() + "\n"
-        return code
-
-    def __hash__(self):
-        return hash(self.__repr__())
-
-    def __eq__(self, other):
-        return type(self) == type(other)
-
-    def __ne__(self, other):
-        return type(self) != type(other)
+        raise NotImplementedError()
 
 
 class Scalar(SimpleModelFunction):

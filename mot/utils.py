@@ -372,7 +372,7 @@ class NamedCLFunction(object):
         raise NotImplementedError()
 
 
-class SimpleNamedCLFunction(object):
+class SimpleNamedCLFunction(NamedCLFunction):
 
     def __init__(self, function, name):
         self._function = function
@@ -451,7 +451,8 @@ class KernelInputData(object):
         """Get the underlying data.
 
         This should return the data such that it can be loaded by PyOpenCL in a kernel. This means that it
-        should return the data pre-formatted with the numpy require method with the requirements 'C', 'A', 'O'.
+        should return the data pre-formatted with the numpy require method with the requirements 'C', 'A', 'O'
+        and 'W' if the data is supposed to be writable.
 
         Returns:
             ndarray: the underlying data object, make sure this is of your desired type.
@@ -463,6 +464,18 @@ class KernelInputData(object):
 
         Returns:
             str: the name of this data object
+        """
+        raise NotImplementedError()
+
+    def is_writable(self):
+        """If this kernel input data must be loaded as a read-write dataset or as read only.
+
+        If this returns true the kernel function must ensure that the data is loaded with read-write permissions.
+        This flag will also ensure that the data will be read back from the device after kernel execution, overwriting
+        the current data.
+
+        Returns:
+            boolean: if this data must be made writable and be read back after function execution.
         """
         raise NotImplementedError()
 
@@ -496,7 +509,7 @@ class KernelInputData(object):
 
 class SimpleKernelInputData(KernelInputData):
 
-    def __init__(self, name, data, offset_str=None, as_pointer=True):
+    def __init__(self, name, data, offset_str=None, as_pointer=True, is_writable=False):
         """A simple implementation of the kernel input data.
 
         By default, this will try to offset the data in the kernel by the stride of the first dimension multiplied
@@ -511,11 +524,17 @@ class SimpleKernelInputData(KernelInputData):
             offset_str (str): the offset definition, can use ``{problem_id}`` for multiplication purposes. Set to 0
                 for no offset.
             as_pointer (boolean): if we want to load this data as a pointer or not
+            is_writable (boolean): if the data must be loaded writable or not, defaults to False
         """
-        self._data = np.require(data, requirements=['C', 'A', 'O'])
+        requirements = ['C', 'A', 'O']
+        if is_writable:
+            requirements.append('W')
+
+        self._data = np.require(data, requirements=requirements)
         self._name = name
         self._offset_str = offset_str
         self._as_pointer = as_pointer
+        self._is_writable = is_writable
 
         if self._offset_str is None:
             self._offset_str = str(self._data.strides[0] // self._data.itemsize) + ' * {problem_id}'
@@ -533,6 +552,9 @@ class SimpleKernelInputData(KernelInputData):
 
     def get_offset_str(self):
         return self._offset_str
+
+    def is_writable(self):
+        return self._is_writable
 
 
 class DataStructManager(object):
@@ -560,11 +582,17 @@ class DataStructManager(object):
 
         definitions = []
         for kernel_input_data in self._kernel_input_data_list:
-            definition = 'global ' + dtype_to_ctype(kernel_input_data.get_data().dtype)
+            definition = ''
+            if kernel_input_data.as_pointer():
+                definition += 'global '
+
+            definition += dtype_to_ctype(kernel_input_data.get_data().dtype)
+
             if kernel_input_data.as_pointer():
                 definition += '* '
             else:
                 definition += ' '
+
             definition += kernel_input_data.get_name()
             definition += ';'
             definitions.append(definition)
@@ -611,4 +639,4 @@ class DataStructManager(object):
                 definition += '[' + offset + ']'
             definitions.append(definition)
 
-        return '{' + ','.join(definitions) + '}'
+        return '{' + ', '.join(definitions) + '}'

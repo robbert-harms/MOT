@@ -1,9 +1,8 @@
-import pyopencl as cl
-from ...utils import results_to_dict, get_float_type_def, DataStructManager
+from mot.cl_routines.mapping.run_procedure import RunProcedure
+from ...utils import results_to_dict, SimpleNamedCLFunction, SimpleKernelInputData
 from ...cl_routines.base import CLRoutine
-from ...load_balance_strategies import Worker
 import numpy as np
-
+import copy
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-02-05"
@@ -28,14 +27,14 @@ class CalculateDependentParameters(CLRoutine):
         super(CalculateDependentParameters, self).__init__(**kwargs)
         self._double_precision = double_precision
 
-    def calculate(self, model, estimated_parameters_list, parameters_listing, dependent_parameter_names):
+    def calculate(self, kernel_data, estimated_parameters_list, parameters_listing, dependent_parameter_names):
         """Calculate the dependent parameters
 
         This uses the calculated parameters in the results dictionary to run the parameters_listing in CL to obtain
         the maps for the dependent parameters.
 
         Args:
-            model (mot.model_interfaces.OptimizeModelInterface): the model for which to get the dependent parameters
+            kernel_data (list of mot.utils.KernelInputData): the list of additional data to load
             estimated_parameters_list (list of ndarray): The list with the one-dimensional
                 ndarray of estimated parameters
             parameters_listing (str): The parameters listing in CL
@@ -44,101 +43,45 @@ class CalculateDependentParameters(CLRoutine):
         Returns:
             dict: A dictionary with the calculated maps for the dependent parameters.
         """
+        cl_named_func = self._get_wrapped_function(estimated_parameters_list, parameters_listing,
+                                                   dependent_parameter_names)
+
         np_dtype = np.float32
         if self._double_precision:
             np_dtype = np.float64
 
-        results_list = np.zeros(
+        results = np.zeros(
             (estimated_parameters_list[0].shape[0], len(dependent_parameter_names)),
             dtype=np_dtype, order='C')
-
         estimated_parameters = np.require(np.dstack(estimated_parameters_list),
                                           np_dtype, requirements=['C', 'A', 'O'])[0, ...]
 
-        workers = self._create_workers(
-            lambda cl_environment: _CDPWorker(cl_environment, self.get_compile_flags_list(self._double_precision),
-                                              model, len(estimated_parameters_list),
-                                              estimated_parameters, parameters_listing,
-                                              dependent_parameter_names, results_list, self._double_precision))
-        self.load_balancer.process(workers, estimated_parameters_list[0].shape[0])
+        all_kernel_data = copy.copy(kernel_data)
+        all_kernel_data.append(SimpleKernelInputData('x', estimated_parameters))
+        all_kernel_data.append(SimpleKernelInputData('results', results, is_writable=True))
 
-        return results_to_dict(results_list, [n[1] for n in dependent_parameter_names])
+        runner = RunProcedure(cl_environments=self.cl_environments, load_balancer=self.load_balancer,
+                              compile_flags=self.compile_flags)
+        runner.run_procedure(cl_named_func, all_kernel_data, estimated_parameters_list[0].shape[0],
+                             double_precision=self._double_precision)
 
+        results = all_kernel_data[-1].get_data()
+        return results_to_dict(results, [n[1] for n in dependent_parameter_names])
 
-class _CDPWorker(Worker):
-
-    def __init__(self, cl_environment, compile_flags, model, nmr_estimated_params, estimated_parameters,
-                 parameters_listing, dependent_parameter_names, results_list, double_precision):
-        super(_CDPWorker, self).__init__(cl_environment)
-
-        self._nmr_estimated_params = nmr_estimated_params
-        self._parameters_listing = parameters_listing
-        self._dependent_parameter_names = dependent_parameter_names
-        self._results_list = results_list
-        self._double_precision = double_precision
-
-        self._model = model
-        self._data_info = self._model.get_kernel_data()
-        self._data_struct_manager = DataStructManager(self._data_info)
-
-        self._estimated_parameters = estimated_parameters
-        self._all_buffers, self._results_list_buffer = self._create_buffers()
-        self._kernel = self._build_kernel(self._get_kernel_source(), compile_flags)
-
-    def calculate(self, range_start, range_end):
-        nmr_problems = int(range_end - range_start)
-
-        self._kernel.transform(self._cl_run_context.queue, (int(nmr_problems), ), None, *self._all_buffers,
-                               global_offset=(int(range_start),))
-        self._enqueue_readout(self._results_list_buffer, self._results_list, range_start, range_end)
-
-    def _create_buffers(self):
-        estimated_parameters_buf = cl.Buffer(self._cl_run_context.context,
-                                             cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR,
-                                             hostbuf=self._estimated_parameters)
-
-        results_buffer = cl.Buffer(self._cl_run_context.context,
-                                   cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
-                                   hostbuf=self._results_list)
-
-        data_buffers = [estimated_parameters_buf, results_buffer]
-
-        for data in self._data_info:
-            data_buffers.append(cl.Buffer(self._cl_run_context.context,
-                                          cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data.get_data()))
-
-        return data_buffers, results_buffer
-
-    def _get_kernel_source(self):
-        dependent_parameter_names = [n[0] for n in self._dependent_parameter_names]
-
+    def _get_wrapped_function(self, estimated_parameters_list, parameters_listing, dependent_parameter_names):
         parameter_write_out = ''
-        for i, p in enumerate(dependent_parameter_names):
-            parameter_write_out += 'results[gid * ' + str(len(dependent_parameter_names)) + \
-                                   ' + ' + str(i) + '] = ' + p + ";\n"
+        for i, p in enumerate([el[0] for el in dependent_parameter_names]):
+            parameter_write_out += 'data->results[' + str(i) + '] = ' + p + ";\n"
 
-        kernel_param_names = ['global mot_float_type* params', 'global mot_float_type* results']
-        kernel_param_names.extend(self._data_struct_manager.get_kernel_arguments())
+        func = '''
+            void transform(mot_data_struct* data){
+                    mot_float_type x[''' + str(len(estimated_parameters_list)) + '''];
 
-        kernel_source = ''
-        kernel_source += get_float_type_def(self._double_precision)
-        kernel_source += self._data_struct_manager.get_struct_definition()
-        kernel_source += '''
-            __kernel void transform(
-                ''' + ",\n".join(kernel_param_names) + '''
-                ){
-                    ulong gid = get_global_id(0);
-
-                    mot_data_struct data_var = ''' + self._data_struct_manager.get_struct_init_string('gid') + ''';
-                    mot_data_struct* data = &data_var;
-
-                    mot_float_type x[''' + str(self._nmr_estimated_params) + '''];
-
-                    for(uint i = 0; i < ''' + str(self._nmr_estimated_params) + '''; i++){
-                        x[i] = params[gid * ''' + str(self._nmr_estimated_params) + ''' + i];
+                    for(uint i = 0; i < ''' + str(len(estimated_parameters_list)) + '''; i++){
+                        x[i] = data->x[i];
                     }
-                    ''' + self._parameters_listing + '''
+                    ''' + parameters_listing + '''
                     ''' + parameter_write_out + '''
             }
         '''
-        return kernel_source
+        return SimpleNamedCLFunction(func, 'transform')
