@@ -1,5 +1,5 @@
 import pyopencl as cl
-from ...utils import results_to_dict, get_float_type_def
+from ...utils import results_to_dict, get_float_type_def, DataStructManager
 from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
 import numpy as np
@@ -78,15 +78,12 @@ class _CDPWorker(Worker):
         self._double_precision = double_precision
 
         self._model = model
-        self._data_info = self._model.get_kernel_data_info()
+        self._data_info = self._model.get_kernel_data()
+        self._data_struct_manager = DataStructManager(self._data_info)
 
         self._estimated_parameters = estimated_parameters
         self._all_buffers, self._results_list_buffer = self._create_buffers()
         self._kernel = self._build_kernel(self._get_kernel_source(), compile_flags)
-
-    def __del__(self):
-        for buffer in self._all_buffers:
-            buffer.release()
 
     def calculate(self, range_start, range_end):
         nmr_problems = int(range_end - range_start)
@@ -106,9 +103,9 @@ class _CDPWorker(Worker):
 
         data_buffers = [estimated_parameters_buf, results_buffer]
 
-        for data in self._data_info.get_data():
+        for data in self._data_info:
             data_buffers.append(cl.Buffer(self._cl_run_context.context,
-                                          cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data))
+                                          cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data.get_data()))
 
         return data_buffers, results_buffer
 
@@ -121,18 +118,18 @@ class _CDPWorker(Worker):
                                    ' + ' + str(i) + '] = ' + p + ";\n"
 
         kernel_param_names = ['global mot_float_type* params', 'global mot_float_type* results']
-        kernel_param_names.extend(self._data_info.get_kernel_parameters())
+        kernel_param_names.extend(self._data_struct_manager.get_kernel_arguments())
 
         kernel_source = ''
         kernel_source += get_float_type_def(self._double_precision)
-        kernel_source += self._data_info.get_kernel_data_struct()
+        kernel_source += self._data_struct_manager.get_struct_definition()
         kernel_source += '''
             __kernel void transform(
                 ''' + ",\n".join(kernel_param_names) + '''
                 ){
                     ulong gid = get_global_id(0);
 
-                    ''' + self._data_info.get_kernel_data_struct_initialization('data_var') + '''
+                    mot_data_struct data_var = ''' + self._data_struct_manager.get_struct_init_string('gid') + ''';
                     mot_data_struct* data = &data_var;
 
                     mot_float_type x[''' + str(self._nmr_estimated_params) + '''];

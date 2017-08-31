@@ -69,7 +69,7 @@ class _MaxFinderWorker(Worker):
         super(_MaxFinderWorker, self).__init__(cl_environment)
 
         self._model = model
-        self._data_info = self._model.get_kernel_data_info()
+        self._data_info = self._model.get_kernel_data()
         self._double_precision = model.double_precision
 
         self._mle_indices = mle_indices

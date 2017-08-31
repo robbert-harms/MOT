@@ -310,7 +310,7 @@ def all_elements_equal(value):
     """
     if is_scalar(value):
         return True
-    return np.array(value == value[..., 0]).all()
+    return np.array(value == value.flatten()[0]).all()
 
 
 def get_single_value(value):
@@ -416,7 +416,7 @@ def cartesian(arrays, out=None):
     arrays = [np.asarray(x) for x in arrays]
     dtype = arrays[0].dtype
 
-    nmr_elements = np.prod(x.size for x in arrays)
+    nmr_elements = np.prod([x.size for x in arrays])
     if out is None:
         out = np.zeros([nmr_elements, len(arrays)], dtype=dtype)
 
@@ -442,3 +442,173 @@ def split_in_batches(nmr_elements, max_batch_size):
     if nmr_elements % max_batch_size > 0:
         batch_sizes.append(nmr_elements % max_batch_size)
     return batch_sizes
+
+
+class KernelInputData(object):
+    """This class holds the information necessary to load the data into a CL kernel."""
+
+    def get_data(self):
+        """Get the underlying data.
+
+        This should return the data such that it can be loaded by PyOpenCL in a kernel. This means that it
+        should return the data pre-formatted with the numpy require method with the requirements 'C', 'A', 'O'.
+
+        Returns:
+            ndarray: the underlying data object, make sure this is of your desired type.
+        """
+        raise NotImplementedError()
+
+    def get_name(self):
+        """Get the name of this data object for use in the kernel and in the ``mot_data_struct``.
+
+        Returns:
+            str: the name of this data object
+        """
+        raise NotImplementedError()
+
+    def as_pointer(self):
+        """Will this value be provided to as a pointer or as a value.
+
+        If this is set to True we will provide the dataset as a pointer at the specified offset to the
+        implementing function. If set to False, we will dereference the pointer at the specified offset and provide
+        the values to the implementing function (for example the ``mot_data_struct``).
+
+        Returns:
+            boolean: if we dereference the pointer or not
+        """
+        raise NotImplementedError()
+
+    def get_offset_str(self):
+        """Get the offset to use for this dataset in the kernel.
+
+        This should return a string that can compute the offset for this dataset. Since the data is loaded into the
+        kernel as a 1d array, we need to offset this array to the correct location for every problem instance.
+        This offset often includes a scaling with the current problem index, which can be implemented by the kernel
+        in various different ways. To apply this scaling one can return a string containing the literal ``{problem_id}``
+        which is replaced by the kernel for the correct problem id.
+
+        Returns:
+            str: the offset string for offsetting the input array for each problem. Do not add a plus in front
+                of the offset, it is implicit.
+        """
+        raise NotImplementedError()
+
+
+class SimpleKernelInputData(KernelInputData):
+
+    def __init__(self, name, data, offset_str=None, as_pointer=True):
+        """A simple implementation of the kernel input data.
+
+        By default, this will try to offset the data in the kernel by the stride of the first dimension multiplied
+        with the problem id by the kernel. For example, if a (n, m) matrix is provided, this will offset the data
+        by ``{problem_id} * m``.
+
+        By default we will load the data as a pointer instead of a dereferenced value.
+
+        Args:
+            name (str): the name of this data element
+            data (ndarray): the data to load in the kernel
+            offset_str (str): the offset definition, can use ``{problem_id}`` for multiplication purposes. Set to 0
+                for no offset.
+            as_pointer (boolean): if we want to load this data as a pointer or not
+        """
+        self._data = np.require(data, requirements=['C', 'A', 'O'])
+        self._name = name
+        self._offset_str = offset_str
+        self._as_pointer = as_pointer
+
+        if self._offset_str is None:
+            self._offset_str = str(self._data.strides[0] // self._data.itemsize) + ' * {problem_id}'
+        else:
+            self._offset_str = str(self._offset_str)
+
+    def get_data(self):
+        return self._data
+
+    def get_name(self):
+        return self._name
+
+    def as_pointer(self):
+        return self._as_pointer
+
+    def get_offset_str(self):
+        return self._offset_str
+
+
+class DataStructManager(object):
+
+    def __init__(self, kernel_input_data_list):
+        """This class manages the definition and the instantiation of the mot_data_struct from the list of data inputs.
+
+        Args:
+            kernel_input_data_list (list of KernelInputData): the list of kernel input data objects
+        """
+        self._kernel_input_data_list = kernel_input_data_list or []
+
+    def get_struct_definition(self):
+        """Return the structure definition of the mot_data_struct.
+
+        Returns:
+            str: the CL code for the structure definition
+        """
+        if not len(self._kernel_input_data_list):
+            return '''
+                typedef struct{
+                    constant void* place_holder;
+                } mot_data_struct;
+            '''
+
+        definitions = []
+        for kernel_input_data in self._kernel_input_data_list:
+            definition = 'global ' + dtype_to_ctype(kernel_input_data.get_data().dtype)
+            if kernel_input_data.as_pointer():
+                definition += '* '
+            else:
+                definition += ' '
+            definition += kernel_input_data.get_name()
+            definition += ';'
+            definitions.append(definition)
+
+        return '''
+            typedef struct{
+                ''' + '\n'.join(definitions) + '''
+            } mot_data_struct;
+        '''
+
+    def get_kernel_arguments(self):
+        """Get the list of kernel arguments for loading the kernel data elements into the kernel.
+
+        Returns:
+            list of str: the list of parameter definitions
+        """
+        definitions = []
+        for kernel_input_data in self._kernel_input_data_list:
+            definitions.append('global {}* {}'.format(dtype_to_ctype(kernel_input_data.get_data().dtype),
+                                                      kernel_input_data.get_name()))
+        return definitions
+
+    def get_struct_init_string(self, problem_id_substitute):
+        """Create the structure initialization string.
+
+        Args:
+            problem_id_substitute (str): the substitute for the ``{problem_id}`` in the kernel data info elements.
+
+        Returns:
+            str: the instantiation string for the data struct
+        """
+        if not len(self._kernel_input_data_list):
+            return '{0}'
+
+        definitions = []
+        for kernel_input_data in self._kernel_input_data_list:
+            offset = kernel_input_data.get_offset_str().replace('{problem_id}', problem_id_substitute)
+
+            definition = kernel_input_data.get_name()
+
+            if kernel_input_data.as_pointer():
+                definition += ' + ' + offset
+            else:
+                definition += '[' + offset + ']'
+            definitions.append(definition)
+
+        return '{' + ','.join(definitions) + '}'

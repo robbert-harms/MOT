@@ -12,9 +12,9 @@ from mot.model_building.parameters import CurrentObservationParam, StaticMapPara
     ModelDataParameter, FreeParameter
 from mot.model_building.parameter_functions.dependencies import SimpleAssignment, AbstractParameterDependency
 from mot.model_building.utils import ParameterCodec, SimpleModelPrior
-from mot.model_interfaces import OptimizeModelInterface, SampleModelInterface, KernelDataInfo
+from mot.model_interfaces import OptimizeModelInterface, SampleModelInterface
 from mot.utils import is_scalar, all_elements_equal, get_single_value, SimpleNamedCLFunction, convert_data_to_dtype, \
-    dtype_to_ctype
+    dtype_to_ctype, SimpleKernelInputData
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-03-14"
@@ -104,7 +104,7 @@ class OptimizeModelBuilder(object):
         return SimpleOptimizeModel(problems_to_analyze,
                                    self.name,
                                    self.double_precision,
-                                   self._get_kernel_data_info(problems_to_analyze),
+                                   self._get_kernel_data(problems_to_analyze),
                                    self._get_nmr_problems(problems_to_analyze),
                                    self.get_nmr_inst_per_problem(),
                                    self.get_nmr_estimable_parameters(),
@@ -382,24 +382,18 @@ class OptimizeModelBuilder(object):
             return 0
         return len(problems_to_analyze)
 
-    def _get_kernel_data_info(self, problems_to_analyze):
-        info = self._get_all_kernel_source_items(problems_to_analyze)
+    def _get_kernel_data(self, problems_to_analyze):
+        data_list = []
+        for key, cl_data in self._get_variable_data(problems_to_analyze).items():
+            as_value = len(cl_data.shape) == 1 or cl_data.shape[1] == 1
+            data_list.append(SimpleKernelInputData('var_data_' + str(key), cl_data, as_pointer=not as_value))
 
-        data_struct_init = info['data_struct_init']
-        struct_code = '0'
-        if data_struct_init:
-            struct_code = ', '.join(data_struct_init)
+        for key, cl_data in self._get_protocol_data().items():
+            data_list.append(SimpleKernelInputData('protocol_data_' + str(key), cl_data, offset_str='0'))
 
-        data = []
-        for data_dict in [self._get_variable_data(problems_to_analyze),
-                          self._get_protocol_data(),
-                          self._get_model_data()]:
-            for el in data_dict.values():
-                data.append(el)
-
-        return SimpleKernelDataInfo(
-            data, info['kernel_param_names'], info['data_struct'],
-            ('mot_data_struct {variable_name} = {{' + struct_code + '}};'))
+        for key, cl_data in self._get_model_data().items():
+            data_list.append(SimpleKernelInputData('model_data_' + str(key), cl_data, offset_str='0'))
+        return data_list
 
     def _get_initial_parameters(self, problems_to_analyze):
         np_dtype = np.float32
@@ -951,59 +945,6 @@ class OptimizeModelBuilder(object):
                     data_dict.update({p.name: convert_data_to_dtype(value, p.data_type,
                                                                     self._get_mot_float_type())})
         return data_dict
-
-    def _get_all_kernel_source_items(self, problems_to_analyze):
-        """Get the CL strings for the kernel source items for most common CL kernels in this library."""
-        kernel_param_names = []
-        data_struct_init = []
-        data_struct_names = []
-
-        for key, cl_data in self._get_variable_data(problems_to_analyze).items():
-            param_name = 'var_data_' + str(key)
-            data_type = dtype_to_ctype(cl_data.dtype)
-
-            kernel_param_names.append('global ' + data_type + '* ' + param_name)
-
-            mult = cl_data.shape[1] if len(cl_data.shape) > 1 else 1
-            if len(cl_data.shape) == 1 or cl_data.shape[1] == 1:
-                data_struct_names.append(data_type + ' ' + param_name)
-                data_struct_init.append(param_name + '[{{problem_id_name}} * {}]'.format(mult))
-            else:
-                data_struct_names.append('global ' + data_type + '* ' + param_name)
-                data_struct_init.append(param_name + ' + {{problem_id_name}} * {}'.format(mult))
-
-        for key, cl_data in self._get_protocol_data().items():
-            param_name = 'protocol_data_' + str(key)
-            data_type = dtype_to_ctype(cl_data.dtype)
-
-            kernel_param_names.append('global ' + data_type + '* ' + param_name)
-            data_struct_init.append(param_name)
-            data_struct_names.append('global ' + data_type + '* ' + param_name)
-
-        for key, cl_data in self._get_model_data().items():
-            param_name = 'model_data_' + str(key)
-            data_type = dtype_to_ctype(cl_data.dtype)
-
-            data_struct_init.append(param_name)
-
-            if isinstance(cl_data, np.ndarray):
-                kernel_param_names.append('global ' + data_type + '* ' + param_name)
-                data_struct_names.append('global ' + data_type + '* ' + param_name)
-            else:
-                kernel_param_names.append(data_type + ' ' + param_name)
-                data_struct_names.append(data_type + ' ' + param_name)
-
-        data_struct = '''
-            typedef struct{
-                ''' + ('' if data_struct_names else 'constant void* place_holder;') + '''
-                ''' + " ".join((name + ";\n" for name in data_struct_names)) + '''
-            } mot_data_struct;
-        '''
-
-        return {'kernel_param_names': kernel_param_names,
-                'data_struct_names': data_struct_names,
-                'data_struct_init': data_struct_init,
-                'data_struct': data_struct}
 
     def _get_pre_model_expression_eval_code(self):
         """The code called in the evaluation function.
@@ -2058,8 +1999,8 @@ class ParameterTransformedModel(OptimizeModelInterface):
     def double_precision(self):
         return self._model.double_precision
 
-    def get_kernel_data_info(self):
-        return self._model.get_kernel_data_info()
+    def get_kernel_data(self):
+        return self._model.get_kernel_data()
 
     def get_nmr_problems(self):
         return self._model.get_nmr_problems()
@@ -2139,36 +2080,6 @@ class _ModelFunctionPriorToCompositeModelPrior(ModelFunctionPrior):
         return self._function_name
 
 
-class SimpleKernelDataInfo(KernelDataInfo):
-
-    def __init__(self, data, kernel_parameters, kernel_struct, init_format_str):
-        """Simple kernel data information container.
-
-        Args:
-            data (list): list with ndarrays
-            kernel_parameters (list of str): the kernel parameters for each of the data elements
-            kernel_struct (str): the kernel structure containing all the data in the kernel
-            init_format_str (str): the kernel data structure initialization string. This is used to
-                format the init string using the python string format function.
-        """
-        self._data = data
-        self._kernel_parameters = kernel_parameters
-        self._kernel_struct = kernel_struct
-        self._init_format_str = init_format_str
-
-    def get_data(self):
-        return self._data
-
-    def get_kernel_data_struct(self):
-        return self._kernel_struct
-
-    def get_kernel_parameters(self):
-        return self._kernel_parameters
-
-    def get_kernel_data_struct_initialization(self, variable_name, problem_id_name='gid'):
-        return self._init_format_str.format(variable_name=variable_name, problem_id_name=problem_id_name)
-
-
 class SimpleOptimizeModel(OptimizeModelInterface):
 
     def __init__(self, used_problem_indices,
@@ -2199,7 +2110,7 @@ class SimpleOptimizeModel(OptimizeModelInterface):
     def double_precision(self):
         return self._double_precision
 
-    def get_kernel_data_info(self):
+    def get_kernel_data(self):
         return self._kernel_data_info
 
     def get_nmr_problems(self):
@@ -2258,8 +2169,8 @@ class SimpleSampleModel(SampleModelInterface):
     def double_precision(self):
         return self._wrapped_optimize_model.double_precision
 
-    def get_kernel_data_info(self):
-        return self._wrapped_optimize_model.get_kernel_data_info()
+    def get_kernel_data(self):
+        return self._wrapped_optimize_model.get_kernel_data()
 
     def get_nmr_problems(self):
         return self._wrapped_optimize_model.get_nmr_problems()

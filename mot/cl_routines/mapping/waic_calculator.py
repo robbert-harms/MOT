@@ -1,6 +1,6 @@
 import pyopencl as cl
 import numpy as np
-from ...utils import get_float_type_def, all_logging_disabled
+from ...utils import get_float_type_def, all_logging_disabled, DataStructManager
 from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
 from copy import copy
@@ -72,7 +72,8 @@ class _LLWorker(Worker):
         self._problem_index = 0
 
         self._model = model
-        self._data_info = self._model.get_kernel_data_info()
+        self._data_info = self._model.get_kernel_data()
+        self._data_struct_manager = DataStructManager(self._data_info)
         self._double_precision = model.double_precision
 
         self._samples = samples
@@ -165,9 +166,9 @@ class _LLWorker(Worker):
 
         ll_calculating_buffers = [samples_buffer, ll_buffer]
 
-        for data in self._data_info.get_data():
+        for data in self._data_info:
             ll_calculating_buffers.append(cl.Buffer(self._cl_run_context.context,
-                                          cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data))
+                                          cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data.get_data()))
 
         return ll_calculating_buffers, ll_buffer, lse_buffer, variances_buffer
 
@@ -176,10 +177,10 @@ class _LLWorker(Worker):
         obs_func = self._model.get_log_likelihood_per_observation_function(full_likelihood=True)
 
         kernel_param_names = ['uint problem_ind', 'global mot_float_type* samples', 'global double* lls']
-        kernel_param_names.extend(self._data_info.get_kernel_parameters())
+        kernel_param_names.extend(self._data_struct_manager.get_kernel_arguments())
         kernel_source = ''
         kernel_source += get_float_type_def(self._double_precision)
-        kernel_source += self._data_info.get_kernel_data_struct()
+        kernel_source += self._data_struct_manager.get_struct_definition()
         kernel_source += obs_func.get_function()
         kernel_source += r'''
             __kernel void run_kernel(
@@ -188,9 +189,7 @@ class _LLWorker(Worker):
                     ulong obs_ind = get_global_id(0);
                     ulong sample_ind = get_global_id(1);
 
-                    ''' + self._data_info.get_kernel_data_struct_initialization(
-                            'data', problem_id_name='problem_ind') + '''
-
+                    mot_data_struct data = ''' + self._data_struct_manager.get_struct_init_string('problem_ind') + ''';
                     mot_float_type x[''' + str(self._nmr_params) + '''];
 
                     for(uint i = 0; i < ''' + str(self._nmr_params) + '''; i++){

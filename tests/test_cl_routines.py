@@ -21,8 +21,6 @@ from mot.cl_routines.optimizing.powell import Powell
 from mot.cl_routines.filters.gaussian import GaussianFilter
 from mot.cl_routines.filters.mean import MeanFilter
 from mot.cl_routines.filters.median import MedianFilter
-
-from mot.model_building.model_builders import SimpleKernelDataInfo
 from mot.utils import results_to_dict, SimpleNamedCLFunction, convert_data_to_dtype
 
 from mot.model_interfaces import OptimizeModelInterface
@@ -134,12 +132,8 @@ class Rosenbrock(OptimizeModelInterface):
     def name(self):
         return 'rosenbrock'
 
-    def get_kernel_data_info(self):
-        return SimpleKernelDataInfo([], [], '''
-            typedef struct{
-                constant void* place_holder;
-            } _model_data;
-        ''', '_model_data', '_model_data {variable_name} = {{0}};')
+    def get_kernel_data(self):
+        return []
 
     def get_nmr_problems(self):
         return 1
@@ -252,12 +246,8 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
     def name(self):
         return 'matlab_lsqnonlin_example'
 
-    def get_kernel_data_info(self):
-        return SimpleKernelDataInfo([], [], '''
-            typedef struct{
-                constant void* place_holder;
-            } _model_data;
-        ''', '_model_data', '_model_data {variable_name} = {{0}};')
+    def get_kernel_data(self):
+        return []
 
     def get_nmr_problems(self):
         return 1

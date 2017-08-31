@@ -80,14 +80,14 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
 
         kernel_param_names = ['global mot_float_type* params',
                               'global char* return_codes']
-        kernel_param_names.extend(self._data_info.get_kernel_parameters())
+        kernel_param_names.extend(self._data_struct_manager.get_kernel_arguments())
         kernel_param_names.append('global mot_float_type* fjac_all')
 
         optimizer_call_args = 'x, (void*)&data'
 
         kernel_source = ''
         kernel_source += get_float_type_def(self._double_precision)
-        kernel_source += str(self._data_info.get_kernel_data_struct())
+        kernel_source += self._data_struct_manager.get_struct_definition()
 
         kernel_source += self._get_optimizer_cl_code()
         kernel_source += '''
@@ -104,7 +104,7 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
                     global mot_float_type* fjac = fjac_all + gid * ''' \
                          + str(self._nmr_params * self._model.get_nmr_inst_per_problem()) + ''';
 
-                    ''' + self._data_info.get_kernel_data_struct_initialization('data') + '''
+                    mot_data_struct data = ''' + self._data_struct_manager.get_struct_init_string('gid') + ''';
                     return_codes[gid] = (char) ''' + self._get_optimizer_call_name() + '''(''' \
                          + optimizer_call_args + ''', fjac);
 

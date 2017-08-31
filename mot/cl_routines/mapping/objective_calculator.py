@@ -1,6 +1,6 @@
 import pyopencl as cl
 import numpy as np
-from ...utils import get_float_type_def
+from ...utils import get_float_type_def, DataStructManager
 from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
 
@@ -59,7 +59,8 @@ class _ObjectiveCalculatorWorker(Worker):
         super(_ObjectiveCalculatorWorker, self).__init__(cl_environment)
 
         self._model = model
-        self._data_info = self._model.get_kernel_data_info()
+        self._data_info = self._model.get_kernel_data()
+        self._data_struct_manager = DataStructManager(self._data_info)
         self._double_precision = model.double_precision
         self._objective_values = objective_values
         self._parameters = parameters
@@ -84,9 +85,9 @@ class _ObjectiveCalculatorWorker(Worker):
 
         all_buffers = [params_buffer, objective_value_buffer]
 
-        for data in self._data_info.get_data():
+        for data in self._data_info:
             all_buffers.append(cl.Buffer(self._cl_run_context.context,
-                                         cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data))
+                                         cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data.get_data()))
 
         return all_buffers, objective_value_buffer
 
@@ -97,10 +98,10 @@ class _ObjectiveCalculatorWorker(Worker):
         nmr_params = self._parameters.shape[1]
 
         kernel_param_names = ['global mot_float_type* params', 'global mot_float_type* objective_values']
-        kernel_param_names.extend(self._data_info.get_kernel_parameters())
+        kernel_param_names.extend(self._data_struct_manager.get_kernel_arguments())
         kernel_source = ''
         kernel_source += get_float_type_def(self._double_precision)
-        kernel_source += self._data_info.get_kernel_data_struct()
+        kernel_source += self._data_struct_manager.get_struct_definition()
         kernel_source += objective_function.get_function()
         kernel_source += param_modifier.get_function()
         kernel_source += '''
@@ -119,7 +120,7 @@ class _ObjectiveCalculatorWorker(Worker):
                 ''' + ",\n".join(kernel_param_names) + '''
                 ){
                     ulong gid = get_global_id(0);
-                    ''' + self._data_info.get_kernel_data_struct_initialization('data') + '''
+                    mot_data_struct data = ''' + self._data_struct_manager.get_struct_init_string('gid') + ''';
 
                     mot_float_type x[''' + str(nmr_params) + '''];
                     for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){

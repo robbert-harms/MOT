@@ -1,6 +1,6 @@
 import pyopencl as cl
 import numpy as np
-from ...utils import get_float_type_def, split_in_batches
+from ...utils import get_float_type_def, split_in_batches, DataStructManager
 from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
 
@@ -71,7 +71,8 @@ class _LogLikelihoodCalculatorWorker(Worker):
         super(_LogLikelihoodCalculatorWorker, self).__init__(cl_environment)
 
         self._model = model
-        self._data_info = self._model.get_kernel_data_info()
+        self._data_info = self._model.get_kernel_data()
+        self._data_struct_manager = DataStructManager(self._data_info)
         self._double_precision = model.double_precision
         self._log_likelihoods = log_likelihoods
         self._parameters = parameters
@@ -108,9 +109,9 @@ class _LogLikelihoodCalculatorWorker(Worker):
 
         all_buffers = [params_buffer, likelihoods_buffer]
 
-        for data in self._data_info.get_data():
+        for data in self._data_info:
             all_buffers.append(cl.Buffer(self._cl_run_context.context,
-                                         cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data))
+                                         cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data.get_data()))
 
         return all_buffers, likelihoods_buffer
 
@@ -121,10 +122,10 @@ class _LogLikelihoodCalculatorWorker(Worker):
         nmr_params = self._parameters.shape[1]
 
         kernel_param_names = ['global mot_float_type* params', 'global mot_float_type* log_likelihoods']
-        kernel_param_names.extend(self._data_info.get_kernel_parameters())
+        kernel_param_names.extend(self._data_struct_manager.get_kernel_arguments())
         kernel_source = ''
         kernel_source += get_float_type_def(self._double_precision)
-        kernel_source += self._data_info.get_kernel_data_struct()
+        kernel_source += self._data_struct_manager.get_struct_definition()
         kernel_source += cl_func
 
         kernel_source += '''
@@ -143,7 +144,7 @@ class _LogLikelihoodCalculatorWorker(Worker):
                     ''' + ",\n".join(kernel_param_names) + '''
                     ){
                         ulong gid = get_global_id(0);
-                        ''' + self._data_info.get_kernel_data_struct_initialization('data') + '''
+                        mot_data_struct data = ''' + self._data_struct_manager.get_struct_init_string('gid') + ''';
 
                         mot_float_type x[''' + str(nmr_params) + '''];
                         for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
@@ -161,8 +162,8 @@ class _LogLikelihoodCalculatorWorker(Worker):
                         ulong problem_ind = get_global_id(0);
                         ulong sample_ind = get_global_id(1);
 
-                        ''' + self._data_info.get_kernel_data_struct_initialization(
-                                'data', problem_id_name='problem_ind') + '''
+                        mot_data_struct data = ''' + self._data_struct_manager.get_struct_init_string('problem_ind') \
+                             + ''';
 
                         mot_float_type x[''' + str(nmr_params) + '''];
                         for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
