@@ -227,6 +227,8 @@ class Rosenbrock(OptimizeModelInterface):
     def get_nmr_estimable_parameters(self):
         return self.n
 
+    def finalize_optimized_parameters(self, parameters):
+        return parameters
 
 class MatlabLSQNonlinExample(OptimizeModelInterface):
 
@@ -338,6 +340,8 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
     def get_nmr_estimable_parameters(self):
         return 2
 
+    def finalize_optimized_parameters(self, parameters):
+        return parameters
 
 if __name__ == '__main__':
     unittest.main()

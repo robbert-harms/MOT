@@ -188,24 +188,26 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         if init_params is None:
             init_params = model.get_initial_parameters()
 
-        starting_points = np.require(init_params, np_dtype,
-                                     requirements=['C', 'A', 'O', 'W'])
+        parameters = np.require(init_params, np_dtype,
+                                requirements=['C', 'A', 'O', 'W'])
 
-        nmr_params = starting_points.shape[1]
+        nmr_params = parameters.shape[1]
 
-        return_codes = np.zeros((starting_points.shape[0],), dtype=np.int8, order='C')
+        return_codes = np.zeros((parameters.shape[0],), dtype=np.int8, order='C')
 
         self._logger.info('Finished optimization preliminaries')
         self._logger.info('Starting optimization')
 
-        workers = self._create_workers(self._get_worker_generator(self, model, starting_points,
+        workers = self._create_workers(self._get_worker_generator(self, model, parameters,
                                                                   nmr_params, return_codes,
                                                                   self._optimizer_settings))
         self.load_balancer.process(workers, model.get_nmr_problems())
 
         self._logger.info('Finished optimization')
 
-        return SimpleOptimizationResult(model, starting_points, return_codes)
+        parameters = model.finalize_optimized_parameters(parameters)
+
+        return SimpleOptimizationResult(model, parameters, return_codes)
 
     def _get_worker_generator(self, *args):
         """Generate the worker generator callback for the function _create_workers()
@@ -239,10 +241,6 @@ class AbstractParallelOptimizerWorker(Worker):
         self._starting_points = starting_points
         self._all_buffers, self._params_buffer, self._return_code_buffer = self._create_buffers()
         self._kernel = self._build_kernel(self._get_kernel_source(), self._parent_optimizer.get_compile_flags_list())
-
-    def __del__(self):
-        for buffer in self._all_buffers:
-            buffer.release()
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start

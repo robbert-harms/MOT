@@ -23,7 +23,44 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class OptimizeModelBuilder(object):
+class ModelBuilder(object):
+    """The interface for a model builder.
+
+    The primary method of a model builder is the ``build`` method which can be used to build a
+    ``OptimizeModelInterface`` or subclasses thereof.
+    """
+
+    def build(self, problems_to_analyze=None):
+        """Construct the final model using all current construction settings.
+
+        Args:
+            problems_to_analyze (ndarray): optional set of problem indices, this should construct the model
+                such that it analyzes only the indicated subset of problems.
+
+        Returns:
+            OptimizeModelInterface or SampleModelInterface: an implementation of an optimization or
+                optimization/sampling model using the current construction settings.
+        """
+        raise NotImplementedError()
+
+    def build_with_codec(self, problems_to_analyze):
+        """Construct the model and decorate it with ``ParameterTransformedModel`` using a parameter codec
+
+        This will build the model such that it uses the parameter codec which transforms the parameters
+        to and from optimization and model space. This can be used to enforce boundary conditions for the optimization
+        routine and present the optimization routine with a smoother set of parameters.
+
+        This is typically only used during optimization and not during sampling since during sampling we already
+        have priors for the boundary conditions and second, we want to sample the parameters directly to get the
+        correct parameter density.
+
+        Returns:
+            OptimizeModelInterface: the optimization model decorated with a codec transformation
+        """
+        raise NotImplementedError()
+
+
+class OptimizeModelBuilder(ModelBuilder):
 
     def __init__(self, name, model_tree, evaluation_model, signal_noise_model=None,
                  input_data=None, enforce_weights_sum_to_one=True):
@@ -115,6 +152,50 @@ class OptimizeModelBuilder(object):
                                    self._get_objective_per_observation_function(problems_to_analyze),
                                    self.get_lower_bounds(),
                                    self.get_upper_bounds())
+
+    def build_with_codec(self, problems_to_analyze):
+        return ParameterTransformedModel(self.build(problems_to_analyze), self.get_parameter_codec())
+
+    def get_parameter_codec(self):
+        """Get a parameter codec that can be used to transform the parameters to and from optimization and model space.
+
+        This is typically used as input to the ParameterTransformedModel decorator model.
+
+        Returns:
+            mot.model_building.utils.ParameterCodec: an instance of a parameter codec
+        """
+        model_builder = self
+
+        class Codec(ParameterCodec):
+            def get_parameter_decode_function(self, function_name='decodeParameters'):
+                func = '''
+                    void ''' + function_name + '''(mot_data_struct* data, mot_float_type* x){
+                '''
+                for d in model_builder._get_parameter_transformations()[1]:
+                    func += "\n" + "\t" * 4 + d.format('x')
+
+                if model_builder._enforce_weights_sum_to_one:
+                    func += model_builder._get_weight_sum_to_one_transformation()
+
+                return func + '''
+                    }
+                '''
+
+            def get_parameter_encode_function(self, function_name='encodeParameters'):
+                func = '''
+                    void ''' + function_name + '''(mot_data_struct* data, mot_float_type* x){
+                '''
+
+                if model_builder._enforce_weights_sum_to_one:
+                    func += model_builder._get_weight_sum_to_one_transformation()
+
+                for d in model_builder._get_parameter_transformations()[0]:
+                    func += "\n" + "\t" * 4 + d.format('x')
+
+                return func + '''
+                    }
+                '''
+        return Codec()
 
     @property
     def name(self):
@@ -311,10 +392,6 @@ class OptimizeModelBuilder(object):
                 self._model_functions_info.set_parameter_value('{}.{}'.format(m.name, p.name), fixed_values[p.name])
         return self
 
-    def get_free_param_names(self):
-        """See super class for details"""
-        return ['{}.{}'.format(m.name, p.name) for m, p in self._model_functions_info.get_estimable_parameters_list()]
-
     def get_nmr_inst_per_problem(self):
         """See super class for details"""
         return self._input_data.get_nmr_inst_per_problem()
@@ -332,47 +409,6 @@ class OptimizeModelBuilder(object):
         """See super class for details"""
         return [self._upper_bounds['{}.{}'.format(m.name, p.name)] for m, p in
                 self._model_functions_info.get_estimable_parameters_list()]
-
-    def get_parameter_codec(self):
-        """Get a parameter codec that can be used to transform the parameters to and from optimization and model space.
-
-        This is typically used as input to the ParameterTransformedModel decorator model.
-
-        Returns:
-            mot.model_building.utils.ParameterCodec: an instance of a parameter codec
-        """
-        model_builder = self
-
-        class Codec(ParameterCodec):
-            def get_parameter_decode_function(self, function_name='decodeParameters'):
-                func = '''
-                    void ''' + function_name + '''(mot_data_struct* data, mot_float_type* x){
-                '''
-                for d in model_builder._get_parameter_transformations()[1]:
-                    func += "\n" + "\t" * 4 + d.format('x')
-
-                if model_builder._enforce_weights_sum_to_one:
-                    func += model_builder._get_weight_sum_to_one_transformation()
-
-                return func + '''
-                    }
-                '''
-
-            def get_parameter_encode_function(self, function_name='encodeParameters'):
-                func = '''
-                    void ''' + function_name + '''(mot_data_struct* data, mot_float_type* x){
-                '''
-
-                if model_builder._enforce_weights_sum_to_one:
-                    func += model_builder._get_weight_sum_to_one_transformation()
-
-                for d in model_builder._get_parameter_transformations()[0]:
-                    func += "\n" + "\t" * 4 + d.format('x')
-
-                return func + '''
-                    }
-                '''
-        return Codec()
 
     def _get_nmr_problems(self, problems_to_analyze):
         """See super class for details"""
@@ -2047,6 +2083,12 @@ class ParameterTransformedModel(OptimizeModelInterface):
         # todo add codec transform here
         return self._model.get_upper_bounds()
 
+    def finalize_optimized_parameters(self, parameters):
+        return self._model.finalize_optimized_parameters(self.decode_parameters(parameters))
+
+    def __getattr__(self, item):
+        return getattr(self._model, item)
+
 
 class ParameterNameException(Exception):
     """Thrown when the a parameter of an given name could not be found."""
@@ -2145,6 +2187,9 @@ class SimpleOptimizeModel(OptimizeModelInterface):
     def get_upper_bounds(self):
         return self._upper_bounds
 
+    def finalize_optimized_parameters(self, parameters):
+        return parameters
+
 
 class SimpleSampleModel(SampleModelInterface):
 
@@ -2203,6 +2248,9 @@ class SimpleSampleModel(SampleModelInterface):
 
     def get_upper_bounds(self):
         return self._wrapped_optimize_model.get_upper_bounds()
+
+    def finalize_optimized_parameters(self, parameters):
+        return self._wrapped_optimize_model.finalize_optimized_parameters(parameters)
 
     def get_proposal_state(self):
         return self._proposal_state

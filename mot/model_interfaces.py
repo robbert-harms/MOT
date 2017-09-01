@@ -171,6 +171,22 @@ class OptimizeModelInterface(object):
         """
         raise NotImplementedError()
 
+    def finalize_optimized_parameters(self, parameters):
+        """Called by the optimization routine after optimization to finalize the optimized parameters.
+
+        This can be used to do some automatic post-processing similar to for example what the
+        ``get_pre_eval_parameter_modifier`` can do within the kernel.
+
+        Args:
+            parameters (ndarray): the set of parameters after optimization. This method may change this array
+                in place.
+
+        Returns:
+            ndarray: the updated parameters. While changes may be done in place, one must return the parameters
+                one would like to use.
+        """
+        raise NotImplementedError()
+
 
 class SampleModelInterface(OptimizeModelInterface):
     """Extends the OptimizeModelInterface with information for sampling purposes.
