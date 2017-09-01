@@ -21,7 +21,7 @@ class ParameterSampleStatistics(object):
         raise NotImplementedError()
 
 
-class GaussianPSS(ParameterSampleStatistics):
+class GaussianFit(ParameterSampleStatistics):
     """Calculates the mean and the standard deviation of the given samples.
 
     The standard deviation is calculated with a degree of freedom of one, meaning we are returning the unbiased
@@ -32,17 +32,14 @@ class GaussianPSS(ParameterSampleStatistics):
         return SamplingStatisticsContainer(np.mean(samples, axis=1), {'std': np.std(samples, axis=1, ddof=1)})
 
 
-class CircularGaussianPSS(ParameterSampleStatistics):
+class CircularGaussianFit(ParameterSampleStatistics):
+    """Compute the circular mean for some samples.
 
-    def __init__(self):
-        """Compute the circular mean for some samples.
-
-        This assumes angles between 0 and pi.
-        """
-        super(CircularGaussianPSS, self).__init__()
+    This assumes angles between 0 and pi.
+    """
 
     def get_statistics(self, samples):
-        mean, std = CircularGaussianPSS.circmean_circstd(np.mod(samples, np.pi))
+        mean, std = CircularGaussianFit.circmean_circstd(np.mod(samples, np.pi))
         return SamplingStatisticsContainer(mean, {'std': std})
 
     @staticmethod
@@ -76,11 +73,8 @@ class CircularGaussianPSS(ParameterSampleStatistics):
 
 class SamplingStatistics(object):
 
-    def get_point_estimate(self):
-        """Get the map that would represent the point estimate of these samples.
-
-        This map is used for comparison with the point estimates obtained from optimization and typically corresponds
-        to the mean of the distribution.
+    def get_expected_value(self):
+        """Get the expected value (typically the mean) of the given dataset.
 
         Returns:
             ndarray: The point estimate for every voxel.
@@ -101,18 +95,18 @@ class SamplingStatistics(object):
 
 class SamplingStatisticsContainer(SamplingStatistics):
 
-    def __init__(self, point_estimate, additional_maps):
+    def __init__(self, expected_value, additional_maps):
         """Simple container for storing the point estimate and the other maps.
 
         Args:
-            point_estimate (ndarray): the array with the point estimates
+            expected_value (ndarray): the array with the expected value (mean)
             additional_maps (dict): the additional maps
         """
-        self._point_estimate = point_estimate
+        self._expected_value = expected_value
         self._additional_maps = additional_maps
 
-    def get_point_estimate(self):
-        return self._point_estimate
+    def get_expected_value(self):
+        return self._expected_value
 
     def get_additional_statistics(self):
         return self._additional_maps

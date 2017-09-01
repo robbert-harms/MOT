@@ -42,7 +42,7 @@ class LogLikelihoodCalculator(CLRoutine):
             workers = self._create_workers(
                 lambda cl_environment: _LogLikelihoodCalculatorWorker(
                     cl_environment, self.get_compile_flags_list(model.double_precision), model, params, lls))
-            self.load_balancer.process(workers, model.get_nmr_problems())
+            self.load_balancer.process(workers, parameters.shape[0])
 
         if len(parameters.shape) < 3:
             process(parameters, log_likelihoods)

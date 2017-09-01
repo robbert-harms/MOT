@@ -56,6 +56,32 @@ class CodecRunner(CLRoutine):
         return self._transform_parameters(codec.get_parameter_encode_function('encodeParameters'),
                                           'encodeParameters', parameters, kernel_data, double_precision)
 
+    def encode_decode(self, parameters, kernel_data, codec, double_precision=False):
+        """First apply an encoding operation and then apply a decoding operation again.
+
+        This can be used to enforce boundary conditions in the parameters.
+
+        Args:
+            parameters (ndarray): The parameters to transform
+            kernel_data (list of mot.utils.KernelInputData): the list of additional data to load
+            codec (mot.model_building.utils.ParameterCodec): the parameter codec to use
+            double_precision (boolean): if we are running in double precision or not
+
+        Returns:
+            ndarray: The array with the transformed parameters.
+        """
+        func_name = 'encode_decode'
+        func = ''
+        func += codec.get_parameter_encode_function('encodeParameters')
+        func += codec.get_parameter_decode_function('decodeParameters')
+        func += '''
+            void ''' + func_name + '''(mot_data_struct* data, mot_float_type* x){
+                encodeParameters(data, x);
+                decodeParameters(data, x);
+            }
+        '''
+        return self._transform_parameters(func, func_name, parameters, kernel_data, double_precision)
+
     def _transform_parameters(self, cl_func, cl_func_name, parameters, kernel_data, double_precision):
         cl_named_func = self._get_codec_function_wrapper(cl_func, cl_func_name, parameters.shape[1])
 

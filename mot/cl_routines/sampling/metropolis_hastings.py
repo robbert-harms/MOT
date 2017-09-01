@@ -612,7 +612,7 @@ class _MCMCKernelBuilder(object):
                                local double* log_likelihood_tmp){
 
                 float4 random_nmr;
-                mot_float_type new_prior = 0;
+                local mot_float_type new_prior;
                 double new_likelihood;
                 double bayesian_f;
                 mot_float_type old_x;
@@ -629,7 +629,8 @@ class _MCMCKernelBuilder(object):
 
                         new_prior = ''' + self._prior_func.get_name() + '''(data, x_local);
                     }
-
+                    barrier(CLK_LOCAL_MEM_FENCE);
+                    
                     if(exp(new_prior) > 0){
                         _fill_log_likelihood_tmp(data, x_local, log_likelihood_tmp);
 

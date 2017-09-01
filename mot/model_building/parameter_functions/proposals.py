@@ -218,7 +218,7 @@ class GaussianProposal(SimpleProposal):
         """
         parameters = [ProposalParameter('std', std, adaptable)]
         super(GaussianProposal, self).__init__(
-            'return fma(std, (mot_float_type)frandn(rng_data), current);',
+            'return std * frandn(rng_data) + current;',
             'gaussian',
             parameters,
             proposal_update_function=proposal_update_function
@@ -240,10 +240,9 @@ class CircularGaussianProposal(SimpleProposal):
         parameters = [ProposalParameter('std', std, adaptable)]
         super(CircularGaussianProposal, self).__init__(
             '''
-                double x1 = fma(std, (mot_float_type)frandn(rng_data), current);
-                double x2 = {};
-                return (mot_float_type) (x1 - floor(x1 / x2) * x2);
-            '''.format(modulus),
+                double x1 = std * frandn(rng_data) + current;
+                return x1 - floor(x1 / {modulus}) * {modulus};
+            '''.format(modulus=modulus),
             'circular_gaussian',
             parameters,
             proposal_update_function=proposal_update_function

@@ -283,12 +283,11 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
         return '''
             double ''' + fname + '''(mot_data_struct* data, const mot_float_type* const x, uint observation_index){
                 ''' + param_listing + '''
-                return - (pown(''' + obs_fname + '''(data, observation_index) -
-                                sqrt(pown(''' + eval_fname + '''(data, x, observation_index), 2) +
-                                     (OffsetGaussianNoise_sigma * OffsetGaussianNoise_sigma)), 2)
-                               ) 
-                           / (2 * pown(OffsetGaussianNoise_sigma, 2)
-                          )
+                double observation = (double)''' + obs_fname + '''(data, observation_index);
+                double estimate = (double)sqrt(pown(''' + eval_fname + '''(data, x, observation_index), 2) + 
+                                               (OffsetGaussianNoise_sigma * OffsetGaussianNoise_sigma));
+                                               
+                return - (pown(observation - estimate, 2)) / (2 * pown(OffsetGaussianNoise_sigma, 2))
                     ''' + ('- log(OffsetGaussianNoise_sigma * sqrt(2 * M_PI))' if full_likelihood else '') + ''';
             }
         '''

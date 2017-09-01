@@ -2,7 +2,7 @@ from mot.cl_data_type import SimpleCLDataType
 from mot.cl_parameter import CLFunctionParameter
 from mot.model_building.parameter_functions.priors import UniformWithinBoundsPrior
 from mot.model_building.parameter_functions.proposals import GaussianProposal
-from mot.model_building.parameter_functions.sample_statistics import GaussianPSS
+from mot.model_building.parameter_functions.sample_statistics import GaussianFit
 from mot.model_building.parameter_functions.transformations import IdentityTransform
 
 __author__ = 'Robbert Harms'
@@ -120,7 +120,7 @@ class FreeParameter(CLFunctionParameter):
         self._parameter_transform = parameter_transform or IdentityTransform()
         self._sampling_proposal = sampling_proposal or GaussianProposal(1.0)
         self._sampling_prior = sampling_prior or UniformWithinBoundsPrior()
-        self._sampling_statistics = sampling_statistics or GaussianPSS()
+        self._sampling_statistics = sampling_statistics or GaussianFit()
 
     @property
     def value(self):
