@@ -83,11 +83,23 @@ class Bessel(SimpleCLLibraryFromFile):
             resource_filename('mot', 'data/opencl/bessel.cl'))
 
 
-class GammaFunctions(SimpleCLLibraryFromFile):
+class GammaCDF(SimpleCLLibraryFromFile):
 
     def __init__(self):
-        """Function library for the bessel functions."""
-        super(GammaFunctions, self).__init__(
+        """Function library for the Gamma Cumulative Distribution function."""
+        super(GammaCDF, self).__init__(
+            'double', 'gamma_cdf', [CLFunctionParameter('double', 'shape'),
+                                    CLFunctionParameter('double', 'scale'),
+                                    CLFunctionParameter('double', 'x')],
+            resource_filename('mot', 'data/opencl/gammaFunctions.cl'))
+
+
+class GammaP(SimpleCLLibraryFromFile):
+
+    def __init__(self):
+        """Calculates the normalized/regularized lower incomplete gamma function returning values in the range [0, 1].
+        """
+        super(GammaP, self).__init__(
             'double', 'gamma_p', [CLFunctionParameter('double', 'a'), CLFunctionParameter('double', 'x')],
             resource_filename('mot', 'data/opencl/gammaFunctions.cl'))
 
