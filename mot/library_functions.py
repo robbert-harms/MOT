@@ -36,7 +36,7 @@ class SimpleCLLibrary(CLLibrary, SimpleCLFunction):
             {code}
             #endif // {inclusion_guard_name}
         '''.format(dependencies=indent(self._get_cl_dependency_code(), ' '*4*3),
-                   inclusion_guard_name='LIBRARY_FUNCTION_{}_CL'.format(self.cl_function_name),
+                   inclusion_guard_name='LIBRARY_FUNCTION_{}_CL'.format(self.get_cl_function_name()),
                    code=indent('\n' + self._cl_code.strip() + '\n', ' '*4*3)))
 
 

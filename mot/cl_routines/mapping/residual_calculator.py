@@ -99,8 +99,8 @@ class _ResidualCalculatorWorker(Worker):
 
         kernel_source += get_float_type_def(self._double_precision)
         kernel_source += self._data_struct_manager.get_struct_definition()
-        kernel_source += residual_function.get_function()
-        kernel_source += param_modifier.get_function()
+        kernel_source += residual_function.get_cl_code()
+        kernel_source += param_modifier.get_cl_code()
         kernel_source += '''
             __kernel void get_errors(
                 ''' + ",\n".join(kernel_param_names) + '''

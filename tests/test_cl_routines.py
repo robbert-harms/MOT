@@ -163,8 +163,8 @@ class Rosenbrock(OptimizeModelInterface):
         eval_func = self.get_model_eval_function()
         obs_func = self._get_observation_return_function()
 
-        func = eval_func.get_function()
-        func += obs_func.get_function()
+        func = eval_func.get_cl_code()
+        func += obs_func.get_cl_code()
 
         func_name = "getResidual"
         func += '''
@@ -188,8 +188,8 @@ class Rosenbrock(OptimizeModelInterface):
         eval_func = self.get_model_eval_function()
         obs_func = self._get_observation_return_function()
 
-        func = eval_func.get_function()
-        func += obs_func.get_function()
+        func = eval_func.get_cl_code()
+        func += obs_func.get_cl_code()
 
         func_name = "getObjectiveInstanceValue"
         func += '''
@@ -284,8 +284,8 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
         eval_func = self.get_model_eval_function()
         obs_func = self._get_observation_return_function()
 
-        func = eval_func.get_function()
-        func += obs_func.get_function()
+        func = eval_func.get_cl_code()
+        func += obs_func.get_cl_code()
 
         func_name = "getResidual"
         func += '''
@@ -300,8 +300,8 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
         eval_func = self.get_model_eval_function()
         obs_func = self._get_observation_return_function()
 
-        func = eval_func.get_function()
-        func += obs_func.get_function()
+        func = eval_func.get_cl_code()
+        func += obs_func.get_cl_code()
 
         func_name = "getObjectiveInstanceValue"
 

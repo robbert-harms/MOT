@@ -10,8 +10,7 @@ __licence__ = 'LGPL v3'
 class CLFunction(object):
     """Interface for a basic CL function."""
 
-    @property
-    def return_type(self):
+    def get_return_type(self):
         """Get the type (in CL naming) of the returned value from this function.
 
         Returns:
@@ -19,9 +18,8 @@ class CLFunction(object):
         """
         raise NotImplementedError()
 
-    @property
-    def cl_function_name(self):
-        """Return the name of the implemented CL function
+    def get_cl_function_name(self):
+        """Return the calling name of the implemented CL function
 
         Returns:
             str: The name of this CL function
@@ -75,38 +73,17 @@ class SimpleCLFunction(CLFunction):
         self._parameter_list = parameter_list
         self._dependency_list = dependency_list
 
-    @property
-    def return_type(self):
-        """Get the type (in CL naming) of the returned value from this function.
+    def get_cl_code(self):
+        raise NotImplementedError()
 
-        Returns:
-            str: The return type of this CL function. (Examples: double, int, double4, ...)
-        """
-        return self._return_type
-
-    @property
-    def cl_function_name(self):
-        """Return the name of the implemented CL function
-
-        Returns:
-            str: The name of this CL function
-        """
+    def get_cl_function_name(self):
         return self._function_name
 
+    def get_return_type(self):
+        return self._return_type
+
     def get_parameters(self):
-        """Return the list of parameters from this CL function.
-
-        Returns:
-            A list containing instances of CLFunctionParameter."""
         return self._parameter_list
-
-    def get_cl_code(self):
-        """Get the function code for this function and all its dependencies.
-
-        Returns:
-            str: The CL code for inclusion in a kernel.
-        """
-        raise NotImplementedError()
 
     def evaluate(self, inputs, double_precision=False):
         return CLFunctionEvaluator().evaluate(self, inputs, double_precision=double_precision)

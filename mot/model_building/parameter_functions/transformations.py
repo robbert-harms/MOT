@@ -185,3 +185,9 @@ class AbsModXTransform(AbstractTransformation):
 class AbsModPiTransform(AbsModXTransform):
     def __init__(self):
         super(AbsModPiTransform, self).__init__('M_PI')
+
+
+class AbsModTwoPiTransform(AbsModXTransform):
+    def __init__(self):
+        super(AbsModTwoPiTransform, self).__init__('(2 * M_PI)')
+

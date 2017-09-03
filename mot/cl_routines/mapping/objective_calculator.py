@@ -102,8 +102,8 @@ class _ObjectiveCalculatorWorker(Worker):
         kernel_source = ''
         kernel_source += get_float_type_def(self._double_precision)
         kernel_source += self._data_struct_manager.get_struct_definition()
-        kernel_source += objective_function.get_function()
-        kernel_source += param_modifier.get_function()
+        kernel_source += objective_function.get_cl_code()
+        kernel_source += param_modifier.get_cl_code()
         kernel_source += '''
             double _evaluate(mot_data_struct* data, mot_float_type* x){
                 ''' + param_modifier.get_name() + '''(data, x);

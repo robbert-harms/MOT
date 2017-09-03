@@ -1,3 +1,4 @@
+import copy
 import pyopencl as cl
 import numpy as np
 from ...utils import get_float_type_def, split_in_batches
@@ -15,12 +16,12 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 class Sampling_MLE_MAP_Index(CLRoutine):
 
     def calculate(self, model, samples):
-        """Calculate the (two sets of) indices of the parameters that maximize the likelihood and a posteriori
+        """Calculate the (two sets of) indices of the parameters that maximize the likelihood and the a posteriori.
 
         This calculates the log likelihoods and posterior value for every sample of every problem in the sampling chain
-        and returns a map with indices of the maximum log likelihoods and of the maximum a posteriori value. These
-        can subsequently be used to get point estimates for every parameter (by taking the parameters corresponding to
-        the index of the maximum).
+        and returns for every problem the with indices of the maximum log likelihoods and of the maximum a posteriori.
+        These can subsequently be used to get point estimates for every parameter (by taking the parameters
+        corresponding to the index of these maxima).
 
         Args:
             model (AbstractModel): The model to use for the likelihood and prior models
@@ -51,7 +52,7 @@ class Sampling_MLE_MAP_Index(CLRoutine):
         def process(samples_subset):
             for worker in workers:
                 worker.set_samples(samples_subset)
-            self.load_balancer.process(workers, model.get_nmr_problems())
+            self.load_balancer.process(workers, samples.shape[0])
 
         max_batch_size = np.min([samples.shape[2], 1000])
         for batch_ind, batch_size in enumerate(split_in_batches(samples.shape[2], max_batch_size)):
@@ -72,13 +73,8 @@ class _MaxFinderWorker(Worker):
         self._data_info = self._model.get_kernel_data()
         self._double_precision = model.double_precision
 
-        self._mle_indices = mle_indices
-        self._map_indices = map_indices
-
-        self._mle_values = mle_values
-        self._map_values = map_values
-
         self._samples = None
+        self._state_arrays = [mle_indices, map_indices, mle_values, map_values]
 
         self._all_buffers = self._create_buffers()
         self._kernel = self._build_kernel(self._get_kernel_source(), compile_flags)
@@ -97,43 +93,32 @@ class _MaxFinderWorker(Worker):
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
 
-        global_range = [int(nmr_problems)]
-        global_offset = [int(range_start)]
+        buffers = list(self._all_buffers)
+        buffers.append(cl.Buffer(self._cl_run_context.context,
+                                 cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
+                                 hostbuf=self._samples))
 
-        if self._nmr_ll_per_problem:
-            global_range.append(self._nmr_ll_per_problem)
-            global_offset.append(0)
+        self._kernel.run_kernel(self._cl_run_context.queue, (int(nmr_problems),), None, *self._all_buffers,
+                                global_offset=(int(range_start),))
 
-        self._kernel.run_kernel(self._cl_run_context.queue, global_range, None, *self._all_buffers,
-                                global_offset=global_offset)
-        self._enqueue_readout(self._likelihoods_buffer, self._log_likelihoods, range_start, range_end)
+        for buffer, state_array in zip(self._all_buffers, self._state_arrays):
+            self._enqueue_readout(buffer, state_array, range_start, range_end)
 
     def _create_buffers(self):
-        mle_ind_buffer = cl.Buffer(self._cl_run_context.context,
-                                   cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR,
-                                   hostbuf=self._mle_indices)
-
-        map_ind_buffer = cl.Buffer(self._cl_run_context.context,
-                                   cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR,
-                                   hostbuf=self._map_indices)
-
-        mle_values_buffer = cl.Buffer(self._cl_run_context.context,
-                                      cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR,
-                                      hostbuf=self._mle_values)
-
-        map_values_buffer = cl.Buffer(self._cl_run_context.context,
-                                      cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR,
-                                      hostbuf=self._map_values)
-
-        return mle_ind_buffer, map_ind_buffer, mle_values_buffer, map_values_buffer
+        buffers = []
+        for state_array in self._state_arrays:
+            buffers.append(cl.Buffer(self._cl_run_context.context,
+                                     cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR,
+                                     hostbuf=state_array))
+        return buffers
 
     def _get_kernel_source(self):
         ll_func = self._model.get_log_likelihood_per_observation_function()
         prior_func = self._model.get_log_prior_function(address_space_parameter_vector='private')
 
         cl_func = ''
-        cl_func += ll_func.get_function()
-        cl_func += prior_func.get_function()
+        cl_func += ll_func.get_cl_code()
+        cl_func += prior_func.get_cl_code()
         nmr_params = self._model.get_nmr_estimable_parameters()
 
         kernel_param_names = ['global uint* mle_ind',

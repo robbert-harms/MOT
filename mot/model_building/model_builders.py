@@ -4,6 +4,7 @@ import numpy as np
 import copy
 from six import string_types
 from mot.cl_data_type import SimpleCLDataType
+from mot.cl_function import SimpleCLFunction
 from mot.cl_routines.mapping.codec_runner import CodecRunner
 from mot.cl_routines.sampling.metropolis_hastings import DefaultMHState
 from mot.model_building.model_function_priors import ModelFunctionPrior
@@ -116,7 +117,12 @@ class OptimizeModelBuilder(ModelBuilder):
         return ModelFunctionsInformation(model_tree, evaluation_model, signal_noise_model)
 
     def get_composite_model_function(self):
-        """Get the composite model function for the current model tree and possible signal noise model.
+        """Get the composite model function for the current model tree and possible signal decorator model.
+
+        The output model function of this class is a subclass of :class:`~mot.cl_function.CLFunction` meaning it can
+        be used to evaluate the model given some input parameters.
+
+        This function does not incorporate the evaluation model (Gaussian, Rician, etc.).
 
         Returns:
             CompositeModelFunction: the model function for the composite model
@@ -469,7 +475,7 @@ class OptimizeModelBuilder(ModelBuilder):
         eval_function_info = self._get_model_eval_function(problems_to_analyze)
 
         func_name = '_getResidual'
-        func = eval_function_info.get_function()
+        func = eval_function_info.get_cl_code()
         func += '''
             double ''' + func_name + '''(mot_data_struct* data, const mot_float_type* const x, uint observation_index){
                 return data->var_data_observations''' \
@@ -537,8 +543,8 @@ class OptimizeModelBuilder(ModelBuilder):
         preliminary = ''
         preliminary += self._evaluation_model.get_cl_dependency_code()
 
-        preliminary += eval_function_info.get_function()
-        preliminary += obs_func.get_function()
+        preliminary += eval_function_info.get_cl_code()
+        preliminary += obs_func.get_cl_code()
         preliminary += str(self._evaluation_model.get_objective_per_observation_function(
             '_evaluationModel', eval_function_info.get_name(), obs_func.get_name(), param_listing))
 
@@ -647,7 +653,7 @@ class OptimizeModelBuilder(ModelBuilder):
             else:
                 param_list.append('{}.{}'.format(model.name, param.name).replace('.', '_'))
 
-        return composite_model.cl_function_name + '(' + ', '.join(param_list) + ')'
+        return composite_model.get_cl_function_name() + '(' + ', '.join(param_list) + ')'
 
     def _get_parameters_listing(self, exclude_list=()):
         """Get the CL code for the parameter listing, this goes on top of the evaluate function.
@@ -1418,8 +1424,8 @@ class SampleModelBuilder(OptimizeModelBuilder):
         preliminary = ''
         preliminary += self._evaluation_model.get_cl_dependency_code()
 
-        preliminary += eval_function_info.get_function()
-        preliminary += obs_func.get_function()
+        preliminary += eval_function_info.get_cl_code()
+        preliminary += obs_func.get_cl_code()
 
         def builder(full_likelihood):
             func = preliminary + self._evaluation_model.get_log_likelihood_per_observation_function(
@@ -1448,7 +1454,7 @@ class SampleModelBuilder(OptimizeModelBuilder):
         return None
 
 
-class CompositeModelFunction(ModelFunction):
+class CompositeModelFunction(SimpleCLFunction):
 
     def __init__(self, model_tree, signal_noise_model=None):
         """The model function for the total constructed model.
@@ -1463,39 +1469,31 @@ class CompositeModelFunction(ModelFunction):
         """
         self._model_tree = model_tree
         self._signal_noise_model = signal_noise_model
-
         self._models = list(self._model_tree.get_compartment_models())
         if self._signal_noise_model:
             self._models.append(self._signal_noise_model)
         self._parameter_model_list = list((m, p) for m in self._models for p in m.get_parameters())
 
-    @property
-    def return_type(self):
-        return 'double'
-
-    @property
-    def cl_function_name(self):
-        return '_composite_model_function'
-
-    def get_parameters(self):
-        return [p.get_renamed(cl_name) for m, p, cl_name in self._get_model_function_parameters()]
+        super(CompositeModelFunction, self).__init__(
+            'double', '_composite_model_function',
+            [p.get_renamed(cl_name) for m, p, cl_name in self._get_model_function_parameters()],
+            dependency_list=self._models)
 
     def get_original_model_parameter_list(self):
-        """Get the model and parameter tuples for the model out of which this composite model was constructed."""
+        """Get the model and parameter tuples for the model out of which this composite model was constructed.
+
+        This is used by the model builder.
+
+        Returns:
+            list of tuple: the list of (model, parameter) tuples for each of the models and parameters.
+        """
         return [(m, p) for m, p, cl_name in self._get_model_function_parameters()]
 
     def get_cl_code(self):
-        dependencies = []
-        for model in self._models:
-            dependencies.append(model.get_cl_code())
-
         return_str = ''
-        return_str += '\n'.join(dependencies)
+        return_str += self._get_cl_dependency_code()
         return_str += self._get_model_function_cl_code()
         return return_str
-
-    def get_free_parameters(self):
-        return list([p for p in self.get_parameters() if isinstance(p, FreeParameter)])
 
     def _get_model_function_cl_code(self):
         """Get the CL code for the model function as build by this model.
@@ -1521,7 +1519,7 @@ class CompositeModelFunction(ModelFunction):
                 noise_params = ''
                 for p in self._signal_noise_model.get_free_parameters():
                     noise_params += '{}.{}'.format(self._signal_noise_model.name, p.name).replace('.', '_')
-                model_expression += '{}(({}), {});'.format(self._signal_noise_model.cl_function_name,
+                model_expression += '{}(({}), {});'.format(self._signal_noise_model.get_cl_function_name(),
                                                            tree, noise_params)
             else:
                 model_expression += '(' + tree + ');'
@@ -1542,12 +1540,10 @@ class CompositeModelFunction(ModelFunction):
 
                 return {model_expression}
             }}
-        '''.format(func_name=self.cl_function_name, params=indent(', \n'.join(build_parameters()), '    ' * 5)[20:],
+        '''.format(func_name=self.get_cl_function_name(),
+                   params=indent(', \n'.join(build_parameters()), '    ' * 5)[20:],
                    model_expression=build_model_expression())
         return dedent(return_str.replace('\t', '    '))
-
-    def _get_model_parameters_list(self):
-        pass
 
     def _get_model_function_parameters(self):
         """Get the parameters to use in the model function.
@@ -1589,7 +1585,7 @@ class CompositeModelFunction(ModelFunction):
                     param_list.append(param.name)
                 else:
                     param_list.append('{}.{}'.format(model.name, param.name).replace('.', '_'))
-            return model.cl_function_name + '(' + ', '.join(param_list) + ')'
+            return model.get_cl_function_name() + '(' + ', '.join(param_list) + ')'
 
         if not node.children:
             return model_to_string(node.data)
@@ -2056,7 +2052,7 @@ class ParameterTransformedModel(OptimizeModelInterface):
         old_modifier = self._model.get_pre_eval_parameter_modifier()
         new_fname = 'wrapped_' + old_modifier.get_name()
 
-        code = old_modifier.get_function()
+        code = old_modifier.get_cl_code()
         code += self._parameter_codec.get_parameter_decode_function('_decodeParameters')
         code += '''
             void ''' + new_fname + '''(mot_data_struct* data, mot_float_type* x){

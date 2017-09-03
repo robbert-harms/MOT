@@ -171,7 +171,7 @@ class Scalar(SimpleModelFunction):
             }}
             
             #endif // SCALAR_CL
-        '''.format(return_type=self.return_type, func_name=self.cl_function_name,
+        '''.format(return_type=self.get_return_type(), func_name=self.get_cl_function_name(),
                    input_type=self._parameter_list[0].data_type.get_declaration())
         return dedent(return_str.replace('\t', ' '*4))
 

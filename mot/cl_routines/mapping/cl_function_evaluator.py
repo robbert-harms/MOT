@@ -46,7 +46,7 @@ class CLFunctionEvaluator(CLRoutine):
         func = cl_function.get_cl_code()
         func += '''
             void ''' + func_name + '''(mot_data_struct* data){
-                data->_results[0] = ''' + cl_function.cl_function_name + '''(''' + ', '.join(func_args) + ''');  
+                data->_results[0] = ''' + cl_function.get_cl_function_name() + '''(''' + ', '.join(func_args) + ''');  
             }
         '''
         named_func = SimpleNamedCLFunction(func, func_name)
@@ -59,7 +59,7 @@ class CLFunctionEvaluator(CLRoutine):
 
         kernel_data.append(SimpleKernelInputData(
             '_results',
-            convert_data_to_dtype(np.ones(input_data[0].shape[0]), cl_function.return_type,
+            convert_data_to_dtype(np.ones(input_data[0].shape[0]), cl_function.get_return_type(),
                                   mot_float_type='double' if double_precision else 'float'),
             is_writable=True))
 

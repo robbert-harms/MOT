@@ -106,10 +106,11 @@ class ParameterProposal(object):
 
 class ProposalParameter(object):
 
-    def __init__(self, name, default_value, adaptable):
+    def __init__(self, name, default_value, adaptable, static=False):
         """Container class for parameters of a proposal function.
 
         Args:
+            name (str): the name of this parameter
             default_value (double): the parameter value
             adaptable (boolean): if this parameter is adaptable during sampling
 
@@ -237,12 +238,13 @@ class CircularGaussianProposal(SimpleProposal):
             proposal_update_function (mot.model_building.parameter_functions.proposal_updates.ProposalUpdate): the
                 proposal update function to use. Defaults to the one in the current mot configuration.
         """
-        parameters = [ProposalParameter('std', std, adaptable)]
+        parameters = [ProposalParameter('std', std, adaptable),
+                      ProposalParameter('modulus', modulus, False)]
         super(CircularGaussianProposal, self).__init__(
             '''
                 double x1 = std * frandn(rng_data) + current;
-                return x1 - floor(x1 / {modulus}) * {modulus};
-            '''.format(modulus=modulus),
+                return x1 - floor(x1 / modulus) * modulus;
+            ''',
             'circular_gaussian',
             parameters,
             proposal_update_function=proposal_update_function

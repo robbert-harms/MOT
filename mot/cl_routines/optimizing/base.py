@@ -363,8 +363,8 @@ class AbstractParallelOptimizerWorker(Worker):
         param_modifier = self._model.get_pre_eval_parameter_modifier()
 
         kernel_source = ''
-        kernel_source += objective_function.get_function()
-        kernel_source += param_modifier.get_function()
+        kernel_source += objective_function.get_cl_code()
+        kernel_source += param_modifier.get_cl_code()
         kernel_source += '''
             double evaluate(mot_float_type* x, void* data_void){
                 

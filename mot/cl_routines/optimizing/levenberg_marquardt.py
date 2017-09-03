@@ -127,8 +127,8 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
         param_modifier = self._model.get_pre_eval_parameter_modifier()
 
         kernel_source = ''
-        kernel_source += objective_func.get_function()
-        kernel_source += param_modifier.get_function()
+        kernel_source += objective_func.get_cl_code()
+        kernel_source += param_modifier.get_cl_code()
         kernel_source += '''
             void evaluate(mot_float_type* x, void* data_void, mot_float_type* result){
                 mot_data_struct* data = (mot_data_struct*)data_void;

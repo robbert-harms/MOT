@@ -375,14 +375,14 @@ class _MCMCKernelBuilder(object):
         kernel_source += self._get_rng_functions()
 
         kernel_source += self._data_struct_manager.get_struct_definition()
-        kernel_source += self._prior_func.get_function()
-        kernel_source += self._proposal_func.get_function()
+        kernel_source += self._prior_func.get_cl_code()
+        kernel_source += self._proposal_func.get_cl_code()
 
         if self._use_adaptive_proposals:
-            kernel_source += self._proposal_state_update_func.get_function()
+            kernel_source += self._proposal_state_update_func.get_cl_code()
 
         if not self._model.is_proposal_symmetric():
-            kernel_source += self._proposal_logpdf_func.get_function()
+            kernel_source += self._proposal_logpdf_func.get_cl_code()
 
         kernel_source += self._get_log_likelihood_functions()
         kernel_source += self._get_state_update_functions()
@@ -556,7 +556,7 @@ class _MCMCKernelBuilder(object):
     def _get_log_likelihood_functions(self):
         ll_func = self._model.get_log_likelihood_per_observation_function(full_likelihood=False)
 
-        kernel_source = ll_func.get_function()
+        kernel_source = ll_func.get_cl_code()
         kernel_source += '''
             void _fill_log_likelihood_tmp(mot_data_struct* data,
                                           local mot_float_type* const x_local,

@@ -67,7 +67,7 @@ class JohnsonNoise(SignalNoiseModel):
             #ifndef JOHNSON_NOISE_MODEL
             #define JOHNSON_NOISE_MODEL
         
-            double ''' + self.cl_function_name + '''(double signal, double eta){
+            double ''' + self.get_cl_function_name() + '''(double signal, double eta){
                 return sqrt((signal * signal) + (eta * eta));
             }
             

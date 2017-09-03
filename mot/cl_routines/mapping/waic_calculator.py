@@ -181,7 +181,7 @@ class _LLWorker(Worker):
         kernel_source = ''
         kernel_source += get_float_type_def(self._double_precision)
         kernel_source += self._data_struct_manager.get_struct_definition()
-        kernel_source += obs_func.get_function()
+        kernel_source += obs_func.get_cl_code()
         kernel_source += r'''
             __kernel void run_kernel(
                 ''' + ",\n".join(kernel_param_names) + '''

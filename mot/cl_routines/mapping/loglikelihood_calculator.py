@@ -118,7 +118,7 @@ class _LogLikelihoodCalculatorWorker(Worker):
     def _get_kernel_source(self):
         ll_func = self._model.get_log_likelihood_per_observation_function()
 
-        cl_func = ll_func.get_function()
+        cl_func = ll_func.get_cl_code()
         nmr_params = self._parameters.shape[1]
 
         kernel_param_names = ['global mot_float_type* params', 'global mot_float_type* log_likelihoods']

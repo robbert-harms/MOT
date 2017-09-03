@@ -355,7 +355,7 @@ def all_logging_disabled(highest_level=logging.CRITICAL):
 
 class NamedCLFunction(object):
 
-    def get_function(self):
+    def get_cl_code(self):
         """Return the CL function.
 
         Returns:
@@ -378,7 +378,7 @@ class SimpleNamedCLFunction(NamedCLFunction):
         self._function = function
         self._name = name
 
-    def get_function(self):
+    def get_cl_code(self):
         return self._function
 
     def get_name(self):
