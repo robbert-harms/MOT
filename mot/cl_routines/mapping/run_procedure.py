@@ -43,7 +43,7 @@ class _ProcedureWorker(Worker):
     def __init__(self, cl_environment, compile_flags, named_cl_function, kernel_data, double_precision):
         super(_ProcedureWorker, self).__init__(cl_environment)
         self._cl_func = named_cl_function.get_cl_code()
-        self._cl_func_name = named_cl_function.get_name()
+        self._cl_func_name = named_cl_function.get_cl_function_name()
         self._kernel_data = kernel_data
         self._double_precision = double_precision
 

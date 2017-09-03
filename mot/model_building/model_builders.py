@@ -4,7 +4,7 @@ import numpy as np
 import copy
 from six import string_types
 from mot.cl_data_type import SimpleCLDataType
-from mot.cl_function import SimpleCLFunction
+from mot.cl_function import AbstractCLFunction
 from mot.cl_routines.mapping.codec_runner import CodecRunner
 from mot.cl_routines.sampling.metropolis_hastings import DefaultMHState
 from mot.model_building.model_function_priors import ModelFunctionPrior
@@ -480,7 +480,7 @@ class OptimizeModelBuilder(ModelBuilder):
             double ''' + func_name + '''(mot_data_struct* data, const mot_float_type* const x, uint observation_index){
                 return data->var_data_observations''' \
                     + ('[observation_index]' if self.get_nmr_inst_per_problem() > 1 else '') + ''' - 
-                    ''' + eval_function_info.get_name() + '''(data, x, observation_index);
+                    ''' + eval_function_info.get_cl_function_name() + '''(data, x, observation_index);
             }
         '''
         return SimpleNamedCLFunction(func, func_name)
@@ -546,7 +546,7 @@ class OptimizeModelBuilder(ModelBuilder):
         preliminary += eval_function_info.get_cl_code()
         preliminary += obs_func.get_cl_code()
         preliminary += str(self._evaluation_model.get_objective_per_observation_function(
-            '_evaluationModel', eval_function_info.get_name(), obs_func.get_name(), param_listing))
+            '_evaluationModel', eval_function_info.get_cl_function_name(), obs_func.get_cl_function_name(), param_listing))
 
         func_name = 'getObjectiveInstanceValue'
         func = str(preliminary) + '''
@@ -1429,8 +1429,8 @@ class SampleModelBuilder(OptimizeModelBuilder):
 
         def builder(full_likelihood):
             func = preliminary + self._evaluation_model.get_log_likelihood_per_observation_function(
-                func_name, eval_function_info.get_name(),
-                obs_func.get_name(), param_listing,
+                func_name, eval_function_info.get_cl_function_name(),
+                obs_func.get_cl_function_name(), param_listing,
                 full_likelihood=full_likelihood)
             return SimpleNamedCLFunction(func, func_name)
 
@@ -1454,7 +1454,7 @@ class SampleModelBuilder(OptimizeModelBuilder):
         return None
 
 
-class CompositeModelFunction(SimpleCLFunction):
+class CompositeModelFunction(AbstractCLFunction):
 
     def __init__(self, model_tree, signal_noise_model=None):
         """The model function for the total constructed model.
@@ -2050,14 +2050,14 @@ class ParameterTransformedModel(OptimizeModelInterface):
 
     def get_pre_eval_parameter_modifier(self):
         old_modifier = self._model.get_pre_eval_parameter_modifier()
-        new_fname = 'wrapped_' + old_modifier.get_name()
+        new_fname = 'wrapped_' + old_modifier.get_cl_function_name()
 
         code = old_modifier.get_cl_code()
         code += self._parameter_codec.get_parameter_decode_function('_decodeParameters')
         code += '''
             void ''' + new_fname + '''(mot_data_struct* data, mot_float_type* x){
                 _decodeParameters(data, x);
-                ''' + old_modifier.get_name() + '''(data, x);
+                ''' + old_modifier.get_cl_function_name() + '''(data, x);
             }
         '''
         return SimpleNamedCLFunction(code, new_fname)

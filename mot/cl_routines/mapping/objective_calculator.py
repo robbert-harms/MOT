@@ -106,11 +106,11 @@ class _ObjectiveCalculatorWorker(Worker):
         kernel_source += param_modifier.get_cl_code()
         kernel_source += '''
             double _evaluate(mot_data_struct* data, mot_float_type* x){
-                ''' + param_modifier.get_name() + '''(data, x);
+                ''' + param_modifier.get_cl_function_name() + '''(data, x);
                 
                 double sum = 0;
                 for(uint i = 0; i < ''' + str(self._model.get_nmr_inst_per_problem()) + '''; i++){
-                    sum += pown(''' + objective_function.get_name() + '''(data, x, i), 2);
+                    sum += pown(''' + objective_function.get_cl_function_name() + '''(data, x, i), 2);
                 }
                 return sum;
             }

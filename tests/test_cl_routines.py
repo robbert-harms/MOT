@@ -169,8 +169,8 @@ class Rosenbrock(OptimizeModelInterface):
         func_name = "getResidual"
         func += '''
             mot_float_type ''' + func_name + '''(void* data, const mot_float_type* const x, observation_index){
-                return ''' + obs_func.get_name() + '''(data, observation_index) -
-                            ''' + eval_func.get_name() + '''(data, x, observation_index);
+                return ''' + obs_func.get_cl_function_name() + '''(data, observation_index) -
+                            ''' + eval_func.get_cl_function_name() + '''(data, x, observation_index);
             }
         '''
         return SimpleNamedCLFunction(func, func_name)
@@ -194,8 +194,8 @@ class Rosenbrock(OptimizeModelInterface):
         func_name = "getObjectiveInstanceValue"
         func += '''
             mot_float_type ''' + func_name + '''(void* data, const mot_float_type* const x, uint observation_index){
-                return ''' + obs_func.get_name() + '''(data, observation_index) -
-                            ''' + eval_func.get_name() + '''(data, x, observation_index);
+                return ''' + obs_func.get_cl_function_name() + '''(data, observation_index) -
+                            ''' + eval_func.get_cl_function_name() + '''(data, x, observation_index);
             }
         '''
         return SimpleNamedCLFunction(func, func_name)
@@ -290,8 +290,8 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
         func_name = "getResidual"
         func += '''
             mot_float_type ''' + func_name + '''(void* data, const mot_float_type* const x, uint observation_index){
-                return ''' + obs_func.get_name() + '''(data, observation_index) -
-                            ''' + eval_func.get_name() + '''(data, x, observation_index);
+                return ''' + obs_func.get_cl_function_name() + '''(data, observation_index) -
+                            ''' + eval_func.get_cl_function_name() + '''(data, x, observation_index);
             }
         '''
         return SimpleNamedCLFunction(func, func_name)
@@ -307,8 +307,8 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
 
         func += '''
             mot_float_type ''' + func_name + '''(void* data, const mot_float_type* const x, uint observation_index){
-                return ''' + obs_func.get_name() + '''(data, observation_index) -
-                            ''' + eval_func.get_name() + '''(data, x, observation_index);
+                return ''' + obs_func.get_cl_function_name() + '''(data, observation_index) -
+                            ''' + eval_func.get_cl_function_name() + '''(data, x, observation_index);
             }
         '''
         return SimpleNamedCLFunction(func, func_name)

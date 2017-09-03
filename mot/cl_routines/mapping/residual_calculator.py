@@ -115,10 +115,10 @@ class _ResidualCalculatorWorker(Worker):
 
                     global mot_float_type* result = errors + gid * NMR_INST_PER_PROBLEM;
                     
-                    ''' + param_modifier.get_name() + '''(&data, x);
+                    ''' + param_modifier.get_cl_function_name() + '''(&data, x);
                                         
                     for(uint i = 0; i < NMR_INST_PER_PROBLEM; i++){
-                        result[i] = ''' + residual_function.get_name() + '''(&data, x, i);
+                        result[i] = ''' + residual_function.get_cl_function_name() + '''(&data, x, i);
                     }
             }
         '''

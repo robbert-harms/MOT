@@ -139,7 +139,7 @@ class _MaxFinderWorker(Worker):
             double _calculate_log_likelihood(void* data, const mot_float_type* const x){
                 double ll = 0;
                 for(uint i = 0; i < ''' + str(self._model.get_nmr_inst_per_problem()) + '''; i++){
-                    ll += ''' + ll_func.get_name() + '''(data, x, i);
+                    ll += ''' + ll_func.get_cl_function_name() + '''(data, x, i);
                 }
                 return ll;
             }
@@ -164,7 +164,7 @@ class _MaxFinderWorker(Worker):
                                            + i * nmr_samples_per_problem + sample_ind];
                         }
 
-                        prior = ''' + prior_func.get_name() + '''((void*)&data, x);
+                        prior = ''' + prior_func.get_cl_function_name() + '''((void*)&data, x);
                         ll = _calculate_log_likelihood((void*)&data, x);
                     }
             }

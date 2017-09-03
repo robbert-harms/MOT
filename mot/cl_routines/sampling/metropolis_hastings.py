@@ -435,7 +435,7 @@ class _MCMCKernelBuilder(object):
                             sampling_counter[j]++;
                         }
 
-                        ''' + (self._proposal_state_update_func.get_name() +
+                        ''' + (self._proposal_state_update_func.get_cl_function_name() +
                                '(proposal_state, sampling_counter, acceptance_counter' +
                                 (', parameter_variance' if self._update_parameter_variances else '')
                                     + ');'
@@ -497,7 +497,7 @@ class _MCMCKernelBuilder(object):
                         x_local[i] = current_chain_position[problem_ind * ''' + str(self._nmr_params) + ''' + i];
                     }
 
-                    current_prior = ''' + self._prior_func.get_name() + '''(&data, x_local);
+                    current_prior = ''' + self._prior_func.get_cl_function_name() + '''(&data, x_local);
                 }
 
                 _fill_log_likelihood_tmp(&data, x_local, log_likelihood_tmp);
@@ -576,7 +576,7 @@ class _MCMCKernelBuilder(object):
                     observation_ind = i * workgroup_size + local_id;
 
                     if(observation_ind < NMR_INST_PER_PROBLEM){
-                        log_likelihood_tmp[local_id] += ''' + ll_func.get_name() + '''(
+                        log_likelihood_tmp[local_id] += ''' + ll_func.get_cl_function_name() + '''(
                             data, x_private, observation_ind);
                     }
                 }
@@ -624,10 +624,10 @@ class _MCMCKernelBuilder(object):
                         random_nmr = frand(rng_data);
 
                         old_x = x_local[k];
-                        x_local[k] = ''' + self._proposal_func.get_name() + \
+                        x_local[k] = ''' + self._proposal_func.get_cl_function_name() + \
                             '''(k, x_local[k], rng_data, proposal_state);
 
-                        new_prior = ''' + self._prior_func.get_name() + '''(data, x_local);
+                        new_prior = ''' + self._prior_func.get_cl_function_name() + '''(data, x_local);
                     }
                     barrier(CLK_LOCAL_MEM_FENCE);
                     
@@ -645,9 +645,9 @@ class _MCMCKernelBuilder(object):
         else:
             kernel_source += '''
                             mot_float_type x_to_prop = ''' + \
-                             self._proposal_logpdf_func.get_name() + '''(k, old_x, x_local[k], proposal_state);
+                             self._proposal_logpdf_func.get_cl_function_name() + '''(k, old_x, x_local[k], proposal_state);
                             mot_float_type prop_to_x = ''' + \
-                             self._proposal_logpdf_func.get_name() + '''(k, x_local[k], x_local[k], proposal_state);
+                             self._proposal_logpdf_func.get_cl_function_name() + '''(k, x_local[k], x_local[k], proposal_state);
 
                             bayesian_f = exp((new_likelihood + new_prior + x_to_prop) -
                                                 (*current_likelihood + *current_prior + prop_to_x));

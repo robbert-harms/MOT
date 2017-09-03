@@ -3,7 +3,7 @@ from textwrap import indent, dedent
 
 from pkg_resources import resource_filename
 
-from mot.cl_function import CLFunction, SimpleCLFunction
+from mot.cl_function import CLFunction, AbstractCLFunction
 from mot.cl_parameter import CLFunctionParameter
 
 __author__ = 'Robbert Harms'
@@ -16,7 +16,7 @@ class CLLibrary(CLFunction):
     pass
 
 
-class SimpleCLLibrary(CLLibrary, SimpleCLFunction):
+class SimpleCLLibrary(CLLibrary, AbstractCLFunction):
 
     def __init__(self, return_type, cl_function_name, parameter_list, cl_code, dependency_list=()):
         """Python wrapper for library CL code.

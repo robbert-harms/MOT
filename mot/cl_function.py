@@ -57,10 +57,13 @@ class CLFunction(object):
         raise NotImplementedError()
 
 
-class SimpleCLFunction(CLFunction):
+class AbstractCLFunction(CLFunction):
 
     def __init__(self, return_type, cl_function_name, parameter_list, dependency_list=()):
-        """This CL function is for all estimable models
+        """A simple abstract implementation of a CL function.
+
+        Most of the requirements of a CL function are satisfied by the constructor arguments, only the CL code remains.
+        This needs to be overridden by an implementing subclass.
 
         Args:
             return_type (str): the CL return type of the function

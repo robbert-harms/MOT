@@ -363,7 +363,7 @@ class NamedCLFunction(object):
         """
         raise NotImplementedError()
 
-    def get_name(self):
+    def get_cl_function_name(self):
         """Get the CL name of this function.
 
         Returns:
@@ -381,7 +381,7 @@ class SimpleNamedCLFunction(NamedCLFunction):
     def get_cl_code(self):
         return self._function
 
-    def get_name(self):
+    def get_cl_function_name(self):
         return self._name
 
     def __repr__(self):

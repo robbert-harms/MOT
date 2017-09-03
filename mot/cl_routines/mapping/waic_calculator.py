@@ -197,7 +197,7 @@ class _LLWorker(Worker):
                     }
 
                     lls[obs_ind * ''' + str(self._nmr_samples) + ''' + sample_ind] =
-                        ''' + obs_func.get_name() + '''(&data, x, obs_ind);
+                        ''' + obs_func.get_cl_function_name() + '''(&data, x, obs_ind);
                 }
         '''
         return kernel_source

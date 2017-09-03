@@ -375,11 +375,11 @@ class AbstractParallelOptimizerWorker(Worker):
                     x_model[i] = x[i];
                 }
                 
-                ''' + param_modifier.get_name() + '''(data, x_model);
+                ''' + param_modifier.get_cl_function_name() + '''(data, x_model);
                 
                 double sum = 0;
                 for(uint i = 0; i < ''' + str(self._model.get_nmr_inst_per_problem()) + '''; i++){
-                    sum += pown(''' + objective_function.get_name() + '''(data, x_model, i), 2);
+                    sum += pown(''' + objective_function.get_cl_function_name() + '''(data, x_model, i), 2);
                 }
                 return sum;
             }

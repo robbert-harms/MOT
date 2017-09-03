@@ -132,7 +132,7 @@ class _LogLikelihoodCalculatorWorker(Worker):
             double _calculate_log_likelihood(mot_data_struct* data, const mot_float_type* const x){
                 double ll = 0;
                 for(uint i = 0; i < ''' + str(self._model.get_nmr_inst_per_problem()) + '''; i++){
-                    ll += ''' + ll_func.get_name() + '''(data, x, i);
+                    ll += ''' + ll_func.get_cl_function_name() + '''(data, x, i);
                 }
                 return ll;
             }

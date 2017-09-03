@@ -137,10 +137,10 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
                 for(uint i = 0; i < ''' + str(self._model.get_nmr_estimable_parameters()) + '''; i++){
                     x_model[i] = x[i];
                 }
-                ''' + param_modifier.get_name() + '''(data, x_model);
+                ''' + param_modifier.get_cl_function_name() + '''(data, x_model);
                 
                 for(uint i = 0; i < ''' + str(self._model.get_nmr_inst_per_problem()) + '''; i++){
-                    result[i] = ''' + objective_func.get_name() + '''(data, x_model, i);
+                    result[i] = ''' + objective_func.get_cl_function_name() + '''(data, x_model, i);
                 }
             }
         '''

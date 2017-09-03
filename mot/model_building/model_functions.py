@@ -1,6 +1,6 @@
 from textwrap import dedent
 from mot.cl_data_type import SimpleCLDataType
-from mot.cl_function import CLFunction, SimpleCLFunction
+from mot.cl_function import CLFunction, AbstractCLFunction
 from mot.model_building.model_function_priors import ModelFunctionPrior
 from mot.model_building.parameters import FreeParameter
 from mot.model_building.parameter_functions.priors import ARDGaussian, UniformWithinBoundsPrior, ARDBeta
@@ -55,7 +55,7 @@ class SampleModelFunction(ModelFunction):
         raise NotImplementedError()
 
 
-class SimpleModelFunction(SampleModelFunction, SimpleCLFunction):
+class SimpleModelFunction(SampleModelFunction, AbstractCLFunction):
 
     def __init__(self, return_type, name, cl_function_name, parameter_list, dependency_list=(),
                  model_function_priors=None):
