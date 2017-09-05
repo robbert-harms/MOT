@@ -1,9 +1,10 @@
+from mot.model_building.model_functions import SimpleModelFunction
+
 from mot.cl_function import SimpleCLFunction
 from mot.cl_parameter import CLFunctionParameter
 from mot.model_building.parameters import FreeParameter
 from mot.library_functions import LogBesseli0
 from mot.model_building.parameter_functions.transformations import ClampTransform
-from mot.cl_data_type import SimpleCLDataType
 
 
 __author__ = 'Robbert Harms'
@@ -13,7 +14,7 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class EvaluationModel(object):
+class EvaluationModel(SimpleModelFunction):
 
     def __init__(self, name, cl_function_name, parameter_list, noise_std_param_name=None, prior_parameters=None):
         """The evaluation model is the model under which you evaluate your model estimates against observations.
@@ -28,15 +29,14 @@ class EvaluationModel(object):
             parameter_list (list or tuple): the list of parameters this model requires to function correctly
             prior_parameters (list or tuple): the list of prior parameters
         """
-        self._name = name
-        self._cl_function_name = cl_function_name
-        self._parameter_list = parameter_list
+        super(EvaluationModel, self).__init__('double', name, cl_function_name, parameter_list, '')
         self._noise_std_param_name = noise_std_param_name
-        self._prior_parameters = prior_parameters or []
 
-    @property
-    def name(self):
-        return self._name
+    def evaluate(self, inputs, double_precision=False):
+        raise TypeError('The evaluation model can not be evaluated directly. '
+                        'This class is only a proxy for the objective function and the log likelihood function.'
+                        'Use `get_objective_per_observation_function` or `get_log_likelihood_per_observation_function`'
+                        'and evaluate those.')
 
     def get_noise_std_param_name(self):
         """Get the name of the parameter that is associated with the noise standard deviation in the problem data.
@@ -45,42 +45,6 @@ class EvaluationModel(object):
             str: the name of the parameter that is associated with the noise_std in the problem data.
         """
         return self._noise_std_param_name
-
-    def get_free_parameters(self):
-        """Get the free parameters in this evaluation model. Assumed to be equal for both the objective and LL function.
-        """
-        return self._parameter_list
-
-    def get_parameters(self):
-        return self._parameter_list
-
-    def get_model_function_priors(self):
-        return ''
-
-    def get_prior_parameters(self, parameter):
-        """Get the parameters referred to by the priors of the free parameters.
-
-        This returns a list of all the parameters referenced by the prior parameters, recursively.
-
-        Returns:
-            list of parameters: the list of additional parameters in the prior for the given parameter
-        """
-        def get_prior_parameters(params):
-            return_params = []
-
-            for param in params:
-                prior_params = param.sampling_prior.get_parameters()
-                proxy_prior_params = [prior_param.get_renamed('{}.prior.{}'.format(param.name, prior_param.name))
-                                      for prior_param in prior_params]
-
-                return_params.extend(proxy_prior_params)
-
-                free_prior_params = [p for p in proxy_prior_params if isinstance(p, FreeParameter)]
-                return_params.extend(get_prior_parameters(free_prior_params))
-
-            return return_params
-
-        return get_prior_parameters([parameter])
 
     def get_objective_per_observation_function(self):
         """Get the function to evaluate the objective for a given observation and estimate under this noise model.
@@ -114,9 +78,23 @@ class SumOfSquaresEvaluationModel(EvaluationModel):
     def __init__(self):
         """Evaluates the distance between the estimated signal and the data using the sum of squared differences.
 
-        This is implemented as::
+        This is implemented as:
+
+        .. code-block:: c
 
             sum((observation - evaluation)^2)
+
+        Since the optimization routines will square and sum the results, we only need to return:
+
+        .. code-block:: c
+
+            observation - evaluation
+
+        And for sampling we return:
+
+        .. code-block:: c
+
+             -pown(observation - model_evaluation, 2)
         """
         super(SumOfSquaresEvaluationModel, self).__init__('SumOfSquaresNoise', 'sumOfSquaresNoise', (), None)
 
@@ -174,17 +152,23 @@ class GaussianEvaluationModel(EvaluationModel):
             log(PDF) = - ((observation - evaluation)^2 / (2 * sigma^2)) - log(sigma * sqrt(2*pi))
 
 
-        For the maximum likelihood estimator we then need to use the negative of this sum:
+        Since the optimization routines are minimization routines, we need use the negative of this sum:
 
         .. code-block:: c
 
-            - sum(log(PDF)).
+            = - sum(log(PDF))
+
+        as maximum likelihood estimator for the optimization routines. Furthermore, since the optimization
+        routines already square and sum the results, we return here:
+
+        .. code-block:: c
+
+            - sqrt(log(PDF))
         """
         super(GaussianEvaluationModel, self).__init__(
             'GaussianNoise',
             'gaussianNoiseModel',
-            (FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'sigma', True, 1, 0, 'INFINITY',
-                           parameter_transform=ClampTransform()),),
+            (FreeParameter('mot_float_type', 'sigma', True, 1, 0, 'INFINITY', parameter_transform=ClampTransform()),),
             'sigma')
 
     def get_objective_per_observation_function(self):
@@ -194,8 +178,7 @@ class GaussianEvaluationModel(EvaluationModel):
 
          .. code-block:: c
 
-            + log(GaussianNoise_sigma * sqrt(2 * M_PI))
-
+            + log(sigma * sqrt(2 * M_PI))
         """
         cl_code = '''
             double gaussianEvaluationModel(double observation, double model_evaluation, mot_float_type sigma){
@@ -251,17 +234,18 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
 
             log(PDF) = - ((observation - sqrt(evaluation^2 + sigma^2))^2 / (2 * sigma^2)) - log(sigma * sqrt(2*pi))
 
-        For the maximum likelihood estimator we use the negative of this sum:
+        For the maximum likelihood estimator we need to use the negative of the log(PDF) since the optimization routines
+        are minimization routines, and since the optimization routines already take the square and sum the results,
+        we return here as MLE objective function:
 
         .. code-block:: c
 
-            -sum_n(log(PDF)).
+            - sqrt(log(PDF)).
         """
         super(OffsetGaussianEvaluationModel, self).__init__(
             'OffsetGaussianNoise',
             'offsetGaussianNoiseModel',
-            (FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'sigma', True, 1, 0, 'INFINITY',
-                           parameter_transform=ClampTransform()),),
+            (FreeParameter('mot_float_type', 'sigma', True, 1, 0, 'INFINITY', parameter_transform=ClampTransform()),),
             'sigma')
 
     def get_objective_per_observation_function(self):
@@ -271,7 +255,7 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
 
          .. code-block:: c
 
-            (+ log(OffsetGaussianNoise_sigma * sqrt(2 * M_PI)))
+            (+ log(sigma * sqrt(2 * M_PI)))
         """
         cl_code = '''
             double offsetGaussianEvaluationModel(double observation, double model_evaluation, mot_float_type sigma){
@@ -333,17 +317,18 @@ class RicianEvaluationModel(EvaluationModel):
                         - (observation^2 + evaluation^2) / (2 * sigma^2)
                         + log(bessel_i0((observation * evaluation) / sigma^2))
 
-        For the maximum likelihood estimator we use the negative of this sum:
+        For the maximum likelihood estimator we need to use the negative of the log(PDF) since the optimization routines
+        are minimization routines, and since the optimization routines already take the square and sum the results,
+        we return here as MLE objective function:
 
         .. code-block:: c
 
-            -sum(log(PDF)).
+            - sqrt(log(PDF)).
         """
         super(RicianEvaluationModel, self).__init__(
             'RicianNoise',
             'ricianNoiseModel',
-            (FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'sigma', True, 1, 0, 'INFINITY',
-                           parameter_transform=ClampTransform()),),
+            (FreeParameter('mot_float_type', 'sigma', True, 1, 0, 'INFINITY', parameter_transform=ClampTransform()),),
             'sigma')
 
     def get_objective_per_observation_function(self):
@@ -353,14 +338,15 @@ class RicianEvaluationModel(EvaluationModel):
 
          .. code-block:: c
 
-            + log(observation / (sigma * sigma))
+            + log(observation/sigma^2)
             - ((observation * observation) / (2 * (sigma * sigma)))
 
         """
         cl_code = '''
             double ricianEvaluationModel(double observation, double model_evaluation, mot_float_type sigma){
-                return - ((model_evaluation * model_evaluation) / (2 * sigma * sigma))
-                            + log_bessel_i0((observation * model_evaluation) / (sigma * sigma));
+                return sqrt(log_bessel_i0((observation * model_evaluation) / (sigma * sigma)) 
+                            - ((model_evaluation * model_evaluation) / (2 * sigma * sigma))
+                           );
             }
         '''
         return SimpleCLFunction('double', 'ricianEvaluationModel',

@@ -88,7 +88,7 @@ class FreeParameter(CLFunctionParameter):
         These parameters may optionally be fixed to a value or list of values for all voxels.
 
         Args:
-            data_type (mot.cl_data_type.SimpleCLDataType): the data type expected by this parameter
+            data_type (str or mot.cl_data_type.SimpleCLDataType): the data type expected by this parameter
             name (str): The name of this parameter
             fixed (boolean): If this parameter is fixed to the value given
             value (double or ndarray): A single value for all voxels or a list of values for each voxel
