@@ -4,7 +4,7 @@ import numpy as np
 import copy
 from six import string_types
 from mot.cl_data_type import SimpleCLDataType
-from mot.cl_function import AbstractCLFunction
+from mot.cl_function import SimpleCLFunction
 from mot.cl_routines.mapping.codec_runner import CodecRunner
 from mot.cl_routines.sampling.metropolis_hastings import DefaultMHState
 from mot.model_building.model_function_priors import ModelFunctionPrior
@@ -117,12 +117,13 @@ class OptimizeModelBuilder(ModelBuilder):
         return ModelFunctionsInformation(model_tree, evaluation_model, signal_noise_model)
 
     def get_composite_model_function(self):
-        """Get the composite model function for the current model tree and possible signal decorator model.
+        """Get the composite model function for the current model tree.
 
         The output model function of this class is a subclass of :class:`~mot.cl_function.CLFunction` meaning it can
         be used to evaluate the model given some input parameters.
 
-        This function does not incorporate the evaluation model (Gaussian, Rician, etc.).
+        This function does not incorporate the evaluation model (Gaussian, Rician, etc.), but does incorporate the
+        signal noise model (JohnsonNoise for example).
 
         Returns:
             CompositeModelFunction: the model function for the composite model
@@ -425,17 +426,22 @@ class OptimizeModelBuilder(ModelBuilder):
         return len(problems_to_analyze)
 
     def _get_kernel_data(self, problems_to_analyze):
-        data_list = []
+        data_items = {}
+
+        observations = self._get_observations_data(problems_to_analyze)
+        if observations is not None:
+            data_items['observations'] = SimpleKernelInputData(observations)
+
         for key, cl_data in self._get_variable_data(problems_to_analyze).items():
             as_value = len(cl_data.shape) == 1 or cl_data.shape[1] == 1
-            data_list.append(SimpleKernelInputData('var_data_' + str(key), cl_data, as_pointer=not as_value))
+            data_items['var_data_' + str(key)] = SimpleKernelInputData(cl_data, as_pointer=not as_value)
 
         for key, cl_data in self._get_protocol_data().items():
-            data_list.append(SimpleKernelInputData('protocol_data_' + str(key), cl_data, offset_str='0'))
+            data_items['protocol_data_' + str(key)] = SimpleKernelInputData(cl_data, offset_str='0')
 
         for key, cl_data in self._get_model_data().items():
-            data_list.append(SimpleKernelInputData('model_data_' + str(key), cl_data, offset_str='0'))
-        return data_list
+            data_items['model_data_' + str(key)] = SimpleKernelInputData(cl_data, offset_str='0')
+        return data_items
 
     def _get_initial_parameters(self, problems_to_analyze):
         np_dtype = np.float32
@@ -478,8 +484,7 @@ class OptimizeModelBuilder(ModelBuilder):
         func = eval_function_info.get_cl_code()
         func += '''
             double ''' + func_name + '''(mot_data_struct* data, const mot_float_type* const x, uint observation_index){
-                return data->var_data_observations''' \
-                    + ('[observation_index]' if self.get_nmr_inst_per_problem() > 1 else '') + ''' - 
+                return data->observations[observation_index] - 
                     ''' + eval_function_info.get_cl_function_name() + '''(data, x, observation_index);
             }
         '''
@@ -534,24 +539,28 @@ class OptimizeModelBuilder(ModelBuilder):
 
     def _get_objective_per_observation_function(self, problems_to_analyze):
         eval_function_info = self._get_model_eval_function(problems_to_analyze)
-        obs_func = self._get_observation_return_function()
+        eval_model_func = self._evaluation_model.get_objective_per_observation_function()
 
+        eval_call_args = ['observation', 'model_evaluation']
         param_listing = ''
         for p in self._evaluation_model.get_free_parameters():
             param_listing += self._get_param_listing_for_param(self._evaluation_model, p)
+            eval_call_args.append('{}.{}'.format(self._evaluation_model.name, p.name).replace('.', '_'))
 
         preliminary = ''
-        preliminary += self._evaluation_model.get_cl_dependency_code()
-
         preliminary += eval_function_info.get_cl_code()
-        preliminary += obs_func.get_cl_code()
-        preliminary += str(self._evaluation_model.get_objective_per_observation_function(
-            '_evaluationModel', eval_function_info.get_cl_function_name(), obs_func.get_cl_function_name(), param_listing))
+        preliminary += eval_model_func.get_cl_code()
 
         func_name = 'getObjectiveInstanceValue'
         func = str(preliminary) + '''
             double ''' + func_name + '''(mot_data_struct* data, const mot_float_type* const x, uint observation_index){
-                return _evaluationModel(data, x, observation_index);
+                double observation = data->observations[observation_index];
+                double model_evaluation = ''' + eval_function_info.get_cl_function_name() + '''(
+                    data, x, observation_index);
+                
+                ''' + param_listing + '''
+                
+                return ''' + eval_model_func.get_cl_function_name() + '''(''' + ','.join(eval_call_args) + ''');
             }
         '''
         return SimpleNamedCLFunction(func, func_name)
@@ -591,8 +600,7 @@ class OptimizeModelBuilder(ModelBuilder):
         func_name = '_getObservation'
         func = '''
             double ''' + func_name + '''(mot_data_struct* data, uint observation_index){
-                return data->var_data_observations''' \
-                    + ('[observation_index]' if self.get_nmr_inst_per_problem() > 1 else '') + ''';
+                return data->observations[observation_index];
             }
         '''
         return SimpleNamedCLFunction(func, func_name)
@@ -623,7 +631,7 @@ class OptimizeModelBuilder(ModelBuilder):
             problems_to_analyze (list): the problems we are analyzing in this round
         """
         param_list = []
-        for model, param in composite_model.get_original_model_parameter_list():
+        for model, param in composite_model.get_model_parameter_list():
             if isinstance(param, ProtocolParameter):
                 param_list.append(param.name)
 
@@ -647,8 +655,7 @@ class OptimizeModelBuilder(ModelBuilder):
                         param_list.append('data->var_data_' + '{}.{}'.format(model.name, param.name).replace('.', '_'))
 
             elif isinstance(param, CurrentObservationParam):
-                param_list.append('data->var_data_observations'
-                                  + ('[observation_index]' if self.get_nmr_inst_per_problem() > 1 else ''))
+                param_list.append('data->observations[observation_index]')
 
             else:
                 param_list.append('{}.{}'.format(model.name, param.name).replace('.', '_'))
@@ -941,22 +948,25 @@ class OptimizeModelBuilder(ModelBuilder):
                     else:
                         var_data_dict.update({param_name: value})
 
+    def _get_observations_data(self, problems_to_analyze):
+        """Get the observations to use in the kernel.
+
+        Can return None if there are no observations.
+        """
+        observations = self._input_data.observations
+        if observations is not None:
+            if problems_to_analyze is not None:
+                observations = observations[problems_to_analyze, ...]
+            observations = self._transform_observations(observations)
+            observations = convert_data_to_dtype(observations, 'mot_float_type*', self._get_mot_float_type())
+        return observations
+
     def _get_variable_data(self, problems_to_analyze):
         """See super class OptimizeModelInterface for details
 
         When overriding this function, please note that it should adhere to the attribute problems_to_analyze.
         """
         var_data_dict = {}
-
-        observations = self._input_data.observations
-        if observations is not None:
-            if problems_to_analyze is not None:
-                observations = observations[problems_to_analyze, ...]
-
-            observations = self._transform_observations(observations)
-            observations = convert_data_to_dtype(observations, 'mot_float_type*', self._get_mot_float_type())
-            var_data_dict.update({'observations': observations})
-
         var_data_dict.update(self._get_fixed_parameters_as_var_data(problems_to_analyze))
         var_data_dict.update(self._get_static_parameters_as_var_data(problems_to_analyze))
         var_data_dict.update(self._get_bounds_as_var_data())
@@ -1413,27 +1423,35 @@ class SampleModelBuilder(OptimizeModelBuilder):
 
     def _get_log_likelihood_per_observation_function_builder(self, problems_to_analyze):
         eval_function_info = self._get_model_eval_function(problems_to_analyze)
-        obs_func = self._get_observation_return_function()
 
+        eval_call_args = ['observation', 'model_evaluation']
         param_listing = ''
         for p in self._evaluation_model.get_free_parameters():
             param_listing += self._get_param_listing_for_param(self._evaluation_model, p)
-
-        func_name = "getLogLikelihoodPerObservation"
+            eval_call_args.append('{}.{}'.format(self._evaluation_model.name, p.name).replace('.', '_'))
 
         preliminary = ''
-        preliminary += self._evaluation_model.get_cl_dependency_code()
-
         preliminary += eval_function_info.get_cl_code()
-        preliminary += obs_func.get_cl_code()
 
         def builder(full_likelihood):
-            func = preliminary + self._evaluation_model.get_log_likelihood_per_observation_function(
-                func_name, eval_function_info.get_cl_function_name(),
-                obs_func.get_cl_function_name(), param_listing,
+            eval_model_func = self._evaluation_model.get_log_likelihood_per_observation_function(
                 full_likelihood=full_likelihood)
-            return SimpleNamedCLFunction(func, func_name)
 
+            func_name = 'getLogLikelihoodPerObservation'
+            func = str(preliminary) + eval_model_func.get_cl_code() + '''
+               double ''' + func_name + '''(mot_data_struct* data, const mot_float_type* const x, 
+                                            uint observation_index){
+                   
+                   double observation = data->observations[observation_index];
+                   double model_evaluation = ''' + eval_function_info.get_cl_function_name() + '''(
+                       data, x, observation_index);
+
+                   ''' + param_listing + '''
+
+                   return ''' + eval_model_func.get_cl_function_name() + '''(''' + ','.join(eval_call_args) + ''');
+               }
+           '''
+            return SimpleNamedCLFunction(func, func_name)
         return builder
 
     def _get_metropolis_hastings_state(self, problems_to_analyze):
@@ -1454,7 +1472,7 @@ class SampleModelBuilder(OptimizeModelBuilder):
         return None
 
 
-class CompositeModelFunction(AbstractCLFunction):
+class CompositeModelFunction(SimpleCLFunction):
 
     def __init__(self, model_tree, signal_noise_model=None):
         """The model function for the total constructed model.
@@ -1474,28 +1492,47 @@ class CompositeModelFunction(AbstractCLFunction):
             self._models.append(self._signal_noise_model)
         self._parameter_model_list = list((m, p) for m in self._models for p in m.get_parameters())
 
+        cl_function_name = '_composite_model_function'
+
         super(CompositeModelFunction, self).__init__(
-            'double', '_composite_model_function',
-            [p.get_renamed(cl_name) for m, p, cl_name in self._get_model_function_parameters()],
+            'double', cl_function_name,
+            [p.get_renamed(external_name) for m, p, _, external_name in self._get_model_function_parameters()],
+            self._get_model_function_cl_code(cl_function_name),
             dependency_list=self._models)
 
-    def get_original_model_parameter_list(self):
-        """Get the model and parameter tuples for the model out of which this composite model was constructed.
+    def get_model_parameter_list(self):
+        """Get the model and parameter tuples that constructed this composite model.
 
-        This is used by the model builder.
+        This is used by the model builder, to construct the model function call.
 
         Returns:
             list of tuple: the list of (model, parameter) tuples for each of the models and parameters.
         """
-        return [(m, p) for m, p, cl_name in self._get_model_function_parameters()]
+        return [(m, p) for m, p, cl_name, ext_name in self._get_model_function_parameters()]
 
-    def get_cl_code(self):
-        return_str = ''
-        return_str += self._get_cl_dependency_code()
-        return_str += self._get_model_function_cl_code()
-        return return_str
+    def _get_model_function_parameters(self):
+        """Get the parameters to use in the model function.
 
-    def _get_model_function_cl_code(self):
+        Returns:
+            list of tuples: per parameter a tuple with (model, parameter, cl_name, external_name)
+                where the cl_name is how we reference the parameter in the CL code and the external_name is
+                how we reference the parameter in a call to for example 'evaluate'.
+        """
+        seen_shared_params = []
+
+        shared_params = []
+        other_params = []
+
+        for m, p in self._parameter_model_list:
+            if isinstance(p, (ProtocolParameter, CurrentObservationParam)):
+                if p.name not in seen_shared_params:
+                    shared_params.append((m, p, p.name, p.name))
+                    seen_shared_params.append(p.name)
+            else:
+                other_params.append((m, p, '{}_{}'.format(m.name, p.name), '{}.{}'.format(m.name, p.name)))
+        return shared_params + other_params
+
+    def _get_model_function_cl_code(self, cl_function_name):
         """Get the CL code for the model function as build by this model.
 
         This returns the CL code for ONLY the model, that is it will return a function with the signature:
@@ -1529,7 +1566,7 @@ class CompositeModelFunction(AbstractCLFunction):
             params = self._get_model_function_parameters()
             cl_parameters = []
 
-            for m, p, name in params:
+            for m, p, name, _ in params:
                 cl_type = p.data_type.declaration_type
                 cl_parameters.append('{} {}'.format(cl_type, name))
             return cl_parameters
@@ -1540,32 +1577,10 @@ class CompositeModelFunction(AbstractCLFunction):
 
                 return {model_expression}
             }}
-        '''.format(func_name=self.get_cl_function_name(),
+        '''.format(func_name=cl_function_name,
                    params=indent(', \n'.join(build_parameters()), '    ' * 5)[20:],
                    model_expression=build_model_expression())
         return dedent(return_str.replace('\t', '    '))
-
-    def _get_model_function_parameters(self):
-        """Get the parameters to use in the model function.
-
-        Returns:
-            list of tuples: per parameter a tuple with (model, parameter, cl_name)
-                with the cl_name the name for this parameter in this CL function and the model and parameter
-                the original model and parameter.
-        """
-        seen_shared_params = []
-
-        shared_params = []
-        other_params = []
-
-        for m, p in self._parameter_model_list:
-            if isinstance(p, (ProtocolParameter, CurrentObservationParam)):
-                if p.name not in seen_shared_params:
-                    shared_params.append((m, p, p.name))
-                    seen_shared_params.append(p.name)
-            else:
-                other_params.append((m, p, '{}_{}'.format(m.name, p.name)))
-        return shared_params + other_params
 
     def _build_model_from_tree(self, node, depth):
         """Construct the model equation from the provided model tree.

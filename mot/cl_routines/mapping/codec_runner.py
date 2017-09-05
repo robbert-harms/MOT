@@ -1,5 +1,4 @@
 import logging
-import copy
 from mot.cl_routines.mapping.run_procedure import RunProcedure
 from ...utils import SimpleNamedCLFunction, SimpleKernelInputData
 from ...cl_routines.base import CLRoutine
@@ -29,7 +28,7 @@ class CodecRunner(CLRoutine):
 
         Args:
             parameters (ndarray): The parameters to transform
-            kernel_data (list of mot.utils.KernelInputData): the list of additional data to load
+            kernel_data (dict[str: mot.utils.KernelInputData]): the additional data to load
             codec (mot.model_building.utils.ParameterCodec): the parameter codec to use
             double_precision (boolean): if we are running in double precision or not
 
@@ -46,7 +45,7 @@ class CodecRunner(CLRoutine):
 
         Args:
             parameters (ndarray): The parameters to transform
-            kernel_data (list of mot.utils.KernelInputData): the list of additional data to load
+            kernel_data (dict[str: mot.utils.KernelInputData]): the additional data to load
             codec (mot.model_building.utils.ParameterCodec): the parameter codec to use
             double_precision (boolean): if we are running in double precision or not
 
@@ -63,7 +62,7 @@ class CodecRunner(CLRoutine):
 
         Args:
             parameters (ndarray): The parameters to transform
-            kernel_data (list of mot.utils.KernelInputData): the list of additional data to load
+            kernel_data (dict[str: mot.utils.KernelInputData]): the additional data to load
             codec (mot.model_building.utils.ParameterCodec): the parameter codec to use
             double_precision (boolean): if we are running in double precision or not
 
@@ -85,13 +84,12 @@ class CodecRunner(CLRoutine):
     def _transform_parameters(self, cl_func, cl_func_name, parameters, kernel_data, double_precision):
         cl_named_func = self._get_codec_function_wrapper(cl_func, cl_func_name, parameters.shape[1])
 
-        all_kernel_data = copy.copy(kernel_data)
-        all_kernel_data.append(SimpleKernelInputData('x', parameters, is_writable=True))
+        all_kernel_data = dict(kernel_data)
+        all_kernel_data['x'] = SimpleKernelInputData(parameters, is_writable=True)
 
-        runner = RunProcedure(cl_environments=self.cl_environments, load_balancer=self.load_balancer,
-                              compile_flags=self.compile_flags)
+        runner = RunProcedure(**self.get_cl_routine_kwargs())
         runner.run_procedure(cl_named_func, all_kernel_data, parameters.shape[0], double_precision=double_precision)
-        return all_kernel_data[-1].get_data()
+        return all_kernel_data['x'].get_data()
 
     def _get_codec_function_wrapper(self, cl_func, cl_func_name, nmr_params):
         func_name = 'transformParameterSpace'

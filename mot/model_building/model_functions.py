@@ -1,6 +1,6 @@
 from textwrap import dedent
 from mot.cl_data_type import SimpleCLDataType
-from mot.cl_function import CLFunction, AbstractCLFunction
+from mot.cl_function import CLFunction, SimpleCLFunction
 from mot.model_building.model_function_priors import ModelFunctionPrior
 from mot.model_building.parameters import FreeParameter
 from mot.model_building.parameter_functions.priors import ARDGaussian, UniformWithinBoundsPrior, ARDBeta
@@ -55,9 +55,9 @@ class SampleModelFunction(ModelFunction):
         raise NotImplementedError()
 
 
-class SimpleModelFunction(SampleModelFunction, AbstractCLFunction):
+class SimpleModelFunction(SampleModelFunction, SimpleCLFunction):
 
-    def __init__(self, return_type, name, cl_function_name, parameter_list, dependency_list=(),
+    def __init__(self, return_type, name, cl_function_name, parameter_list, cl_code, dependency_list=(),
                  model_function_priors=None):
         """This CL function is for all estimable models
 
@@ -66,11 +66,12 @@ class SimpleModelFunction(SampleModelFunction, AbstractCLFunction):
             name (str): The name of the model
             cl_function_name (string): The name of the CL function
             parameter_list (list or tuple of CLFunctionParameter): The list of parameters required for this function
+            cl_code (str): the cl code for this function without inclusion guards or dependencies
             dependency_list (list or tuple of CLFunction): The list of CL libraries this function depends on
             model_function_priors (list of mot.model_building.model_function_priors.ModelFunctionPrior):
                 list of priors concerning this whole model function
         """
-        super(SimpleModelFunction, self).__init__(return_type, cl_function_name, parameter_list,
+        super(SimpleModelFunction, self).__init__(return_type, cl_function_name, parameter_list, cl_code,
                                                   dependency_list=dependency_list)
         self._name = name
         self._model_function_priors = model_function_priors or []
@@ -128,14 +129,6 @@ class SimpleModelFunction(SampleModelFunction, AbstractCLFunction):
 
         return get_prior_parameters([parameter])
 
-    def get_cl_code(self):
-        """Get the function code for this function and all its dependencies.
-
-        Returns:
-            str: The CL code for inclusion in a kernel.
-        """
-        raise NotImplementedError()
-
 
 class Scalar(SimpleModelFunction):
 
@@ -154,26 +147,20 @@ class Scalar(SimpleModelFunction):
                                   sampling_proposal=GaussianProposal(1.0))
         parameter_settings.update(parameter_kwargs or {})
 
+        model_code = '''
+            mot_float_type Scalar(mot_float_type scalar){{
+                return scalar;
+            }}
+        '''
+        model_code = dedent(model_code.replace('\t', ' ' * 4))
+
         super(Scalar, self).__init__(
             'mot_float_type',
             name,
             'Scalar',
             (FreeParameter(SimpleCLDataType.from_string('mot_float_type'), param_name,
-                           False, value, lower_bound, upper_bound, **parameter_settings),))
-
-    def get_cl_code(self):
-        return_str = '''
-            #ifndef SCALAR_CL
-            #define SCALAR_CL
-            
-            {return_type} {func_name}({input_type} scalar){{
-                return scalar;
-            }}
-            
-            #endif // SCALAR_CL
-        '''.format(return_type=self.get_return_type(), func_name=self.get_cl_function_name(),
-                   input_type=self._parameter_list[0].data_type.get_declaration())
-        return dedent(return_str.replace('\t', ' '*4))
+                           False, value, lower_bound, upper_bound, **parameter_settings),),
+            model_code)
 
 
 class Weight(Scalar):

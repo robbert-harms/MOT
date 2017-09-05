@@ -1,3 +1,5 @@
+from textwrap import dedent, indent
+
 from mot.cl_routines.mapping.cl_function_evaluator import CLFunctionEvaluator
 
 __author__ = 'Robbert Harms'
@@ -47,7 +49,7 @@ class CLFunction(object):
         Given a set of input parameters, this model will be evaluated for every parameter set.
 
         Args:
-            inputs (list of ndarray): a list with for each parameter of the model an input parameter to this function.
+            inputs (dict): for each parameter of the function an array with input data.
                 Each of these input arrays must be of equal length in the first dimension.
             double_precision (boolean): if the function should be evaluated in double precision or not
 
@@ -57,9 +59,9 @@ class CLFunction(object):
         raise NotImplementedError()
 
 
-class AbstractCLFunction(CLFunction):
+class SimpleCLFunction(CLFunction):
 
-    def __init__(self, return_type, cl_function_name, parameter_list, dependency_list=()):
+    def __init__(self, return_type, cl_function_name, parameter_list, cl_code, dependency_list=()):
         """A simple abstract implementation of a CL function.
 
         Most of the requirements of a CL function are satisfied by the constructor arguments, only the CL code remains.
@@ -70,14 +72,25 @@ class AbstractCLFunction(CLFunction):
             cl_function_name (string): The name of the CL function
             parameter_list (list or tuple of CLFunctionParameter): The list of parameters required for this function
             dependency_list (list or tuple of CLLibrary): The list of CL libraries this function depends on
+            cl_code (str): the raw cl code for this function. This does not need to include the dependencies or
+                the inclusion guard, these are added automatically here.
         """
         self._return_type = return_type
         self._function_name = cl_function_name
         self._parameter_list = parameter_list
         self._dependency_list = dependency_list
+        self._cl_code = cl_code
 
     def get_cl_code(self):
-        raise NotImplementedError()
+        return dedent('''
+            {dependencies}
+            #ifndef {inclusion_guard_name}
+            #define {inclusion_guard_name}
+            {code}
+            #endif // {inclusion_guard_name}
+        '''.format(dependencies=indent(self._get_cl_dependency_code(), ' ' * 4 * 3),
+                   inclusion_guard_name='LIBRARY_FUNCTION_{}_CL'.format(self.get_cl_function_name()),
+                   code=indent('\n' + self._cl_code.strip() + '\n', ' ' * 4 * 3)))
 
     def get_cl_function_name(self):
         return self._function_name

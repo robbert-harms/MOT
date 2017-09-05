@@ -2,7 +2,6 @@ from mot.cl_routines.mapping.run_procedure import RunProcedure
 from ...utils import results_to_dict, SimpleNamedCLFunction, SimpleKernelInputData
 from ...cl_routines.base import CLRoutine
 import numpy as np
-import copy
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-02-05"
@@ -34,7 +33,7 @@ class CalculateDependentParameters(CLRoutine):
         the maps for the dependent parameters.
 
         Args:
-            kernel_data (list of mot.utils.KernelInputData): the list of additional data to load
+            kernel_data (dict[str: mot.utils.KernelInputData]): the list of additional data to load
             estimated_parameters_list (list of ndarray): The list with the one-dimensional
                 ndarray of estimated parameters
             parameters_listing (str): The parameters listing in CL
@@ -56,16 +55,15 @@ class CalculateDependentParameters(CLRoutine):
         estimated_parameters = np.require(np.dstack(estimated_parameters_list),
                                           np_dtype, requirements=['C', 'A', 'O'])[0, ...]
 
-        all_kernel_data = copy.copy(kernel_data)
-        all_kernel_data.append(SimpleKernelInputData('x', estimated_parameters))
-        all_kernel_data.append(SimpleKernelInputData('results', results, is_writable=True))
+        all_kernel_data = dict(kernel_data)
+        all_kernel_data['x'] = SimpleKernelInputData(estimated_parameters)
+        all_kernel_data['results'] = SimpleKernelInputData(results, is_writable=True)
 
-        runner = RunProcedure(cl_environments=self.cl_environments, load_balancer=self.load_balancer,
-                              compile_flags=self.compile_flags)
+        runner = RunProcedure(**self.get_cl_routine_kwargs())
         runner.run_procedure(cl_named_func, all_kernel_data, estimated_parameters_list[0].shape[0],
                              double_precision=self._double_precision)
 
-        results = all_kernel_data[-1].get_data()
+        results = all_kernel_data['results'].get_data()
         return results_to_dict(results, [n[1] for n in dependent_parameter_names])
 
     def _get_wrapped_function(self, estimated_parameters_list, parameters_listing, dependent_parameter_names):

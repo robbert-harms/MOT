@@ -1,6 +1,7 @@
+from mot.cl_function import SimpleCLFunction
+from mot.cl_parameter import CLFunctionParameter
 from mot.model_building.parameters import FreeParameter
-from mot.model_building.model_functions import SimpleModelFunction
-from mot.library_functions import Bessel
+from mot.library_functions import LogBesseli0
 from mot.model_building.parameter_functions.transformations import ClampTransform
 from mot.cl_data_type import SimpleCLDataType
 
@@ -12,10 +13,12 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class EvaluationModel(SimpleModelFunction):
+class EvaluationModel(object):
 
-    def __init__(self, name, cl_function_name, parameter_list, dependency_list=()):
-        """The evaluation model is the model under which you evaluate the estimated results against the data.
+    def __init__(self, name, cl_function_name, parameter_list, noise_std_param_name=None, prior_parameters=None):
+        """The evaluation model is the model under which you evaluate your model estimates against observations.
+
+        This class is a proxy for the optimization evaluation function and for the log likelihood objective function.
 
         This normally embed the noise model assumptions of your data.
 
@@ -23,77 +26,17 @@ class EvaluationModel(SimpleModelFunction):
             name (str): the name of this evaluation model
             cl_function_name (str): the name of the function, this is not used atm
             parameter_list (list or tuple): the list of parameters this model requires to function correctly
-            dependency_list (list or tuple): some dependencies for this model
+            prior_parameters (list or tuple): the list of prior parameters
         """
-        super(EvaluationModel, self).__init__('double', name, cl_function_name, parameter_list,
-                                              dependency_list=dependency_list)
+        self._name = name
+        self._cl_function_name = cl_function_name
+        self._parameter_list = parameter_list
+        self._noise_std_param_name = noise_std_param_name
+        self._prior_parameters = prior_parameters or []
 
-    def get_objective_per_observation_function(self, fname, eval_fname, obs_fname, param_listing):
-        """Get the cl code for the objective function for a given instance under the given noise model.
-
-        This function is used by some evaluation routines (like for example LevenbergMarquardt) that need
-        a list of objective values (one per instance point), instead of a single objective function scalar.
-        This function provides the information to build that list.
-
-        Args:
-            fname (str): the name of the resulting function
-            eval_fname (str): the name of the function that can be called to get the evaluation, its signature is:
-
-                .. code-block:: c
-
-                    double <fname>(mot_data_struct* data, const mot_float_type* x, const uint observation_index);
-
-            obs_fname (str): the name of the function that can be called for the observed data, its signature is:
-
-                .. code-block:: c
-
-                    double <fname>(mot_data_struct* data, const uint observation_index);
-
-            param_listing (str): the parameter listings for the parameters of the noise model
-
-        Returns:
-            str: The objective function for the given observation index under this noise model, its signature is:
-
-                .. code-block:: c
-
-                    double (mot_data_struct* const data, mot_float_type* const x, const uint observation_index);
-        """
-        raise NotImplementedError()
-
-    def get_log_likelihood_per_observation_function(self, fname, eval_fname, obs_fname, param_listing,
-                                                    full_likelihood=True):
-        """Get the cl code for the log likelihood function under the given noise model for the given observation index.
-
-        This should return the log likelihoods as such that when linearly summed they would yield the complete
-        log likelihood for the model.
-
-        Args:
-            fname (str): the name of the resulting function
-            eval_fname (str): the name of the function that can be called to get the evaluation, its signature is:
-
-                .. code-block:: c
-
-                    double <fname>(mot_data_struct* data, const mot_float_type* x, const uint observation_index);
-
-            obs_fname (str): the name of the function that can be called for the observed data, its signature is:
-
-                .. code-block:: c
-
-                    double <fname>(mot_data_struct* data, const uint observation_index);
-
-            param_listing (str): the parameter listings for the parameters of the noise model
-            full_likelihood (boolean): if we want the complete likelihood, or if we can drop the constant terms.
-                The default is the complete likelihood. Disable for speed.
-
-        Returns:
-            str: the objective function under this noise model, its signature is:
-
-                .. code-block:: c
-
-                    double <fname>(mot_data_struct* const data, mot_float_type* const x,
-                                   const uint observation_index);
-        """
-        raise NotImplementedError()
+    @property
+    def name(self):
+        return self._name
 
     def get_noise_std_param_name(self):
         """Get the name of the parameter that is associated with the noise standard deviation in the problem data.
@@ -101,15 +44,69 @@ class EvaluationModel(SimpleModelFunction):
         Returns:
             str: the name of the parameter that is associated with the noise_std in the problem data.
         """
-        return 'sigma'
+        return self._noise_std_param_name
 
-    def get_cl_dependency_code(self):
-        """Get the CL code for all the CL code for all the dependencies.
+    def get_free_parameters(self):
+        """Get the free parameters in this evaluation model. Assumed to be equal for both the objective and LL function.
+        """
+        return self._parameter_list
+
+    def get_parameters(self):
+        return self._parameter_list
+
+    def get_model_function_priors(self):
+        return ''
+
+    def get_prior_parameters(self, parameter):
+        """Get the parameters referred to by the priors of the free parameters.
+
+        This returns a list of all the parameters referenced by the prior parameters, recursively.
 
         Returns:
-            str: The CL code with the actual code.
+            list of parameters: the list of additional parameters in the prior for the given parameter
         """
-        return self._get_cl_dependency_code()
+        def get_prior_parameters(params):
+            return_params = []
+
+            for param in params:
+                prior_params = param.sampling_prior.get_parameters()
+                proxy_prior_params = [prior_param.get_renamed('{}.prior.{}'.format(param.name, prior_param.name))
+                                      for prior_param in prior_params]
+
+                return_params.extend(proxy_prior_params)
+
+                free_prior_params = [p for p in proxy_prior_params if isinstance(p, FreeParameter)]
+                return_params.extend(get_prior_parameters(free_prior_params))
+
+            return return_params
+
+        return get_prior_parameters([parameter])
+
+    def get_objective_per_observation_function(self):
+        """Get the function to evaluate the objective for a given observation and estimate under this noise model.
+
+        This should return the observations such that the square root of the squared sum would yield the
+        complete objective function value. That is, the calling routines must square the output of this function.
+
+        Returns:
+            mot.cl_function.CLFunction: The objective function for the given observation index under this noise model.
+        """
+        raise NotImplementedError()
+
+    def get_log_likelihood_per_observation_function(self, full_likelihood=True):
+        """Get the function to evaluate the log likelihood for the given observations and model estimates.
+
+        This should return the log likelihoods as such that when linearly summed they would yield the complete
+        log likelihood for the model.
+
+        Args:
+            full_likelihood (boolean): if we want the function for the complete likelihood or for the simplified
+                likelihood that is faster to evaluate but might be non-normalized.
+
+        Returns:
+            mot.cl_function.CLFunction: The objective function for the given observation index under this noise model.
+        """
+        raise NotImplementedError()
 
 
 class SumOfSquaresEvaluationModel(EvaluationModel):
@@ -121,26 +118,29 @@ class SumOfSquaresEvaluationModel(EvaluationModel):
 
             sum((observation - evaluation)^2)
         """
-        super(EvaluationModel, self).__init__('SumOfSquaresNoise', 'sumOfSquaresNoise', (), ())
+        super(SumOfSquaresEvaluationModel, self).__init__('SumOfSquaresNoise', 'sumOfSquaresNoise', (), None)
 
-    def get_objective_per_observation_function(self, fname, eval_fname, obs_fname, param_listing):
-        return '''
-            double ''' + fname + '''(mot_data_struct* data, const mot_float_type* const x, uint observation_index){
-                ''' + param_listing + '''
-                return ''' + obs_fname + '''(data, observation_index) -
-                        ''' + eval_fname + '''(data, x, observation_index);
+    def get_objective_per_observation_function(self):
+        cl_code = '''
+            double sumOfSquaresEvaluationModel(double observation, double model_evaluation){
+                return observation - model_evaluation;
             }
         '''
+        return SimpleCLFunction('double', 'sumOfSquaresEvaluationModel',
+                                [CLFunctionParameter('double', 'observation'),
+                                 CLFunctionParameter('double', 'model_evaluation')],
+                                cl_code)
 
-    def get_log_likelihood_per_observation_function(self, fname, eval_fname, obs_fname, param_listing,
-                                                    full_likelihood=True):
-        return '''
-            double ''' + fname + '''(mot_data_struct* data, const mot_float_type* const x, uint observation_index){
-                ''' + param_listing + '''
-                return - (pown(''' + obs_fname + '''(data, observation_index)
-                            - ''' + eval_fname + '''(data, x, observation_index), 2));
+    def get_log_likelihood_per_observation_function(self, full_likelihood=True):
+        cl_code = '''
+            double sumOfSquaresLL(double observation, double model_evaluation){
+                return -pown(observation - model_evaluation, 2);
             }
         '''
+        return SimpleCLFunction('double', 'sumOfSquaresLL',
+                                [CLFunctionParameter('double', 'observation'),
+                                 CLFunctionParameter('double', 'model_evaluation')],
+                                cl_code)
 
 
 class GaussianEvaluationModel(EvaluationModel):
@@ -184,9 +184,10 @@ class GaussianEvaluationModel(EvaluationModel):
             'GaussianNoise',
             'gaussianNoiseModel',
             (FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'sigma', True, 1, 0, 'INFINITY',
-                           parameter_transform=ClampTransform()),), ())
+                           parameter_transform=ClampTransform()),),
+            'sigma')
 
-    def get_objective_per_observation_function(self, fname, eval_fname, obs_fname, param_listing):
+    def get_objective_per_observation_function(self):
         """Get the Gaussian objective function.
 
         This omits the constant terms for speed reasons. Omitted terms are:
@@ -196,26 +197,29 @@ class GaussianEvaluationModel(EvaluationModel):
             + log(GaussianNoise_sigma * sqrt(2 * M_PI))
 
         """
-        return '''
-            double ''' + fname + '''(mot_data_struct* data, const mot_float_type* const x, uint observation_index){
-                ''' + param_listing + '''
-                return (''' + obs_fname + '''(data, observation_index) -
-                        ''' + eval_fname + '''(data, x, observation_index)) 
-                        / (M_SQRT2 * GaussianNoise_sigma);
+        cl_code = '''
+            double gaussianEvaluationModel(double observation, double model_evaluation, mot_float_type sigma){
+                return (observation - model_evaluation) / (M_SQRT2 * sigma);
             }
         '''
+        return SimpleCLFunction('double', 'gaussianEvaluationModel',
+                                [CLFunctionParameter('double', 'observation'),
+                                 CLFunctionParameter('double', 'model_evaluation'),
+                                 CLFunctionParameter('mot_float_type', 'sigma')],
+                                cl_code)
 
-    def get_log_likelihood_per_observation_function(self, fname, eval_fname, obs_fname, param_listing,
-                                                    full_likelihood=True):
-        return '''
-            double ''' + fname + '''(mot_data_struct* data, const mot_float_type* const x, uint observation_index){
-                ''' + param_listing + '''
-                return - pown(''' + obs_fname + '''(data, observation_index)
-                                - ''' + eval_fname + '''(data, x, observation_index), 2)
-                    / (2 * GaussianNoise_sigma * GaussianNoise_sigma)
-                    ''' + ('- log(GaussianNoise_sigma * sqrt(2 * M_PI))' if full_likelihood else '') + ''';
+    def get_log_likelihood_per_observation_function(self, full_likelihood=True):
+        cl_code = '''
+            double gaussianEvaluationLL(double observation, double model_evaluation, mot_float_type sigma){
+                return - pown(observation - model_evaluation, 2) / (2 * sigma * sigma) 
+                    ''' + ('- log(sigma * sqrt(2 * M_PI))' if full_likelihood else '') + ''';
             }
         '''
+        return SimpleCLFunction('double', 'gaussianEvaluationLL',
+                                [CLFunctionParameter('double', 'observation'),
+                                 CLFunctionParameter('double', 'model_evaluation'),
+                                 CLFunctionParameter('mot_float_type', 'sigma')],
+                                cl_code)
 
 
 class OffsetGaussianEvaluationModel(EvaluationModel):
@@ -257,9 +261,10 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
             'OffsetGaussianNoise',
             'offsetGaussianNoiseModel',
             (FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'sigma', True, 1, 0, 'INFINITY',
-                           parameter_transform=ClampTransform()),), ())
+                           parameter_transform=ClampTransform()),),
+            'sigma')
 
-    def get_objective_per_observation_function(self, fname, eval_fname, obs_fname, param_listing):
+    def get_objective_per_observation_function(self):
         """Get the Offset Gaussian objective function.
 
         This omits the constant terms for speed reasons. Omitted terms are:
@@ -268,29 +273,30 @@ class OffsetGaussianEvaluationModel(EvaluationModel):
 
             (+ log(OffsetGaussianNoise_sigma * sqrt(2 * M_PI)))
         """
-        return '''
-            double ''' + fname + '''(mot_data_struct* data, const mot_float_type* const x, uint observation_index){
-                ''' + param_listing + '''
-                return (''' + obs_fname + '''(data, observation_index) -
-                         sqrt(pown(''' + eval_fname + '''(data, x, observation_index), 2)
-                                + (OffsetGaussianNoise_sigma * OffsetGaussianNoise_sigma))) 
-                        / (M_SQRT2 * OffsetGaussianNoise_sigma);
+        cl_code = '''
+            double offsetGaussianEvaluationModel(double observation, double model_evaluation, mot_float_type sigma){
+                return (observation - sqrt(pown(model_evaluation, 2) + (sigma * sigma))) / (M_SQRT2 * sigma);
             }
         '''
+        return SimpleCLFunction('double', 'offsetGaussianEvaluationModel',
+                                [CLFunctionParameter('double', 'observation'),
+                                 CLFunctionParameter('double', 'model_evaluation'),
+                                 CLFunctionParameter('mot_float_type', 'sigma')],
+                                cl_code)
 
-    def get_log_likelihood_per_observation_function(self, fname, eval_fname, obs_fname, param_listing,
-                                                    full_likelihood=True):
-        return '''
-            double ''' + fname + '''(mot_data_struct* data, const mot_float_type* const x, uint observation_index){
-                ''' + param_listing + '''
-                double observation = (double)''' + obs_fname + '''(data, observation_index);
-                double estimate = (double)sqrt(pown(''' + eval_fname + '''(data, x, observation_index), 2) + 
-                                               (OffsetGaussianNoise_sigma * OffsetGaussianNoise_sigma));
-                                               
-                return - (pown(observation - estimate, 2)) / (2 * pown(OffsetGaussianNoise_sigma, 2))
-                    ''' + ('- log(OffsetGaussianNoise_sigma * sqrt(2 * M_PI))' if full_likelihood else '') + ''';
+    def get_log_likelihood_per_observation_function(self, full_likelihood=True):
+        cl_code = '''
+            double offsetGaussianEvaluationLL(double observation, double model_evaluation, mot_float_type sigma){
+                double estimate = sqrt(pown(model_evaluation, 2) + (sigma * sigma));
+                return - pown(observation - estimate, 2) / (2 * (sigma * sigma))
+                    ''' + ('- log(sigma * sqrt(2 * M_PI))' if full_likelihood else '') + ''';
             }
         '''
+        return SimpleCLFunction('double', 'offsetGaussianEvaluationLL',
+                                [CLFunctionParameter('double', 'observation'),
+                                 CLFunctionParameter('double', 'model_evaluation'),
+                                 CLFunctionParameter('mot_float_type', 'sigma')],
+                                cl_code)
 
 
 class RicianEvaluationModel(EvaluationModel):
@@ -338,42 +344,44 @@ class RicianEvaluationModel(EvaluationModel):
             'ricianNoiseModel',
             (FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'sigma', True, 1, 0, 'INFINITY',
                            parameter_transform=ClampTransform()),),
-            (Bessel(),))
+            'sigma')
 
-    def get_objective_per_observation_function(self, fname, eval_fname, obs_fname, param_listing):
+    def get_objective_per_observation_function(self):
         """Get the Rician objective function.
 
         This omits the constant terms for speed reasons. Omitted terms are:
 
          .. code-block:: c
 
-            + log(observation / (RicianNoise_sigma * RicianNoise_sigma))
-            - ((observation * observation) / (2 * (RicianNoise_sigma * RicianNoise_sigma)))
+            + log(observation / (sigma * sigma))
+            - ((observation * observation) / (2 * (sigma * sigma)))
 
         """
-        return '''
-            double ''' + fname + '''(mot_data_struct* data, const mot_float_type* const x, uint observation_index){
-                ''' + param_listing + '''
-
-                double observation = (double)''' + obs_fname + '''(data, observation_index);
-                double evaluation = (double)''' + eval_fname + '''(data, x, observation_index);
-
-                return - ((evaluation * evaluation) / (2 * RicianNoise_sigma * RicianNoise_sigma))
-                            + log_bessel_i0((observation * evaluation) / (RicianNoise_sigma * RicianNoise_sigma));
+        cl_code = '''
+            double ricianEvaluationModel(double observation, double model_evaluation, mot_float_type sigma){
+                return - ((model_evaluation * model_evaluation) / (2 * sigma * sigma))
+                            + log_bessel_i0((observation * model_evaluation) / (sigma * sigma));
             }
         '''
+        return SimpleCLFunction('double', 'ricianEvaluationModel',
+                                [CLFunctionParameter('double', 'observation'),
+                                 CLFunctionParameter('double', 'model_evaluation'),
+                                 CLFunctionParameter('mot_float_type', 'sigma')],
+                                cl_code,
+                                dependency_list=(LogBesseli0(),))
 
-    def get_log_likelihood_per_observation_function(self, fname, eval_fname, obs_fname, param_listing,
-                                                    full_likelihood=True):
-        return '''
-            double ''' + fname + '''(mot_data_struct* data, const mot_float_type* const x, uint observation_index){
-                ''' + param_listing + '''
-                double observation = (double)''' + obs_fname + '''(data, observation_index);
-                double evaluation = (double)''' + eval_fname + '''(data, x, observation_index);
-
-                return log(observation / (RicianNoise_sigma * RicianNoise_sigma))
-                        - ((observation * observation) / (2 * RicianNoise_sigma * RicianNoise_sigma))
-                        - ((evaluation * evaluation) / (2 * RicianNoise_sigma * RicianNoise_sigma))
-                        + log_bessel_i0((observation * evaluation) / (RicianNoise_sigma * RicianNoise_sigma));
+    def get_log_likelihood_per_observation_function(self, full_likelihood=True):
+        cl_code = '''
+            double ricianEvaluationLL(double observation, double model_evaluation, mot_float_type sigma){
+                return log(observation / (sigma * sigma))
+                        - ((observation * observation) / (2 * sigma * sigma))
+                        - ((model_evaluation * model_evaluation) / (2 * sigma * sigma))
+                        + log_bessel_i0((observation * model_evaluation) / (sigma * sigma));
             }
         '''
+        return SimpleCLFunction('double', 'ricianEvaluationLL',
+                                [CLFunctionParameter('double', 'observation'),
+                                 CLFunctionParameter('double', 'model_evaluation'),
+                                 CLFunctionParameter('mot_float_type', 'sigma')],
+                                cl_code,
+                                dependency_list=(LogBesseli0(),))

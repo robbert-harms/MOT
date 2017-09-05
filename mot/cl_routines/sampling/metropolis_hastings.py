@@ -280,7 +280,7 @@ class _MHWorker(Worker):
 
         data_buffers.append(cl.LocalMemory(workgroup_size * np.dtype('double').itemsize))
 
-        for data in self._data_info:
+        for data in [self._data_info[key] for key in sorted(self._data_info)]:
             data_buffers.append(cl.Buffer(self._cl_run_context.context,
                                           cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data.get_data()))
 

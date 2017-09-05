@@ -1,4 +1,3 @@
-import copy
 import pyopencl as cl
 import numpy as np
 from ...utils import get_float_type_def, split_in_batches
@@ -53,6 +52,8 @@ class Sampling_MLE_MAP_Index(CLRoutine):
             for worker in workers:
                 worker.set_samples(samples_subset)
             self.load_balancer.process(workers, samples.shape[0])
+
+        # todo, set the current sample index
 
         max_batch_size = np.min([samples.shape[2], 1000])
         for batch_ind, batch_size in enumerate(split_in_batches(samples.shape[2], max_batch_size)):

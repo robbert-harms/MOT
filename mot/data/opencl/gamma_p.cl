@@ -1,15 +1,9 @@
-#ifndef GAMMA_FUNCS
-#define GAMMA_FUNCS
-
 /**
  * Author = Robbert Harms
  * Date = 2017-07-24
  * License = LGPL v3
  * Maintainer = Robbert Harms
  * Email = robbert.harms@maastrichtuniversity.nl
-
- Implements several Gamma related functionality.
-
  */
 
 /** Small number constant used in continued fraction gamma evaluation */
@@ -111,26 +105,6 @@ double gamma_p(const double a, const double x){
     return 1.0 - _gamma_p_using_fraction(a, x);
 }
 
-/**
- * Calculate the Cumulative Distribution Function of the Gamma function.
- *
- * This computes:
- *
- *      lower_incomplete_gamma(k, x/theta) / gamma(k)
- *
- * With k the shape parameter, theta the scale parameter, lower_incomplete_gamma the lower incomplete gamma function
- * and gamma the complete gamma function.
- *
- * Args:
- *  - shape: the shape parameter of the gamma distribution (often denoted "k")
- *  - scale: the scale parameter of the gamma distribution (often denoted "\theta")
- */
-double gamma_cdf(double shape, double scale, double x){
-     return gamma_p(shape, x/scale);
-}
-
 #undef GAMMA_P_FPMIN
 #undef GAMMA_P_EPS
 #undef GAMMA_P_ITMAX
-
-#endif // GAMMA_FUNCS

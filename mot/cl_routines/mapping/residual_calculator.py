@@ -77,7 +77,7 @@ class _ResidualCalculatorWorker(Worker):
                                  hostbuf=self._parameters),
                        errors_buffer]
 
-        for data in self._data_info:
+        for data in [self._data_info[key] for key in sorted(self._data_info)]:
             all_buffers.append(cl.Buffer(self._cl_run_context.context,
                                          cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data.get_data()))
 

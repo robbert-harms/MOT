@@ -459,14 +459,6 @@ class KernelInputData(object):
         """
         raise NotImplementedError()
 
-    def get_name(self):
-        """Get the name of this data object for use in the kernel and in the ``mot_data_struct``.
-
-        Returns:
-            str: the name of this data object
-        """
-        raise NotImplementedError()
-
     def is_writable(self):
         """If this kernel input data must be loaded as a read-write dataset or as read only.
 
@@ -509,7 +501,7 @@ class KernelInputData(object):
 
 class SimpleKernelInputData(KernelInputData):
 
-    def __init__(self, name, data, offset_str=None, as_pointer=True, is_writable=False):
+    def __init__(self, data, offset_str=None, as_pointer=True, is_writable=False):
         """A simple implementation of the kernel input data.
 
         By default, this will try to offset the data in the kernel by the stride of the first dimension multiplied
@@ -519,7 +511,6 @@ class SimpleKernelInputData(KernelInputData):
         By default we will load the data as a pointer instead of a dereferenced value.
 
         Args:
-            name (str): the name of this data element
             data (ndarray): the data to load in the kernel
             offset_str (str): the offset definition, can use ``{problem_id}`` for multiplication purposes. Set to 0
                 for no offset.
@@ -531,7 +522,6 @@ class SimpleKernelInputData(KernelInputData):
             requirements.append('W')
 
         self._data = np.require(data, requirements=requirements)
-        self._name = name
         self._offset_str = offset_str
         self._as_pointer = as_pointer
         self._is_writable = is_writable
@@ -543,9 +533,6 @@ class SimpleKernelInputData(KernelInputData):
 
     def get_data(self):
         return self._data
-
-    def get_name(self):
-        return self._name
 
     def as_pointer(self):
         return self._as_pointer
@@ -559,21 +546,25 @@ class SimpleKernelInputData(KernelInputData):
 
 class DataStructManager(object):
 
-    def __init__(self, kernel_input_data_list):
+    def __init__(self, kernel_input_dict):
         """This class manages the definition and the instantiation of the mot_data_struct from the list of data inputs.
 
+        Please note that throughout this class we use the sorted keys for the kernel parts generation.
+
         Args:
-            kernel_input_data_list (list of KernelInputData): the list of kernel input data objects
+            kernel_input_dict (dict[str: KernelInputData]): the kernel input data items by name
         """
-        self._kernel_input_data_list = kernel_input_data_list or []
+        self._kernel_input_dict = kernel_input_dict or []
 
     def get_struct_definition(self):
         """Return the structure definition of the mot_data_struct.
 
+        This will use the sorted keys for looping through the kernel input items.
+
         Returns:
             str: the CL code for the structure definition
         """
-        if not len(self._kernel_input_data_list):
+        if not len(self._kernel_input_dict):
             return '''
                 typedef struct{
                     constant void* place_holder;
@@ -581,7 +572,9 @@ class DataStructManager(object):
             '''
 
         definitions = []
-        for kernel_input_data in self._kernel_input_data_list:
+        for name in sorted(self._kernel_input_dict):
+            kernel_input_data = self._kernel_input_dict[name]
+
             definition = ''
             if kernel_input_data.as_pointer():
                 definition += 'global '
@@ -593,8 +586,7 @@ class DataStructManager(object):
             else:
                 definition += ' '
 
-            definition += kernel_input_data.get_name()
-            definition += ';'
+            definition += name + ';'
             definitions.append(definition)
 
         return '''
@@ -606,17 +598,21 @@ class DataStructManager(object):
     def get_kernel_arguments(self):
         """Get the list of kernel arguments for loading the kernel data elements into the kernel.
 
+        This will use the sorted keys for looping through the kernel input items.
+
         Returns:
             list of str: the list of parameter definitions
         """
         definitions = []
-        for kernel_input_data in self._kernel_input_data_list:
-            definitions.append('global {}* {}'.format(dtype_to_ctype(kernel_input_data.get_data().dtype),
-                                                      kernel_input_data.get_name()))
+        for name in sorted(self._kernel_input_dict):
+            kernel_input_data = self._kernel_input_dict[name]
+            definitions.append('global {}* {}'.format(dtype_to_ctype(kernel_input_data.get_data().dtype), name))
         return definitions
 
     def get_struct_init_string(self, problem_id_substitute):
         """Create the structure initialization string.
+
+        This will use the sorted keys for looping through the kernel input items.
 
         Args:
             problem_id_substitute (str): the substitute for the ``{problem_id}`` in the kernel data info elements.
@@ -624,14 +620,16 @@ class DataStructManager(object):
         Returns:
             str: the instantiation string for the data struct
         """
-        if not len(self._kernel_input_data_list):
+        if not len(self._kernel_input_dict):
             return '{0}'
 
         definitions = []
-        for kernel_input_data in self._kernel_input_data_list:
+        for name in sorted(self._kernel_input_dict):
+            kernel_input_data = self._kernel_input_dict[name]
+
             offset = kernel_input_data.get_offset_str().replace('{problem_id}', problem_id_substitute)
 
-            definition = kernel_input_data.get_name()
+            definition = name
 
             if kernel_input_data.as_pointer():
                 definition += ' + ' + offset

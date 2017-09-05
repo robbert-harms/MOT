@@ -34,6 +34,17 @@ class CLRoutine(object):
         if self.compile_flags is None:
             self.compile_flags = configuration.get_compile_flags(self.__class__.__name__)
 
+    def get_cl_routine_kwargs(self):
+        """Get a dictionary with the keyword arguments needed to create a similar CL routine instance.
+
+        Returns:
+            dict: a dictionary with the keyword arguments that a CLRoutine will take. This can be used to
+                generate other CL routines with the same settings.
+        """
+        return dict(cl_environments=self.cl_environments,
+                    load_balancer=self.load_balancer,
+                    compile_flags=self.compile_flags)
+
     def set_compile_flag(self, compile_flag, enable):
         """Enable or disable the given compile flag.
 

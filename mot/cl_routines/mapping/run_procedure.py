@@ -21,13 +21,13 @@ class RunProcedure(CLRoutine):
     def run_procedure(self, named_cl_function, kernel_data, nmr_instances, double_precision=False):
         """Run the given function/procedure on the given set of data.
 
-        This class will wrap the given CL function in a kernel and call that for every instance using the provided
-        kernel data. This class will respect the read write setting of the kernel data elements such that output can
-        be written back to the according kernel data elements.
+        This class will wrap the given CL function in a kernel call and execute that that for every data instance using
+        the provided kernel data. This class will respect the read write setting of the kernel data elements such that
+        output can be written back to the according kernel data elements.
 
         Args:
             named_cl_function (mot.utils.NamedCLFunction): the function to run on the datasets
-            kernel_data (list of mot.utils.KernelInputData): the data to use as input to the function,
+            kernel_data (dict[str: mot.utils.KernelInputData]): the data to use as input to the function
                 all the data will be wrapped in a single ``mot_data_struct``.
             nmr_instances (int): the number of parallel threads to run
             double_precision (boolean): if we want to run in double precision. Defaults to True.
@@ -53,7 +53,7 @@ class _ProcedureWorker(Worker):
 
     def _get_buffers(self):
         buffers = []
-        for data in self._kernel_data:
+        for data in [self._kernel_data[key] for key in sorted(self._kernel_data)]:
             if data.is_writable():
                 buffers.append(cl.Buffer(self._cl_run_context.context,
                                          cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR,
@@ -70,9 +70,9 @@ class _ProcedureWorker(Worker):
         self._kernel.run_procedure(self._cl_run_context.queue, (int(nmr_problems), ), None,
                                    *self._buffers, global_offset=(int(range_start),))
 
-        for ind, data in enumerate(self._kernel_data):
-            if data.is_writable():
-                self._enqueue_readout(self._buffers[ind], data.get_data(), range_start, range_end)
+        for ind, name in enumerate(sorted(self._kernel_data)):
+            if self._kernel_data[name].is_writable():
+                self._enqueue_readout(self._buffers[ind], self._kernel_data[name].get_data(), range_start, range_end)
 
     def _get_kernel_source(self):
         kernel_param_names = self._data_struct_manager.get_kernel_arguments()

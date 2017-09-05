@@ -1,5 +1,3 @@
-from textwrap import dedent
-
 from mot.model_building.parameters import FreeParameter
 from mot.model_building.model_functions import SimpleModelFunction
 from mot.model_building.parameter_functions.transformations import CosSqrClampTransform
@@ -13,35 +11,24 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
 class SignalNoiseModel(SimpleModelFunction):
+    """Signal noise models can add noise to the signal resulting from the model.
 
-    def __init__(self, name, cl_function_name, parameter_list, dependency_list=()):
-        """Signal noise models can add noise to the signal resulting from the model.
+    They require the signal resulting from the model and zero or more parameters and they return a new signal
+    with noise added. This should have a model signature like:
 
-        They require the signal resulting from the model and zero or more parameters and they return a new signal
-        with noise added.
-        """
-        super(SignalNoiseModel, self).__init__('double', name, cl_function_name, parameter_list,
-                                               dependency_list=dependency_list)
+    .. code-block:: c
 
-    def get_signal_function(self):
-        """Get the signal function that adds the noise to the signal function.
+        double fname(double signal, <noise model parameters ...>);
 
-        Returns:
-            str: A function with signature:
+    For example, if the noise model has only one parameter 'sigma' the function should look like:
 
-            .. code-block:: c
+    .. code-block:: c
 
-                double fname(double signal, <noise model parameters ...>);
+        double fname(double signal, double sigma);
 
-            For example, if the noise model has only one parameter 'sigma' the function should look like:
-
-            .. code-block:: c
-
-                double fname(double signal, double sigma);
-
-            The CL function should return a single double that represents the signal with the signal noise
-                added to it.
-        """
+    The CL function should return a single double that represents the signal with the signal noise
+        added to it.
+    """
 
 
 class JohnsonNoise(SignalNoiseModel):
@@ -54,23 +41,13 @@ class JohnsonNoise(SignalNoiseModel):
             sqrt(signal^2 + eta^2)
 
         """
-        super(JohnsonNoise, self).__init__(
-            'JohnsonNoise', 'JohnsonNoise',
-            (FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'eta', False, 0.1, 0, 100,
-                           parameter_transform=CosSqrClampTransform()),), ())
-
-    def get_cl_code(self):
-        return self.get_signal_function()
-
-    def get_signal_function(self):
-        return_str = '''
-            #ifndef JOHNSON_NOISE_MODEL
-            #define JOHNSON_NOISE_MODEL
-        
-            double ''' + self.get_cl_function_name() + '''(double signal, double eta){
+        cl_code = '''
+            double JohnsonNoise(double signal, double eta){
                 return sqrt((signal * signal) + (eta * eta));
             }
-            
-            #endif // JOHNSON_NOISE_MODEL
         '''
-        return dedent(return_str.replace('\t', ' '*4))
+        super(JohnsonNoise, self).__init__(
+            'double', 'JohnsonNoise', 'JohnsonNoise',
+            (FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'eta', False, 0.1, 0, 100,
+                           parameter_transform=CosSqrClampTransform()),),
+            cl_code)

@@ -222,7 +222,7 @@ class AxialNormalPDF(SimplePrior):
             Environmental and Ecological Statistics, volume 13, issue 3, pages 271-285.
         """
         from mot.model_building.parameters import FreeParameter
-        from mot.library_functions import Bessel, LogCosh
+        from mot.library_functions import LogCosh, LogBesseli0
 
         params = [FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'mu', True, 0, -np.inf, np.inf,
                                 sampling_prior=AlwaysOne()),
@@ -241,7 +241,7 @@ class AxialNormalPDF(SimplePrior):
             ''',
             'axial_normal_pdf',
             params,
-            cl_preamble=Bessel().get_cl_code() + '\n' + LogCosh().get_cl_code())
+            cl_preamble=LogBesseli0().get_cl_code() + '\n' + LogCosh().get_cl_code())
 
 
 class ARDBeta(SimplePrior):

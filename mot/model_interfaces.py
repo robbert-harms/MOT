@@ -41,7 +41,7 @@ class OptimizeModelInterface(object):
         """Return a list of data arrays we need to load into the kernel.
 
         Returns:
-            list of mot.utils.KernelInputData: the list of data objects we need to load in the kernel
+            dict[str: mot.utils.KernelInputData]: the list of data objects we need to load in the kernel
         """
         raise NotImplementedError()
 

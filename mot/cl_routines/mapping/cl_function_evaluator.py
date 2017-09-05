@@ -1,7 +1,7 @@
 import numpy as np
 
 from mot.cl_routines.mapping.run_procedure import RunProcedure
-from ...utils import SimpleNamedCLFunction, convert_data_to_dtype, SimpleKernelInputData
+from ...utils import SimpleNamedCLFunction, convert_data_to_dtype, SimpleKernelInputData, KernelInputData
 from ...cl_routines.base import CLRoutine
 
 
@@ -22,25 +22,53 @@ class CLFunctionEvaluator(CLRoutine):
     def evaluate(self, cl_function, input_data, double_precision=False):
         """Evaluate the given CL function at the given data points.
 
+        This function will convert possible dots in the parameter name to underscores for in the CL kernel.
+
         Args:
             cl_function (mot.cl_function.CLFunction): the CL function to evaluate
-            input_data (list of ndarray): a list with for each parameter of the model an input parameter
-                to the function. Each of these input arrays must be of equal length in the first dimension.
+            input_data (dict): for each parameter of the function either an array with input data or an
+                :class:`mot.utils.KernelInputData` object. Each of these input arrays must be of equal length
+                in the first dimension.
             double_precision (boolean): if the function should be evaluated in double precision or not
 
         Returns:
             ndarray: a single array of the return type specified by the CL function,
                 with for each parameter tuple an evaluation result
         """
-        if not isinstance(input_data, (tuple, list)):
-            input_data = [input_data]
+        nmr_data_points = input_data[list(input_data)[0]].shape[0]
 
+        kernel_items = self._wrap_kernel_items(cl_function, input_data, double_precision)
+        kernel_items['_results'] = SimpleKernelInputData(
+            convert_data_to_dtype(np.ones(nmr_data_points), cl_function.get_return_type(),
+                                  mot_float_type='double' if double_precision else 'float'),
+            is_writable=True)
+
+        runner = RunProcedure(**self.get_cl_routine_kwargs())
+        runner.run_procedure(self._wrap_cl_function(cl_function),
+                             kernel_items, nmr_data_points, double_precision=double_precision)
+
+        return kernel_items['_results'].get_data()
+
+    def _wrap_kernel_items(self, cl_function, input_data, double_precision):
+        kernel_items = {}
+        for param in cl_function.get_parameters():
+            if isinstance(input_data[param.name], KernelInputData):
+                kernel_items[self._get_param_cl_name(param.name)] = input_data[param.name]
+            else:
+                data = convert_data_to_dtype(input_data[param.name], param.data_type.ctype,
+                                             mot_float_type='double' if double_precision else 'float')
+                kernel_items[self._get_param_cl_name(param.name)] = SimpleKernelInputData(data)
+        return kernel_items
+
+    def _wrap_cl_function(self, cl_function):
         func_args = []
         for param in cl_function.get_parameters():
+            param_cl_name = self._get_param_cl_name(param.name)
+
             if param.data_type.is_pointer_type:
-                func_args.append('data->{}'.format(param.name))
+                func_args.append('data->{}'.format(param_cl_name))
             else:
-                func_args.append('data->{}[0]'.format(param.name))
+                func_args.append('data->{}[0]'.format(param_cl_name))
 
         func_name = 'evaluate'
         func = cl_function.get_cl_code()
@@ -49,22 +77,9 @@ class CLFunctionEvaluator(CLRoutine):
                 data->_results[0] = ''' + cl_function.get_cl_function_name() + '''(''' + ', '.join(func_args) + ''');  
             }
         '''
-        named_func = SimpleNamedCLFunction(func, func_name)
+        return SimpleNamedCLFunction(func, func_name)
 
-        kernel_data = []
-        for ind, param in enumerate(cl_function.get_parameters()):
-            data = convert_data_to_dtype(input_data[ind], param.data_type.ctype,
-                                         mot_float_type='double' if double_precision else 'float')
-            kernel_data.append(SimpleKernelInputData(param.name, data))
-
-        kernel_data.append(SimpleKernelInputData(
-            '_results',
-            convert_data_to_dtype(np.ones(input_data[0].shape[0]), cl_function.get_return_type(),
-                                  mot_float_type='double' if double_precision else 'float'),
-            is_writable=True))
-
-        runner = RunProcedure(cl_environments=self.cl_environments, load_balancer=self.load_balancer,
-                              compile_flags=self.compile_flags)
-        runner.run_procedure(named_func, kernel_data, input_data[0].shape[0], double_precision=double_precision)
-
-        return kernel_data[-1].get_data()
+    def _get_param_cl_name(self, param_name):
+        if '.' in param_name:
+            return param_name.replace('.', '_')
+        return param_name
