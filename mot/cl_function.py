@@ -127,6 +127,8 @@ class SimpleCLFunction(CLFunction):
     def construct_cl_function(cls, return_type, cl_function_name, parameter_list, cl_body, dependency_list=()):
         """A constructor that can build the full CL code from all the header parts and the CL body.
 
+        If there are any dots in the parameter names, they will be replaced with underscores.
+
         Args:
             return_type (str): the CL return type of the function
             cl_function_name (string): The name of the CL function
@@ -141,7 +143,8 @@ class SimpleCLFunction(CLFunction):
             }}
         '''.format(return_type=return_type,
                    cl_function_name=cl_function_name,
-                   parameters=', '.join('{} {}'.format(p.data_type.declaration_type, p.name) for p in parameter_list),
+                   parameters=', '.join('{} {}'.format(p.data_type.declaration_type, p.name.replace('.', '_'))
+                                        for p in parameter_list),
                    body=cl_body)
         return cls(return_type, cl_function_name, parameter_list, cl_code, dependency_list=dependency_list)
 

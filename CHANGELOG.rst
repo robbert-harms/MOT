@@ -3,19 +3,49 @@ Changelog
 *********
 
 
+v0.3.6 (2017-09-06)
+===================
+
+Added
+-----
+- Adds CL header containing the signature of a CL function.
+- Adds a method finalize_optimized_parameters to the optimize model interface. This should be called once by the optimization routine after optimization to finalize the optimization. This saves the end user from having to to this manually in the case of codec decorated models.
+- Adds mot_data_struct as a basic type for communicating data to the user provided functions.
+- Adds a general CL procedure runner and a more specific CLFunction evaluator to the mapping routines.
+- Adds the method 'evaluate' to the CLFunction interface, allowing it to evaluate itself against some input.
+
+Changed
+-------
+- All optimization routines now linearly sum the evaluation values from the evaluation model. Previously it summed the squares.
+- Modified the evaluation models to not be a model but contain a model.
+- Converted all priors to CLFunctions.
+- Made the KernelInputData not contain the name, but let the encapsulating dictionary contain it instead.
+- Work in progress on making everything that looks like a funcion an actual CLFunction instance
+- Refactored the interface of the CLFunction class from properties to get methods.
+- Moved the mot_data_struct generation from the model to the kernel functions.
+- Aligned the interface of the NamedCLFunction with the CLFunction for a possible merge in the future.
+
+Fixed
+-----
+- Local memory timing bug fix in the sampler.
+
+Other
+-----
+- Intermediate work on the sampling mle and map calculator.
+
+
 v0.3.5 (2017-08-29)
 ===================
 
 Added
 -----
-- Adds support for static maps per compartments, that will if given override the static maps per parameter.
+- Adds support for static maps per compartment overriding the static maps only per parameter.
 
 Changed
 -------
 - Updated the changelog generation slightly.
 - Updated the problem data to be a perfect interface.
 - Updates the parser to the latest version of Grako.
-- Changed the DataAdapter and in return added a util function convert_data_to_dtype.
 
 Fixed
 -----
@@ -25,7 +55,9 @@ Other
 -----
 - Renamed AbstractInputData to just InputData, which is more in line with the rest of the naming scheme.
 - Renamed problem data to input data.
+- Code cleanup in and variable renaming.
 - Removed get_free_param_names as a required function of a model.
+- Removed the DataAdapter and in return added a util function convert_data_to_dtype.
 
 
 v0.3.4 (2017-08-22)

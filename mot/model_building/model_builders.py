@@ -1462,9 +1462,9 @@ class SampleModelBuilder(OptimizeModelBuilder):
             weights.append(CLFunctionParameter('mot_float_type', '{}.{}'.format(m.name, p.name)))
 
         if len(weights) > 1:
-            return [SimpleCLFunction.construct_cl_function(
+            return SimpleCLFunction.construct_cl_function(
                 'mot_float_type', 'prior_estimable_weights_sum_to_one',
-                weights, 'return (' + ' + '.join(el.name.replace('.', '_') for el in weights) + ') <= 1;')]
+                weights, 'return (' + ' + '.join(el.name.replace('.', '_') for el in weights) + ') <= 1;')
         return None
 
 
