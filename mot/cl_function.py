@@ -9,8 +9,8 @@ __email__ = 'robbert.harms@maastrichtuniversity.nl'
 __licence__ = 'LGPL v3'
 
 
-class CLFunction(object):
-    """Interface for a basic CL function."""
+class CLHeader(object):
+    """Signature for a basic CL function."""
 
     def get_return_type(self):
         """Get the type (in CL naming) of the returned value from this function.
@@ -34,6 +34,10 @@ class CLFunction(object):
         Returns:
             list of CLFunctionParameter: list of the parameters in this model in the same order as in the CL function"""
         raise NotImplementedError()
+
+
+class CLFunction(CLHeader):
+    """Interface for a basic CL function."""
 
     def get_cl_code(self):
         """Get the function code for this function and all its dependencies.
@@ -59,13 +63,44 @@ class CLFunction(object):
         raise NotImplementedError()
 
 
+class SimpleCLHeader(CLHeader):
+
+    def __init__(self, return_type, cl_function_name, parameter_list):
+        """A simple implementation of a CL header.
+
+        Args:
+            return_type (str): the CL return type of the function
+            cl_function_name (string): The name of the CL function
+            parameter_list (list or tuple of CLFunctionParameter): The list of parameters required for this function
+        """
+        super(SimpleCLHeader, self).__init__()
+        self._return_type = return_type
+        self._function_name = cl_function_name
+        self._parameter_list = parameter_list
+
+    def get_cl_function_name(self):
+        return self._function_name
+
+    def get_return_type(self):
+        return self._return_type
+
+    def get_parameters(self):
+        return self._parameter_list
+
+    def __hash__(self):
+        return hash(self.__repr__())
+
+    def __eq__(self, other):
+        return type(self) == type(other)
+
+    def __ne__(self, other):
+        return type(self) != type(other)
+
+
 class SimpleCLFunction(CLFunction):
 
     def __init__(self, return_type, cl_function_name, parameter_list, cl_code, dependency_list=()):
-        """A simple abstract implementation of a CL function.
-
-        Most of the requirements of a CL function are satisfied by the constructor arguments, only the CL code remains.
-        This needs to be overridden by an implementing subclass.
+        """A simple implementation of a CL function.
 
         Args:
             return_type (str): the CL return type of the function
@@ -75,11 +110,19 @@ class SimpleCLFunction(CLFunction):
             cl_code (str): the raw cl code for this function. This does not need to include the dependencies or
                 the inclusion guard, these are added automatically here.
         """
-        self._return_type = return_type
-        self._function_name = cl_function_name
-        self._parameter_list = parameter_list
-        self._dependency_list = dependency_list
+        super(SimpleCLFunction, self).__init__()
+        self._header = SimpleCLHeader(return_type, cl_function_name, parameter_list)
         self._cl_code = cl_code
+        self._dependency_list = dependency_list
+
+    def get_return_type(self):
+        return self._header.get_return_type()
+
+    def get_cl_function_name(self):
+        return self._header.get_cl_function_name()
+
+    def get_parameters(self):
+        return self._header.get_parameters()
 
     def get_cl_code(self):
         return dedent('''
@@ -91,15 +134,6 @@ class SimpleCLFunction(CLFunction):
         '''.format(dependencies=indent(self._get_cl_dependency_code(), ' ' * 4 * 3),
                    inclusion_guard_name='LIBRARY_FUNCTION_{}_CL'.format(self.get_cl_function_name()),
                    code=indent('\n' + self._cl_code.strip() + '\n', ' ' * 4 * 3)))
-
-    def get_cl_function_name(self):
-        return self._function_name
-
-    def get_return_type(self):
-        return self._return_type
-
-    def get_parameters(self):
-        return self._parameter_list
 
     def evaluate(self, inputs, double_precision=False):
         return CLFunctionEvaluator().evaluate(self, inputs, double_precision=double_precision)

@@ -102,11 +102,7 @@ class OptimizeModelInterface(object):
         This returned function should not do any error calculations,
         it should merely return the result of evaluating the model for the given parameters.
 
-        For implementers: please make sure the sign of the return value is correct (namely, positive),
-        given that the minimization routines may make use of this function to build their own objective function as
-        ```observation() - evaluation()```. This means that if you
-        want to optimize a function without observation data you need to make sure the evaluation function returns
-        the answers with the right sign.
+        For implementers: please make sure the sign of the return value is correct (namely, positive).
 
         Returns:
             mot.utils.NamedCLFunction: a named CL function with the following signature:
@@ -118,10 +114,10 @@ class OptimizeModelInterface(object):
         raise NotImplementedError()
 
     def get_objective_per_observation_function(self):
-        """Get the objective function that returns the objective value for the given measurement instance.
+        """Get the objective function that returns the objective value at every measurement instance.
 
-        This should return the objective values (of each instance point) as such that when the sum of squares is
-        taken we have our objective function value.
+        This should return the objective values (of each instance point) as such that when linearly summed, we have our
+        objective function value.
 
         Returns:
             mot.utils.NamedCLFunction: A CL function with signature:

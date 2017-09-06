@@ -76,7 +76,7 @@ class CompartmentModelTree(Tree):
         Valid model trees abides this grammar:
 
         tree     ::= model | '(' tree ')' | '(' tree ',' operator ')'
-        model    ::= ModelFunction
+        model    ::= ModelCLFunction
         operator ::= '*' | '/' | '+' | '-'
 
         This means that one can build complex models consisting of "Model Functions" (for example,
@@ -94,7 +94,7 @@ class CompartmentModelTree(Tree):
         This basically just returns the leaves of the tree.
 
         Returns:
-            list of ModelFunction: the compartments in this tree
+            list of ModelCLFunction: the compartments in this tree
         """
         return [n.data for n in self.leaves]
 

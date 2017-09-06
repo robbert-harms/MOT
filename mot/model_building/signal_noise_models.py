@@ -1,5 +1,5 @@
 from mot.model_building.parameters import FreeParameter
-from mot.model_building.model_functions import SimpleModelFunction
+from mot.model_building.model_functions import SimpleModelCLFunction
 from mot.model_building.parameter_functions.transformations import CosSqrClampTransform
 from mot.cl_data_type import SimpleCLDataType
 
@@ -10,7 +10,7 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class SignalNoiseModel(SimpleModelFunction):
+class SignalNoiseModel(SimpleModelCLFunction):
     """Signal noise models can add noise to the signal resulting from the model.
 
     They require the signal resulting from the model and zero or more parameters and they return a new signal

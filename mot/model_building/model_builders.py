@@ -8,7 +8,7 @@ from mot.cl_function import SimpleCLFunction
 from mot.cl_routines.mapping.codec_runner import CodecRunner
 from mot.cl_routines.sampling.metropolis_hastings import DefaultMHState
 from mot.model_building.model_function_priors import ModelFunctionPrior
-from mot.model_building.model_functions import Weight, ModelFunction
+from mot.model_building.model_functions import Weight, ModelCLFunction
 from mot.model_building.parameters import CurrentObservationParam, StaticMapParameter, ProtocolParameter, \
     ModelDataParameter, FreeParameter
 from mot.model_building.parameter_functions.dependencies import SimpleAssignment, AbstractParameterDependency
@@ -539,13 +539,13 @@ class OptimizeModelBuilder(ModelBuilder):
 
     def _get_objective_per_observation_function(self, problems_to_analyze):
         eval_function_info = self._get_model_eval_function(problems_to_analyze)
-        eval_model_func = self._evaluation_model.get_objective_per_observation_function()
+        eval_model_func = self._evaluation_model.get_minimum_likelihood_function()
 
         eval_call_args = ['observation', 'model_evaluation']
         param_listing = ''
-        for p in self._evaluation_model.get_free_parameters():
-            param_listing += self._get_param_listing_for_param(self._evaluation_model, p)
-            eval_call_args.append('{}.{}'.format(self._evaluation_model.name, p.name).replace('.', '_'))
+        for p in eval_model_func.get_free_parameters():
+            param_listing += self._get_param_listing_for_param(eval_model_func, p)
+            eval_call_args.append('{}.{}'.format(eval_model_func.name, p.name).replace('.', '_'))
 
         preliminary = ''
         preliminary += eval_function_info.get_cl_code()
@@ -839,7 +839,7 @@ class OptimizeModelBuilder(ModelBuilder):
         This only returns the problems for which problems_to_analyze is set.
 
         Args:
-            model (ModelFunction): the model function
+            model (ModelCLFunction): the model function
             parameter (CLParameter): the parameter for which we want to get the value
             problems_to_analyze (ndarray): the problems we are interested in
 
@@ -868,10 +868,6 @@ class OptimizeModelBuilder(ModelBuilder):
             return param_data[problems_to_analyze, ...]
 
         return param_data
-
-    def _is_non_model_tree_model(self, model):
-        return model is self._evaluation_model or (self._signal_noise_model is not None and
-                                                   model is self._signal_noise_model)
 
     def _get_param_listing_for_param(self, m, p):
         """Get the param listing for one specific parameter. This can be used for example for the noise model params.
@@ -1423,18 +1419,19 @@ class SampleModelBuilder(OptimizeModelBuilder):
 
     def _get_log_likelihood_per_observation_function_builder(self, problems_to_analyze):
         eval_function_info = self._get_model_eval_function(problems_to_analyze)
+        eval_function_signature = self._evaluation_model.get_log_likelihood_function()
 
         eval_call_args = ['observation', 'model_evaluation']
         param_listing = ''
-        for p in self._evaluation_model.get_free_parameters():
-            param_listing += self._get_param_listing_for_param(self._evaluation_model, p)
-            eval_call_args.append('{}.{}'.format(self._evaluation_model.name, p.name).replace('.', '_'))
+        for p in eval_function_signature.get_free_parameters():
+            param_listing += self._get_param_listing_for_param(eval_function_signature, p)
+            eval_call_args.append('{}.{}'.format(eval_function_signature.name, p.name).replace('.', '_'))
 
         preliminary = ''
         preliminary += eval_function_info.get_cl_code()
 
         def builder(full_likelihood):
-            eval_model_func = self._evaluation_model.get_log_likelihood_per_observation_function(
+            eval_model_func = self._evaluation_model.get_log_likelihood_function(
                 full_likelihood=full_likelihood)
 
             func_name = 'getLogLikelihoodPerObservation'
@@ -1699,7 +1696,7 @@ class ModelFunctionsInformation(object):
         """Get the list of all the applicable model functions
 
         Returns:
-            list of mot.model_building.model_functions.ModelFunction: the list of model functions.
+            list of mot.model_building.model_functions.ModelCLFunction: the list of model functions.
         """
         return self._model_list
 
@@ -1830,8 +1827,8 @@ class ModelFunctionsInformation(object):
             tuple: the (model, parameter) tuple for all non model evaluation parameters
         """
         listing = []
-        for p in self._evaluation_model.get_parameters():
-            listing.append((self._evaluation_model, p))
+        for p in self._evaluation_model.get_function_header().get_parameters():
+            listing.append((self._evaluation_model.get_function_header(), p))
         return listing
 
     def is_fixed(self, parameter_name):
@@ -1862,7 +1859,7 @@ class ModelFunctionsInformation(object):
         """Check if the given model and parameter name combo has a dependency.
 
         Args:
-            model (mot.model_building.model_functions.ModelFunction): the model function
+            model (mot.model_building.model_functions.ModelCLFunction): the model function
             param (mot.cl_parameter.CLFunctionParameter): the parameter
 
         Returns:
@@ -1879,7 +1876,7 @@ class ModelFunctionsInformation(object):
         A parameter is estimable if it is of the Free parameter type and is not fixed.
 
         Args:
-            model (mot.model_building.model_functions.ModelFunction): the model function
+            model (mot.model_building.model_functions.ModelCLFunction): the model function
             param (mot.cl_parameter.CLFunctionParameter): the parameter
 
         Returns:
@@ -1936,7 +1933,7 @@ class ModelFunctionsInformation(object):
         This returns the position of this parameter in the 'x', parameter vector in the CL kernels.
 
         Args:
-            model (mot.model_building.model_functions.ModelFunction): the model function
+            model (mot.model_building.model_functions.ModelCLFunction): the model function
             param (mot.cl_parameter.CLFunctionParameter): the parameter
 
         Returns:
@@ -1991,7 +1988,7 @@ class ModelFunctionsInformation(object):
     def _get_model_list(self):
         """Get the list of all the applicable model functions"""
         models = list(self._model_tree.get_compartment_models())
-        models.append(self._evaluation_model)
+        models.append(self._evaluation_model.get_function_header())
         if self._signal_noise_model:
             models.append(self._signal_noise_model)
         return models

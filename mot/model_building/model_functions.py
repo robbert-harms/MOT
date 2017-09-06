@@ -1,6 +1,6 @@
 from textwrap import dedent
 from mot.cl_data_type import SimpleCLDataType
-from mot.cl_function import CLFunction, SimpleCLFunction
+from mot.cl_function import CLFunction, SimpleCLFunction, CLHeader, SimpleCLHeader
 from mot.model_building.model_function_priors import ModelFunctionPrior
 from mot.model_building.parameters import FreeParameter
 from mot.model_building.parameter_functions.priors import ARDGaussian, UniformWithinBoundsPrior, ARDBeta
@@ -13,11 +13,16 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class ModelFunction(CLFunction):
-    """Interface for a basic model function just for optimization purposes.
+class ModelCLHeader(CLHeader):
 
-    If you need to sample the model, use the extended version of this interface :class:`SampleModelFunction`.
-    """
+    @property
+    def name(self):
+        """Get the name of this model function.
+
+        Returns:
+            str: The name of this model function.
+        """
+        raise NotImplementedError()
 
     def get_free_parameters(self):
         """Get all the free parameters in this model
@@ -28,11 +33,7 @@ class ModelFunction(CLFunction):
         raise NotImplementedError()
 
 
-class SampleModelFunction(ModelFunction):
-    """Extended version of a model function for use in sampling.
-
-    This adds functions to retrieve priors about this function.
-    """
+class SampleModelCLHeader(ModelCLHeader):
 
     def get_prior_parameters(self, parameter):
         """Get the prior parameters of the given parameter.
@@ -55,10 +56,23 @@ class SampleModelFunction(ModelFunction):
         raise NotImplementedError()
 
 
-class SimpleModelFunction(SampleModelFunction, SimpleCLFunction):
+class ModelCLFunction(CLFunction, ModelCLHeader):
+    """Interface for a basic model function just for optimization purposes.
 
-    def __init__(self, return_type, name, cl_function_name, parameter_list, cl_code, dependency_list=(),
-                 model_function_priors=None):
+    If you need to sample the model, use the extended version of this interface :class:`SampleModelCLFunction`.
+    """
+
+
+class SampleModelCLFunction(ModelCLFunction, SampleModelCLHeader):
+    """Extended version of a model function for use in sampling.
+
+    This adds functions to retrieve priors about this function.
+    """
+
+
+class SimpleSampleModelCLHeader(SimpleCLHeader, SampleModelCLHeader):
+
+    def __init__(self, return_type, name, cl_function_name, parameter_list, model_function_priors=None):
         """This CL function is for all estimable models
 
         Args:
@@ -66,13 +80,10 @@ class SimpleModelFunction(SampleModelFunction, SimpleCLFunction):
             name (str): The name of the model
             cl_function_name (string): The name of the CL function
             parameter_list (list or tuple of CLFunctionParameter): The list of parameters required for this function
-            cl_code (str): the cl code for this function without inclusion guards or dependencies
-            dependency_list (list or tuple of CLFunction): The list of CL libraries this function depends on
             model_function_priors (list of mot.model_building.model_function_priors.ModelFunctionPrior):
                 list of priors concerning this whole model function
         """
-        super(SimpleModelFunction, self).__init__(return_type, cl_function_name, parameter_list, cl_code,
-                                                  dependency_list=dependency_list)
+        super(SimpleSampleModelCLHeader, self).__init__(return_type, cl_function_name, parameter_list)
         self._name = name
         self._model_function_priors = model_function_priors or []
         if isinstance(self._model_function_priors, ModelFunctionPrior):
@@ -130,7 +141,43 @@ class SimpleModelFunction(SampleModelFunction, SimpleCLFunction):
         return get_prior_parameters([parameter])
 
 
-class Scalar(SimpleModelFunction):
+class SimpleModelCLFunction(SampleModelCLFunction, SimpleCLFunction):
+
+    def __init__(self, return_type, name, cl_function_name, parameter_list, cl_code, dependency_list=(),
+                 model_function_priors=None):
+        """This CL function is for all estimable models
+
+        Args:
+            return_type (str): the CL return type of the function
+            name (str): The name of the model
+            cl_function_name (string): The name of the CL function
+            parameter_list (list or tuple of CLFunctionParameter): The list of parameters required for this function
+            cl_code (str): the cl code for this function without inclusion guards or dependencies
+            dependency_list (list or tuple of CLFunction): The list of CL libraries this function depends on
+            model_function_priors (list of mot.model_building.model_function_priors.ModelFunctionPrior):
+                list of priors concerning this whole model function
+        """
+        super(SimpleModelCLFunction, self).__init__(return_type, cl_function_name, parameter_list,
+                                                    cl_code, dependency_list=dependency_list)
+
+        self._header = SimpleSampleModelCLHeader(return_type, name, cl_function_name,
+                                                 parameter_list, model_function_priors=model_function_priors)
+
+    @property
+    def name(self):
+        return self._header.name
+
+    def get_model_function_priors(self):
+        return self._header.get_model_function_priors()
+
+    def get_free_parameters(self):
+        return self._header.get_free_parameters()
+
+    def get_prior_parameters(self, parameter):
+        return self._header.get_prior_parameters(parameter)
+
+
+class Scalar(SimpleModelCLFunction):
 
     def __init__(self, name='Scalar', param_name='s', value=0.0, lower_bound=0.0, upper_bound=float('inf'),
                  parameter_kwargs=None):
