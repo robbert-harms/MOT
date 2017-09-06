@@ -140,7 +140,8 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
                 ''' + param_modifier.get_cl_function_name() + '''(data, x_model);
                 
                 for(uint i = 0; i < ''' + str(self._model.get_nmr_inst_per_problem()) + '''; i++){
-                    result[i] = ''' + objective_func.get_cl_function_name() + '''(data, x_model, i);
+                    // the model expects the L1 norm, while the LM method takes the L2 norm. Taking square root here.
+                    result[i] = sqrt(fabs(''' + objective_func.get_cl_function_name() + '''(data, x_model, i)));
                 }
             }
         '''
