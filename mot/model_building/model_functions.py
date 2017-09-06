@@ -1,7 +1,6 @@
 from textwrap import dedent
 from mot.cl_data_type import SimpleCLDataType
 from mot.cl_function import CLFunction, SimpleCLFunction, CLHeader, SimpleCLHeader
-from mot.model_building.model_function_priors import ModelFunctionPrior
 from mot.model_building.parameters import FreeParameter
 from mot.model_building.parameter_functions.priors import ARDGaussian, UniformWithinBoundsPrior, ARDBeta
 from mot.model_building.parameter_functions.proposals import GaussianProposal
@@ -50,7 +49,7 @@ class SampleModelCLHeader(ModelCLHeader):
         """Get all the model function priors.
 
         Returns:
-            list of mot.model_building.model_function_priors.ModelFunctionPrior: the priors for this model function,
+            list[mot.cl_function.CLFunction]: the priors for this model function,
                 these are supposed to be used in conjunction to the parameter priors.
         """
         raise NotImplementedError()
@@ -80,13 +79,13 @@ class SimpleSampleModelCLHeader(SimpleCLHeader, SampleModelCLHeader):
             name (str): The name of the model
             cl_function_name (string): The name of the CL function
             parameter_list (list or tuple of CLFunctionParameter): The list of parameters required for this function
-            model_function_priors (list of mot.model_building.model_function_priors.ModelFunctionPrior):
-                list of priors concerning this whole model function
+            model_function_priors (list of mot.cl_function.CLFunction): list of priors concerning this whole model
+                function. The parameter names of the given functions must match those of this function.
         """
         super(SimpleSampleModelCLHeader, self).__init__(return_type, cl_function_name, parameter_list)
         self._name = name
         self._model_function_priors = model_function_priors or []
-        if isinstance(self._model_function_priors, ModelFunctionPrior):
+        if isinstance(self._model_function_priors, CLFunction):
             self._model_function_priors = [self._model_function_priors]
 
     @property
@@ -102,8 +101,8 @@ class SimpleSampleModelCLHeader(SimpleCLHeader, SampleModelCLHeader):
         """Get all the model function priors.
 
         Returns:
-            list of mot.model_building.model_function_priors.ModelFunctionPrior: the priors for this model function,
-                these are supposed to be used in conjunction to the parameter priors.
+            list[mot.cl_function.CLFunction]: the priors for this model function, these are supposed to be used in
+                conjunction to the parameter priors.
         """
         return self._model_function_priors
 
@@ -127,7 +126,7 @@ class SimpleSampleModelCLHeader(SimpleCLHeader, SampleModelCLHeader):
             return_params = []
 
             for param in params:
-                prior_params = param.sampling_prior.get_parameters()
+                prior_params = param.sampling_prior.get_parameters()[3:]
                 proxy_prior_params = [prior_param.get_renamed('{}.prior.{}'.format(param.name, prior_param.name))
                                       for prior_param in prior_params]
 
@@ -154,8 +153,8 @@ class SimpleModelCLFunction(SampleModelCLFunction, SimpleCLFunction):
             parameter_list (list or tuple of CLFunctionParameter): The list of parameters required for this function
             cl_code (str): the cl code for this function without inclusion guards or dependencies
             dependency_list (list or tuple of CLFunction): The list of CL libraries this function depends on
-            model_function_priors (list of mot.model_building.model_function_priors.ModelFunctionPrior):
-                list of priors concerning this whole model function
+            model_function_priors (list of mot.cl_function.CLFunction): list of priors concerning this whole model
+                function. The parameter names of the given functions must match those of this function.
         """
         super(SimpleModelCLFunction, self).__init__(return_type, cl_function_name, parameter_list,
                                                     cl_code, dependency_list=dependency_list)

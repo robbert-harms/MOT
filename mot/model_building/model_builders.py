@@ -4,15 +4,15 @@ import numpy as np
 import copy
 from six import string_types
 from mot.cl_data_type import SimpleCLDataType
-from mot.cl_function import SimpleCLFunction
+from mot.cl_function import SimpleCLFunction, CLFunction
+from mot.cl_parameter import CLFunctionParameter
 from mot.cl_routines.mapping.codec_runner import CodecRunner
 from mot.cl_routines.sampling.metropolis_hastings import DefaultMHState
-from mot.model_building.model_function_priors import ModelFunctionPrior
 from mot.model_building.model_functions import Weight, ModelCLFunction
 from mot.model_building.parameters import CurrentObservationParam, StaticMapParameter, ProtocolParameter, \
     ModelDataParameter, FreeParameter
 from mot.model_building.parameter_functions.dependencies import SimpleAssignment, AbstractParameterDependency
-from mot.model_building.utils import ParameterCodec, SimpleModelPrior
+from mot.model_building.utils import ParameterCodec
 from mot.model_interfaces import OptimizeModelInterface, SampleModelInterface
 from mot.utils import is_scalar, all_elements_equal, get_single_value, SimpleNamedCLFunction, convert_data_to_dtype, \
     SimpleKernelInputData
@@ -1058,7 +1058,7 @@ class SampleModelBuilder(OptimizeModelBuilder):
         """Create a new model builder for sampling purposes.
 
         Attributes:
-            model_priors (list of mot.model_building.utils.ModelPrior): the list of model priors this class
+            model_priors (list[mot.cl_function.CLFunction]): the list of model priors this class
                 will also use (next to the priors defined in the parameters).
         """
         super(SampleModelBuilder, self).__init__(model_name, model_tree, evaluation_model, signal_noise_model,
@@ -1116,10 +1116,10 @@ class SampleModelBuilder(OptimizeModelBuilder):
         def get_preliminary():
             cl_str = ''
             for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
-                cl_str += p.sampling_prior.get_prior_function()
+                cl_str += p.sampling_prior.get_cl_code()
 
             for model_prior in self._model_priors:
-                cl_str += model_prior.get_prior_function()
+                cl_str += model_prior.get_cl_code()
             return cl_str
 
         def get_body():
@@ -1141,7 +1141,7 @@ class SampleModelBuilder(OptimizeModelBuilder):
                 else:
                     upper_bound = 'data->var_data_ub_' + name.replace('.', '_')
 
-                function_name = p.sampling_prior.get_prior_function_name()
+                function_name = p.sampling_prior.get_cl_function_name()
 
                 if m.get_prior_parameters(p):
                     prior_params = []
@@ -1159,17 +1159,17 @@ class SampleModelBuilder(OptimizeModelBuilder):
                                                     '{}.{}'.format(m.name, prior_param.name).replace('.', '_'))
 
                     cl_str += 'prior *= {}(x[{}], {}, {}, {});\n'.format(function_name, i, lower_bound, upper_bound,
-                                                                       ', '.join(prior_params))
+                                                                         ', '.join(prior_params))
                 else:
                     cl_str += 'prior *= {}(x[{}], {}, {});\n'.format(function_name, i, lower_bound, upper_bound)
 
             for model_prior in self._model_priors:
-                function_name = model_prior.get_prior_function_name()
+                function_name = model_prior.get_cl_function_name()
                 parameters = []
 
-                for param_name in model_prior.get_function_parameters():
+                for param in model_prior.get_parameters():
                     assignment_value = self._get_free_parameter_assignment_value(
-                        *self._model_functions_info.get_model_parameter_by_name(param_name))
+                        *self._model_functions_info.get_model_parameter_by_name(param.name))
                     parameters.append(assignment_value)
 
                 cl_str += '\tprior *= {}({});\n'.format(function_name, ', '.join(parameters))
@@ -1459,13 +1459,12 @@ class SampleModelBuilder(OptimizeModelBuilder):
         """Get the prior limiting the weights between 0 and 1"""
         weights = []
         for (m, p) in self._model_functions_info.get_estimable_weights():
-            weights.append('{}.{}'.format(m.name, p.name))
+            weights.append(CLFunctionParameter('mot_float_type', '{}.{}'.format(m.name, p.name)))
 
         if len(weights) > 1:
-            prior = SimpleModelPrior('''
-                return (''' + ' + '.join(el.replace('.', '_') for el in weights) + ''') <= 1;
-            ''', weights, 'prior_estimable_weights_sum_to_one')
-            return prior
+            return [SimpleCLFunction.construct_cl_function(
+                'mot_float_type', 'prior_estimable_weights_sum_to_one',
+                weights, 'return (' + ' + '.join(el.name.replace('.', '_') for el in weights) + ') <= 1;')]
         return None
 
 
@@ -2113,23 +2112,19 @@ class DoubleModelNameException(Exception):
     pass
 
 
-class _ModelFunctionPriorToCompositeModelPrior(ModelFunctionPrior):
+class _ModelFunctionPriorToCompositeModelPrior(SimpleCLFunction):
 
     def __init__(self, model_function_prior, compartment_name):
         """Simple prior class for easily converting the compartment priors to composite model priors."""
-        self._prior_function = model_function_prior.get_prior_function()
-        self._parameters = ['{}.{}'.format(compartment_name, p)
-                            for p in model_function_prior.get_function_parameters()]
-        self._function_name = model_function_prior.get_prior_function_name()
+        parameters = [CLFunctionParameter('mot_float_type', '{}.{}'.format(compartment_name, p.name))
+                      for p in model_function_prior.get_parameters()]
 
-    def get_prior_function(self):
-        return self._prior_function
-
-    def get_function_parameters(self):
-        return self._parameters
-
-    def get_prior_function_name(self):
-        return self._function_name
+        super(_ModelFunctionPriorToCompositeModelPrior, self).__init__(
+            model_function_prior.get_return_type(),
+            model_function_prior.get_cl_function_name(),
+            parameters,
+            model_function_prior.get_raw_cl_code()
+        )
 
 
 class SimpleOptimizeModel(OptimizeModelInterface):

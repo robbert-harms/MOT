@@ -74,6 +74,9 @@ class CLFunctionEvaluator(CLRoutine):
         func = cl_function.get_cl_code()
         func += '''
             void ''' + func_name + '''(mot_data_struct* data){
+                
+                printf("%f \\n", data->value[0]);
+            
                 data->_results[0] = ''' + cl_function.get_cl_function_name() + '''(''' + ', '.join(func_args) + ''');  
             }
         '''

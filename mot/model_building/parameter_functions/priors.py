@@ -1,5 +1,7 @@
 import numpy as np
 from mot.cl_data_type import SimpleCLDataType
+from mot.cl_function import CLFunction, SimpleCLFunction
+from mot.cl_parameter import CLFunctionParameter
 from mot.model_building.parameter_functions.proposals import GaussianProposal
 
 __author__ = 'Robbert Harms'
@@ -9,103 +11,57 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class ParameterPrior(object):
-    """The priors are used during model sampling.
+class ParameterPrior(CLFunction):
+    """The priors are used during model sampling, indicating the a priori information one has about a parameter.
 
     These priors are not in log space, we take the log in the model builder.
 
-    They indicate the a priori information one has about a parameter.
-    """
+    The signature of prior parameters must be:
 
-    def get_prior_function(self):
-        """Get the prior function as a CL string. This should include include guards (#ifdef's).
+    .. code-block: c
 
-        This should follow the signature:
-
-        .. code-block: c
-
-            mot_float_type <prior_fname>(mot_float_type parent_parameter,
+            mot_float_type <prior_fname>(mot_float_type value,
                                          mot_float_type lower_bound,
                                          mot_float_type upper_bound,
-                                         <sub-parameters>)
-
-        That is, the parent parameter and it lower and upper bound is given next to the optional parameters
-        defined in this prior.
-
-        Returns:
-            str: The cl function
-        """
-        raise NotImplementedError()
-
-    def get_prior_function_name(self):
-        """Get the name of the prior function call.
-
-         This is used by the model builder to construct the call to the prior function.
-
-         Returns:
-            str: name of the function
-        """
-        raise NotImplementedError()
-
-    def get_parameters(self):
-        """Get the additional parameters featured in this prior.
-
-        This can return a list of additional parameters to be used in the model function.
-
-        Returns:
-            list of CLFunctionParameter: the list of function parameters to be added to the list of
-                parameters of the enclosing model.
-        """
-        raise NotImplementedError()
+                                         <extra_parameters>)
+    """
 
 
-class SimplePrior(ParameterPrior):
+class SimplePrior(ParameterPrior, SimpleCLFunction):
 
-    def __init__(self, prior_body, prior_name, prior_params=None, cl_preamble=None):
+    def __init__(self, prior_name, prior_body, extra_params=None, dependency_list=()):
         """A prior template function.
 
+        This will prepend to the given extra parameters the obligatory parameters (value, lower_bound, upper_bound).
+
         Args:
-            prior_body (str): the body of the prior
             prior_name (str): the name of this prior function
-            prior_params (list): additional parameters for this prior
-            preamble (str): optional C code loaded before the function definition.
+            prior_body (str): the body of the prior
+            extra_params (list): additional parameters for this prior
+            dependency_list (list or tuple): the list of dependency functions
         """
-        self._prior_body = prior_body
-        self._prior_name = prior_name
-        self._prior_params = prior_params or []
-        self._cl_preamble = cl_preamble
+        extra_params = extra_params or []
 
-    def get_parameters(self):
-        return self._prior_params
-
-    def get_prior_function(self):
-        params = ['value', 'lower_bound', 'upper_bound']
-        params.extend(p.name for p in self._prior_params)
-        params = ['const mot_float_type {}'.format(v) for v in params]
-
-        return '''
-            {cl_preamble}
-
-            #ifndef {include_guard_name}
-            #define {include_guard_name}
-
+        parameters = [CLFunctionParameter('mot_float_type', 'value'),
+                      CLFunctionParameter('mot_float_type', 'lower_bound'),
+                      CLFunctionParameter('mot_float_type', 'upper_bound')] + extra_params
+        cl_code = '''
             mot_float_type {function_name}({params}){{
-                {prior_body}
+                {body}
             }}
+        '''.format(function_name=prior_name,
+                   params=', '.join(['{} {}'.format(p.data_type.declaration_type, p.name) for p in parameters]),
+                   body=prior_body)
 
-            #endif //{include_guard_name}
-        '''.format(include_guard_name='PRIOR_{}'.format(self._prior_name.upper()), function_name=self._prior_name,
-                   prior_body=self._prior_body, params=', '.join(params), cl_preamble=self._cl_preamble or '')
-
-    def get_prior_function_name(self):
-        return self._prior_name
+        super(SimplePrior, self).__init__('mot_float_type', prior_name, parameters, cl_code,
+                                          dependency_list=dependency_list)
 
 
 class AlwaysOne(SimplePrior):
 
     def __init__(self):
         """The uniform prior is always 1. :math:`P(v) = 1` """
-        super(AlwaysOne, self).__init__('return 1;', 'uniform')
+        super(AlwaysOne, self).__init__('uniform', 'return 1;')
 
 
 class ReciprocalPrior(SimplePrior):
@@ -118,7 +74,7 @@ class ReciprocalPrior(SimplePrior):
             }
             return 1.0/value;
         '''
-        super(ReciprocalPrior, self).__init__(body, 'reciprocal')
+        super(ReciprocalPrior, self).__init__('reciprocal', body)
 
 
 class UniformWithinBoundsPrior(SimplePrior):
@@ -126,22 +82,22 @@ class UniformWithinBoundsPrior(SimplePrior):
     def __init__(self):
         """This prior is 1 within the upper and lower bound of the parameter, 0 outside."""
         super(UniformWithinBoundsPrior, self).__init__(
-            'return value >= lower_bound && value <= upper_bound;',
-            'uniform_within_bounds')
+            'uniform_within_bounds',
+            'return value >= lower_bound && value <= upper_bound;')
 
 
 class AbsSinPrior(SimplePrior):
 
     def __init__(self):
         """Angular prior: :math:`P(v) = |\\sin(v)|`"""
-        super(AbsSinPrior, self).__init__('return fabs(sin(value));', 'abs_sin')
+        super(AbsSinPrior, self).__init__('abs_sin', 'return fabs(sin(value));')
 
 
 class AbsSinHalfPrior(SimplePrior):
 
     def __init__(self):
         """Angular prior: :math:`P(v) = |\\sin(x)/2.0|`"""
-        super(AbsSinHalfPrior, self).__init__('return fabs(sin(value)/2.0);', 'abs_sin_half')
+        super(AbsSinHalfPrior, self).__init__('abs_sin_half', 'return fabs(sin(value)/2.0);')
 
 
 class VagueGammaPrior(SimplePrior):
@@ -176,7 +132,7 @@ class VagueGammaPrior(SimplePrior):
 
             return (1.0 / (tgamma(kappa) * pow(theta, kappa))) * pow(value, kappa - 1) * exp(- value / theta);
         '''
-        super(VagueGammaPrior, self).__init__(body, 'vague_gamma_prior', [])
+        super(VagueGammaPrior, self).__init__('vague_gamma_prior', body)
 
 
 class NormalPDF(SimplePrior):
@@ -184,15 +140,16 @@ class NormalPDF(SimplePrior):
     def __init__(self):
         r"""Normal PDF on the given value: :math:`P(v) = N(v; \mu, \sigma)`"""
         from mot.model_building.parameters import FreeParameter
-        params = [FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'mu', True, 0, -np.inf, np.inf,
-                                sampling_prior=AlwaysOne()),
-                  FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'sigma', True, 1, -np.inf, np.inf,
-                                sampling_prior=AlwaysOne())]
+        extra_params = [FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'mu', True, 0, -np.inf, np.inf,
+                                      sampling_prior=AlwaysOne()),
+                        FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'sigma', True, 1, -np.inf, np.inf,
+                                      sampling_prior=AlwaysOne())]
 
         super(NormalPDF, self).__init__(
-            'return exp(-pown(value - mu, 2) / (2 * pown(sigma, 2))) / (sigma * sqrt(2 * M_PI));',
             'normal_pdf',
-            params)
+            'return exp((mot_float_type) (-((value - mu) * (value - mu)) / (2 * sigma * sigma))) '
+            '           / (sigma * sqrt(2 * M_PI));',
+            extra_params)
 
 
 class AxialNormalPDF(SimplePrior):
@@ -224,12 +181,13 @@ class AxialNormalPDF(SimplePrior):
         from mot.model_building.parameters import FreeParameter
         from mot.library_functions import LogCosh, LogBesseli0
 
-        params = [FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'mu', True, 0, -np.inf, np.inf,
-                                sampling_prior=AlwaysOne()),
-                  FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'sigma', True, 1, -np.inf, np.inf,
-                                sampling_prior=AlwaysOne())]
+        extra_params = [FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'mu', True, 0, -np.inf, np.inf,
+                                      sampling_prior=AlwaysOne()),
+                        FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'sigma', True, 1, -np.inf, np.inf,
+                                      sampling_prior=AlwaysOne())]
 
         super(AxialNormalPDF, self).__init__(
+            'axial_normal_pdf',
             '''
                 float kappa = 1.0 / pown(sigma, 2);
                 float a = kappa * sin(mu);
@@ -239,9 +197,8 @@ class AxialNormalPDF(SimplePrior):
                             - log_bessel_i0(sqrt(pown(a, 2) + pown(b, 2)))
                             - log(M_PI) );
             ''',
-            'axial_normal_pdf',
-            params,
-            cl_preamble=LogBesseli0().get_cl_code() + '\n' + LogCosh().get_cl_code())
+            extra_params,
+            dependency_list=(LogBesseli0(), LogCosh()))
 
 
 class ARDBeta(SimplePrior):
@@ -260,9 +217,9 @@ class ARDBeta(SimplePrior):
 
         """
         from mot.model_building.parameters import FreeParameter
-        params = [FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'beta', False, 1, 1e-4, 1000,
-                                sampling_prior=ReciprocalPrior(),
-                                sampling_proposal=GaussianProposal(0.01))]
+        extra_params = [FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'beta', False, 1, 1e-4, 1000,
+                                      sampling_prior=ReciprocalPrior(),
+                                      sampling_proposal=GaussianProposal(0.01))]
 
         body = '''
             if(value < 0 || value > 1){
@@ -270,7 +227,7 @@ class ARDBeta(SimplePrior):
             }
             return beta * pow(1 - value, beta - 1);
         '''
-        super(ARDBeta, self).__init__(body, 'ard_beta_pdf', params)
+        super(ARDBeta, self).__init__('ard_beta_pdf', body, extra_params)
 
 
 class ARDGaussian(SimplePrior):
@@ -282,9 +239,9 @@ class ARDGaussian(SimplePrior):
         with the relationship :math:`\sigma = 1/\\sqrt(\\alpha)`.
         """
         from mot.model_building.parameters import FreeParameter
-        params = [FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'alpha', False, 8, 1e-5, 1e4,
-                                sampling_prior=UniformWithinBoundsPrior(),
-                                sampling_proposal=GaussianProposal(20))]
+        extra_params = [FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'alpha', False, 8, 1e-5, 1e4,
+                                      sampling_prior=UniformWithinBoundsPrior(),
+                                      sampling_proposal=GaussianProposal(20))]
 
         body = '''
             if(value < 0 || value > 1){
@@ -293,4 +250,4 @@ class ARDGaussian(SimplePrior):
             mot_float_type sigma = 1.0/sqrt(alpha);
             return exp(-pown(value, 2) / (2 * pown(sigma, 2))) / (sigma * sqrt(2 * M_PI));
         '''
-        super(ARDGaussian, self).__init__(body, 'ard_beta_pdf', params)
+        super(ARDGaussian, self).__init__('ard_beta_pdf', body, extra_params)

@@ -40,10 +40,18 @@ class CLFunction(CLHeader):
     """Interface for a basic CL function."""
 
     def get_cl_code(self):
-        """Get the function code for this function and all its dependencies.
+        """Get the function code for this function and all its dependencies, with include guards.
 
         Returns:
             str: The CL code for inclusion in a kernel.
+        """
+        raise NotImplementedError()
+
+    def get_raw_cl_code(self):
+        """Get the CL code of only the implementing function, without include guards.
+
+        Returns:
+            str: the CL for encapsulation
         """
         raise NotImplementedError()
 
@@ -115,6 +123,28 @@ class SimpleCLFunction(CLFunction):
         self._cl_code = cl_code
         self._dependency_list = dependency_list
 
+    @classmethod
+    def construct_cl_function(cls, return_type, cl_function_name, parameter_list, cl_body, dependency_list=()):
+        """A constructor that can build the full CL code from all the header parts and the CL body.
+
+        Args:
+            return_type (str): the CL return type of the function
+            cl_function_name (string): The name of the CL function
+            parameter_list (list or tuple of CLFunctionParameter): The list of parameters required for this function
+            dependency_list (list or tuple of CLLibrary): The list of CL libraries this function depends on
+            cl_body (str): the body of the CL code. The rest of the function call will be added by this constructor.
+        """
+
+        cl_code = '''
+            {return_type} {cl_function_name}({parameters}){{
+                {body}
+            }}
+        '''.format(return_type=return_type,
+                   cl_function_name=cl_function_name,
+                   parameters=', '.join('{} {}'.format(p.data_type.declaration_type, p.name) for p in parameter_list),
+                   body=cl_body)
+        return cls(return_type, cl_function_name, parameter_list, cl_code, dependency_list=dependency_list)
+
     def get_return_type(self):
         return self._header.get_return_type()
 
@@ -134,6 +164,9 @@ class SimpleCLFunction(CLFunction):
         '''.format(dependencies=indent(self._get_cl_dependency_code(), ' ' * 4 * 3),
                    inclusion_guard_name='LIBRARY_FUNCTION_{}_CL'.format(self.get_cl_function_name()),
                    code=indent('\n' + self._cl_code.strip() + '\n', ' ' * 4 * 3)))
+
+    def get_raw_cl_code(self):
+        return self._cl_code
 
     def evaluate(self, inputs, double_precision=False):
         return CLFunctionEvaluator().evaluate(self, inputs, double_precision=double_precision)
