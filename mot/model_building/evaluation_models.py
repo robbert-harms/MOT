@@ -1,4 +1,4 @@
-from mot.model_building.model_functions import SimpleModelCLFunction, SimpleSampleModelCLHeader
+from mot.model_building.model_functions import SimpleModelCLFunction, SimpleSampleModelCLPrototype
 from mot.cl_parameter import CLFunctionParameter
 from mot.model_building.parameters import FreeParameter
 from mot.library_functions import LogBesseli0
@@ -60,14 +60,14 @@ class EvaluationModel(object):
         """
         raise NotImplementedError()
 
-    def get_function_header(self):
+    def get_prototype(self):
         """Get the cl function header for the evaluation model.
 
         It is assumed and required that both the minimum likelihood function as the log likelihood function
         have the same signature.
 
         Returns:
-            mot.model_building.model_functions.SampleModelCLHeader: the CL header for the CL functions in the
+            mot.model_building.model_functions.SampleModelCLPrototype: the CL prototype for the CL functions in the
                 the evaluation model.
         """
         raise NotImplementedError()
@@ -113,8 +113,8 @@ class SimpleAbstractEvaluationModel(EvaluationModel):
                                      self._get_log_likelihood_code(full_likelihood),
                                      dependency_list=self._dependency_list)
 
-    def get_function_header(self):
-        return SimpleSampleModelCLHeader('double', self.name, self._cl_function_name, self._parameter_list)
+    def get_prototype(self):
+        return SimpleSampleModelCLPrototype('double', self.name, self._cl_function_name, self._parameter_list)
 
     def _get_minimum_likelihood_code(self):
         raise NotImplementedError()

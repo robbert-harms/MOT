@@ -1826,8 +1826,8 @@ class ModelFunctionsInformation(object):
             tuple: the (model, parameter) tuple for all non model evaluation parameters
         """
         listing = []
-        for p in self._evaluation_model.get_function_header().get_parameters():
-            listing.append((self._evaluation_model.get_function_header(), p))
+        for p in self._evaluation_model.get_prototype().get_parameters():
+            listing.append((self._evaluation_model.get_prototype(), p))
         return listing
 
     def is_fixed(self, parameter_name):
@@ -1987,7 +1987,7 @@ class ModelFunctionsInformation(object):
     def _get_model_list(self):
         """Get the list of all the applicable model functions"""
         models = list(self._model_tree.get_compartment_models())
-        models.append(self._evaluation_model.get_function_header())
+        models.append(self._evaluation_model.get_prototype())
         if self._signal_noise_model:
             models.append(self._signal_noise_model)
         return models

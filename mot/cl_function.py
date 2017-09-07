@@ -9,8 +9,8 @@ __email__ = 'robbert.harms@maastrichtuniversity.nl'
 __licence__ = 'LGPL v3'
 
 
-class CLHeader(object):
-    """Signature for a basic CL function."""
+class CLPrototype(object):
+    """Prototype for a basic CL function."""
 
     def get_return_type(self):
         """Get the type (in CL naming) of the returned value from this function.
@@ -36,7 +36,7 @@ class CLHeader(object):
         raise NotImplementedError()
 
 
-class CLFunction(CLHeader):
+class CLFunction(CLPrototype):
     """Interface for a basic CL function."""
 
     def get_cl_code(self):
@@ -71,7 +71,7 @@ class CLFunction(CLHeader):
         raise NotImplementedError()
 
 
-class SimpleCLHeader(CLHeader):
+class SimpleCLPrototype(CLPrototype):
 
     def __init__(self, return_type, cl_function_name, parameter_list):
         """A simple implementation of a CL header.
@@ -81,7 +81,7 @@ class SimpleCLHeader(CLHeader):
             cl_function_name (string): The name of the CL function
             parameter_list (list or tuple of CLFunctionParameter): The list of parameters required for this function
         """
-        super(SimpleCLHeader, self).__init__()
+        super(SimpleCLPrototype, self).__init__()
         self._return_type = return_type
         self._function_name = cl_function_name
         self._parameter_list = parameter_list
@@ -119,7 +119,7 @@ class SimpleCLFunction(CLFunction):
                 the inclusion guard, these are added automatically here.
         """
         super(SimpleCLFunction, self).__init__()
-        self._header = SimpleCLHeader(return_type, cl_function_name, parameter_list)
+        self._header = SimpleCLPrototype(return_type, cl_function_name, parameter_list)
         self._cl_code = cl_code
         self._dependency_list = dependency_list
 

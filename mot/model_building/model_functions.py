@@ -1,6 +1,6 @@
 from textwrap import dedent
 from mot.cl_data_type import SimpleCLDataType
-from mot.cl_function import CLFunction, SimpleCLFunction, CLHeader, SimpleCLHeader
+from mot.cl_function import CLFunction, SimpleCLFunction, CLPrototype, SimpleCLPrototype
 from mot.model_building.parameters import FreeParameter
 from mot.model_building.parameter_functions.priors import ARDGaussian, UniformWithinBoundsPrior, ARDBeta
 from mot.model_building.parameter_functions.proposals import GaussianProposal
@@ -12,7 +12,7 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class ModelCLHeader(CLHeader):
+class ModelCLPrototype(CLPrototype):
 
     @property
     def name(self):
@@ -32,7 +32,7 @@ class ModelCLHeader(CLHeader):
         raise NotImplementedError()
 
 
-class SampleModelCLHeader(ModelCLHeader):
+class SampleModelCLPrototype(ModelCLPrototype):
 
     def get_prior_parameters(self, parameter):
         """Get the prior parameters of the given parameter.
@@ -55,21 +55,21 @@ class SampleModelCLHeader(ModelCLHeader):
         raise NotImplementedError()
 
 
-class ModelCLFunction(CLFunction, ModelCLHeader):
+class ModelCLFunction(CLFunction, ModelCLPrototype):
     """Interface for a basic model function just for optimization purposes.
 
     If you need to sample the model, use the extended version of this interface :class:`SampleModelCLFunction`.
     """
 
 
-class SampleModelCLFunction(ModelCLFunction, SampleModelCLHeader):
+class SampleModelCLFunction(ModelCLFunction, SampleModelCLPrototype):
     """Extended version of a model function for use in sampling.
 
     This adds functions to retrieve priors about this function.
     """
 
 
-class SimpleSampleModelCLHeader(SimpleCLHeader, SampleModelCLHeader):
+class SimpleSampleModelCLPrototype(SimpleCLPrototype, SampleModelCLPrototype):
 
     def __init__(self, return_type, name, cl_function_name, parameter_list, model_function_priors=None):
         """This CL function is for all estimable models
@@ -82,7 +82,7 @@ class SimpleSampleModelCLHeader(SimpleCLHeader, SampleModelCLHeader):
             model_function_priors (list of mot.cl_function.CLFunction): list of priors concerning this whole model
                 function. The parameter names of the given functions must match those of this function.
         """
-        super(SimpleSampleModelCLHeader, self).__init__(return_type, cl_function_name, parameter_list)
+        super(SimpleSampleModelCLPrototype, self).__init__(return_type, cl_function_name, parameter_list)
         self._name = name
         self._model_function_priors = model_function_priors or []
         if isinstance(self._model_function_priors, CLFunction):
@@ -159,8 +159,8 @@ class SimpleModelCLFunction(SampleModelCLFunction, SimpleCLFunction):
         super(SimpleModelCLFunction, self).__init__(return_type, cl_function_name, parameter_list,
                                                     cl_code, dependency_list=dependency_list)
 
-        self._header = SimpleSampleModelCLHeader(return_type, name, cl_function_name,
-                                                 parameter_list, model_function_priors=model_function_priors)
+        self._header = SimpleSampleModelCLPrototype(return_type, name, cl_function_name,
+                                                    parameter_list, model_function_priors=model_function_priors)
 
     @property
     def name(self):
