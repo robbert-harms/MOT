@@ -1,5 +1,6 @@
 from textwrap import dedent, indent
 
+from mot.cl_parameter import CLFunctionParameter, SimpleCLFunctionParameter
 from mot.cl_routines.mapping.cl_function_evaluator import CLFunctionEvaluator
 
 __author__ = 'Robbert Harms'
@@ -55,18 +56,32 @@ class CLFunction(CLPrototype):
         """
         raise NotImplementedError()
 
-    def evaluate(self, inputs, double_precision=False):
+    def evaluate(self, inputs, double_precision=False, return_inputs=False):
         """Evaluate this function for each set of given parameters.
 
         Given a set of input parameters, this model will be evaluated for every parameter set.
 
         Args:
-            inputs (dict): for each parameter of the function an array with input data.
-                Each of these input arrays must be of equal length in the first dimension.
+            inputs (dict[str: Union(ndarray, mot.utils.KernelInputData)]): for each parameter of the function
+                the input data. Each of these input datasets must either be a scalar or be of equal length in the
+                first dimension. The user can either input raw ndarrays or input KernelInputData objects.
+                If an ndarray is given we will load it read/write by default.
             double_precision (boolean): if the function should be evaluated in double precision or not
+            return_inputs (boolean): if we are interested in the values of the input arrays after evaluation.
 
         Returns:
-            ndarray: a single array of the specified return type with for each parameter tuple an evaluation result
+            ndarray or tuple(ndarray, dict[str: ndarray]): we always return at least the return values of the function,
+                which can be None if this function has a void return type. If ``return_inputs`` is set to True then
+                we return a tuple with as first element the return value and as second element a dictionary mapping
+                the output state of the parameters.
+        """
+        raise NotImplementedError()
+
+    def get_dependencies(self):
+        """Get the list of dependencies this function depends on.
+
+        Returns:
+            list[CLFunction]: the list of dependencies for this function.
         """
         raise NotImplementedError()
 
@@ -79,12 +94,14 @@ class SimpleCLPrototype(CLPrototype):
         Args:
             return_type (str): the CL return type of the function
             cl_function_name (string): The name of the CL function
-            parameter_list (list or tuple of CLFunctionParameter): The list of parameters required for this function
+            parameter_list (list or tuple): This either contains instances of
+                :class:`mot.cl_parameter.CLFunctionParameter` or contains tuples with arguments that
+                can be used to construct a :class:`mot.cl_parameter.SimpleCLFunctionParameter`.
         """
         super(SimpleCLPrototype, self).__init__()
         self._return_type = return_type
         self._function_name = cl_function_name
-        self._parameter_list = parameter_list
+        self._parameter_list = self._resolve_parameters(parameter_list)
 
     def get_cl_function_name(self):
         return self._function_name
@@ -94,6 +111,15 @@ class SimpleCLPrototype(CLPrototype):
 
     def get_parameters(self):
         return self._parameter_list
+
+    def _resolve_parameters(self, parameter_list):
+        params = []
+        for param in parameter_list:
+            if isinstance(param, CLFunctionParameter):
+                params.append(param)
+            else:
+                params.append(SimpleCLFunctionParameter(*param))
+        return params
 
     def __hash__(self):
         return hash(self.__repr__())
@@ -113,29 +139,34 @@ class SimpleCLFunction(CLFunction):
         Args:
             return_type (str): the CL return type of the function
             cl_function_name (string): The name of the CL function
-            parameter_list (list or tuple of CLFunctionParameter): The list of parameters required for this function
+            parameter_list (list or tuple): This either contains instances of
+                :class:`mot.cl_parameter.CLFunctionParameter` or contains tuples with arguments that
+                can be used to construct a :class:`mot.cl_parameter.SimpleCLFunctionParameter`.
             dependency_list (list or tuple of CLLibrary): The list of CL libraries this function depends on
             cl_code (str): the raw cl code for this function. This does not need to include the dependencies or
                 the inclusion guard, these are added automatically here.
         """
         super(SimpleCLFunction, self).__init__()
-        self._header = SimpleCLPrototype(return_type, cl_function_name, parameter_list)
+        self._prototype = SimpleCLPrototype(return_type, cl_function_name, parameter_list)
         self._cl_code = cl_code
         self._dependency_list = dependency_list
 
     @classmethod
     def construct_cl_function(cls, return_type, cl_function_name, parameter_list, cl_body, dependency_list=()):
-        """A constructor that can build the full CL code from all the header parts and the CL body.
+        """A constructor that can build the function code from the prototype parts and the function body.
 
         If there are any dots in the parameter names, they will be replaced with underscores.
 
         Args:
             return_type (str): the CL return type of the function
             cl_function_name (string): The name of the CL function
-            parameter_list (list or tuple of CLFunctionParameter): The list of parameters required for this function
+            parameter_list (list or tuple): This either contains instances of
+                :class:`mot.cl_parameter.CLFunctionParameter` or contains tuples with arguments that
+                can be used to construct a :class:`mot.cl_parameter.SimpleCLFunctionParameter`.
             dependency_list (list or tuple of CLLibrary): The list of CL libraries this function depends on
             cl_body (str): the body of the CL code. The rest of the function call will be added by this constructor.
         """
+        prototype = SimpleCLPrototype(return_type, cl_function_name, parameter_list)
 
         cl_code = '''
             {return_type} {cl_function_name}({parameters}){{
@@ -143,19 +174,19 @@ class SimpleCLFunction(CLFunction):
             }}
         '''.format(return_type=return_type,
                    cl_function_name=cl_function_name,
-                   parameters=', '.join('{} {}'.format(p.data_type.declaration_type, p.name.replace('.', '_'))
-                                        for p in parameter_list),
+                   parameters=', '.join('{} {}'.format(p.data_type.get_declaration(), p.name.replace('.', '_'))
+                                        for p in prototype.get_parameters()),
                    body=cl_body)
         return cls(return_type, cl_function_name, parameter_list, cl_code, dependency_list=dependency_list)
 
     def get_return_type(self):
-        return self._header.get_return_type()
+        return self._prototype.get_return_type()
 
     def get_cl_function_name(self):
-        return self._header.get_cl_function_name()
+        return self._prototype.get_cl_function_name()
 
     def get_parameters(self):
-        return self._header.get_parameters()
+        return self._prototype.get_parameters()
 
     def get_cl_code(self):
         return dedent('''
@@ -165,14 +196,18 @@ class SimpleCLFunction(CLFunction):
             {code}
             #endif // {inclusion_guard_name}
         '''.format(dependencies=indent(self._get_cl_dependency_code(), ' ' * 4 * 3),
-                   inclusion_guard_name='LIBRARY_FUNCTION_{}_CL'.format(self.get_cl_function_name()),
+                   inclusion_guard_name='INCLUDE_GUARD_{}'.format(self.get_cl_function_name()),
                    code=indent('\n' + self._cl_code.strip() + '\n', ' ' * 4 * 3)))
 
     def get_raw_cl_code(self):
         return self._cl_code
 
-    def evaluate(self, inputs, double_precision=False):
-        return CLFunctionEvaluator().evaluate(self, inputs, double_precision=double_precision)
+    def evaluate(self, inputs, double_precision=False, return_inputs=False):
+        return CLFunctionEvaluator().evaluate(self, inputs, double_precision=double_precision,
+                                              return_inputs=return_inputs)
+
+    def get_dependencies(self):
+        return self._dependency_list
 
     def _get_cl_dependency_code(self):
         """Get the CL code for all the CL code for all the dependencies.

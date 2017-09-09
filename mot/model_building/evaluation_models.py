@@ -1,5 +1,5 @@
 from mot.model_building.model_functions import SimpleModelCLFunction, SimpleSampleModelCLPrototype
-from mot.cl_parameter import CLFunctionParameter
+from mot.cl_parameter import SimpleCLFunctionParameter
 from mot.model_building.parameters import FreeParameter
 from mot.library_functions import LogBesseli0
 from mot.model_building.parameter_functions.transformations import ClampTransform
@@ -148,8 +148,8 @@ class SumOfSquaresEvaluationModel(SimpleAbstractEvaluationModel):
         """
         super(SumOfSquaresEvaluationModel, self).__init__(
             'SumOfSquares', 'sumOfSquares',
-            [CLFunctionParameter('double', 'observation'),
-             CLFunctionParameter('double', 'model_evaluation')])
+            [SimpleCLFunctionParameter('double', 'observation'),
+             SimpleCLFunctionParameter('double', 'model_evaluation')])
 
     def _get_minimum_likelihood_code(self):
         return '''
@@ -206,8 +206,8 @@ class GaussianEvaluationModel(SimpleAbstractEvaluationModel):
         """
         super(GaussianEvaluationModel, self).__init__(
             'GaussianNoiseModel', 'gaussianNoise',
-            [CLFunctionParameter('double', 'observation'),
-             CLFunctionParameter('double', 'model_evaluation'),
+            [SimpleCLFunctionParameter('double', 'observation'),
+             SimpleCLFunctionParameter('double', 'model_evaluation'),
              FreeParameter('mot_float_type', 'sigma', True, 1, 0, 'INFINITY', parameter_transform=ClampTransform())],
             noise_std_param_name='sigma')
 
@@ -274,8 +274,8 @@ class OffsetGaussianEvaluationModel(SimpleAbstractEvaluationModel):
         """
         super(OffsetGaussianEvaluationModel, self).__init__(
             'OffsetGaussianNoise', 'offsetGaussian',
-            [CLFunctionParameter('double', 'observation'),
-             CLFunctionParameter('double', 'model_evaluation'),
+            [SimpleCLFunctionParameter('double', 'observation'),
+             SimpleCLFunctionParameter('double', 'model_evaluation'),
              FreeParameter('mot_float_type', 'sigma', True, 1, 0, 'INFINITY', parameter_transform=ClampTransform())],
             noise_std_param_name='sigma')
 
@@ -348,8 +348,8 @@ class RicianEvaluationModel(SimpleAbstractEvaluationModel):
         """
         super(RicianEvaluationModel, self).__init__(
             'RicianNoise', 'ricianNoise',
-            [CLFunctionParameter('double', 'observation'),
-             CLFunctionParameter('double', 'model_evaluation'),
+            [SimpleCLFunctionParameter('double', 'observation'),
+             SimpleCLFunctionParameter('double', 'model_evaluation'),
              FreeParameter('mot_float_type', 'sigma', True, 1, 0, 'INFINITY', parameter_transform=ClampTransform())],
             noise_std_param_name='sigma',
             dependency_list=(LogBesseli0(),))

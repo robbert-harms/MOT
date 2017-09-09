@@ -57,19 +57,19 @@ class CalculateDependentParameters(CLRoutine):
 
         all_kernel_data = dict(kernel_data)
         all_kernel_data['x'] = SimpleKernelInputData(estimated_parameters)
-        all_kernel_data['results'] = SimpleKernelInputData(results, is_writable=True)
+        all_kernel_data['_results'] = SimpleKernelInputData(results, is_writable=True)
 
         runner = RunProcedure(**self.get_cl_routine_kwargs())
         runner.run_procedure(cl_named_func, all_kernel_data, estimated_parameters_list[0].shape[0],
                              double_precision=self._double_precision)
 
-        results = all_kernel_data['results'].get_data()
+        results = all_kernel_data['_results'].get_data()
         return results_to_dict(results, [n[1] for n in dependent_parameter_names])
 
     def _get_wrapped_function(self, estimated_parameters_list, parameters_listing, dependent_parameter_names):
         parameter_write_out = ''
         for i, p in enumerate([el[0] for el in dependent_parameter_names]):
-            parameter_write_out += 'data->results[' + str(i) + '] = ' + p + ";\n"
+            parameter_write_out += 'data->_results[' + str(i) + '] = ' + p + ";\n"
 
         func = '''
             void transform(mot_data_struct* data){

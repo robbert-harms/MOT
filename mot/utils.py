@@ -438,6 +438,9 @@ def split_in_batches(nmr_elements, max_batch_size):
     Returns:
         list: the list of batch sizes
     """
+    if max_batch_size > nmr_elements:
+        return [nmr_elements]
+
     batch_sizes = [max_batch_size] * (nmr_elements // max_batch_size)
     if nmr_elements % max_batch_size > 0:
         batch_sizes.append(nmr_elements % max_batch_size)
@@ -460,14 +463,26 @@ class KernelInputData(object):
         raise NotImplementedError()
 
     def is_writable(self):
-        """If this kernel input data must be loaded as a read-write dataset or as read only.
+        """Check if this kernel input data will write data back.
 
-        If this returns true the kernel function must ensure that the data is loaded with read-write permissions.
+        This is used in conjunction with :meth:`is_readable` when loading the data in the kernel.
+
+        If this returns true the kernel function must ensure that the data is loaded with at least write permissions.
         This flag will also ensure that the data will be read back from the device after kernel execution, overwriting
         the current data.
 
         Returns:
             boolean: if this data must be made writable and be read back after function execution.
+        """
+        raise NotImplementedError()
+
+    def is_readable(self):
+        """If this kernel input data must be readable by the kernel.
+
+        This is used in conjunction with :meth:`is_writable` when loading the data in the kernel.
+
+        Returns:
+            boolean: if this data must be made readable by the kernel function
         """
         raise NotImplementedError()
 
@@ -501,7 +516,7 @@ class KernelInputData(object):
 
 class SimpleKernelInputData(KernelInputData):
 
-    def __init__(self, data, offset_str=None, as_pointer=True, is_writable=False):
+    def __init__(self, data, offset_str=None, as_pointer=True, is_writable=False, is_readable=True):
         """A simple implementation of the kernel input data.
 
         By default, this will try to offset the data in the kernel by the stride of the first dimension multiplied
@@ -516,6 +531,7 @@ class SimpleKernelInputData(KernelInputData):
                 for no offset.
             as_pointer (boolean): if we want to load this data as a pointer or not
             is_writable (boolean): if the data must be loaded writable or not, defaults to False
+            is_readable (boolean): if this data must be made readable
         """
         requirements = ['C', 'A', 'O']
         if is_writable:
@@ -525,6 +541,7 @@ class SimpleKernelInputData(KernelInputData):
         self._offset_str = offset_str
         self._as_pointer = as_pointer
         self._is_writable = is_writable
+        self._is_readable = is_readable
 
         if self._offset_str is None:
             self._offset_str = str(self._data.strides[0] // self._data.itemsize) + ' * {problem_id}'
@@ -542,6 +559,9 @@ class SimpleKernelInputData(KernelInputData):
 
     def is_writable(self):
         return self._is_writable
+
+    def is_readable(self):
+        return self._is_readable
 
 
 class DataStructManager(object):

@@ -1,7 +1,7 @@
 import numpy as np
 from mot.cl_data_type import SimpleCLDataType
 from mot.cl_function import CLFunction, SimpleCLFunction
-from mot.cl_parameter import CLFunctionParameter
+from mot.cl_parameter import SimpleCLFunctionParameter
 from mot.model_building.parameter_functions.proposals import GaussianProposal
 
 __author__ = 'Robbert Harms'
@@ -42,9 +42,9 @@ class SimplePrior(ParameterPrior, SimpleCLFunction):
         """
         extra_params = extra_params or []
 
-        parameters = [CLFunctionParameter('mot_float_type', 'value'),
-                      CLFunctionParameter('mot_float_type', 'lower_bound'),
-                      CLFunctionParameter('mot_float_type', 'upper_bound')] + extra_params
+        parameters = [SimpleCLFunctionParameter('mot_float_type', 'value'),
+                      SimpleCLFunctionParameter('mot_float_type', 'lower_bound'),
+                      SimpleCLFunctionParameter('mot_float_type', 'upper_bound')] + extra_params
         cl_code = '''
             mot_float_type {function_name}({params}){{
                 {body}

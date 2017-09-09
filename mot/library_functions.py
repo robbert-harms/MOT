@@ -1,7 +1,7 @@
 import os
 from pkg_resources import resource_filename
 from mot.cl_function import CLFunction, SimpleCLFunction
-from mot.cl_parameter import CLFunctionParameter
+from mot.cl_parameter import SimpleCLFunctionParameter
 
 __author__ = 'Robbert Harms'
 __date__ = "2016-10-03"
@@ -113,7 +113,8 @@ class FirstLegendreTerm(SimpleCLLibrary):
             }
         '''
         super(FirstLegendreTerm, self).__init__(
-            'double', 'firstLegendreTerm', [CLFunctionParameter('double', 'x'), CLFunctionParameter('int', 'n')],
+            'double', 'firstLegendreTerm', [SimpleCLFunctionParameter('double', 'x'),
+                                            SimpleCLFunctionParameter('int', 'n')],
             cl_code)
 
 
@@ -152,7 +153,7 @@ class Besseli0(SimpleCLLibrary):
                                                                             + y * 0.392377e-2))))))));
             }
         '''
-        super(Besseli0, self).__init__('double', 'bessel_i0', [CLFunctionParameter('double', 'x')], cl_code)
+        super(Besseli0, self).__init__('double', 'bessel_i0', [SimpleCLFunctionParameter('double', 'x')], cl_code)
 
 
 class LogBesseli0(SimpleCLLibrary):
@@ -167,7 +168,7 @@ class LogBesseli0(SimpleCLLibrary):
                 return x - log(2.0 * M_PI * x)/2.0;
             }
         '''
-        super(LogBesseli0, self).__init__('double', 'log_bessel_i0', [CLFunctionParameter('double', 'x')], cl_code,
+        super(LogBesseli0, self).__init__('double', 'log_bessel_i0', [SimpleCLFunctionParameter('double', 'x')], cl_code,
                                           dependency_list=(Besseli0(),))
 
 
@@ -192,9 +193,9 @@ class GammaCDF(SimpleCLLibraryFromFile):
             }
         '''
         super(GammaCDF, self).__init__(
-            'double', 'gamma_cdf', [CLFunctionParameter('double', 'shape'),
-                                    CLFunctionParameter('double', 'scale'),
-                                    CLFunctionParameter('double', 'x')],
+            'double', 'gamma_cdf', [SimpleCLFunctionParameter('double', 'shape'),
+                                    SimpleCLFunctionParameter('double', 'scale'),
+                                    SimpleCLFunctionParameter('double', 'x')],
             cl_code,
             dependency_list=(GammaP(),))
 
@@ -205,7 +206,7 @@ class GammaP(SimpleCLLibraryFromFile):
         """Calculates the normalized/regularized lower incomplete gamma function returning values in the range [0, 1].
         """
         super(GammaP, self).__init__(
-            'double', 'gamma_p', [CLFunctionParameter('double', 'a'), CLFunctionParameter('double', 'x')],
+            'double', 'gamma_p', [SimpleCLFunctionParameter('double', 'a'), SimpleCLFunctionParameter('double', 'x')],
             resource_filename('mot', 'data/opencl/gamma_p.cl'))
 
 
@@ -226,7 +227,7 @@ class LogCosh(SimpleCLLibrary):
                 return fabs(x) + log(1 + exp(-2.0 * fabs(x))) - log(2.0);
             }
         '''
-        super(LogCosh, self).__init__('double', 'log_cosh', [CLFunctionParameter('double', 'x')], cl_code)
+        super(LogCosh, self).__init__('double', 'log_cosh', [SimpleCLFunctionParameter('double', 'x')], cl_code)
 
 
 class Rand123(SimpleCLLibrary):

@@ -55,13 +55,13 @@ class _ProcedureWorker(Worker):
         buffers = []
         for data in [self._kernel_data[key] for key in sorted(self._kernel_data)]:
             if data.is_writable():
-                buffers.append(cl.Buffer(self._cl_run_context.context,
-                                         cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR,
-                                         hostbuf=data.get_data()))
+                if data.is_readable():
+                    flags = cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR
+                else:
+                    flags = cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR
             else:
-                buffers.append(cl.Buffer(self._cl_run_context.context,
-                                         cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
-                                         hostbuf=data.get_data()))
+                flags = cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR
+            buffers.append(cl.Buffer(self._cl_run_context.context, flags, hostbuf=data.get_data()))
         return buffers
 
     def calculate(self, range_start, range_end):

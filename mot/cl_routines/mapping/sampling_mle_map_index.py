@@ -1,6 +1,6 @@
 import pyopencl as cl
 import numpy as np
-from ...utils import get_float_type_def, split_in_batches
+from ...utils import get_float_type_def, split_in_batches, DataStructManager
 from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
 
@@ -40,26 +40,25 @@ class Sampling_MLE_MAP_Index(CLRoutine):
         mle_indices = np.zeros(samples.shape[0], dtype=np.uint32, order='C')
         map_indices = np.zeros(samples.shape[0], dtype=np.uint32, order='C')
 
-        mle_values = np.zeros(samples.shape[0], dtype=np_dtype, order='C')
-        map_values = np.zeros(samples.shape[0], dtype=np_dtype, order='C')
+        mle_values = np.ones(samples.shape[0], dtype=np_dtype, order='C') * -np.inf
+        map_values = np.ones(samples.shape[0], dtype=np_dtype, order='C') * -np.inf
 
         workers = self._create_workers(
             lambda cl_environment: _MaxFinderWorker(
                 cl_environment, self.get_compile_flags_list(model.double_precision), model,
                 mle_indices, map_indices, mle_values, map_values))
 
-        def process(samples_subset):
+        def process(samples_subset, batch_offset):
             for worker in workers:
-                worker.set_samples(samples_subset)
+                worker.set_samples(samples_subset, batch_offset)
             self.load_balancer.process(workers, samples.shape[0])
 
-        # todo, set the current sample index
-
-        max_batch_size = np.min([samples.shape[2], 1000])
-        for batch_ind, batch_size in enumerate(split_in_batches(samples.shape[2], max_batch_size)):
-            samples_subset = np.require(samples[..., (batch_ind * batch_size):((batch_ind + 1) * batch_size)],
+        items_seen = 0
+        for batch_ind, batch_size in enumerate(split_in_batches(samples.shape[2], 1000)):
+            samples_subset = np.require(samples[..., items_seen:(items_seen + batch_size)],
                                         requirements=['C', 'A', 'O'])
-            process(samples_subset)
+            process(samples_subset, items_seen)
+            items_seen += batch_size
 
         return mle_indices, map_indices, mle_values, map_values
 
@@ -72,15 +71,17 @@ class _MaxFinderWorker(Worker):
 
         self._model = model
         self._data_info = self._model.get_kernel_data()
+        self._data_struct_manager = DataStructManager(self._data_info)
         self._double_precision = model.double_precision
 
         self._samples = None
+        self._batch_offset = 0
         self._state_arrays = [mle_indices, map_indices, mle_values, map_values]
 
-        self._all_buffers = self._create_buffers()
+        self._all_buffers, self._state_buffers = self._create_buffers()
         self._kernel = self._build_kernel(self._get_kernel_source(), compile_flags)
 
-    def set_samples(self, samples):
+    def set_samples(self, samples, batch_offset):
         """Set the samples we will use for finding the maximum.
 
         One can repetitively set samples and recompute the workers to find the global maximum. This will
@@ -88,8 +89,10 @@ class _MaxFinderWorker(Worker):
 
         Args:
             samples (ndarray): the (d, p, n) matrix with the samples to search in this round
+            batch_offset (int): the current batch offset, used to calculate the absolute indices of the next maximums.
         """
         self._samples = samples
+        self._batch_offset = batch_offset
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
@@ -98,46 +101,61 @@ class _MaxFinderWorker(Worker):
         buffers.append(cl.Buffer(self._cl_run_context.context,
                                  cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
                                  hostbuf=self._samples))
+        buffers.append(np.uint32(self._samples.shape[2]))
+        buffers.append(np.uint32(self._batch_offset))
 
-        self._kernel.run_kernel(self._cl_run_context.queue, (int(nmr_problems),), None, *self._all_buffers,
-                                global_offset=(int(range_start),))
+        kernel_func = self._kernel.run_kernel
+        kernel_func.set_scalar_arg_dtypes([None] * (len(self._data_info) + len(self._state_arrays) + 1) +
+                                          [np.uint32, np.uint32])
 
-        for buffer, state_array in zip(self._all_buffers, self._state_arrays):
+        kernel_func(self._cl_run_context.queue, (int(nmr_problems),), None,
+                    *buffers, global_offset=(int(range_start),))
+
+        for buffer, state_array in zip(self._state_buffers, self._state_arrays):
             self._enqueue_readout(buffer, state_array, range_start, range_end)
 
     def _create_buffers(self):
-        buffers = []
+        all_buffers = []
+        state_buffers = []
+
+        for data in [self._data_info[key] for key in sorted(self._data_info)]:
+            all_buffers.append(cl.Buffer(self._cl_run_context.context,
+                                     cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data.get_data()))
+
         for state_array in self._state_arrays:
-            buffers.append(cl.Buffer(self._cl_run_context.context,
-                                     cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR,
-                                     hostbuf=state_array))
-        return buffers
+            buffer = cl.Buffer(self._cl_run_context.context,
+                               cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR,
+                               hostbuf=state_array)
+            all_buffers.append(buffer)
+            state_buffers.append(buffer)
+
+        return all_buffers, state_buffers
 
     def _get_kernel_source(self):
         ll_func = self._model.get_log_likelihood_per_observation_function()
         prior_func = self._model.get_log_prior_function(address_space_parameter_vector='private')
+        nmr_params = self._model.get_nmr_estimable_parameters()
+
+        kernel_param_names = list(self._data_struct_manager.get_kernel_arguments())
+        kernel_param_names.extend(['global uint* mle_ind',
+                                   'global uint* map_ind',
+                                   'global mot_float_type* mle_values',
+                                   'global mot_float_type* map_values',
+                                   'global mot_float_type* samples',
+                                   'uint nmr_samples_per_problem',
+                                   'uint batch_offset'])
+
+        kernel_source = ''
+        kernel_source += get_float_type_def(self._double_precision)
+        kernel_source += self._data_struct_manager.get_struct_definition()
 
         cl_func = ''
         cl_func += ll_func.get_cl_code()
         cl_func += prior_func.get_cl_code()
-        nmr_params = self._model.get_nmr_estimable_parameters()
-
-        kernel_param_names = ['global uint* mle_ind',
-                              'global uint* map_ind',
-                              'global mot_float_type* mle_values',
-                              'global mot_float_type* map_values',
-                              'global mot_float_type* samples',
-                              'global uint nmr_samples_per_problem',
-                              ]
-
-        kernel_param_names.extend(self._data_info.get_kernel_parameters())
-        kernel_source = ''
-        kernel_source += get_float_type_def(self._double_precision)
-        kernel_source += self._data_info.get_kernel_data_struct()
         kernel_source += cl_func
 
         kernel_source += '''
-            double _calculate_log_likelihood(void* data, const mot_float_type* const x){
+            double _calculate_log_likelihood(mot_data_struct* data, const mot_float_type* const x){
                 double ll = 0;
                 for(uint i = 0; i < ''' + str(self._model.get_nmr_inst_per_problem()) + '''; i++){
                     ll += ''' + ll_func.get_cl_function_name() + '''(data, x, i);
@@ -152,23 +170,32 @@ class _MaxFinderWorker(Worker):
                 ){
                     ulong problem_ind = get_global_id(0);
                     
-                    ''' + self._data_info.get_kernel_data_struct_initialization(
-                            'data', problem_id_name='problem_ind') + '''
+                    mot_data_struct data = ''' + self._data_struct_manager.get_struct_init_string('problem_ind') + ''';
                     
                     double prior;
-                    double ll; 
+                    double ll;
                     mot_float_type x[''' + str(nmr_params) + '''];
                     
                     for(uint sample_ind = 0; sample_ind < nmr_samples_per_problem; sample_ind++){
                         for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
                             x[i] = samples[problem_ind * ''' + str(nmr_params) + ''' * nmr_samples_per_problem
-                                           + i * nmr_samples_per_problem + sample_ind];
+                                           + i * nmr_samples_per_problem 
+                                           + sample_ind];
                         }
 
-                        prior = ''' + prior_func.get_cl_function_name() + '''((void*)&data, x);
-                        ll = _calculate_log_likelihood((void*)&data, x);
+                        prior = ''' + prior_func.get_cl_function_name() + '''(&data, x);
+                        ll = _calculate_log_likelihood(&data, x);
+                        
+                        if(ll > mle_values[problem_ind]){
+                            mle_values[problem_ind] = ll;
+                            mle_ind[problem_ind] = sample_ind + batch_offset;
+                        }
+                        
+                        if(ll + prior > map_values[problem_ind]){
+                            map_values[problem_ind] = ll + prior;
+                            map_ind[problem_ind] = sample_ind + batch_offset;
+                        }
                     }
-            }
+                }
         '''
         return kernel_source
-

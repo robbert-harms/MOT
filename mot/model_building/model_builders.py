@@ -4,8 +4,8 @@ import numpy as np
 import copy
 from six import string_types
 from mot.cl_data_type import SimpleCLDataType
-from mot.cl_function import SimpleCLFunction, CLFunction
-from mot.cl_parameter import CLFunctionParameter
+from mot.cl_function import SimpleCLFunction
+from mot.cl_parameter import SimpleCLFunctionParameter
 from mot.cl_routines.mapping.codec_runner import CodecRunner
 from mot.cl_routines.sampling.metropolis_hastings import DefaultMHState
 from mot.model_building.model_functions import Weight, ModelCLFunction
@@ -1459,7 +1459,7 @@ class SampleModelBuilder(OptimizeModelBuilder):
         """Get the prior limiting the weights between 0 and 1"""
         weights = []
         for (m, p) in self._model_functions_info.get_estimable_weights():
-            weights.append(CLFunctionParameter('mot_float_type', '{}.{}'.format(m.name, p.name)))
+            weights.append(SimpleCLFunctionParameter('mot_float_type', '{}.{}'.format(m.name, p.name)))
 
         if len(weights) > 1:
             return SimpleCLFunction.construct_cl_function(
@@ -2116,14 +2116,15 @@ class _ModelFunctionPriorToCompositeModelPrior(SimpleCLFunction):
 
     def __init__(self, model_function_prior, compartment_name):
         """Simple prior class for easily converting the compartment priors to composite model priors."""
-        parameters = [CLFunctionParameter('mot_float_type', '{}.{}'.format(compartment_name, p.name))
+        parameters = [SimpleCLFunctionParameter('mot_float_type', '{}.{}'.format(compartment_name, p.name))
                       for p in model_function_prior.get_parameters()]
 
         super(_ModelFunctionPriorToCompositeModelPrior, self).__init__(
             model_function_prior.get_return_type(),
             model_function_prior.get_cl_function_name(),
             parameters,
-            model_function_prior.get_raw_cl_code()
+            model_function_prior.get_raw_cl_code(),
+            dependency_list=model_function_prior.get_dependencies()
         )
 
 

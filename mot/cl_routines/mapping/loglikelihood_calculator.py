@@ -47,14 +47,15 @@ class LogLikelihoodCalculator(CLRoutine):
         if len(parameters.shape) < 3:
             process(parameters, log_likelihoods)
         else:
-            max_batch_size = np.min([parameters.shape[2], 1000])
-            for batch_ind, batch_size in enumerate(split_in_batches(parameters.shape[2], max_batch_size)):
-                params_subset = np.require(parameters[..., (batch_ind * batch_size):((batch_ind + 1) * batch_size)],
+            items_seen = 0
+            for batch_ind, batch_size in enumerate(split_in_batches(parameters.shape[2], 1000)):
+                params_subset = np.require(parameters[..., items_seen:(items_seen + batch_size)],
                                            np_dtype, requirements=['C', 'A', 'O'])
                 lls_subset = np.zeros((parameters.shape[0], batch_size), dtype=np_dtype, order='C')
 
                 process(params_subset, lls_subset)
                 log_likelihoods[..., (batch_ind * batch_size):((batch_ind + 1) * batch_size)] = lls_subset
+                items_seen += batch_size
 
         return log_likelihoods
 

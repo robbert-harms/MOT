@@ -11,6 +11,41 @@ __licence__ = 'LGPL v3'
 
 class CLFunctionParameter(object):
 
+    @property
+    def data_type(self):
+        """Get the CL data type of this parameter
+
+        Returns:
+            mot.cl_data_type.SimpleCLDataType: The CL data type.
+        """
+        raise NotImplementedError()
+
+    @property
+    def is_cl_vector_type(self):
+        """Parse the data_type to see if this parameter holds a vector type (in CL)
+
+        Returns:
+            bool: True if the type of this function parameter is a CL vector type.
+
+            CL vector types are recognized by an integer after the data type. For example: double4 is a
+            CL vector type with 4 doubles.
+        """
+        raise NotImplementedError()
+
+    def get_renamed(self, name):
+        """Get a copy of the current parameter but then with a new name.
+
+        Args:
+            name (str): the new name for this parameter
+
+        Returns:
+            cls: a copy of the current type but with a new name
+        """
+        raise NotImplementedError()
+
+
+class SimpleCLFunctionParameter(CLFunctionParameter):
+
     def __init__(self, data_type, name):
         """Creates a new function parameter for the CL functions.
 
@@ -31,34 +66,14 @@ class CLFunctionParameter(object):
 
     @property
     def data_type(self):
-        """Get the CL data type of this parameter
-
-        Returns:
-            mot.cl_data_type.SimpleCLDataType: The CL data type.
-        """
         return self._data_type
 
     @property
     def is_cl_vector_type(self):
-        """Parse the data_type to see if this parameter holds a vector type (in CL)
-
-        Returns:
-            bool: True if the type of this function parameter is a CL vector type.
-
-            CL vector types are recognized by an integer after the data type. For example: double4 is a
-            CL vector type with 4 doubles.
-        """
         return self._data_type.is_vector_type
 
     def get_renamed(self, name):
-        """Get a copy of the current parameter but then with a new name.
-
-        Args:
-            name (str): the new name for this parameter
-
-        Returns:
-            cls: a copy of the current type but with a new name
-        """
         new_param = copy(self)
         new_param.name = name
         return new_param
+

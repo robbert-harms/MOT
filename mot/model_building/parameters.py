@@ -1,5 +1,5 @@
 from mot.cl_data_type import SimpleCLDataType
-from mot.cl_parameter import CLFunctionParameter
+from mot.cl_parameter import SimpleCLFunctionParameter
 from mot.model_building.parameter_functions.priors import UniformWithinBoundsPrior
 from mot.model_building.parameter_functions.proposals import GaussianProposal
 from mot.model_building.parameter_functions.sample_statistics import GaussianFit
@@ -11,7 +11,7 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class CurrentObservationParam(CLFunctionParameter):
+class CurrentObservationParam(SimpleCLFunctionParameter):
 
     def __init__(self, name='_observation'):
         """This parameter indicates that the model should inject the current observation value in the model.
@@ -26,7 +26,7 @@ class CurrentObservationParam(CLFunctionParameter):
         super(CurrentObservationParam, self).__init__(SimpleCLDataType.from_string('mot_float_type'), name)
 
 
-class StaticMapParameter(CLFunctionParameter):
+class StaticMapParameter(SimpleCLFunctionParameter):
 
     def __init__(self, data_type, name, value):
         """This parameter is meant for static data that is different per problem.
@@ -50,7 +50,7 @@ class StaticMapParameter(CLFunctionParameter):
         self.value = value
 
 
-class ProtocolParameter(CLFunctionParameter):
+class ProtocolParameter(SimpleCLFunctionParameter):
     """A protocol data parameter indicates that this parameter is supposed to be fixed using the Protocol data.
 
     This class of parameters is used for parameters that are constant per problem instance, but differ for the different
@@ -58,7 +58,7 @@ class ProtocolParameter(CLFunctionParameter):
     """
 
 
-class ModelDataParameter(CLFunctionParameter):
+class ModelDataParameter(SimpleCLFunctionParameter):
 
     def __init__(self, data_type, name, value):
         """This parameter is meant for data that changes the way a model function behaves.
@@ -78,7 +78,7 @@ class ModelDataParameter(CLFunctionParameter):
         self.value = value
 
 
-class FreeParameter(CLFunctionParameter):
+class FreeParameter(SimpleCLFunctionParameter):
 
     def __init__(self, data_type, name, fixed, value, lower_bound, upper_bound,
                  parameter_transform=None, sampling_proposal=None,
@@ -155,6 +155,6 @@ class FreeParameter(CLFunctionParameter):
         return self._sampling_statistics
 
 
-class LibraryParameter(CLFunctionParameter):
+class LibraryParameter(SimpleCLFunctionParameter):
     """Parameters of this type are used inside library functions. They are not meant to be used in Model functions.
     """

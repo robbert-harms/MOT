@@ -1,4 +1,4 @@
-from mot.cl_parameter import CLFunctionParameter
+from mot.cl_parameter import SimpleCLFunctionParameter
 from mot.model_building.parameters import FreeParameter
 from mot.model_building.model_functions import SimpleModelCLFunction
 from mot.model_building.parameter_functions.transformations import CosSqrClampTransform
@@ -48,6 +48,6 @@ class JohnsonNoise(SignalNoiseModel):
         '''
         super(JohnsonNoise, self).__init__(
             'double', 'JohnsonNoise', 'JohnsonNoise',
-            [CLFunctionParameter('double', 'signal'),
+            [SimpleCLFunctionParameter('double', 'signal'),
              FreeParameter('mot_float_type', 'eta', False, 0.1, 0, 100, parameter_transform=CosSqrClampTransform())],
             cl_code)
