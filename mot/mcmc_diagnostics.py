@@ -66,10 +66,17 @@ class _MultivariateESSMultiProcessing(object):
 def univariate_ess(samples, method='standard_error', **kwargs):
     r"""Estimate the univariate Effective Sample Size for the samples of every problem.
 
-    This essentially applies the chosen univariate ESS method on every problem.
+    This computes the ESS using:
+
+        .. math::
+
+            ESS(X) = n * \frac{\lambda^{2}}{\sigma^{2}}
+
+        Where :math:`\lambda` is the standard deviation of the chain and :math:`\sigma` is estimated using the
+        monte carlo standard error (which in turn is, by default, estimated using a batch means estimator).
 
     Args:
-        samples (ndarray, dict or generator): either an matrix of shape (d, p, n) with d problems, p parameters and
+        samples (ndarray, dict or generator): either a matrix of shape (d, p, n) with d problems, p parameters and
             n samples, or a dictionary with for every parameter a matrix with shape (d, n) or, finally,
             a generator function that yields sample arrays of shape (p, n).
         method (str): one of 'autocorrelation' or 'standard_error' defaults to 'standard_error'.
@@ -79,6 +86,13 @@ def univariate_ess(samples, method='standard_error', **kwargs):
 
     Returns:
         ndarray: a matrix of size (d, p) with for every problem and every parameter an ESS.
+
+    References:
+        * Flegal, J.M., Haran, M., and Jones, G.L. (2008). "Markov chain Monte Carlo: Can We
+          Trust the Third Significant Figure?". Statistical Science, 23, p. 250–260.
+        * Marc S. Meketon and Bruce Schmeiser. 1984. Overlapping batch means: something for nothing?.
+          In Proceedings of the 16th conference on Winter simulation (WSC '84), Sallie Sheppard (Ed.).
+          IEEE Press, Piscataway, NJ, USA, 226-230.
     """
     samples_generator = _get_sample_generator(samples)
 
@@ -248,8 +262,8 @@ def estimate_univariate_ess_standard_error(chain, batch_size_generator=None, com
 
         ESS(X) = n * \frac{\lambda^{2}}{\sigma^{2}}
 
-    Where :math:`\lambda` is the variance of the chain and :math:`\sigma` is estimated using the monte carlo
-    standard error (which in turn is by default estimated using a batch means estimator).
+    Where :math:`\lambda` is the standard deviation of the chain and :math:`\sigma` is estimated using the monte carlo
+    standard error (which in turn is, by default, estimated using a batch means estimator).
 
     Args:
         chain (ndarray): the Markov chain
@@ -586,13 +600,15 @@ class BatchMeansMCSE(ComputeMonteCarloStandardError):
     def compute_standard_error(self, chain, batch_size):
         nmr_batches = int(np.floor(len(chain) / batch_size))
 
-        batch_means = np.zeros(nmr_batches)
+        chain_mean = np.mean(chain, dtype=np.float64)
+        var_sum = 0
 
         for batch_index in range(nmr_batches):
-            batch_means[batch_index] = np.mean(
-                chain[int(batch_index * batch_size):int((batch_index + 1) * batch_size)], dtype=np.float64)
+            batch_mean = np.mean(chain[int(batch_index * batch_size):int((batch_index + 1) * batch_size)],
+                                 dtype=np.float64)
+            var_sum += (batch_mean - chain_mean)**2
 
-        var_hat = batch_size * sum((batch_means - np.mean(chain, dtype=np.float64))**2) / (nmr_batches - 1)
+        var_hat = batch_size * var_sum / (nmr_batches - 1)
         return np.sqrt(var_hat / len(chain))
 
 
@@ -602,11 +618,12 @@ class OverlappingBatchMeansMCSE(ComputeMonteCarloStandardError):
     def compute_standard_error(self, chain, batch_size):
         nmr_batches = int(len(chain) - batch_size + 1)
 
-        batch_means = np.zeros(nmr_batches)
+        chain_mean = np.mean(chain, dtype=np.float64)
+        var_sum = 0
 
         for batch_index in range(nmr_batches):
-            batch_means[batch_index] = np.mean(chain[int(batch_index):int(batch_index + batch_size)], dtype=np.float64)
+            batch_mean = np.mean(chain[int(batch_index):int(batch_index + batch_size)], dtype=np.float64)
+            var_sum += (batch_mean - chain_mean) ** 2
 
-        var_hat = (len(chain) * batch_size
-                   * sum((batch_means - np.mean(chain, dtype=np.float64))**2)) / (nmr_batches - 1) / nmr_batches
+        var_hat = (len(chain) * batch_size * var_sum) / (nmr_batches - 1) / nmr_batches
         return np.sqrt(var_hat / len(chain))
