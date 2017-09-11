@@ -61,10 +61,11 @@ class UnivariateESSStandardError(CLRoutine):
         if double_precision:
             np_dtype = np.float64
 
-        ess = np.zeros(samples.shape[0] * samples.shape[1], dtype=np_dtype, order='C')
+        ess = np.zeros((samples.shape[0], samples.shape[1]), dtype=np_dtype, order='C')
 
-        all_kernel_data = {'samples': KernelInputBuffer(np.reshape(samples, (-1, samples.shape[2]))),
+        all_kernel_data = {'samples': KernelInputBuffer(samples),
                            'ess': KernelInputBuffer(ess, is_readable=False, is_writable=True),
+                           'nmr_params': KernelInputScalar(samples.shape[1]),
                            'nmr_samples': KernelInputScalar(samples.shape[2]),
                            'batch_sizes': KernelInputBuffer(batch_sizes, offset_str='0'),
                            'nmr_batch_sizes': KernelInputScalar(len(batch_sizes))
@@ -72,10 +73,10 @@ class UnivariateESSStandardError(CLRoutine):
 
         runner = RunProcedure(**self.get_cl_routine_kwargs())
         runner.run_procedure(self._get_wrapped_function(mcse_method), all_kernel_data,
-                             samples.shape[0] * samples.shape[1],
+                             samples.shape[0],
                              double_precision=double_precision)
 
-        return np.reshape(all_kernel_data['ess'].get_data(), (samples.shape[0], samples.shape[1]))
+        return all_kernel_data['ess'].get_data()
 
     def _get_wrapped_function(self, mcse_method):
         func = '''
@@ -115,19 +116,19 @@ class UnivariateESSStandardError(CLRoutine):
              * This returns the standard error of the mean :math:`\sigma / \sqrt{n}` where :math:`\sigma` is calculated
              * using batch means.
              */ 
-            double _mcse_batch_means(mot_data_struct* data, uint batch_size, double chain_mean){
+            double _mcvar_batch_means(mot_data_struct* data, uint batch_size, 
+                                      global mot_float_type* samples, double chain_mean){
                 uint nmr_batches = (uint)floor((double)data->nmr_samples / batch_size);
                 
                 double var_sum = 0;
                 double batch_mean = 0;
                 
                 for(int i = 0; i < nmr_batches; i++){
-                    _chain_mean(data->samples + i * batch_size, batch_size, &batch_mean);
+                    _chain_mean(samples + i * batch_size, batch_size, &batch_mean);
                     var_sum += pown(batch_mean - chain_mean, 2);
                 }
                 
-                double var_hat = (batch_size / (nmr_batches - 1)) * var_sum;
-                return sqrt(var_hat / data->nmr_samples);                
+                return batch_size * var_sum / (nmr_batches - 1);                
             }
             
             /**
@@ -139,7 +140,8 @@ class UnivariateESSStandardError(CLRoutine):
              * This returns the standard error of the mean :math:`\sigma / \sqrt{n}` where :math:`\sigma` is calculated
              * using overlapping batch means.
              */
-            double _mcse_overlapping_batch_means(mot_data_struct* data, uint batch_size, double chain_mean){
+            double _mcvar_overlapping_batch_means(mot_data_struct* data, uint batch_size, 
+                                                  global mot_float_type* samples, double chain_mean){
                 uint nmr_batches = (uint)(data->nmr_samples - batch_size + 1);
         
                 double var_sum = 0;
@@ -152,21 +154,23 @@ class UnivariateESSStandardError(CLRoutine):
                                                  (uint)batch_size);
                     }
                     
-                    _chain_mean(data->samples + i, current_batch_size, &batch_mean);
+                    _chain_mean(samples + i, current_batch_size, &batch_mean);
                     var_sum += pown(batch_mean - chain_mean, 2);
                 }
                 
-                double var_hat = ((data->nmr_samples * batch_size) / 
-                    ((data->nmr_samples - batch_size + 1) * (data->nmr_samples - batch_size))) * var_sum;
-                return sqrt(var_hat / data->nmr_samples);
+                return (data->nmr_samples * batch_size * var_sum) / 
+                            ((data->nmr_samples - batch_size + 1) * (data->nmr_samples - batch_size));
             }
             
-            double _monte_carlo_standard_error(mot_data_struct* data, double chain_mean){
+            /**
+             * Returns the monte carlo as SEM^2 * n (standard error of the mean to the power of two times n).
+             */
+            double _monte_carlo_variance(mot_data_struct* data, global mot_float_type* samples, double chain_mean){
                 double min_mcse = INFINITY;
                 double mcse;
                 
                 for(int i = 0; i < data->nmr_batch_sizes; i++){
-                    mcse = _mcse_''' + mcse_method + '''(data, data->batch_sizes[i], chain_mean); 
+                    mcse = _mcvar_''' + mcse_method + '''(data, data->batch_sizes[i], samples, chain_mean); 
                     
                     if(mcse < min_mcse){
                         min_mcse = mcse; 
@@ -178,11 +182,17 @@ class UnivariateESSStandardError(CLRoutine):
             void compute(mot_data_struct* data){
                 double chain_mean;
                 double chain_variance;
-                _chain_stats(data->samples, data->nmr_samples, &chain_mean, &chain_variance);
+                global mot_float_type* samples;
                 
-                double sigma = pown(_monte_carlo_standard_error(data, chain_mean), 2) * data->nmr_samples;
-                
-                *(data->ess) = data->nmr_samples * (chain_variance / sigma);
+                for(uint i = 0; i < data->nmr_params; i++){
+                    samples = data->samples + i * data->nmr_samples;
+                    
+                    _chain_stats(samples, data->nmr_samples, &chain_mean, &chain_variance);
+                    
+                    double sigma = _monte_carlo_variance(data, samples, chain_mean);
+                    
+                    data->ess[i] = data->nmr_samples * (chain_variance / sigma);
+                }
             }            
         '''
         return SimpleNamedCLFunction(func, 'compute')

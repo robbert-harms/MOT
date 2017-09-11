@@ -57,7 +57,8 @@ class _ProcedureWorker(Worker):
 
         func = self._kernel.run_procedure
         func.set_scalar_arg_dtypes(self._data_struct_manager.get_scalar_arg_dtypes())
-        func(self._cl_run_context.queue, (int(nmr_problems), ), None, *self._kernel_input, global_offset=(int(range_start),))
+        func(self._cl_run_context.queue, (int(nmr_problems), ), None, *self._kernel_input,
+             global_offset=(int(range_start),))
 
         for ind, name in self._data_struct_manager.get_items_to_write_out():
             self._enqueue_readout(self._kernel_input[ind], self._kernel_data[name].get_data(), range_start, range_end)
