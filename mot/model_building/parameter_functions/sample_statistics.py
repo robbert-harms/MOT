@@ -1,5 +1,4 @@
 import numpy as np
-from scipy.stats import truncnorm
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-10-23"
@@ -71,15 +70,9 @@ class TruncatedGaussianFit(ParameterSampleStatistics):
         self._high = high
 
     def get_statistics(self, samples):
-        means = np.zeros(samples.shape[0])
-        stds = np.zeros(samples.shape[0])
-
-        for ind in range(samples.shape[0]):
-            mean, std = truncnorm.fit_loc_scale(samples[ind, :], self._low, self._high)
-            means[ind] = np.clip(mean, self._low, self._high)
-            stds[ind] = std
-
-        return SamplingStatisticsContainer(means, {'std': stds})
+        from mot.cl_routines.mapping.truncated_gaussian_fit import TruncatedGaussianFit as fitter
+        mean, std = fitter().calculate(samples, high=self._high, low=self._low)
+        return SamplingStatisticsContainer(mean, {'std': std})
 
 
 class TruncatedGaussianFitClipped(TruncatedGaussianFit):
