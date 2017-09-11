@@ -448,7 +448,65 @@ def split_in_batches(nmr_elements, max_batch_size):
 
 
 class KernelInputData(object):
-    """This class holds the information necessary to load the data into a CL kernel."""
+
+    def get_data_ctype(self):
+        """Get the data type of this input data object.
+
+        This should return only the type of data (float, int, unsigned long) etc. No further declaration specifiers
+        should be returned.
+
+        Returns:
+            str: the type declaration.
+        """
+        raise NotImplementedError()
+
+
+class KernelInputScalar(KernelInputData):
+
+    def __init__(self, value):
+        """A kernel input scalar.
+
+        Args:
+            value (number): the number to insert into the kernel as a scalar.
+        """
+        self._value = np.array(value)
+
+    def get_value(self):
+        return self._value
+
+    def get_data_ctype(self):
+        return dtype_to_ctype(self.get_value().dtype)
+
+
+class KernelInputBuffer(KernelInputData):
+
+    def __init__(self, data, offset_str=None, is_writable=False, is_readable=True):
+        """Loads the given data as a buffer into the kernel.
+
+        By default, this will try to offset the data in the kernel by the stride of the first dimension multiplied
+        with the problem id by the kernel. For example, if a (n, m) matrix is provided, this will offset the data
+        by ``{problem_id} * m``.
+
+        Args:
+            data (ndarray): the data to load in the kernel
+            offset_str (str): the offset definition, can use ``{problem_id}`` for multiplication purposes. Set to 0
+                for no offset.
+            is_writable (boolean): if the data must be loaded writable or not, defaults to False
+            is_readable (boolean): if this data must be made readable
+        """
+        requirements = ['C', 'A', 'O']
+        if is_writable:
+            requirements.append('W')
+
+        self._data = np.require(data, requirements=requirements)
+        self._offset_str = offset_str
+        self._is_writable = is_writable
+        self._is_readable = is_readable
+
+        if self._offset_str is None:
+            self._offset_str = str(self._data.strides[0] // self._data.itemsize) + ' * {problem_id}'
+        else:
+            self._offset_str = str(self._offset_str)
 
     def get_data(self):
         """Get the underlying data.
@@ -458,9 +516,23 @@ class KernelInputData(object):
         and 'W' if the data is supposed to be writable.
 
         Returns:
-            ndarray: the underlying data object, make sure this is of your desired type.
+        ndarray: the underlying data object, make sure this is of your desired data type.
         """
-        raise NotImplementedError()
+        return self._data
+
+    def get_offset_str(self):
+        """Get the offset to use for this dataset in the kernel.
+
+        This should return a string that can compute the offset for this dataset. Since the data is loaded into the
+        kernel as a 1d array, we need to offset this array to the correct location for every problem instance.
+        This offset can include a scaling with the current problem index, one can return a string containing the
+        literal ``{problem_id}`` which is replaced by the kernel for the correct problem id.
+
+        Returns:
+            str: the offset string for offsetting the input array for each problem. Do not add a plus in front
+                of the offset, it is implicit.
+        """
+        return self._offset_str
 
     def is_writable(self):
         """Check if this kernel input data will write data back.
@@ -474,7 +546,7 @@ class KernelInputData(object):
         Returns:
             boolean: if this data must be made writable and be read back after function execution.
         """
-        raise NotImplementedError()
+        return self._is_writable
 
     def is_readable(self):
         """If this kernel input data must be readable by the kernel.
@@ -484,97 +556,22 @@ class KernelInputData(object):
         Returns:
             boolean: if this data must be made readable by the kernel function
         """
-        raise NotImplementedError()
-
-    def as_pointer(self):
-        """Will this value be provided to as a pointer or as a value.
-
-        If this is set to True we will provide the dataset as a pointer at the specified offset to the
-        implementing function. If set to False, we will dereference the pointer at the specified offset and provide
-        the values to the implementing function (for example the ``mot_data_struct``).
-
-        Returns:
-            boolean: if we dereference the pointer or not
-        """
-        raise NotImplementedError()
-
-    def get_offset_str(self):
-        """Get the offset to use for this dataset in the kernel.
-
-        This should return a string that can compute the offset for this dataset. Since the data is loaded into the
-        kernel as a 1d array, we need to offset this array to the correct location for every problem instance.
-        This offset often includes a scaling with the current problem index, which can be implemented by the kernel
-        in various different ways. To apply this scaling one can return a string containing the literal ``{problem_id}``
-        which is replaced by the kernel for the correct problem id.
-
-        Returns:
-            str: the offset string for offsetting the input array for each problem. Do not add a plus in front
-                of the offset, it is implicit.
-        """
-        raise NotImplementedError()
-
-
-class SimpleKernelInputData(KernelInputData):
-
-    def __init__(self, data, offset_str=None, as_pointer=True, is_writable=False, is_readable=True):
-        """A simple implementation of the kernel input data.
-
-        By default, this will try to offset the data in the kernel by the stride of the first dimension multiplied
-        with the problem id by the kernel. For example, if a (n, m) matrix is provided, this will offset the data
-        by ``{problem_id} * m``.
-
-        By default we will load the data as a pointer instead of a dereferenced value.
-
-        Args:
-            data (ndarray): the data to load in the kernel
-            offset_str (str): the offset definition, can use ``{problem_id}`` for multiplication purposes. Set to 0
-                for no offset.
-            as_pointer (boolean): if we want to load this data as a pointer or not
-            is_writable (boolean): if the data must be loaded writable or not, defaults to False
-            is_readable (boolean): if this data must be made readable
-        """
-        requirements = ['C', 'A', 'O']
-        if is_writable:
-            requirements.append('W')
-
-        self._data = np.require(data, requirements=requirements)
-        self._offset_str = offset_str
-        self._as_pointer = as_pointer
-        self._is_writable = is_writable
-        self._is_readable = is_readable
-
-        if self._offset_str is None:
-            self._offset_str = str(self._data.strides[0] // self._data.itemsize) + ' * {problem_id}'
-        else:
-            self._offset_str = str(self._offset_str)
-
-    def get_data(self):
-        return self._data
-
-    def as_pointer(self):
-        return self._as_pointer
-
-    def get_offset_str(self):
-        return self._offset_str
-
-    def is_writable(self):
-        return self._is_writable
-
-    def is_readable(self):
         return self._is_readable
 
+    def get_data_ctype(self):
+        return dtype_to_ctype(self.get_data().dtype)
 
-class DataStructManager(object):
+
+class KernelInputDataManager(object):
 
     def __init__(self, kernel_input_dict):
-        """This class manages the definition and the instantiation of the mot_data_struct from the list of data inputs.
-
-        Please note that throughout this class we use the sorted keys for the kernel parts generation.
+        """This class manages the transfer and definitions of the user input data into and from the kernel.
 
         Args:
             kernel_input_dict (dict[str: KernelInputData]): the kernel input data items by name
         """
         self._kernel_input_dict = kernel_input_dict or []
+        self._input_order = list(sorted(self._kernel_input_dict))
 
     def get_struct_definition(self):
         """Return the structure definition of the mot_data_struct.
@@ -592,22 +589,13 @@ class DataStructManager(object):
             '''
 
         definitions = []
-        for name in sorted(self._kernel_input_dict):
+        for name in self._input_order:
             kernel_input_data = self._kernel_input_dict[name]
 
-            definition = ''
-            if kernel_input_data.as_pointer():
-                definition += 'global '
-
-            definition += dtype_to_ctype(kernel_input_data.get_data().dtype)
-
-            if kernel_input_data.as_pointer():
-                definition += '* '
-            else:
-                definition += ' '
-
-            definition += name + ';'
-            definitions.append(definition)
+            if isinstance(kernel_input_data, KernelInputBuffer):
+                definitions.append('global {}* {};'.format(kernel_input_data.get_data_ctype(), name))
+            elif isinstance(kernel_input_data, KernelInputScalar):
+                definitions.append('{} {};'.format(kernel_input_data.get_data_ctype(), name))
 
         return '''
             typedef struct{
@@ -624,9 +612,13 @@ class DataStructManager(object):
             list of str: the list of parameter definitions
         """
         definitions = []
-        for name in sorted(self._kernel_input_dict):
+        for name in self._input_order:
             kernel_input_data = self._kernel_input_dict[name]
-            definitions.append('global {}* {}'.format(dtype_to_ctype(kernel_input_data.get_data().dtype), name))
+
+            if isinstance(kernel_input_data, KernelInputBuffer):
+                definitions.append('global {}* {}'.format(kernel_input_data.get_data_ctype(), name))
+            elif isinstance(kernel_input_data, KernelInputScalar):
+                definitions.append('{} {}'.format(kernel_input_data.get_data_ctype(), name))
         return definitions
 
     def get_struct_init_string(self, problem_id_substitute):
@@ -644,17 +636,66 @@ class DataStructManager(object):
             return '{0}'
 
         definitions = []
-        for name in sorted(self._kernel_input_dict):
+        for name in self._input_order:
             kernel_input_data = self._kernel_input_dict[name]
 
-            offset = kernel_input_data.get_offset_str().replace('{problem_id}', problem_id_substitute)
-
-            definition = name
-
-            if kernel_input_data.as_pointer():
-                definition += ' + ' + offset
-            else:
-                definition += '[' + offset + ']'
-            definitions.append(definition)
+            if isinstance(kernel_input_data, KernelInputBuffer):
+                offset = kernel_input_data.get_offset_str().replace('{problem_id}', problem_id_substitute)
+                definitions.append(name + ' + ' + offset)
+            elif isinstance(kernel_input_data, KernelInputScalar):
+                definitions.append(name)
 
         return '{' + ', '.join(definitions) + '}'
+
+    def get_kernel_inputs(self, cl_context):
+        """Get the kernel inputs to load.
+
+        Args:
+            cl_context (pyopencl.Context): the context in which we create the buffer
+
+        Returns:
+            list of kernel input elements (buffers, local memory object, scalars, etc.)
+        """
+        kernel_inputs = []
+        for data in [self._kernel_input_dict[key] for key in self._input_order]:
+            if isinstance(data, KernelInputBuffer):
+                if data.is_writable():
+                    if data.is_readable():
+                        flags = cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR
+                    else:
+                        flags = cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR
+                else:
+                    flags = cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR
+                kernel_inputs.append(cl.Buffer(cl_context, flags, hostbuf=data.get_data()))
+
+            elif isinstance(data, KernelInputScalar):
+                kernel_inputs.append(data.get_value())
+
+        return kernel_inputs
+
+    def get_scalar_arg_dtypes(self):
+        """Get the location and types of the input scalars.
+
+        Returns:
+            list: for every kernel input element either None if the data is a buffer or the numpy data type if
+                if is a scalar.
+        """
+        dtypes = [None] * len(self._kernel_input_dict)
+        for ind, data in enumerate([self._kernel_input_dict[key] for key in self._input_order]):
+            if isinstance(data, KernelInputScalar):
+                dtypes[ind] = data.get_value().dtype
+        return dtypes
+
+    def get_items_to_write_out(self):
+        """Get the data name and buffer index of the items to write out after kernel execution.
+
+        Returns:
+            list: a list with (buffer index, name) tuples where the name refers to the name of the kernel input element
+                and the index is the generated buffer index of that item.
+        """
+        items = []
+        for ind, name in enumerate(self._input_order):
+            if isinstance(self._kernel_input_dict[name], KernelInputBuffer):
+                if self._kernel_input_dict[name].is_writable():
+                    items.append([ind, name])
+        return items

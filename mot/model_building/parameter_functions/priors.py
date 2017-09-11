@@ -1,7 +1,6 @@
 import numpy as np
 from mot.cl_data_type import SimpleCLDataType
 from mot.cl_function import CLFunction, SimpleCLFunction
-from mot.cl_parameter import SimpleCLFunctionParameter
 from mot.model_building.parameter_functions.proposals import GaussianProposal
 
 __author__ = 'Robbert Harms'
@@ -41,19 +40,10 @@ class SimplePrior(ParameterPrior, SimpleCLFunction):
             dependency_list (list or tuple): the list of dependency functions
         """
         extra_params = extra_params or []
-
-        parameters = [SimpleCLFunctionParameter('mot_float_type', 'value'),
-                      SimpleCLFunctionParameter('mot_float_type', 'lower_bound'),
-                      SimpleCLFunctionParameter('mot_float_type', 'upper_bound')] + extra_params
-        cl_code = '''
-            mot_float_type {function_name}({params}){{
-                {body}
-            }}
-        '''.format(function_name=prior_name,
-                   params=', '.join(['{} {}'.format(p.data_type.declaration_type, p.name) for p in parameters]),
-                   body=prior_body)
-
-        super(SimplePrior, self).__init__('mot_float_type', prior_name, parameters, cl_code,
+        parameters = [('mot_float_type', 'value'),
+                      ('mot_float_type', 'lower_bound'),
+                      ('mot_float_type', 'upper_bound')] + extra_params
+        super(SimplePrior, self).__init__('mot_float_type', prior_name, parameters, prior_body,
                                           dependency_list=dependency_list)
 
 

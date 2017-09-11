@@ -4,7 +4,7 @@ import pyopencl as cl
 from mot.library_functions import Rand123
 from ...cl_routines.sampling.base import AbstractSampler, SamplingOutput
 from ...load_balance_strategies import Worker
-from ...utils import get_float_type_def, DataStructManager
+from ...utils import get_float_type_def, KernelInputDataManager
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-02-05"
@@ -320,7 +320,7 @@ class _MCMCKernelBuilder(object):
         self._cl_environment = cl_environment
         self._model = model
         self._data_info = self._model.get_kernel_data()
-        self._data_struct_manager = DataStructManager(self._data_info)
+        self._data_struct_manager = KernelInputDataManager(self._data_info)
         self._nmr_params = nmr_params
         self._nmr_samples = nmr_samples
         self._store_samples = store_samples

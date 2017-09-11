@@ -1,5 +1,5 @@
 from mot.cl_routines.mapping.run_procedure import RunProcedure
-from ...utils import results_to_dict, SimpleNamedCLFunction, SimpleKernelInputData
+from ...utils import results_to_dict, SimpleNamedCLFunction, KernelInputBuffer
 from ...cl_routines.base import CLRoutine
 import numpy as np
 
@@ -56,8 +56,8 @@ class CalculateDependentParameters(CLRoutine):
                                           np_dtype, requirements=['C', 'A', 'O'])[0, ...]
 
         all_kernel_data = dict(kernel_data)
-        all_kernel_data['x'] = SimpleKernelInputData(estimated_parameters)
-        all_kernel_data['_results'] = SimpleKernelInputData(results, is_writable=True)
+        all_kernel_data['x'] = KernelInputBuffer(estimated_parameters)
+        all_kernel_data['_results'] = KernelInputBuffer(results, is_writable=True)
 
         runner = RunProcedure(**self.get_cl_routine_kwargs())
         runner.run_procedure(cl_named_func, all_kernel_data, estimated_parameters_list[0].shape[0],

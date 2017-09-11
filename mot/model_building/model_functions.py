@@ -143,7 +143,7 @@ class SimpleSampleModelCLPrototype(SimpleCLPrototype, SampleModelCLPrototype):
 class SimpleModelCLFunction(SampleModelCLFunction, SimpleCLFunction):
 
     def __init__(self, return_type, name, cl_function_name, parameter_list, cl_code, dependency_list=(),
-                 model_function_priors=None):
+                 model_function_priors=None, cl_extra=None):
         """This CL function is for all estimable models
 
         Args:
@@ -157,23 +157,23 @@ class SimpleModelCLFunction(SampleModelCLFunction, SimpleCLFunction):
                 function. The parameter names of the given functions must match those of this function.
         """
         super(SimpleModelCLFunction, self).__init__(return_type, cl_function_name, parameter_list,
-                                                    cl_code, dependency_list=dependency_list)
+                                                    cl_code, dependency_list=dependency_list, cl_extra=cl_extra)
 
-        self._header = SimpleSampleModelCLPrototype(return_type, name, cl_function_name,
-                                                    parameter_list, model_function_priors=model_function_priors)
+        self._prototype = SimpleSampleModelCLPrototype(return_type, name, cl_function_name,
+                                                       parameter_list, model_function_priors=model_function_priors)
 
     @property
     def name(self):
-        return self._header.name
+        return self._prototype.name
 
     def get_model_function_priors(self):
-        return self._header.get_model_function_priors()
+        return self._prototype.get_model_function_priors()
 
     def get_free_parameters(self):
-        return self._header.get_free_parameters()
+        return self._prototype.get_free_parameters()
 
     def get_prior_parameters(self, parameter):
-        return self._header.get_prior_parameters(parameter)
+        return self._prototype.get_prior_parameters(parameter)
 
 
 class Scalar(SimpleModelCLFunction):
@@ -193,20 +193,13 @@ class Scalar(SimpleModelCLFunction):
                                   sampling_proposal=GaussianProposal(1.0))
         parameter_settings.update(parameter_kwargs or {})
 
-        model_code = '''
-            mot_float_type Scalar(mot_float_type scalar){{
-                return scalar;
-            }}
-        '''
-        model_code = dedent(model_code.replace('\t', ' ' * 4))
-
         super(Scalar, self).__init__(
             'mot_float_type',
             name,
             'Scalar',
             (FreeParameter(SimpleCLDataType.from_string('mot_float_type'), param_name,
                            False, value, lower_bound, upper_bound, **parameter_settings),),
-            model_code)
+            'return ' + param_name + ';')
 
 
 class Weight(Scalar):

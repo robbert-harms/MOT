@@ -4,7 +4,7 @@ import pyopencl as cl
 
 from mot.cl_routines.mapping.error_measures import ErrorMeasures
 from mot.cl_routines.mapping.residual_calculator import ResidualCalculator
-from ...utils import get_float_type_def, DataStructManager
+from ...utils import get_float_type_def, KernelInputDataManager
 from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
 from ...__version__ import __version__
@@ -232,7 +232,7 @@ class AbstractParallelOptimizerWorker(Worker):
 
         self._model = model
         self._data_info = self._model.get_kernel_data()
-        self._data_struct_manager = DataStructManager(self._data_info)
+        self._data_struct_manager = KernelInputDataManager(self._data_info)
         self._double_precision = model.double_precision
         self._nmr_params = nmr_params
 

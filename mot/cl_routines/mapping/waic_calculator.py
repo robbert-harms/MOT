@@ -1,6 +1,6 @@
 import pyopencl as cl
 import numpy as np
-from ...utils import get_float_type_def, all_logging_disabled, DataStructManager
+from ...utils import get_float_type_def, all_logging_disabled, KernelInputDataManager
 from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
 from copy import copy
@@ -73,7 +73,7 @@ class _LLWorker(Worker):
 
         self._model = model
         self._data_info = self._model.get_kernel_data()
-        self._data_struct_manager = DataStructManager(self._data_info)
+        self._data_struct_manager = KernelInputDataManager(self._data_info)
         self._double_precision = model.double_precision
 
         self._samples = samples

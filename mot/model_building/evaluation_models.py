@@ -148,21 +148,17 @@ class SumOfSquaresEvaluationModel(SimpleAbstractEvaluationModel):
         """
         super(SumOfSquaresEvaluationModel, self).__init__(
             'SumOfSquares', 'sumOfSquares',
-            [SimpleCLFunctionParameter('double', 'observation'),
-             SimpleCLFunctionParameter('double', 'model_evaluation')])
+            [('double', 'observation'),
+             ('double', 'model_evaluation')])
 
     def _get_minimum_likelihood_code(self):
         return '''
-            double sumOfSquares(double observation, double model_evaluation){
-                return pown(observation - model_evaluation, 2);
-            }
+            return pown(observation - model_evaluation, 2);
         '''
 
     def _get_log_likelihood_code(self, full_likelihood):
         return '''
-            double sumOfSquares(double observation, double model_evaluation){
-                return -pown(observation - model_evaluation, 2);
-            }
+            return -pown(observation - model_evaluation, 2);
         '''
 
 
@@ -206,8 +202,8 @@ class GaussianEvaluationModel(SimpleAbstractEvaluationModel):
         """
         super(GaussianEvaluationModel, self).__init__(
             'GaussianNoiseModel', 'gaussianNoise',
-            [SimpleCLFunctionParameter('double', 'observation'),
-             SimpleCLFunctionParameter('double', 'model_evaluation'),
+            [('double', 'observation'),
+             ('double', 'model_evaluation'),
              FreeParameter('mot_float_type', 'sigma', True, 1, 0, 'INFINITY', parameter_transform=ClampTransform())],
             noise_std_param_name='sigma')
 
@@ -221,17 +217,13 @@ class GaussianEvaluationModel(SimpleAbstractEvaluationModel):
             + log(sigma * sqrt(2 * M_PI))
         """
         return '''
-            double gaussianNoise(double observation, double model_evaluation, mot_float_type sigma){
-                return pown(observation - model_evaluation, 2) / (2 * sigma * sigma);
-            }
+            return pown(observation - model_evaluation, 2) / (2 * sigma * sigma);
         '''
 
     def _get_log_likelihood_code(self, full_likelihood):
         return '''
-            double gaussianNoise(double observation, double model_evaluation, mot_float_type sigma){
-                return - pown(observation - model_evaluation, 2) / (2 * sigma * sigma) 
-                    ''' + ('- log(sigma * sqrt(2 * M_PI))' if full_likelihood else '') + ''';
-            }
+            return - pown(observation - model_evaluation, 2) / (2 * sigma * sigma) 
+                ''' + ('- log(sigma * sqrt(2 * M_PI))' if full_likelihood else '') + ''';
         '''
 
 
@@ -274,8 +266,8 @@ class OffsetGaussianEvaluationModel(SimpleAbstractEvaluationModel):
         """
         super(OffsetGaussianEvaluationModel, self).__init__(
             'OffsetGaussianNoise', 'offsetGaussian',
-            [SimpleCLFunctionParameter('double', 'observation'),
-             SimpleCLFunctionParameter('double', 'model_evaluation'),
+            [('double', 'observation'),
+             ('double', 'model_evaluation'),
              FreeParameter('mot_float_type', 'sigma', True, 1, 0, 'INFINITY', parameter_transform=ClampTransform())],
             noise_std_param_name='sigma')
 
@@ -289,18 +281,14 @@ class OffsetGaussianEvaluationModel(SimpleAbstractEvaluationModel):
             (+ log(sigma * sqrt(2 * M_PI)))
         """
         return '''
-            double offsetGaussian(double observation, double model_evaluation, mot_float_type sigma){
-                return pown(observation - sqrt(pown(model_evaluation, 2) + (sigma * sigma)), 2) / (2 * sigma * sigma);
-            }
+            return pown(observation - hypot(model_evaluation, (double)sigma), 2) / (2 * sigma * sigma);
         '''
 
     def _get_log_likelihood_code(self, full_likelihood):
         return '''
-            double offsetGaussian(double observation, double model_evaluation, mot_float_type sigma){
-                double estimate = sqrt(pown(model_evaluation, 2) + (sigma * sigma));
-                return - pown(observation - estimate, 2) / (2 * (sigma * sigma))
-                    ''' + ('- log(sigma * sqrt(2 * M_PI))' if full_likelihood else '') + ''';
-            }
+            double estimate = hypot(model_evaluation, (double)sigma);
+            return - pown(observation - estimate, 2) / (2 * (sigma * sigma))
+                ''' + ('- log(sigma * sqrt(2 * M_PI))' if full_likelihood else '') + ''';
         '''
 
 
@@ -348,8 +336,8 @@ class RicianEvaluationModel(SimpleAbstractEvaluationModel):
         """
         super(RicianEvaluationModel, self).__init__(
             'RicianNoise', 'ricianNoise',
-            [SimpleCLFunctionParameter('double', 'observation'),
-             SimpleCLFunctionParameter('double', 'model_evaluation'),
+            [('double', 'observation'),
+             ('double', 'model_evaluation'),
              FreeParameter('mot_float_type', 'sigma', True, 1, 0, 'INFINITY', parameter_transform=ClampTransform())],
             noise_std_param_name='sigma',
             dependency_list=(LogBesseli0(),))
@@ -366,18 +354,14 @@ class RicianEvaluationModel(SimpleAbstractEvaluationModel):
 
         """
         return '''
-            double ricianNoise(double observation, double model_evaluation, mot_float_type sigma){
-                return ((model_evaluation * model_evaluation) / (2 * sigma * sigma)) 
-                        - log_bessel_i0((observation * model_evaluation) / (sigma * sigma));
-            }
+            return ((model_evaluation * model_evaluation) / (2 * sigma * sigma)) 
+                    - log_bessel_i0((observation * model_evaluation) / (sigma * sigma));
         '''
 
     def _get_log_likelihood_code(self, full_likelihood=True):
         return '''
-            double ricianNoise(double observation, double model_evaluation, mot_float_type sigma){
-                return log(observation / (sigma * sigma))
-                        - ((observation * observation) / (2 * sigma * sigma))
-                        - ((model_evaluation * model_evaluation) / (2 * sigma * sigma))
-                        + log_bessel_i0((observation * model_evaluation) / (sigma * sigma));
-            }
+            return log(observation / (sigma * sigma))
+                    - ((observation * observation) / (2 * sigma * sigma))
+                    - ((model_evaluation * model_evaluation) / (2 * sigma * sigma))
+                    + log_bessel_i0((observation * model_evaluation) / (sigma * sigma));
         '''

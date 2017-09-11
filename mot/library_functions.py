@@ -1,7 +1,8 @@
 import os
+from textwrap import indent, dedent
+
 from pkg_resources import resource_filename
 from mot.cl_function import CLFunction, SimpleCLFunction
-from mot.cl_parameter import SimpleCLFunctionParameter
 
 __author__ = 'Robbert Harms'
 __date__ = "2016-10-03"
@@ -14,15 +15,7 @@ class CLLibrary(CLFunction):
 
 
 class SimpleCLLibrary(CLLibrary, SimpleCLFunction):
-
-    def __init__(self, return_type, cl_function_name, parameter_list, cl_code, dependency_list=()):
-        """Python wrapper for library CL code.
-
-        Args:
-            cl_code (str): the CL code for this library
-        """
-        super(SimpleCLLibrary, self).__init__(return_type, cl_function_name, parameter_list, cl_code,
-                                              dependency_list=dependency_list)
+    pass
 
 
 class SimpleCLLibraryFromFile(SimpleCLLibrary):
@@ -48,6 +41,20 @@ class SimpleCLLibraryFromFile(SimpleCLLibrary):
 
         super(SimpleCLLibraryFromFile, self).__init__(return_type, cl_function_name, parameter_list, code,
                                                       dependency_list=dependency_list)
+        self._code = code
+
+    def get_cl_code(self):
+        return dedent('''
+            {dependencies}
+            #ifndef {inclusion_guard_name}
+            #define {inclusion_guard_name}
+            {cl_extra}
+            {code}
+            #endif // {inclusion_guard_name}
+        '''.format(dependencies=indent(self._get_cl_dependency_code(), ' ' * 4 * 3),
+                   inclusion_guard_name='INCLUDE_GUARD_{}'.format(self.get_cl_function_name()),
+                   cl_extra=self._cl_extra if self._cl_extra is not None else '',
+                   code=indent('\n' + self._code.strip() + '\n', ' ' * 4 * 3)))
 
 
 class FirstLegendreTerm(SimpleCLLibrary):
@@ -79,43 +86,40 @@ class FirstLegendreTerm(SimpleCLLibrary):
 
         The return value is Pn(x) if n is a nonnegative integer.  If n is negative, 0 is returned.
         """
-        cl_code = '''
-            double getFirstLegendreTerm(const double x, const int n){
+        super(FirstLegendreTerm, self).__init__(
+            'double', 'firstLegendreTerm',
+            [('double', 'x'), ('int', 'n')],
+            '''
                 if (n < 0){
                     return 0.0;
                 }
-            
+
                 if(fabs(x) == 1.0){
                     if(x > 0.0 || n % 2 == 0){
                         return 1.0;
                     }
                     return -1.0;
                 }
-            
+
                 if (n == 0){
                     return 1.0;
                 }
                 if (n == 1){
                     return x;
                 }
-            
+
                 double P0 = 1.0;
                 double P1 = x;
                 double Pn;
-            
+
                 for(int k = 1; k < n; k++){
                     Pn = ((2 * k + 1) * x * P1 - (k * P0)) / (k + 1);
                     P0 = P1;
                     P1 = Pn;
                 }
-            
+
                 return Pn;
-            }
-        '''
-        super(FirstLegendreTerm, self).__init__(
-            'double', 'firstLegendreTerm', [SimpleCLFunctionParameter('double', 'x'),
-                                            SimpleCLFunctionParameter('int', 'n')],
-            cl_code)
+            ''')
 
 
 class Besseli0(SimpleCLLibrary):
@@ -126,50 +130,46 @@ class Besseli0(SimpleCLLibrary):
         Original author of C code: M.G.R. Vogelaar
         """
         cl_code = '''
-            double bessel_i0(double x){
-                double y;
+            double y;
+            
+            if(fabs(x) < 3.75){
+                y = (x / 3.75) * (x / 3.75);                  
                 
-                if(fabs(x) < 3.75){
-                    y = (x / 3.75) * (x / 3.75);                  
-                    
-                    return 1.0 + y * (3.5156229 
-                                      + y * (3.0899424
-                                             + y * (1.2067492 
-                                                    + y * (0.2659732
-                                                           + y * (0.360768e-1 
-                                                                  + y * 0.45813e-2)))));
-                }
-                
-                y = 3.75 / fabs(x);
-                return (exp(fabs(x)) / sqrt(fabs(x))) 
-                        * (0.39894228
-                           + y * (0.1328592e-1
-                                  + y * (0.225319e-2
-                                         + y * (-0.157565e-2
-                                                + y * (0.916281e-2
-                                                       + y * (-0.2057706e-1
-                                                              + y * (0.2635537e-1
-                                                                     + y * (-0.1647633e-1
-                                                                            + y * 0.392377e-2))))))));
+                return 1.0 + y * (3.5156229 
+                                  + y * (3.0899424
+                                         + y * (1.2067492 
+                                                + y * (0.2659732
+                                                       + y * (0.360768e-1 
+                                                              + y * 0.45813e-2)))));
             }
+            
+            y = 3.75 / fabs(x);
+            return (exp(fabs(x)) / sqrt(fabs(x))) 
+                    * (0.39894228
+                       + y * (0.1328592e-1
+                              + y * (0.225319e-2
+                                     + y * (-0.157565e-2
+                                            + y * (0.916281e-2
+                                                   + y * (-0.2057706e-1
+                                                          + y * (0.2635537e-1
+                                                                 + y * (-0.1647633e-1
+                                                                        + y * 0.392377e-2))))))));
         '''
-        super(Besseli0, self).__init__('double', 'bessel_i0', [SimpleCLFunctionParameter('double', 'x')], cl_code)
+        super(Besseli0, self).__init__('double', 'bessel_i0', [('double', 'x')], cl_code)
 
 
 class LogBesseli0(SimpleCLLibrary):
 
     def __init__(self):
         """Return the log of the zeroth-order modified Bessel function of the first kind."""
-        cl_code = '''
-            double log_bessel_i0(double x){
-                if(x < 700){
-                    return log(bessel_i0(x));
-                }
-                return x - log(2.0 * M_PI * x)/2.0;
-            }
-        '''
-        super(LogBesseli0, self).__init__('double', 'log_bessel_i0', [SimpleCLFunctionParameter('double', 'x')], cl_code,
-                                          dependency_list=(Besseli0(),))
+        super(LogBesseli0, self).__init__(
+            'double', 'log_bessel_i0', [('double', 'x')],
+            '''
+              if(x < 700){
+                  return log(bessel_i0(x));
+              }
+              return x - log(2.0 * M_PI * x)/2.0;
+            ''', dependency_list=(Besseli0(),))
 
 
 class GammaCDF(SimpleCLLibraryFromFile):
@@ -187,16 +187,12 @@ class GammaCDF(SimpleCLLibraryFromFile):
          * shape: the shape parameter of the gamma distribution (often denoted :math:`k`)
          * scale: the scale parameter of the gamma distribution (often denoted :math:`\theta`)
         """
-        cl_code = '''
-            double gamma_cdf(double shape, double scale, double x){
-                 return gamma_p(shape, x/scale);
-            }
-        '''
         super(GammaCDF, self).__init__(
-            'double', 'gamma_cdf', [SimpleCLFunctionParameter('double', 'shape'),
-                                    SimpleCLFunctionParameter('double', 'scale'),
-                                    SimpleCLFunctionParameter('double', 'x')],
-            cl_code,
+            'double', 'gamma_cdf',
+            [('double', 'shape'),
+             ('double', 'scale'),
+             ('double', 'x')],
+            'return gamma_p(shape, x/scale);',
             dependency_list=(GammaP(),))
 
 
@@ -206,7 +202,7 @@ class GammaP(SimpleCLLibraryFromFile):
         """Calculates the normalized/regularized lower incomplete gamma function returning values in the range [0, 1].
         """
         super(GammaP, self).__init__(
-            'double', 'gamma_p', [SimpleCLFunctionParameter('double', 'a'), SimpleCLFunctionParameter('double', 'x')],
+            'double', 'gamma_p', [('double', 'a'), ('double', 'x')],
             resource_filename('mot', 'data/opencl/gamma_p.cl'))
 
 
@@ -219,22 +215,22 @@ class LogCosh(SimpleCLLibrary):
         The estimation for large numbers has been taken from:
         https://github.com/JaneliaSciComp/tmt/blob/master/basics/logcosh.m
         """
-        cl_code = '''
-            double log_cosh(double x){
-               if(x < 50){
+        super(LogCosh, self).__init__(
+            'double', 'log_cosh',
+            [('double', 'x')],
+            '''
+                if(x < 50){
                     return log(cosh(x));
                 }
                 return fabs(x) + log(1 + exp(-2.0 * fabs(x))) - log(2.0);
-            }
-        '''
-        super(LogCosh, self).__init__('double', 'log_cosh', [SimpleCLFunctionParameter('double', 'x')], cl_code)
+            ''')
 
 
 class Rand123(SimpleCLLibrary):
 
     def __init__(self):
         """Estimate various trigonometric functions additional to the OpenCL offerings."""
-        super(Rand123, self).__init__('void', 'rand123', [], Rand123._get_random123_cl_code())
+        super(Rand123, self).__init__('void', 'rand123', [], '', cl_extra=Rand123._get_random123_cl_code())
 
     @staticmethod
     def _get_random123_cl_code():

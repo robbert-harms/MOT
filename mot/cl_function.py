@@ -48,11 +48,19 @@ class CLFunction(CLPrototype):
         """
         raise NotImplementedError()
 
-    def get_raw_cl_code(self):
-        """Get the CL code of only the implementing function, without include guards.
+    def get_cl_body(self):
+        """Get the CL code of the body of this function.
 
         Returns:
-            str: the CL for encapsulation
+            str: the CL code of this function body
+        """
+        raise NotImplementedError()
+
+    def get_cl_extra(self):
+        """Get the extra CL code outside the function body.
+
+        Returns:
+            str or None: the CL code outside the function body, can be None
         """
         raise NotImplementedError()
 
@@ -133,7 +141,7 @@ class SimpleCLPrototype(CLPrototype):
 
 class SimpleCLFunction(CLFunction):
 
-    def __init__(self, return_type, cl_function_name, parameter_list, cl_code, dependency_list=()):
+    def __init__(self, return_type, cl_function_name, parameter_list, cl_body, dependency_list=(), cl_extra=None):
         """A simple implementation of a CL function.
 
         Args:
@@ -142,42 +150,15 @@ class SimpleCLFunction(CLFunction):
             parameter_list (list or tuple): This either contains instances of
                 :class:`mot.cl_parameter.CLFunctionParameter` or contains tuples with arguments that
                 can be used to construct a :class:`mot.cl_parameter.SimpleCLFunctionParameter`.
+            cl_body (str): the body of the CL code for this function.
             dependency_list (list or tuple of CLLibrary): The list of CL libraries this function depends on
-            cl_code (str): the raw cl code for this function. This does not need to include the dependencies or
-                the inclusion guard, these are added automatically here.
+            cl_extra (str): extra CL code for this function that does not warrant an own function
         """
         super(SimpleCLFunction, self).__init__()
         self._prototype = SimpleCLPrototype(return_type, cl_function_name, parameter_list)
-        self._cl_code = cl_code
+        self._cl_body = cl_body
         self._dependency_list = dependency_list
-
-    @classmethod
-    def construct_cl_function(cls, return_type, cl_function_name, parameter_list, cl_body, dependency_list=()):
-        """A constructor that can build the function code from the prototype parts and the function body.
-
-        If there are any dots in the parameter names, they will be replaced with underscores.
-
-        Args:
-            return_type (str): the CL return type of the function
-            cl_function_name (string): The name of the CL function
-            parameter_list (list or tuple): This either contains instances of
-                :class:`mot.cl_parameter.CLFunctionParameter` or contains tuples with arguments that
-                can be used to construct a :class:`mot.cl_parameter.SimpleCLFunctionParameter`.
-            dependency_list (list or tuple of CLLibrary): The list of CL libraries this function depends on
-            cl_body (str): the body of the CL code. The rest of the function call will be added by this constructor.
-        """
-        prototype = SimpleCLPrototype(return_type, cl_function_name, parameter_list)
-
-        cl_code = '''
-            {return_type} {cl_function_name}({parameters}){{
-                {body}
-            }}
-        '''.format(return_type=return_type,
-                   cl_function_name=cl_function_name,
-                   parameters=', '.join('{} {}'.format(p.data_type.get_declaration(), p.name.replace('.', '_'))
-                                        for p in prototype.get_parameters()),
-                   body=cl_body)
-        return cls(return_type, cl_function_name, parameter_list, cl_code, dependency_list=dependency_list)
+        self._cl_extra = cl_extra
 
     def get_return_type(self):
         return self._prototype.get_return_type()
@@ -189,18 +170,33 @@ class SimpleCLFunction(CLFunction):
         return self._prototype.get_parameters()
 
     def get_cl_code(self):
+        cl_code = '''
+            {return_type} {cl_function_name}({parameters}){{
+                {body}
+            }}
+        '''.format(return_type=self._prototype.get_return_type(),
+                   cl_function_name=self._prototype.get_cl_function_name(),
+                   parameters=', '.join('{} {}'.format(p.data_type.get_declaration(), p.name.replace('.', '_'))
+                                        for p in self._prototype.get_parameters()),
+                   body=self._cl_body)
+
         return dedent('''
             {dependencies}
             #ifndef {inclusion_guard_name}
             #define {inclusion_guard_name}
+            {cl_extra}
             {code}
             #endif // {inclusion_guard_name}
         '''.format(dependencies=indent(self._get_cl_dependency_code(), ' ' * 4 * 3),
                    inclusion_guard_name='INCLUDE_GUARD_{}'.format(self.get_cl_function_name()),
-                   code=indent('\n' + self._cl_code.strip() + '\n', ' ' * 4 * 3)))
+                   cl_extra=self._cl_extra if self._cl_extra is not None else '',
+                   code=indent('\n' + cl_code.strip() + '\n', ' ' * 4 * 3)))
 
-    def get_raw_cl_code(self):
-        return self._cl_code
+    def get_cl_body(self):
+        return self._cl_body
+
+    def get_cl_extra(self):
+        return self._cl_extra
 
     def evaluate(self, inputs, double_precision=False, return_inputs=False):
         return CLFunctionEvaluator().evaluate(self, inputs, double_precision=double_precision,

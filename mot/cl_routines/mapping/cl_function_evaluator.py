@@ -1,7 +1,8 @@
 import numpy as np
 
 from mot.cl_routines.mapping.run_procedure import RunProcedure
-from ...utils import SimpleNamedCLFunction, convert_data_to_dtype, SimpleKernelInputData, KernelInputData, is_scalar
+from ...utils import SimpleNamedCLFunction, convert_data_to_dtype, KernelInputBuffer, KernelInputData, is_scalar, \
+    KernelInputScalar
 from ...cl_routines.base import CLRoutine
 
 
@@ -39,18 +40,18 @@ class CLFunctionEvaluator(CLRoutine):
                 we return a tuple with as first element the return value and as second element a dictionary mapping
                 the output state of the parameters.
         """
-        nmr_data_points = self._get_minimum_data_lenght(input_data)
+        nmr_data_points = self._get_minimum_data_length(input_data)
 
-        kernel_items = self._wrap_kernel_items(cl_function, input_data, double_precision)
+        kernel_items = self._wrap_input_data(cl_function, input_data, double_precision)
 
         if cl_function.get_return_type() != 'void':
-            kernel_items['_results'] = SimpleKernelInputData(
+            kernel_items['_results'] = KernelInputBuffer(
                 convert_data_to_dtype(np.ones(nmr_data_points), cl_function.get_return_type(),
                                       mot_float_type='double' if double_precision else 'float'),
                 is_writable=True)
 
         runner = RunProcedure(**self.get_cl_routine_kwargs())
-        runner.run_procedure(self._wrap_cl_function(cl_function),
+        runner.run_procedure(self._wrap_cl_function(cl_function, kernel_items),
                              kernel_items, nmr_data_points, double_precision=double_precision)
 
         if cl_function.get_return_type() != 'void':
@@ -60,16 +61,25 @@ class CLFunctionEvaluator(CLRoutine):
             return_value = None
 
         if return_inputs:
-            return return_value, {key: value.get_data() for key, value in kernel_items.items()}
+            data = {}
+            for key, value in kernel_items.items():
+                if isinstance(value, KernelInputBuffer):
+                    data[key] = value.get_data()
+                elif isinstance(value, KernelInputScalar):
+                    data[key] = value.get_value()
+
+            return return_value, data
         return return_value
 
-    def _wrap_kernel_items(self, cl_function, input_data, double_precision):
-        min_data_length = self._get_minimum_data_lenght(input_data)
+    def _wrap_input_data(self, cl_function, input_data, double_precision):
+        min_data_length = self._get_minimum_data_length(input_data)
 
         kernel_items = {}
         for param in cl_function.get_parameters():
             if isinstance(input_data[param.name], KernelInputData):
                 kernel_items[self._get_param_cl_name(param.name)] = input_data[param.name]
+            elif is_scalar(input_data[param.name]) and not param.data_type.is_pointer_type:
+                kernel_items[self._get_param_cl_name(param.name)] = KernelInputScalar(input_data[param.name])
             else:
                 if is_scalar(input_data[param.name]):
                     data = convert_data_to_dtype(np.ones(min_data_length) * input_data[param.name],
@@ -80,18 +90,20 @@ class CLFunctionEvaluator(CLRoutine):
                                                  param.data_type.ctype,
                                                  mot_float_type='double' if double_precision else 'float')
 
-                kernel_items[self._get_param_cl_name(param.name)] = SimpleKernelInputData(
+                kernel_items[self._get_param_cl_name(param.name)] = KernelInputBuffer(
                     data, is_writable=True, is_readable=True)
 
         return kernel_items
 
-    def _get_minimum_data_lenght(self, input_data):
+    def _get_minimum_data_length(self, input_data):
         min_length = 1
 
         for value in input_data.values():
-            if isinstance(value, KernelInputData):
+            if isinstance(value, KernelInputBuffer):
                 if value.get_data().shape[0] > min_length:
                     min_length = value.get_data().shape[0]
+            elif isinstance(value, KernelInputScalar):
+                pass
             elif is_scalar(value):
                 pass
             elif value.shape[0] > min_length:
@@ -99,15 +111,18 @@ class CLFunctionEvaluator(CLRoutine):
 
         return min_length
 
-    def _wrap_cl_function(self, cl_function):
+    def _wrap_cl_function(self, cl_function, kernel_items):
         func_args = []
         for param in cl_function.get_parameters():
             param_cl_name = self._get_param_cl_name(param.name)
 
-            if param.data_type.is_pointer_type:
+            if isinstance(kernel_items[param_cl_name], KernelInputBuffer):
+                if param.data_type.is_pointer_type:
+                    func_args.append('data->{}'.format(param_cl_name))
+                else:
+                    func_args.append('data->{}[0]'.format(param_cl_name))
+            elif isinstance(kernel_items[param_cl_name], KernelInputScalar):
                 func_args.append('data->{}'.format(param_cl_name))
-            else:
-                func_args.append('data->{}[0]'.format(param_cl_name))
 
         func_name = 'evaluate'
         func = cl_function.get_cl_code()

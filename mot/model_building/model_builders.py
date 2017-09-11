@@ -15,7 +15,7 @@ from mot.model_building.parameter_functions.dependencies import SimpleAssignment
 from mot.model_building.utils import ParameterCodec
 from mot.model_interfaces import OptimizeModelInterface, SampleModelInterface
 from mot.utils import is_scalar, all_elements_equal, get_single_value, SimpleNamedCLFunction, convert_data_to_dtype, \
-    SimpleKernelInputData
+    KernelInputBuffer
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-03-14"
@@ -430,17 +430,16 @@ class OptimizeModelBuilder(ModelBuilder):
 
         observations = self._get_observations_data(problems_to_analyze)
         if observations is not None:
-            data_items['observations'] = SimpleKernelInputData(observations)
+            data_items['observations'] = KernelInputBuffer(observations)
 
         for key, cl_data in self._get_variable_data(problems_to_analyze).items():
-            as_value = len(cl_data.shape) == 1 or cl_data.shape[1] == 1
-            data_items['var_data_' + str(key)] = SimpleKernelInputData(cl_data, as_pointer=not as_value)
+            data_items['var_data_' + str(key)] = KernelInputBuffer(cl_data)
 
         for key, cl_data in self._get_protocol_data().items():
-            data_items['protocol_data_' + str(key)] = SimpleKernelInputData(cl_data, offset_str='0')
+            data_items['protocol_data_' + str(key)] = KernelInputBuffer(cl_data, offset_str='0')
 
         for key, cl_data in self._get_model_data().items():
-            data_items['model_data_' + str(key)] = SimpleKernelInputData(cl_data, offset_str='0')
+            data_items['model_data_' + str(key)] = KernelInputBuffer(cl_data, offset_str='0')
         return data_items
 
     def _get_initial_parameters(self, problems_to_analyze):
@@ -577,12 +576,12 @@ class OptimizeModelBuilder(ModelBuilder):
             if all_elements_equal(self._lower_bounds[name]):
                 lower_bound = str(get_single_value(self._lower_bounds[name]))
             else:
-                lower_bound = 'data->var_data_lb_' + name.replace('.', '_')
+                lower_bound = 'data->var_data_lb_{}[0]'.format(name.replace('.', '_'))
 
             if all_elements_equal(self._upper_bounds[name]):
                 upper_bound = str(get_single_value(self._upper_bounds[name]))
             else:
-                upper_bound = 'data->var_data_ub_' + name.replace('.', '_')
+                upper_bound = 'data->var_data_ub_{}[0]'.format(name.replace('.', '_'))
 
             s = '{0}[' + str(ind) + '] = ' + transform.get_cl_decode().create_assignment(
                 '{0}[' + str(ind) + ']', lower_bound, upper_bound) + ';'
@@ -647,16 +646,14 @@ class OptimizeModelBuilder(ModelBuilder):
                 if all_elements_equal(static_map_value):
                     param_list.append(str(get_single_value(static_map_value)))
                 else:
+                    pointer_index = '0'
                     if len(static_map_value.shape) > 1 and static_map_value.shape[1] != 1 \
-                            and static_map_value.shape[1] == self.get_nmr_inst_per_problem():
-                        param_list.append('data->var_data_' + '{}.{}'.format(model.name, param.name).replace('.', '_')
-                                          + '[observation_index]')
-                    else:
-                        param_list.append('data->var_data_' + '{}.{}'.format(model.name, param.name).replace('.', '_'))
-
+                        and static_map_value.shape[1] == self.get_nmr_inst_per_problem():
+                            pointer_index = 'observation_index'
+                    param_list.append('data->var_data_{}[{}]'.format(
+                        '{}.{}'.format(model.name, param.name).replace('.', '_'), pointer_index))
             elif isinstance(param, CurrentObservationParam):
                 param_list.append('data->observations[observation_index]')
-
             else:
                 param_list.append('{}.{}'.format(model.name, param.name).replace('.', '_'))
 
@@ -750,8 +747,8 @@ class OptimizeModelBuilder(ModelBuilder):
                 if all_elements_equal(value):
                     assignment = '(' + data_type + ')' + str(float(get_single_value(value)))
                 else:
-                    assignment = '(' + data_type + ') data->var_data_' + \
-                                 '{}.{}'.format(m.name, p.name).replace('.', '_')
+                    assignment = '(' + data_type + ') data->var_data_{}[0]'.format(
+                        '{}.{}'.format(m.name, p.name).replace('.', '_'))
                 func += "\t"*4 + data_type + ' ' + name + ' = ' + assignment + ';' + "\n"
         return func
 
@@ -904,7 +901,8 @@ class OptimizeModelBuilder(ModelBuilder):
             if all_elements_equal(value):
                 assignment = '(' + data_type + ')' + str(float(get_single_value(value)))
             else:
-                assignment = '(' + data_type + ') data->var_data_{}.{}'.format(m.name, p.name).replace('.', '_')
+                assignment = '(' + data_type + ') data->var_data_{}[0]'.format(
+                    '{}.{}'.format(m.name, p.name).replace('.', '_'))
         elif self._model_functions_info.is_fixed_to_dependency(m, p):
             return self._get_dependent_parameters_listing(((m, p),))
         else:
@@ -1132,14 +1130,14 @@ class SampleModelBuilder(OptimizeModelBuilder):
                     if lower_bound == '-inf':
                         lower_bound = '-INFINITY'
                 else:
-                    lower_bound = 'data->var_data_lb_' + name.replace('.', '_')
+                    lower_bound = 'data->var_data_lb_' + name.replace('.', '_') + '[0]'
 
                 if all_elements_equal(self._upper_bounds[name]):
                     upper_bound = str(get_single_value(self._upper_bounds[name]))
                     if upper_bound == 'inf':
                         upper_bound = 'INFINITY'
                 else:
-                    upper_bound = 'data->var_data_ub_' + name.replace('.', '_')
+                    upper_bound = 'data->var_data_ub_' + name.replace('.', '_') + '[0]'
 
                 function_name = p.sampling_prior.get_cl_function_name()
 
@@ -1156,7 +1154,7 @@ class SampleModelBuilder(OptimizeModelBuilder):
                                 prior_params.append(str(get_single_value(value)))
                             else:
                                 prior_params.append('data->var_data_' +
-                                                    '{}.{}'.format(m.name, prior_param.name).replace('.', '_'))
+                                                    '{}.{}'.format(m.name, prior_param.name).replace('.', '_')) + '[0]'
 
                     cl_str += 'prior *= {}(x[{}], {}, {}, {});\n'.format(function_name, i, lower_bound, upper_bound,
                                                                          ', '.join(prior_params))
@@ -1459,12 +1457,12 @@ class SampleModelBuilder(OptimizeModelBuilder):
         """Get the prior limiting the weights between 0 and 1"""
         weights = []
         for (m, p) in self._model_functions_info.get_estimable_weights():
-            weights.append(SimpleCLFunctionParameter('mot_float_type', '{}.{}'.format(m.name, p.name)))
+            weights.append(('mot_float_type', '{}.{}'.format(m.name, p.name)))
 
         if len(weights) > 1:
-            return SimpleCLFunction.construct_cl_function(
+            return SimpleCLFunction(
                 'mot_float_type', 'prior_estimable_weights_sum_to_one',
-                weights, 'return (' + ' + '.join(el.name.replace('.', '_') for el in weights) + ') <= 1;')
+                weights, 'return (' + ' + '.join(el[1].replace('.', '_') for el in weights) + ') <= 1;')
         return None
 
 
@@ -1493,7 +1491,7 @@ class CompositeModelFunction(SimpleCLFunction):
         super(CompositeModelFunction, self).__init__(
             'double', cl_function_name,
             [p.get_renamed(external_name) for m, p, _, external_name in self._get_model_function_parameters()],
-            self._get_model_function_cl_code(cl_function_name),
+            self._get_model_function_body(),
             dependency_list=self._models)
 
     def get_model_parameter_list(self):
@@ -1528,21 +1526,11 @@ class CompositeModelFunction(SimpleCLFunction):
                 other_params.append((m, p, '{}_{}'.format(m.name, p.name), '{}.{}'.format(m.name, p.name)))
         return shared_params + other_params
 
-    def _get_model_function_cl_code(self, cl_function_name):
-        """Get the CL code for the model function as build by this model.
-
-        This returns the CL code for ONLY the model, that is it will return a function with the signature:
-
-        .. code-block:: c
-
-            double <func_name>(<param0>, <param1>, <param2>, ...);
-
-        Which as output returns the model evaluated at that set of parameters.
-        The model returned by this function knows nothing about the different types of parameters, it just returns
-        the model equation as constructed using the model tree.
+    def _get_model_function_body(self):
+        """Get the CL code for the body of the model function as build by this model.
 
         Returns:
-            str: the CL code for the model
+            str: the CL code for the body of this code
         """
         def build_model_expression():
             tree = self._build_model_from_tree(self._model_tree, 0)
@@ -1567,15 +1555,7 @@ class CompositeModelFunction(SimpleCLFunction):
                 cl_parameters.append('{} {}'.format(cl_type, name))
             return cl_parameters
 
-        return_str = '''
-            double {func_name}(
-                    {params}){{
-
-                return {model_expression}
-            }}
-        '''.format(func_name=cl_function_name,
-                   params=indent(', \n'.join(build_parameters()), '    ' * 5)[20:],
-                   model_expression=build_model_expression())
+        return_str = 'return ' + build_model_expression()
         return dedent(return_str.replace('\t', '    '))
 
     def _build_model_from_tree(self, node, depth):
@@ -2123,8 +2103,9 @@ class _ModelFunctionPriorToCompositeModelPrior(SimpleCLFunction):
             model_function_prior.get_return_type(),
             model_function_prior.get_cl_function_name(),
             parameters,
-            model_function_prior.get_raw_cl_code(),
-            dependency_list=model_function_prior.get_dependencies()
+            model_function_prior.get_cl_body(),
+            dependency_list=model_function_prior.get_dependencies(),
+            cl_extra=model_function_prior.get_cl_extra()
         )
 
 

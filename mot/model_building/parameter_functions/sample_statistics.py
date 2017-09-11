@@ -30,7 +30,9 @@ class GaussianFit(ParameterSampleStatistics):
     """
 
     def get_statistics(self, samples):
-        return SamplingStatisticsContainer(np.mean(samples, axis=1), {'std': np.std(samples, axis=1, ddof=1)})
+        from mot.cl_routines.mapping.gaussian_fit import GaussianFit as GaussianFitter
+        mean, std = GaussianFitter().calculate(samples)
+        return SamplingStatisticsContainer(mean, {'std': std})
 
 
 class CircularGaussianFit(ParameterSampleStatistics):
@@ -49,103 +51,9 @@ class CircularGaussianFit(ParameterSampleStatistics):
         self.min_angle = min_angle
 
     def get_statistics(self, samples):
-        mod = np.mod(samples, self.max_angle)
-
-        mean = CircularGaussianFit.circmean(mod, high=self.max_angle, low=self.min_angle, axis=1)
-        additional_maps = {'std': CircularGaussianFit.circstd(mod, high=self.max_angle, low=self.min_angle, axis=1)}
-
-        return SamplingStatisticsContainer(mean, additional_maps)
-
-    @staticmethod
-    def circmean(samples, high=2*np.pi, low=0, axis=None):
-        """Compute the circular mean for samples in a range.
-        Taken from scipy.stats
-
-        Args:
-            samples (array_like): Input array.
-            high (float or int): High boundary for circular mean range.  Default is ``2*pi``.
-            low (float or int): Low boundary for circular mean range.  Default is 0.
-            axis (int, optional): Axis along which means are computed.
-                The default is to compute the mean of the flattened array.
-
-        Returns:
-            float: Circular mean.
-        """
-        ang = (samples - low) * 2 * np.pi / (high - low)
-        res = np.angle(np.mean(np.exp(1j * ang), axis=axis))
-        mask = res < 0
-        if mask.ndim > 0:
-            res[mask] += 2 * np.pi
-        elif mask:
-            res += 2 * np.pi
-        return res * (high - low) / 2.0 / np.pi + low
-
-    @staticmethod
-    def circstd(samples, high=2*np.pi, low=0, axis=None):
-        """Compute the circular standard deviation for samples assumed to be in the range [low to high].
-
-        Taken from scipy.stats, with a small change on the 4th line.
-
-        This uses a definition of circular standard deviation that in the limit of
-        small angles returns a number close to the 'linear' standard deviation.
-
-        Args:
-            samples (array_like): Input array.
-            low (float or int): Low boundary for circular standard deviation range.  Default is 0.
-            high (float or int): High boundary for circular standard deviation range. Default is ``2*pi``.
-            axis (int): Axis along which standard deviations are computed.  The default is
-                to compute the standard deviation of the flattened array.
-
-        Returns:
-            float: Circular standard deviation.
-        """
-        ang = (samples - low) * 2 * np.pi / (high - low)
-        res = np.mean(np.exp(1j * ang), axis=axis)
-        R = abs(res)
-        R[R >= 1] = 1 - np.finfo(np.float).eps
-        return ((high - low) / 2.0 / np.pi) * np.sqrt(-2 * np.log(R))
-
-
-class CircularGaussianPIFit(ParameterSampleStatistics):
-    """Compute the circular mean where the results are wrapped around [0, pi].
-
-    This is exactly the same as using CircularGaussianFit from above with a maximum angle of pi. This special
-    case is only faster to compute.
-
-    This assumes angles between 0 and pi.
-    """
-
-    def get_statistics(self, samples):
-        mean, std = self.circmean_circstd(np.mod(samples, np.pi))
+        from mot.cl_routines.mapping.circular_gaussian_fit import CircularGaussianFit
+        mean, std = CircularGaussianFit().calculate(samples, high=self.max_angle, low=self.min_angle)
         return SamplingStatisticsContainer(mean, {'std': std})
-
-    @staticmethod
-    def circmean_circstd(samples):
-        """Compute the circular mean for samples in a range.
-
-        Copied and modified from scipy.stats.circmean and scipy.stats.circstd. Merged the two functions and
-        hardcoded the limits between 0 and pi.
-
-        Args:
-            samples (array_like): Input array.
-
-        Returns:
-            tuple: (float, float) Circular mean and circular std
-        """
-        complex_coordinate_means = np.mean(np.exp(1j * 2 * samples), axis=1)
-
-        R = abs(complex_coordinate_means)
-        R[R >= 1] = 1 - np.finfo(np.float).eps
-        stds = 1/2. * np.sqrt(-2 * np.log(R))
-
-        res = np.angle(complex_coordinate_means)
-        mask = res < 0
-        if mask.ndim > 0:
-            res[mask] += 2 * np.pi
-        elif mask:
-            res += 2 * np.pi
-
-        return res/2., stds
 
 
 class TruncatedGaussianFit(ParameterSampleStatistics):
