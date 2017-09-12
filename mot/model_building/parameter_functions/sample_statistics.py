@@ -29,9 +29,7 @@ class GaussianFit(ParameterSampleStatistics):
     """
 
     def get_statistics(self, samples):
-        from mot.cl_routines.mapping.gaussian_fit import GaussianFit as GaussianFitter
-        mean, std = GaussianFitter().calculate(samples)
-        return SamplingStatisticsContainer(mean, {'std': std})
+        return SamplingStatisticsContainer(np.mean(samples, axis=1), {'std': np.std(samples, axis=1, ddof=1)})
 
 
 class CircularGaussianFit(ParameterSampleStatistics):
