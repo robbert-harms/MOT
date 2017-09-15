@@ -33,16 +33,41 @@ class SamplingOutput(object):
         """Get the matrix containing the sampling results.
 
         Returns:
-            ndarray: the sampled parameter maps, an (d, p, n) array with for d problems and p parameters n samples.
+            ndarray: the sampled parameter maps, a (d, p, n) array with for d problems and p parameters n samples.
+        """
+        raise NotImplementedError()
+
+    def get_log_likelihoods(self):
+        """Get per set of sampled parameters the log likelihood value associated with that set of parameters.
+
+        Returns:
+            ndarray: the log likelihood values, a (d, n) array with for d problems and n samples the log likelihood
+                value.
+        """
+        raise NotImplementedError()
+
+    def get_log_priors(self):
+        """Get per set of sampled parameters the log prior value associated with that set of parameters.
+
+        Returns:
+            ndarray: the log prior values, a (d, n) array with for d problems and n samples the prior value.
         """
         raise NotImplementedError()
 
 
 class SimpleSampleOutput(SamplingOutput):
 
-    def __init__(self, samples):
+    def __init__(self, samples, log_likelihoods, log_priors):
         """Simple storage container for the sampling output"""
         self._samples = samples
+        self._log_likelihood = log_likelihoods
+        self._log_prior = log_priors
 
     def get_samples(self):
         return self._samples
+
+    def get_log_likelihoods(self):
+        return self._log_likelihood
+
+    def get_log_priors(self):
+        return self._log_prior

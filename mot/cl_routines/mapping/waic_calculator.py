@@ -174,7 +174,7 @@ class _LLWorker(Worker):
 
     def _get_ll_calculating_kernel(self):
         """Kernel to calculate the log likelihoods per sample per observation"""
-        obs_func = self._model.get_log_likelihood_per_observation_function(full_likelihood=True)
+        obs_func = self._model.get_log_likelihood_per_observation_function()
 
         kernel_param_names = ['uint problem_ind', 'global mot_float_type* samples', 'global double* lls']
         kernel_param_names.extend(self._data_struct_manager.get_kernel_arguments())

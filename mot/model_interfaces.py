@@ -233,14 +233,10 @@ class SampleModelInterface(OptimizeModelInterface):
         """
         raise NotImplementedError()
 
-    def get_log_likelihood_per_observation_function(self, full_likelihood=True):
-        """Get the CL Log Likelihood function that evaluates the given instance under a noise model.
+    def get_log_likelihood_per_observation_function(self):
+        """Get the (complete) CL Log Likelihood function that evaluates the given instance under a noise model.
 
         This should return the LL's such that when linearly summed they yield the total log likelihood of the model.
-
-        Args:
-            full_likelihood (boolean): if we want the complete likelihood, or if we can drop the constant terms.
-                The default is the complete likelihood. Disable for speed.
 
         Returns:
             mot.utils.NamedCLFunction: A function of the kind:

@@ -1,5 +1,4 @@
 from mot.model_building.model_functions import SimpleModelCLFunction, SimpleSampleModelCLPrototype
-from mot.cl_parameter import SimpleCLFunctionParameter
 from mot.model_building.parameters import FreeParameter
 from mot.library_functions import LogBesseli0
 from mot.model_building.parameter_functions.transformations import ClampTransform
@@ -44,19 +43,15 @@ class EvaluationModel(object):
         """
         raise NotImplementedError()
 
-    def get_log_likelihood_function(self, full_likelihood=True):
+    def get_log_likelihood_function(self):
         """Get the function to evaluate the log likelihood for the given observations and model estimates.
 
         This should return the log likelihoods as such that when linearly summed they would yield the complete
         log likelihood for the model.
 
-        Args:
-            full_likelihood (boolean): if we want the function for the complete likelihood or for the simplified
-                likelihood that is faster to evaluate but might be non-normalized.
-
         Returns:
-            mot.model_building.model_functions.SampleModelCLFunction: The objective function for the given observation
-                index under this noise model.
+            mot.model_building.model_functions.SampleModelCLFunction: The log likelihood function for the given
+                observation index under this noise model.
         """
         raise NotImplementedError()
 
@@ -108,9 +103,9 @@ class SimpleAbstractEvaluationModel(EvaluationModel):
                                      self._get_minimum_likelihood_code(),
                                      dependency_list=self._dependency_list)
 
-    def get_log_likelihood_function(self, full_likelihood=True):
+    def get_log_likelihood_function(self):
         return SimpleModelCLFunction('double', self.name, self._cl_function_name, self._parameter_list,
-                                     self._get_log_likelihood_code(full_likelihood),
+                                     self._get_log_likelihood_code(),
                                      dependency_list=self._dependency_list)
 
     def get_prototype(self):
@@ -119,7 +114,7 @@ class SimpleAbstractEvaluationModel(EvaluationModel):
     def _get_minimum_likelihood_code(self):
         raise NotImplementedError()
 
-    def _get_log_likelihood_code(self, full_likelihood):
+    def _get_log_likelihood_code(self):
         raise NotImplementedError()
 
 
@@ -156,7 +151,7 @@ class SumOfSquaresEvaluationModel(SimpleAbstractEvaluationModel):
             return pown(observation - model_evaluation, 2);
         '''
 
-    def _get_log_likelihood_code(self, full_likelihood):
+    def _get_log_likelihood_code(self):
         return '''
             return -pown(observation - model_evaluation, 2);
         '''
@@ -220,10 +215,10 @@ class GaussianEvaluationModel(SimpleAbstractEvaluationModel):
             return pown(observation - model_evaluation, 2) / (2 * sigma * sigma);
         '''
 
-    def _get_log_likelihood_code(self, full_likelihood):
+    def _get_log_likelihood_code(self):
         return '''
-            return - pown(observation - model_evaluation, 2) / (2 * sigma * sigma) 
-                ''' + ('- log(sigma * sqrt(2 * M_PI))' if full_likelihood else '') + ''';
+            return - pown(observation - model_evaluation, 2) / (2 * sigma * sigma)
+                    - log(sigma * sqrt(2 * M_PI));
         '''
 
 
@@ -284,11 +279,11 @@ class OffsetGaussianEvaluationModel(SimpleAbstractEvaluationModel):
             return pown(observation - hypot(model_evaluation, (double)sigma), 2) / (2 * sigma * sigma);
         '''
 
-    def _get_log_likelihood_code(self, full_likelihood):
+    def _get_log_likelihood_code(self):
         return '''
             double estimate = hypot(model_evaluation, (double)sigma);
             return - pown(observation - estimate, 2) / (2 * (sigma * sigma))
-                ''' + ('- log(sigma * sqrt(2 * M_PI))' if full_likelihood else '') + ''';
+                    - log(sigma * sqrt(2 * M_PI));
         '''
 
 
@@ -358,7 +353,7 @@ class RicianEvaluationModel(SimpleAbstractEvaluationModel):
                     - log_bessel_i0((observation * model_evaluation) / (sigma * sigma));
         '''
 
-    def _get_log_likelihood_code(self, full_likelihood=True):
+    def _get_log_likelihood_code(self):
         return '''
             return log(observation / (sigma * sigma))
                     - ((observation * observation) / (2 * sigma * sigma))

@@ -2,9 +2,9 @@ import warnings
 import numpy as np
 import pyopencl as cl
 from mot.library_functions import Rand123
-from ...cl_routines.sampling.base import AbstractSampler, SamplingOutput
+from ...cl_routines.sampling.base import AbstractSampler, SamplingOutput, SimpleSampleOutput
 from ...load_balance_strategies import Worker
-from ...utils import get_float_type_def, KernelInputDataManager
+from ...utils import get_float_type_def, KernelInputDataManager, split_in_batches
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-02-05"
@@ -74,10 +74,13 @@ class MetropolisHastings(AbstractSampler):
         current_chain_position = np.require(init_params, float_dtype, requirements=['C', 'A', 'O', 'W'])
         proposal_state = np.require(model.get_proposal_state(), float_dtype, requirements=['C', 'A', 'O', 'W'])
         mh_state = _prepare_mh_state(model.get_metropolis_hastings_state(), float_dtype)
+
         samples = np.zeros((model.get_nmr_problems(), nmr_params, self.nmr_samples),
                            dtype=float_dtype, order='C')
+        log_likelihoods = np.zeros((model.get_nmr_problems(), self.nmr_samples), dtype=float_dtype, order='C')
+        log_priors = np.zeros((model.get_nmr_problems(), self.nmr_samples), dtype=float_dtype, order='C')
 
-        def run(_samples, _mh_state, nmr_samples, in_burnin=False):
+        def run(_samples, _log_likelihoods, _log_priors, _mh_state, nmr_samples, in_burnin=False):
             """Create the worker, process it, store the results in the given sample array and return a new mh state."""
             if in_burnin:
                 sample_interval = 0
@@ -86,7 +89,7 @@ class MetropolisHastings(AbstractSampler):
 
             workers = self._create_workers(lambda cl_environment: _MHWorker(
                 cl_environment, self.get_compile_flags_list(model.double_precision), model, current_chain_position,
-                _samples, proposal_state, _mh_state, nmr_samples, in_burnin,
+                _samples, _log_likelihoods, _log_priors, proposal_state, _mh_state, nmr_samples, in_burnin,
                 sample_interval, self.use_adaptive_proposals))
             self.load_balancer.process(workers, model.get_nmr_problems())
             return _mh_state.with_nmr_samples_drawn(_mh_state.nmr_samples_drawn + nmr_samples * (sample_interval + 1))
@@ -94,17 +97,23 @@ class MetropolisHastings(AbstractSampler):
         self._logger.info('Starting sampling with method {0}'.format(self.__class__.__name__))
 
         if self.burn_length > 0:
-            mh_state = run(samples, mh_state, self.burn_length, in_burnin=True)
+            mh_state = run(samples, None, None, mh_state, self.burn_length, in_burnin=True)
 
-        for batch_ind, batch_size in enumerate(self._get_sampling_batch_sizes(self.nmr_samples, 1000)):
+        for batch_ind, batch_size in enumerate(split_in_batches(self.nmr_samples, 1000)):
             samples_subset = np.zeros((model.get_nmr_problems(), nmr_params, batch_size),
                                       dtype=float_dtype, order='C')
-            mh_state = run(samples_subset, mh_state, batch_size)
+            ll_subset = np.zeros((model.get_nmr_problems(), batch_size), dtype=float_dtype, order='C')
+            lp_subset = np.zeros((model.get_nmr_problems(), batch_size), dtype=float_dtype, order='C')
+
+            mh_state = run(samples_subset, ll_subset, lp_subset, mh_state, batch_size)
+
             samples[..., (batch_ind * batch_size):((batch_ind + 1) * batch_size)] = samples_subset
+            log_likelihoods[..., (batch_ind * batch_size):((batch_ind + 1) * batch_size)] = ll_subset
+            log_priors[..., (batch_ind * batch_size):((batch_ind + 1) * batch_size)] = lp_subset
 
         self._logger.info('Finished sampling')
 
-        return MHSampleOutput(samples, proposal_state, mh_state, current_chain_position)
+        return MHSampleOutput(samples, log_likelihoods, log_priors, proposal_state, mh_state, current_chain_position)
 
     def _do_initial_logging(self, model):
         self._logger.info('Entered sampling routine.')
@@ -129,43 +138,28 @@ class MetropolisHastings(AbstractSampler):
         self._logger.info('Total samples drawn: {samples_drawn}, total samples returned: '
                           '{samples_returned} (per problem).'.format(**samples_drawn))
 
-    def _get_sampling_batch_sizes(self, total_nmr_samples, max_batch_length):
-        """Cuts the total number of samples into smaller batches.
 
-        This returns the size of every batch, which can be used as the ``nmr_samples`` input in running a kernel.
+class MHSampleOutput(SimpleSampleOutput):
 
-        Examples:
-            self._get_sampling_batch_sizes(30, 8) -> [8, 8, 8, 6]
-
-        Returns:
-            list: the list of batch sizes
-        """
-        batch_sizes = [max_batch_length] * (total_nmr_samples // max_batch_length)
-        if total_nmr_samples % max_batch_length > 0:
-            batch_sizes.append(total_nmr_samples % max_batch_length)
-        return batch_sizes
-
-
-class MHSampleOutput(SamplingOutput):
-
-    def __init__(self, samples, proposal_state, mh_state, current_chain_position):
+    def __init__(self, samples, log_likelihoods, log_priors, proposal_state, mh_state, current_chain_position):
         """Simple storage container for the sampling output
 
         Args:
             samples (ndarray): an (d, p, n) matrix with d problems, p parameters and n samples
+            log_likelihoods (ndarray): the log likelihood values, a (d, n) array with for d problems and n samples the
+                log likelihood value.
+            log_priors (ndarray): the log prior values, a (d, n) array with for d problems and n samples the
+                prior value.
             proposal_state (ndarray): (d, p) matrix with for d problems and p parameters the proposal state
             mh_state (MHState): the current MH state
             current_chain_position (ndarray): (d, p) matrix with for d observations and p parameters the current
                 chain position. If the samples are not empty the last element in the samples (``samples[..., -1]``)
                 should equal this matrix.
         """
-        self._samples = samples
+        super(MHSampleOutput, self).__init__(samples, log_likelihoods, log_priors)
         self._proposal_state = proposal_state
         self._mh_state = mh_state
         self._current_chain_position = current_chain_position
-
-    def get_samples(self):
-        return self._samples
 
     def get_proposal_state(self):
         """Get the proposal state at the end of this sampling
@@ -196,8 +190,9 @@ class MHSampleOutput(SamplingOutput):
 
 class _MHWorker(Worker):
 
-    def __init__(self, cl_environment, compile_flags, model, current_chain_position, samples, proposal_state,
-                 mh_state, nmr_samples, in_burnin, sample_intervals, use_adaptive_proposals):
+    def __init__(self, cl_environment, compile_flags, model, current_chain_position, samples,
+                 log_likelihoods, log_priors, proposal_state, mh_state, nmr_samples, in_burnin,
+                 sample_intervals, use_adaptive_proposals):
         super(_MHWorker, self).__init__(cl_environment)
 
         self._model = model
@@ -205,6 +200,8 @@ class _MHWorker(Worker):
         self._current_chain_position = current_chain_position
         self._nmr_params = current_chain_position.shape[1]
         self._samples = samples
+        self._log_likelihoods = log_likelihoods
+        self._log_priors = log_priors
 
         self._proposal_state = proposal_state
         self._mh_state = mh_state
@@ -232,11 +229,12 @@ class _MHWorker(Worker):
             nmr_iterations = self._nmr_samples
         else:
             nmr_iterations = self._nmr_samples * (self._sample_intervals + 1)
-            samples_buf = cl.Buffer(self._cl_run_context.context,
-                                    cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
-                                    hostbuf=self._samples)
-            data_buffers.append(samples_buf)
-            readout_items.append([samples_buf, self._samples])
+            for item in [self._samples, self._log_likelihoods, self._log_priors]:
+                buffer = cl.Buffer(self._cl_run_context.context,
+                                   cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
+                                   hostbuf=item)
+                data_buffers.append(buffer)
+                readout_items.append([buffer, item])
 
         self._kernel.sample(
             self._cl_run_context.queue,
@@ -365,6 +363,8 @@ class _MCMCKernelBuilder(object):
 
         if self._store_samples:
             kernel_param_names.append('global mot_float_type* samples')
+            kernel_param_names.append('global mot_float_type* log_likelihoods')
+            kernel_param_names.append('global mot_float_type* log_priors')
 
         proposal_state_size = self._model.get_proposal_state().shape[1]
 
@@ -405,7 +405,10 @@ class _MCMCKernelBuilder(object):
                                    global mot_float_type* parameter_variance,
                                    global mot_float_type* parameter_variance_update_m2,'''
                                 if self._update_parameter_variances else '') + '''
-                         ''' + ('global mot_float_type* samples, ' if self._store_samples else '') + '''
+                         ''' + ('global mot_float_type* samples, '
+                                'global mot_float_type* log_likelihoods, '
+                                'global mot_float_type* log_priors, '
+                                if self._store_samples else '') + '''
                          local double* log_likelihood_tmp){
 
                 ulong i;
@@ -444,6 +447,13 @@ class _MCMCKernelBuilder(object):
         if self._store_samples:
             kernel_source += '''
                         if(i % ''' + str(self._sample_intervals + 1) + ''' == 0){
+                            log_likelihoods[problem_ind * ''' + str(self._nmr_samples) + ''' 
+                                            + (ulong)(i / ''' + str(self._sample_intervals + 1) + ''')
+                                ] = *current_likelihood;
+                            log_priors[problem_ind * ''' + str(self._nmr_samples) + ''' 
+                                       + (ulong)(i / ''' + str(self._sample_intervals + 1) + ''')
+                                ] = *current_prior;
+                            
                             for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
                                 samples[(ulong)(i / ''' + str(self._sample_intervals + 1) + ''') // remove the interval
                                         + j * ''' + str(self._nmr_samples) + '''  // parameter index
@@ -504,11 +514,10 @@ class _MCMCKernelBuilder(object):
                 _sum_log_likelihood_tmp_local(log_likelihood_tmp, &current_likelihood);
 
                 _sample(x_local, rng_data, &current_likelihood, &current_prior, &data, nmr_iterations,
-                        iteration_offset,
-                        proposal_state, sampling_counter, acceptance_counter,
+                        iteration_offset, proposal_state, sampling_counter, acceptance_counter,
                     ''' + ('parameter_mean, parameter_variance, parameter_variance_update_m2,'
                             if self._update_parameter_variances else '') + '''
-                    ''' + ('samples, ' if self._store_samples else '') + '''
+                    ''' + ('samples, log_likelihoods, log_priors, ' if self._store_samples else '') + '''
                     log_likelihood_tmp);
 
                 if(get_local_id(0) == 0){
@@ -554,7 +563,7 @@ class _MCMCKernelBuilder(object):
         return kernel_source
 
     def _get_log_likelihood_functions(self):
-        ll_func = self._model.get_log_likelihood_per_observation_function(full_likelihood=False)
+        ll_func = self._model.get_log_likelihood_per_observation_function()
 
         kernel_source = ll_func.get_cl_code()
         kernel_source += '''

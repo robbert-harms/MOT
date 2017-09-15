@@ -1101,7 +1101,7 @@ class SampleModelBuilder(OptimizeModelBuilder):
         simple_optimize_model = super(SampleModelBuilder, self).build(problems_to_analyze)
         return SimpleSampleModel(simple_optimize_model,
                                  self._get_proposal_state(problems_to_analyze),
-                                 self._get_log_likelihood_per_observation_function_builder(problems_to_analyze),
+                                 self._get_log_likelihood_per_observation_function(problems_to_analyze),
                                  self._is_proposal_symmetric(),
                                  self._get_log_prior_function_builder(),
                                  self._get_metropolis_hastings_state(problems_to_analyze),
@@ -1415,7 +1415,7 @@ class SampleModelBuilder(OptimizeModelBuilder):
                     return True
         return False
 
-    def _get_log_likelihood_per_observation_function_builder(self, problems_to_analyze):
+    def _get_log_likelihood_per_observation_function(self, problems_to_analyze):
         eval_function_info = self._get_model_eval_function(problems_to_analyze)
         eval_function_signature = self._evaluation_model.get_log_likelihood_function()
 
@@ -1428,26 +1428,23 @@ class SampleModelBuilder(OptimizeModelBuilder):
         preliminary = ''
         preliminary += eval_function_info.get_cl_code()
 
-        def builder(full_likelihood):
-            eval_model_func = self._evaluation_model.get_log_likelihood_function(
-                full_likelihood=full_likelihood)
+        eval_model_func = self._evaluation_model.get_log_likelihood_function()
 
-            func_name = 'getLogLikelihoodPerObservation'
-            func = str(preliminary) + eval_model_func.get_cl_code() + '''
-               double ''' + func_name + '''(mot_data_struct* data, const mot_float_type* const x, 
-                                            uint observation_index){
-                   
-                   double observation = data->observations[observation_index];
-                   double model_evaluation = ''' + eval_function_info.get_cl_function_name() + '''(
-                       data, x, observation_index);
+        func_name = 'getLogLikelihoodPerObservation'
+        func = str(preliminary) + eval_model_func.get_cl_code() + '''
+           double ''' + func_name + '''(mot_data_struct* data, const mot_float_type* const x, 
+                                        uint observation_index){
+               
+               double observation = data->observations[observation_index];
+               double model_evaluation = ''' + eval_function_info.get_cl_function_name() + '''(
+                   data, x, observation_index);
 
-                   ''' + param_listing + '''
+               ''' + param_listing + '''
 
-                   return ''' + eval_model_func.get_cl_function_name() + '''(''' + ','.join(eval_call_args) + ''');
-               }
-           '''
-            return SimpleNamedCLFunction(func, func_name)
-        return builder
+               return ''' + eval_model_func.get_cl_function_name() + '''(''' + ','.join(eval_call_args) + ''');
+           }
+       '''
+        return SimpleNamedCLFunction(func, func_name)
 
     def _get_metropolis_hastings_state(self, problems_to_analyze):
         return DefaultMHState(self._get_nmr_problems(problems_to_analyze),
@@ -2178,13 +2175,13 @@ class SimpleOptimizeModel(OptimizeModelInterface):
 
 class SimpleSampleModel(SampleModelInterface):
 
-    def __init__(self, wrapped_optimize_model, proposal_state, ll_per_obs_func_builder,
+    def __init__(self, wrapped_optimize_model, proposal_state, ll_per_obs_func,
                  is_proposal_symmetric, log_prior_function_builder, metropolis_hastings_state,
                  proposal_state_update_uses_variance, proposal_logpdf_builder, proposal_function_builder,
                  proposal_state_update_function_builder):
         self._wrapped_optimize_model = wrapped_optimize_model
         self._proposal_state = proposal_state
-        self._ll_per_obs_func_builder = ll_per_obs_func_builder
+        self._ll_per_obs_func = ll_per_obs_func
         self._is_proposal_symmetric = is_proposal_symmetric
         self._log_prior_function_builder = log_prior_function_builder
         self._metropolis_hastings_state = metropolis_hastings_state
@@ -2240,8 +2237,8 @@ class SimpleSampleModel(SampleModelInterface):
     def get_proposal_state(self):
         return self._proposal_state
 
-    def get_log_likelihood_per_observation_function(self, full_likelihood=True):
-        return self._ll_per_obs_func_builder(full_likelihood)
+    def get_log_likelihood_per_observation_function(self):
+        return self._ll_per_obs_func
 
     def is_proposal_symmetric(self):
         return self._is_proposal_symmetric
