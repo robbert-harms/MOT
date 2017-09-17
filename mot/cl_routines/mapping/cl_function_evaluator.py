@@ -61,14 +61,7 @@ class CLFunctionEvaluator(CLRoutine):
             return_value = None
 
         if return_inputs:
-            data = {}
-            for key, value in kernel_items.items():
-                if isinstance(value, KernelInputBuffer):
-                    data[key] = value.get_data()
-                elif isinstance(value, KernelInputScalar):
-                    data[key] = value.get_value()
-
-            return return_value, data
+            return return_value, {key: value.get_data() for key, value in kernel_items.items()}
         return return_value
 
     def _wrap_input_data(self, cl_function, input_data, double_precision):
@@ -99,11 +92,11 @@ class CLFunctionEvaluator(CLRoutine):
         min_length = 1
 
         for value in input_data.values():
-            if isinstance(value, KernelInputBuffer):
-                if value.get_data().shape[0] > min_length:
-                    min_length = value.get_data().shape[0]
-            elif isinstance(value, (KernelInputScalar, KernelInputBuffer)):
-                pass
+            if isinstance(value, KernelInputData):
+                data = value.get_data()
+                if data is not None:
+                    if np.ndarray(data).shape[0] > min_length:
+                        min_length = np.ndarray(data).shape[0]
             elif is_scalar(value):
                 pass
             elif value.shape[0] > min_length:
@@ -116,13 +109,13 @@ class CLFunctionEvaluator(CLRoutine):
         for param in cl_function.get_parameters():
             param_cl_name = self._get_param_cl_name(param.name)
 
-            if isinstance(kernel_items[param_cl_name], KernelInputBuffer):
+            if kernel_items[param_cl_name].is_scalar:
+                func_args.append('data->{}'.format(param_cl_name))
+            else:
                 if param.data_type.is_pointer_type:
                     func_args.append('data->{}'.format(param_cl_name))
                 else:
                     func_args.append('data->{}[0]'.format(param_cl_name))
-            elif isinstance(kernel_items[param_cl_name], KernelInputScalar):
-                func_args.append('data->{}'.format(param_cl_name))
 
         func_name = 'evaluate'
         func = cl_function.get_cl_code()

@@ -75,6 +75,9 @@ def get_cl_environments():
 def set_cl_environments(cl_environments):
     """Set the current CL environments to the given list
 
+    Please note that this will change the global configuration, i.e. this is a persistent change. If you do not want
+    a persistent state change, consider using :func:`~mot.configuration.config_context` instead.
+
     Args:
         cl_environments (list of CLEnvironment): the new list of CL environments.
 
@@ -97,6 +100,9 @@ def get_load_balancer():
 
 def set_load_balancer(load_balancer):
     """Set the current CL environments to the given list
+
+    Please note that this will change the global configuration, i.e. this is a persistent change. If you do not want
+    a persistent state change, consider using :func:`~mot.configuration.config_context` instead.
 
     Args:
         load_balancer (SimpleLoadBalanceStrategy): the current load balancer to use
@@ -141,6 +147,9 @@ def get_default_proposal_update():
 
 def set_default_proposal_update(proposal_update):
     """Set the default proposal update function to use in sampling.
+
+    Please note that this will change the global configuration, i.e. this is a persistent change. If you do not want
+    a persistent state change, consider using :func:`~mot.configuration.config_context` instead.
 
     Args:
         mot.model_building.parameter_functions.proposal_updates.ProposalUpdate: the new proposal update function

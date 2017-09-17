@@ -449,14 +449,92 @@ def split_in_batches(nmr_elements, max_batch_size):
 
 class KernelInputData(object):
 
-    def get_data_ctype(self):
-        """Get the data type of this input data object.
+    @property
+    def is_scalar(self):
+        """Check if the implemented input data is a scalar or not.
 
-        This should return only the type of data (float, int, unsigned long) etc. No further declaration specifiers
-        should be returned.
+        Since scalars are loaded differently as buffers in the kernel, we have to check if this data is a scalar or not.
 
         Returns:
-            str: the type declaration.
+            boolean: if the implemented type should be loaded as a scalar or not
+        """
+        raise NotImplementedError()
+
+    @property
+    def dtype(self):
+        """Get the numpy data type of this input data.
+
+        Returns:
+             numpy dtype: the numpy data type of this data
+        """
+        raise NotImplementedError()
+
+    @property
+    def read_data_back(self):
+        """Check if this input data should be read back after kernel execution.
+
+        Returns:
+            boolean: if, after kernel launch, the data should be mapped from the compute device back to host memory.
+        """
+        raise NotImplementedError()
+
+    def get_data(self):
+        """Get the underlying data.
+
+        This should return the current state of the data object.
+
+        Returns:
+            the underlying data object, make sure this is of your desired data type. Can return None if
+                this input data has no actual data.
+        """
+        raise NotImplementedError()
+
+    def get_struct_declaration(self, name):
+        """Get the declaration of this input data in the ``mot_data_struct`` object.
+
+        Args:
+            name (str): the name for this data, i.e. how it is represented in the kernel.
+
+        Returns:
+            str: the declaration of this input data in the kernel data struct
+        """
+        raise NotImplementedError()
+
+    def get_kernel_argument_declaration(self, name):
+        """Get the kernel argument declaration of this parameter.
+
+        Args:
+            name (str): the name for this data, i.e. how it is represented in the kernel.
+
+        Returns:
+            str: the kernel argument declaration
+        """
+        raise NotImplementedError()
+
+    def get_struct_init_string(self, name, problem_id_substitute):
+        """Create the structure initialization string.
+
+        Args:
+            name (str): the name of this data in the kernel
+            problem_id_substitute (str): the substitute for the ``{problem_id}`` in the kernel data info elements.
+
+        Returns:
+            str: the instantiation string for the data struct of this input data
+        """
+        raise NotImplementedError()
+
+    def get_kernel_inputs(self, cl_context, workgroup_size):
+        """Get the kernel CL input object.
+
+        Since the kernels follow the map/unmap paradigm make sure to use the ``USE_HOST_PTR`` when making
+        writable data objects.
+
+        Args:
+            cl_context (pyopencl.Context): the CL context in which we are working.
+            workgroup_size (int): the workgroup size the kernel will use
+
+        Returns:
+            a buffer, a local memory object, a scalars, etc., anything that can be loaded into the kernel.
         """
         raise NotImplementedError()
 
@@ -471,11 +549,32 @@ class KernelInputScalar(KernelInputData):
         """
         self._value = np.array(value)
 
-    def get_value(self):
+    @property
+    def is_scalar(self):
+        return True
+
+    @property
+    def dtype(self):
+        return self._value.dtype
+
+    @property
+    def read_data_back(self):
+        return False
+
+    def get_data(self):
         return self._value
 
-    def get_data_ctype(self):
-        return dtype_to_ctype(self.get_value().dtype)
+    def get_struct_declaration(self, name):
+        return '{} {};'.format(dtype_to_ctype(self._value.dtype), name)
+
+    def get_kernel_argument_declaration(self, name):
+        return '{} {}'.format(dtype_to_ctype(self._value.dtype), name)
+
+    def get_struct_init_string(self, name, problem_id_substitute):
+        return name
+
+    def get_kernel_inputs(self, cl_context, workgroup_size):
+        return self._value
 
 
 class KernelInputLocalMemory(KernelInputData):
@@ -491,16 +590,32 @@ class KernelInputLocalMemory(KernelInputData):
         self._dtype = dtype
         self._size_func = size_func or (lambda workgroup_size: workgroup_size * np.dtype(dtype).itemsize)
 
-    def get_data_ctype(self):
-        return dtype_to_ctype(self._dtype)
+    @property
+    def is_scalar(self):
+        return False
 
-    def compute_size(self, workgroup_size):
-        """Get the required size (in bytes) for this local memory object given the work group size the kernel will use.
+    @property
+    def dtype(self):
+        return self._dtype
 
-        Args:
-            workgroup_size (int): the work group size the kernel will use.
-        """
-        return self._size_func(workgroup_size)
+    @property
+    def read_data_back(self):
+        return False
+
+    def get_data(self):
+        return None
+
+    def get_struct_declaration(self, name):
+        return 'local {}* {};'.format(dtype_to_ctype(self._dtype), name)
+
+    def get_kernel_argument_declaration(self, name):
+        return 'local {}* {}'.format(dtype_to_ctype(self._dtype), name)
+
+    def get_struct_init_string(self, name, problem_id_substitute):
+        return name
+
+    def get_kernel_inputs(self, cl_context, workgroup_size):
+        return cl.LocalMemory(self._size_func(workgroup_size))
 
 
 class KernelInputBuffer(KernelInputData):
@@ -511,6 +626,10 @@ class KernelInputBuffer(KernelInputData):
         By default, this will try to offset the data in the kernel by the stride of the first dimension multiplied
         with the problem id by the kernel. For example, if a (n, m) matrix is provided, this will offset the data
         by ``{problem_id} * m``.
+
+        This class will pre-formatted the data with the numpy require method such that it can be loaded in the kernel.
+        That might change the reference to the data, which is important if data is written back. Never trust your
+        reference to the input data and always use :meth:`get_data` for return values.
 
         Args:
             data (ndarray): the data to load in the kernel
@@ -533,32 +652,30 @@ class KernelInputBuffer(KernelInputData):
         else:
             self._offset_str = str(self._offset_str)
 
-    def get_data(self):
-        """Get the underlying data.
+    @property
+    def is_scalar(self):
+        return False
 
-        This should return the data such that it can be loaded by PyOpenCL in a kernel. This means that it
-        should return the data pre-formatted with the numpy require method with the requirements 'C', 'A', 'O'
-        and 'W' if the data is supposed to be writable.
+    @property
+    def dtype(self):
+        return self._data.dtype
 
-        Returns:
-        ndarray: the underlying data object, make sure this is of your desired data type.
-        """
-        return self._data
+    @property
+    def read_data_back(self):
+        return self._is_writable
 
-    def get_offset_str(self):
-        """Get the offset to use for this dataset in the kernel.
+    @property
+    def is_readable(self):
+        """If this kernel input data must be readable by the kernel.
 
-        This should return a string that can compute the offset for this dataset. Since the data is loaded into the
-        kernel as a 1d array, we need to offset this array to the correct location for every problem instance.
-        This offset can include a scaling with the current problem index, one can return a string containing the
-        literal ``{problem_id}`` which is replaced by the kernel for the correct problem id.
+        This is used in conjunction with :meth:`is_writable` when loading the data in the kernel.
 
         Returns:
-            str: the offset string for offsetting the input array for each problem. Do not add a plus in front
-                of the offset, it is implicit.
+            boolean: if this data must be made readable by the kernel function
         """
-        return self._offset_str
+        return self._is_readable
 
+    @property
     def is_writable(self):
         """Check if this kernel input data will write data back.
 
@@ -573,18 +690,28 @@ class KernelInputBuffer(KernelInputData):
         """
         return self._is_writable
 
-    def is_readable(self):
-        """If this kernel input data must be readable by the kernel.
+    def get_struct_declaration(self, name):
+        return 'global {}* {};'.format(dtype_to_ctype(self.get_data().dtype), name)
 
-        This is used in conjunction with :meth:`is_writable` when loading the data in the kernel.
+    def get_kernel_argument_declaration(self, name):
+        return 'global {}* {}'.format(dtype_to_ctype(self.get_data().dtype), name)
 
-        Returns:
-            boolean: if this data must be made readable by the kernel function
-        """
-        return self._is_readable
+    def get_struct_init_string(self, name, problem_id_substitute):
+        offset = self._offset_str.replace('{problem_id}', problem_id_substitute)
+        return name + ' + ' + offset
 
-    def get_data_ctype(self):
-        return dtype_to_ctype(self.get_data().dtype)
+    def get_data(self):
+        return self._data
+
+    def get_kernel_inputs(self, cl_context, workgroup_size):
+        if self._is_writable:
+            if self._is_readable:
+                flags = cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR
+            else:
+                flags = cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR
+        else:
+            flags = cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR
+        return cl.Buffer(cl_context, flags, hostbuf=self._data)
 
 
 class KernelInputDataManager(object):
@@ -616,13 +743,7 @@ class KernelInputDataManager(object):
         definitions = []
         for name in self._input_order:
             kernel_input_data = self._kernel_input_dict[name]
-
-            if isinstance(kernel_input_data, KernelInputBuffer):
-                definitions.append('global {}* {};'.format(kernel_input_data.get_data_ctype(), name))
-            elif isinstance(kernel_input_data, KernelInputScalar):
-                definitions.append('{} {};'.format(kernel_input_data.get_data_ctype(), name))
-            elif isinstance(kernel_input_data, KernelInputLocalMemory):
-                definitions.append('local {}* {};'.format(kernel_input_data.get_data_ctype(), name))
+            definitions.append(kernel_input_data.get_struct_declaration(name))
 
         return '''
             typedef struct{
@@ -641,14 +762,7 @@ class KernelInputDataManager(object):
         definitions = []
         for name in self._input_order:
             kernel_input_data = self._kernel_input_dict[name]
-
-            if isinstance(kernel_input_data, KernelInputBuffer):
-                definitions.append('global {}* {}'.format(kernel_input_data.get_data_ctype(), name))
-            elif isinstance(kernel_input_data, KernelInputScalar):
-                definitions.append('{} {}'.format(kernel_input_data.get_data_ctype(), name))
-            elif isinstance(kernel_input_data, KernelInputLocalMemory):
-                definitions.append('local {}* {}'.format(kernel_input_data.get_data_ctype(), name))
-
+            definitions.append(kernel_input_data.get_kernel_argument_declaration(name))
         return definitions
 
     def get_struct_init_string(self, problem_id_substitute):
@@ -668,12 +782,7 @@ class KernelInputDataManager(object):
         definitions = []
         for name in self._input_order:
             kernel_input_data = self._kernel_input_dict[name]
-
-            if isinstance(kernel_input_data, KernelInputBuffer):
-                offset = kernel_input_data.get_offset_str().replace('{problem_id}', problem_id_substitute)
-                definitions.append(name + ' + ' + offset)
-            elif isinstance(kernel_input_data, (KernelInputScalar, KernelInputLocalMemory)):
-                definitions.append(name)
+            definitions.append(kernel_input_data.get_struct_init_string(name, problem_id_substitute))
 
         return '{' + ', '.join(definitions) + '}'
 
@@ -689,22 +798,7 @@ class KernelInputDataManager(object):
         """
         kernel_inputs = []
         for data in [self._kernel_input_dict[key] for key in self._input_order]:
-            if isinstance(data, KernelInputBuffer):
-                if data.is_writable():
-                    if data.is_readable():
-                        flags = cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR
-                    else:
-                        flags = cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR
-                else:
-                    flags = cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR
-                kernel_inputs.append(cl.Buffer(cl_context, flags, hostbuf=data.get_data()))
-
-            elif isinstance(data, KernelInputScalar):
-                kernel_inputs.append(data.get_value())
-
-            elif isinstance(data, KernelInputLocalMemory):
-                kernel_inputs.append(cl.LocalMemory(data.compute_size(workgroup_size)))
-
+            kernel_inputs.append(data.get_kernel_inputs(cl_context, workgroup_size))
         return kernel_inputs
 
     def get_scalar_arg_dtypes(self):
@@ -716,8 +810,8 @@ class KernelInputDataManager(object):
         """
         dtypes = [None] * len(self._kernel_input_dict)
         for ind, data in enumerate([self._kernel_input_dict[key] for key in self._input_order]):
-            if isinstance(data, KernelInputScalar):
-                dtypes[ind] = data.get_value().dtype
+            if data.is_scalar:
+                dtypes[ind] = data.dtype
         return dtypes
 
     def get_items_to_write_out(self):
@@ -729,7 +823,6 @@ class KernelInputDataManager(object):
         """
         items = []
         for ind, name in enumerate(self._input_order):
-            if isinstance(self._kernel_input_dict[name], KernelInputBuffer):
-                if self._kernel_input_dict[name].is_writable():
-                    items.append([ind, name])
+            if self._kernel_input_dict[name].read_data_back:
+                items.append([ind, name])
         return items
