@@ -22,6 +22,9 @@ class WAICCalculator(CLRoutine):
 
         The WAIC can be used as a model selection criteria, in which the model with the lowest WAIC is preferred.
 
+        This is an expensive function to call, considering that it needs to calculate the log likelihoods for every
+        observation separately.
+
         Args:
             model (AbstractModel): The model to calculate the WAIC for
             samples (ndarray): The obtained samples per problem. This is supposed to be a matrix

@@ -478,6 +478,31 @@ class KernelInputScalar(KernelInputData):
         return dtype_to_ctype(self.get_value().dtype)
 
 
+class KernelInputLocalMemory(KernelInputData):
+
+    def __init__(self, dtype, size_func=None):
+        """Indicates that a local memory array of the indicated size must be loaded as kernel input data.
+
+        Args:
+            dtype (numpy dtype): the data type for this local memory object
+            size_func (Function): the function that can calculate the required local memory size (in number of bytes),
+                given the workgroup size used by the kernel.
+        """
+        self._dtype = dtype
+        self._size_func = size_func or (lambda workgroup_size: workgroup_size * np.dtype(dtype).itemsize)
+
+    def get_data_ctype(self):
+        return dtype_to_ctype(self._dtype)
+
+    def compute_size(self, workgroup_size):
+        """Get the required size (in bytes) for this local memory object given the work group size the kernel will use.
+
+        Args:
+            workgroup_size (int): the work group size the kernel will use.
+        """
+        return self._size_func(workgroup_size)
+
+
 class KernelInputBuffer(KernelInputData):
 
     def __init__(self, data, offset_str=None, is_writable=False, is_readable=True):
@@ -596,6 +621,8 @@ class KernelInputDataManager(object):
                 definitions.append('global {}* {};'.format(kernel_input_data.get_data_ctype(), name))
             elif isinstance(kernel_input_data, KernelInputScalar):
                 definitions.append('{} {};'.format(kernel_input_data.get_data_ctype(), name))
+            elif isinstance(kernel_input_data, KernelInputLocalMemory):
+                definitions.append('local {}* {};'.format(kernel_input_data.get_data_ctype(), name))
 
         return '''
             typedef struct{
@@ -619,6 +646,9 @@ class KernelInputDataManager(object):
                 definitions.append('global {}* {}'.format(kernel_input_data.get_data_ctype(), name))
             elif isinstance(kernel_input_data, KernelInputScalar):
                 definitions.append('{} {}'.format(kernel_input_data.get_data_ctype(), name))
+            elif isinstance(kernel_input_data, KernelInputLocalMemory):
+                definitions.append('local {}* {}'.format(kernel_input_data.get_data_ctype(), name))
+
         return definitions
 
     def get_struct_init_string(self, problem_id_substitute):
@@ -642,16 +672,17 @@ class KernelInputDataManager(object):
             if isinstance(kernel_input_data, KernelInputBuffer):
                 offset = kernel_input_data.get_offset_str().replace('{problem_id}', problem_id_substitute)
                 definitions.append(name + ' + ' + offset)
-            elif isinstance(kernel_input_data, KernelInputScalar):
+            elif isinstance(kernel_input_data, (KernelInputScalar, KernelInputLocalMemory)):
                 definitions.append(name)
 
         return '{' + ', '.join(definitions) + '}'
 
-    def get_kernel_inputs(self, cl_context):
+    def get_kernel_inputs(self, cl_context, workgroup_size):
         """Get the kernel inputs to load.
 
         Args:
             cl_context (pyopencl.Context): the context in which we create the buffer
+            workgroup_size (int): the workgroup size the kernel will use
 
         Returns:
             list of kernel input elements (buffers, local memory object, scalars, etc.)
@@ -670,6 +701,9 @@ class KernelInputDataManager(object):
 
             elif isinstance(data, KernelInputScalar):
                 kernel_inputs.append(data.get_value())
+
+            elif isinstance(data, KernelInputLocalMemory):
+                kernel_inputs.append(cl.LocalMemory(data.compute_size(workgroup_size)))
 
         return kernel_inputs
 

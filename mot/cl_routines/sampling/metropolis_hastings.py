@@ -447,6 +447,7 @@ class _MCMCKernelBuilder(object):
         if self._store_samples:
             kernel_source += '''
                         if(i % ''' + str(self._sample_intervals + 1) + ''' == 0){
+
                             log_likelihoods[problem_ind * ''' + str(self._nmr_samples) + ''' 
                                             + (ulong)(i / ''' + str(self._sample_intervals + 1) + ''')
                                 ] = *current_likelihood;

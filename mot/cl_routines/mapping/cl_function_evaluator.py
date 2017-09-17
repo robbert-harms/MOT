@@ -102,7 +102,7 @@ class CLFunctionEvaluator(CLRoutine):
             if isinstance(value, KernelInputBuffer):
                 if value.get_data().shape[0] > min_length:
                     min_length = value.get_data().shape[0]
-            elif isinstance(value, KernelInputScalar):
+            elif isinstance(value, (KernelInputScalar, KernelInputBuffer)):
                 pass
             elif is_scalar(value):
                 pass

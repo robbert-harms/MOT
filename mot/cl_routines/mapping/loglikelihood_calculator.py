@@ -1,8 +1,7 @@
-import pyopencl as cl
 import numpy as np
-from ...utils import get_float_type_def, split_in_batches, KernelInputDataManager
+from mot.cl_routines.mapping.run_procedure import RunProcedure
+from ...utils import KernelInputBuffer, KernelInputScalar, SimpleNamedCLFunction, KernelInputLocalMemory, dtype_to_ctype
 from ...cl_routines.base import CLRoutine
-from ...load_balance_strategies import Worker
 
 
 __author__ = 'Robbert Harms'
@@ -35,146 +34,102 @@ class LogLikelihoodCalculator(CLRoutine):
         if model.double_precision:
             np_dtype = np.float64
 
-        parameters = np.require(parameters, np_dtype, requirements=['C', 'A', 'O'])
-        log_likelihoods = self._initialize_result_array(parameters, np_dtype)
+        all_kernel_data = dict(model.get_kernel_data())
+        all_kernel_data.update({
+            'parameters': KernelInputBuffer(parameters),
+        })
 
-        def process(params, lls):
-            workers = self._create_workers(
-                lambda cl_environment: _LogLikelihoodCalculatorWorker(
-                    cl_environment, self.get_compile_flags_list(model.double_precision), model, params, lls))
-            self.load_balancer.process(workers, parameters.shape[0])
-
-        if len(parameters.shape) < 3:
-            process(parameters, log_likelihoods)
+        shape = parameters.shape
+        if len(shape) > 2:
+            log_likelihoods = np.zeros((shape[0], shape[2]), dtype=np_dtype, order='C')
+            all_kernel_data.update({
+                'log_likelihoods': KernelInputBuffer(log_likelihoods, is_readable=False, is_writable=True),
+                'nmr_params': KernelInputScalar(parameters.shape[1]),
+                'nmr_samples': KernelInputScalar(parameters.shape[2]),
+                'local_reduction_lls': KernelInputLocalMemory(np.float64)
+            })
         else:
-            items_seen = 0
-            for batch_ind, batch_size in enumerate(split_in_batches(parameters.shape[2], 1000)):
-                params_subset = np.require(parameters[..., items_seen:(items_seen + batch_size)],
-                                           np_dtype, requirements=['C', 'A', 'O'])
-                lls_subset = np.zeros((parameters.shape[0], batch_size), dtype=np_dtype, order='C')
+            log_likelihoods = np.zeros(shape[0], dtype=np_dtype, order='C')
+            all_kernel_data.update({
+                'log_likelihoods': KernelInputBuffer(log_likelihoods, is_readable=False, is_writable=True),
+                'local_reduction_lls': KernelInputLocalMemory(np.float64)
+            })
 
-                process(params_subset, lls_subset)
-                log_likelihoods[..., (batch_ind * batch_size):((batch_ind + 1) * batch_size)] = lls_subset
-                items_seen += batch_size
+        runner = RunProcedure(**self.get_cl_routine_kwargs())
+        runner.run_procedure(self._get_wrapped_function(model, parameters), all_kernel_data, parameters.shape[0],
+                             double_precision=model.double_precision, use_local_reduction=True)
 
-        return log_likelihoods
+        return all_kernel_data['log_likelihoods'].get_data()
 
-    def _initialize_result_array(self, parameters, np_dtype):
-        shape = list(parameters.shape)
-        if len(shape) > 1:
-            del shape[1]
-        return np.zeros(shape, dtype=np_dtype, order='C')
+    def _get_wrapped_function(self, model, parameters):
+        ll_func = model.get_log_likelihood_per_observation_function()
+        nmr_params = parameters.shape[1]
 
+        func = ''
+        func += ll_func.get_cl_code()
+        func += '''
+            void _fill_log_likelihood_tmp(mot_data_struct* data,
+                                          mot_float_type* x,
+                                          local double* log_likelihood_tmp){
 
-class _LogLikelihoodCalculatorWorker(Worker):
+                ulong observation_ind;
+                ulong local_id = get_local_id(0);
+                log_likelihood_tmp[local_id] = 0;
+                uint workgroup_size = get_local_size(0);
+                
+                for(uint i = 0; i < ceil(''' + str(model.get_nmr_inst_per_problem()) + ''' 
+                                         / (mot_float_type)workgroup_size); i++){
 
-    def __init__(self, cl_environment, compile_flags, model, parameters, log_likelihoods):
-        super(_LogLikelihoodCalculatorWorker, self).__init__(cl_environment)
+                    observation_ind = i * workgroup_size + local_id;
+                    
+                    if(observation_ind < ''' + str(model.get_nmr_inst_per_problem()) + '''){
+                        log_likelihood_tmp[local_id] += ''' + ll_func.get_cl_function_name() + '''(
+                            data, x, observation_ind);
+                    }
+                }
 
-        self._model = model
-        self._data_info = self._model.get_kernel_data()
-        self._data_struct_manager = KernelInputDataManager(self._data_info)
-        self._double_precision = model.double_precision
-        self._log_likelihoods = log_likelihoods
-        self._parameters = parameters
+                barrier(CLK_LOCAL_MEM_FENCE);
+            }
 
-        self._nmr_ll_per_problem = 0
-        if len(log_likelihoods.shape) > 1:
-            self._nmr_ll_per_problem = log_likelihoods.shape[1]
-
-        self._all_buffers, self._likelihoods_buffer = self._create_buffers()
-        self._kernel = self._build_kernel(self._get_kernel_source(), compile_flags)
-
-    def calculate(self, range_start, range_end):
-        nmr_problems = range_end - range_start
-
-        global_range = [int(nmr_problems)]
-        global_offset = [int(range_start)]
-
-        if self._nmr_ll_per_problem:
-            global_range.append(self._nmr_ll_per_problem)
-            global_offset.append(0)
-
-        self._kernel.run_kernel(self._cl_run_context.queue, global_range, None, *self._all_buffers,
-                                global_offset=global_offset)
-        self._enqueue_readout(self._likelihoods_buffer, self._log_likelihoods, range_start, range_end)
-
-    def _create_buffers(self):
-        likelihoods_buffer = cl.Buffer(self._cl_run_context.context,
-                                       cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
-                                       hostbuf=self._log_likelihoods)
-
-        params_buffer = cl.Buffer(self._cl_run_context.context,
-                                  cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR,
-                                  hostbuf=self._parameters)
-
-        all_buffers = [params_buffer, likelihoods_buffer]
-
-        for data in [self._data_info[key] for key in sorted(self._data_info)]:
-            all_buffers.append(cl.Buffer(self._cl_run_context.context,
-                                         cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data.get_data()))
-
-        return all_buffers, likelihoods_buffer
-
-    def _get_kernel_source(self):
-        ll_func = self._model.get_log_likelihood_per_observation_function()
-
-        cl_func = ll_func.get_cl_code()
-        nmr_params = self._parameters.shape[1]
-
-        kernel_param_names = ['global mot_float_type* params', 'global mot_float_type* log_likelihoods']
-        kernel_param_names.extend(self._data_struct_manager.get_kernel_arguments())
-        kernel_source = ''
-        kernel_source += get_float_type_def(self._double_precision)
-        kernel_source += self._data_struct_manager.get_struct_definition()
-        kernel_source += cl_func
-
-        kernel_source += '''
-            double _calculate_log_likelihood(mot_data_struct* data, const mot_float_type* const x){
+            double _sum_log_likelihood_tmp(local double* log_likelihood_tmp){
                 double ll = 0;
-                for(uint i = 0; i < ''' + str(self._model.get_nmr_inst_per_problem()) + '''; i++){
-                    ll += ''' + ll_func.get_cl_function_name() + '''(data, x, i);
+                for(uint i = 0; i < get_local_size(0); i++){
+                    ll += log_likelihood_tmp[i];
                 }
                 return ll;
             }
+            
         '''
 
-        if self._nmr_ll_per_problem == 0:
-            kernel_source += '''
-                __kernel void run_kernel(
-                    ''' + ",\n".join(kernel_param_names) + '''
-                    ){
-                        ulong gid = get_global_id(0);
-                        mot_data_struct data = ''' + self._data_struct_manager.get_struct_init_string('gid') + ''';
-
-                        mot_float_type x[''' + str(nmr_params) + '''];
+        if len(parameters.shape) > 2:
+            func += '''
+                void compute(mot_data_struct* data){
+                    mot_float_type x[''' + str(nmr_params) + '''];
+                    
+                    for(uint sample_ind = 0; sample_ind < ''' + str(parameters.shape[2]) + '''; sample_ind++){
                         for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
-                            x[i] = params[gid * ''' + str(nmr_params) + ''' + i];
+                            x[i] = data->parameters[i *''' + str(parameters.shape[2]) + ''' + sample_ind];
                         }
 
-                        log_likelihoods[gid] = _calculate_log_likelihood(&data, x);
+                        _fill_log_likelihood_tmp(data, x, data->local_reduction_lls);
+                        if(get_local_id(0) == 0){
+                            data->log_likelihoods[sample_ind] = _sum_log_likelihood_tmp(data->local_reduction_lls);
+                        }
+                    }
                 }
             '''
         else:
-            kernel_source += '''
-                __kernel void run_kernel(
-                    ''' + ",\n".join(kernel_param_names) + '''
-                    ){
-                        ulong problem_ind = get_global_id(0);
-                        ulong sample_ind = get_global_id(1);
-
-                        mot_data_struct data = ''' + self._data_struct_manager.get_struct_init_string('problem_ind') \
-                             + ''';
-
-                        mot_float_type x[''' + str(nmr_params) + '''];
-                        for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
-                            x[i] = params[problem_ind * ''' + str(nmr_params * self._nmr_ll_per_problem) + '''
-                                          + i * ''' + str(self._nmr_ll_per_problem) + ''' + sample_ind];
-                        }
-
-                        log_likelihoods[problem_ind * ''' + str(self._nmr_ll_per_problem) + ''' + sample_ind] =
-                            _calculate_log_likelihood(&data, x);
+            func += '''
+                void compute(mot_data_struct* data){
+                    mot_float_type x[''' + str(nmr_params) + '''];
+                    for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
+                        x[i] = data->parameters[i];
+                    }
+                    
+                    _fill_log_likelihood_tmp(data, x, data->local_reduction_lls);
+                    if(get_local_id(0) == 0){
+                        *(data->log_likelihoods) = _sum_log_likelihood_tmp(data->local_reduction_lls);
+                    }
                 }
             '''
-
-        return kernel_source
+        return SimpleNamedCLFunction(func, 'compute')
