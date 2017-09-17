@@ -3,9 +3,9 @@
 #######
 Credits
 #######
-The Maastricht Optimization Toolbox is a model optimization toolbox originally meant for diffusion MRI analysis, but
-applicable to any other field. Software development by Robbert Harms, under the
-(Phd) supervision of Alard Roebroeck, at Maastricht University.
+The Multi-threaded Optimization Toolbox is a model optimization toolbox originally meant for diffusion MRI analysis, but
+applicable to other fields as well. Software development by Robbert Harms, under the (Phd) supervision of
+Alard Roebroeck, at Maastricht University.
 
 
 ************

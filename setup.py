@@ -27,15 +27,16 @@ requirements_tests = load_requirements('requirements_tests.txt')
 long_description = readme
 if sys.argv and len(sys.argv) > 3 and sys.argv[2] == 'debianize':
     long_description = dedent("""
-        The Maastricht Optimization Toolbox contains various optimization and sampling algorithms implemented in OpenCL.
-        Being GPU enabled, it allows for high-performance computing in the case of large scale parallelizable problems.
+        The Multi-threaded Optimization Toolbox contains various optimization and sampling algorithms 
+        implemented in OpenCL. Being GPU/multi-threaded CPU enabled, it allows for high-performance computing in 
+        the case of large scale parallelizable problems.
     """).lstrip()
 
 
 info_dict = dict(
     name='mot',
     version=ver_dic["VERSION"],
-    description='Maastricht Optimization Toolbox',
+    description='Multi-threaded Optimization Toolbox',
     long_description=long_description,
     author='Robbert Harms',
     author_email='robbert.harms@maastrichtuniversity.nl',

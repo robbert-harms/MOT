@@ -165,7 +165,7 @@ html_theme = 'alabaster'
 
 html_theme_options = {
     'show_powered_by': False,
-    'description': "Maastricht Optimization Toolbox",
+    'description': "Multi-threaded Optimization Toolbox",
     'logo_name': True,
     'sidebar_collapse': True,
     'fixed_sidebar': True,
@@ -298,7 +298,7 @@ latex_elements = {
 # [howto/manual]).
 latex_documents = [
     ('index_latex', 'mot.tex',
-     u'Maastricht Optimization Toolbox',
+     u'Multi-threaded Optimization Toolbox',
      u'Robbert Harms',
      'manual'),
 ]
@@ -330,7 +330,7 @@ latex_documents = [
 # (source start file, name, description, authors, manual section).
 man_pages = [
     ('index_man', 'mot',
-     u'Maastricht Optimization Toolbox',
+     u'Multi-threaded Optimization Toolbox',
      [u'Robbert Harms'], 1)
 ]
 
@@ -345,7 +345,7 @@ man_pages = [
 #  dir menu entry, description, category)
 texinfo_documents = [
     ('index_latex', 'mot',
-     u'Maastricht Optimization Toolbox',
+     u'Multi-threaded Optimization Toolbox',
      u'Robbert Harms',
      'mot',
      'One line description of project.',

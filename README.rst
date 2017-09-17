@@ -1,7 +1,7 @@
-###############################
-Maastricht Optimization Toolbox
-###############################
-The Maastricht Optimization Toolbox, MOT, is a library for parallel optimization and sampling using the graphics card for the computations.
+###################################
+Multi-threaded Optimization Toolbox
+###################################
+The Multi-threaded Optimization Toolbox, MOT, is a library for parallel optimization and sampling using the graphics card for the computations.
 It is meant to optimize, in parallel, a large number of smaller problems, in contrast to optimizing one big problem with parallelized parts.
 For example, in diffusion MRI the brain is scanned in a 3D grid where each grid element, a *voxel*, represents its own optimization problem.
 The number of data points per voxel is generally small, ranging from 30 to 500 datapoints, and the models fitted to that data have generally

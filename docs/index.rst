@@ -1,6 +1,6 @@
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-Maastricht Optimization Toolbox
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Multi-threaded Optimization Toolbox
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 ############
 Introduction
