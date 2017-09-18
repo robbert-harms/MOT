@@ -73,13 +73,13 @@ class CalculateDependentParameters(CLRoutine):
 
         func = '''
             void transform(mot_data_struct* data){
-                    mot_float_type x[''' + str(len(estimated_parameters_list)) + '''];
+                mot_float_type x[''' + str(len(estimated_parameters_list)) + '''];
 
-                    for(uint i = 0; i < ''' + str(len(estimated_parameters_list)) + '''; i++){
-                        x[i] = data->x[i];
-                    }
-                    ''' + parameters_listing + '''
-                    ''' + parameter_write_out + '''
+                for(uint i = 0; i < ''' + str(len(estimated_parameters_list)) + '''; i++){
+                    x[i] = data->x[i];
+                }
+                ''' + parameters_listing + '''
+                ''' + parameter_write_out + '''
             }
         '''
         return SimpleNamedCLFunction(func, 'transform')

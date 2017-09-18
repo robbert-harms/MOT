@@ -1,8 +1,7 @@
-import pyopencl as cl
 import numpy as np
-from ...utils import get_float_type_def, KernelInputDataManager
+from mot.cl_routines.mapping.run_procedure import RunProcedure
+from ...utils import KernelInputBuffer, SimpleNamedCLFunction
 from ...cl_routines.base import CLRoutine
-from ...load_balance_strategies import Worker
 
 
 __author__ = 'Robbert Harms'
@@ -14,12 +13,8 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class ResidualCalculator(CLRoutine):
 
-    def __init__(self, cl_environments=None, load_balancer=None):
-        """Calculate the residuals, that is the errors, per problem instance per data point."""
-        super(ResidualCalculator, self).__init__(cl_environments=cl_environments, load_balancer=load_balancer)
-
     def calculate(self, model, parameters):
-        """Calculate and return the residuals.
+        """Calculate and return the residuals, that is the errors, per problem instance per data point.
 
         Args:
             model (AbstractModel): The model to calculate the residuals of.
@@ -36,91 +31,39 @@ class ResidualCalculator(CLRoutine):
         nmr_problems = model.get_nmr_problems()
 
         residuals = np.zeros((nmr_problems, nmr_inst_per_problem), dtype=np_dtype, order='C')
-        parameters = np.require(parameters, np_dtype, requirements=['C', 'A', 'O'])
 
-        workers = self._create_workers(lambda cl_environment: _ResidualCalculatorWorker(
-            cl_environment, self.get_compile_flags_list(model.double_precision), model, parameters,
-            residuals))
-        self.load_balancer.process(workers, model.get_nmr_problems())
+        all_kernel_data = dict(model.get_kernel_data())
+        all_kernel_data.update({
+            'parameters': KernelInputBuffer(parameters),
+            'residuals': KernelInputBuffer(residuals, is_readable=False, is_writable=True)
+        })
 
-        return residuals
+        runner = RunProcedure(**self.get_cl_routine_kwargs())
+        runner.run_procedure(self._get_wrapped_function(model, parameters), all_kernel_data, parameters.shape[0],
+                             double_precision=model.double_precision, use_local_reduction=False)
 
+        return all_kernel_data['residuals'].get_data()
 
-class _ResidualCalculatorWorker(Worker):
+    def _get_wrapped_function(self, model, parameters):
+        residual_function = model.get_residual_per_observation_function()
+        param_modifier = model.get_pre_eval_parameter_modifier()
+        nmr_params = parameters.shape[1]
 
-    def __init__(self, cl_environment, compile_flags, model, parameters, residuals):
-        super(_ResidualCalculatorWorker, self).__init__(cl_environment)
-
-        self._model = model
-        self._data_info = self._model.get_kernel_data()
-        self._data_struct_manager = KernelInputDataManager(self._data_info)
-        self._double_precision = model.double_precision
-        self._residuals = residuals
-        self._parameters = parameters
-
-        self._all_buffers, self._residuals_buffer = self._create_buffers()
-        self._kernel = self._build_kernel(self._get_kernel_source(), compile_flags)
-
-    def calculate(self, range_start, range_end):
-        nmr_problems = range_end - range_start
-        self._kernel.get_errors(self._cl_run_context.queue, (int(nmr_problems), ), None, *self._all_buffers,
-                                global_offset=(int(range_start),))
-        self._enqueue_readout(self._residuals_buffer, self._residuals, range_start, range_end)
-
-    def _create_buffers(self):
-        errors_buffer = cl.Buffer(self._cl_run_context.context,
-                                  cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
-                                  hostbuf=self._residuals)
-
-        all_buffers = [cl.Buffer(self._cl_run_context.context,
-                                 cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR,
-                                 hostbuf=self._parameters),
-                       errors_buffer]
-
-        for data in [self._data_info[key] for key in sorted(self._data_info)]:
-            all_buffers.append(cl.Buffer(self._cl_run_context.context,
-                                         cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data.get_data()))
-
-        return all_buffers, errors_buffer
-
-    def _get_kernel_source(self):
-        residual_function = self._model.get_residual_per_observation_function()
-        param_modifier = self._model.get_pre_eval_parameter_modifier()
-
-        nmr_inst_per_problem = self._model.get_nmr_inst_per_problem()
-        nmr_params = self._parameters.shape[1]
-
-        kernel_param_names = ['global mot_float_type* params', 'global mot_float_type* errors']
-        kernel_param_names.extend(self._data_struct_manager.get_kernel_arguments())
-
-        kernel_source = '''
-            #define NMR_INST_PER_PROBLEM ''' + str(nmr_inst_per_problem) + '''
-        '''
-
-        kernel_source += get_float_type_def(self._double_precision)
-        kernel_source += self._data_struct_manager.get_struct_definition()
-        kernel_source += residual_function.get_cl_code()
-        kernel_source += param_modifier.get_cl_code()
-        kernel_source += '''
-            __kernel void get_errors(
-                ''' + ",\n".join(kernel_param_names) + '''
-                ){
-                    ulong gid = get_global_id(0);
-                    mot_data_struct data = ''' + self._data_struct_manager.get_struct_init_string('gid') + ''';
-
-                    mot_float_type x[''' + str(nmr_params) + '''];
-                    for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
-                        x[i] = params[gid * ''' + str(nmr_params) + ''' + i];
-                    }
-
-                    global mot_float_type* result = errors + gid * NMR_INST_PER_PROBLEM;
-                    
-                    ''' + param_modifier.get_cl_function_name() + '''(&data, x);
-                                        
-                    for(uint i = 0; i < NMR_INST_PER_PROBLEM; i++){
-                        result[i] = ''' + residual_function.get_cl_function_name() + '''(&data, x, i);
-                    }
+        func = ''
+        func += residual_function.get_cl_code()
+        func += param_modifier.get_cl_code()
+        func += '''
+            void compute(mot_data_struct* data){
+                mot_float_type x[''' + str(nmr_params) + '''];
+                for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
+                    x[i] = data->parameters[i];
+                }
+                
+                ''' + param_modifier.get_cl_function_name() + '''(data, x);
+                
+                for(uint i = 0; i < ''' + str(model.get_nmr_inst_per_problem()) + '''; i++){
+                    data->residuals[i] = ''' + residual_function.get_cl_function_name() + '''(data, x, i);
+                }
             }
         '''
-
-        return kernel_source
+        return SimpleNamedCLFunction(func, 'compute')

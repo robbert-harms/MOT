@@ -512,7 +512,7 @@ class _MCMCKernelBuilder(object):
                 }
 
                 _fill_log_likelihood_tmp(&data, x_local, log_likelihood_tmp);
-                _sum_log_likelihood_tmp_local(log_likelihood_tmp, &current_likelihood);
+                _sum_log_likelihood_tmp(log_likelihood_tmp, &current_likelihood);
 
                 _sample(x_local, rng_data, &current_likelihood, &current_prior, &data, nmr_iterations,
                         iteration_offset, proposal_state, sampling_counter, acceptance_counter,
@@ -594,14 +594,7 @@ class _MCMCKernelBuilder(object):
                 barrier(CLK_LOCAL_MEM_FENCE);
             }
 
-            void _sum_log_likelihood_tmp_local(local double* log_likelihood_tmp, local double* log_likelihood){
-                *log_likelihood = 0;
-                for(uint i = 0; i < get_local_size(0); i++){
-                    *log_likelihood += log_likelihood_tmp[i];
-                }
-            }
-
-            void _sum_log_likelihood_tmp_private(local double* log_likelihood_tmp, private double* log_likelihood){
+            void _sum_log_likelihood_tmp(local double* log_likelihood_tmp, local double* log_likelihood){
                 *log_likelihood = 0;
                 for(uint i = 0; i < get_local_size(0); i++){
                     *log_likelihood += log_likelihood_tmp[i];
@@ -621,10 +614,10 @@ class _MCMCKernelBuilder(object):
                                global ulong * const acceptance_counter,
                                local double* log_likelihood_tmp){
 
-                float4 random_nmr;
+                local float4 random_nmr;
                 local mot_float_type new_prior;
-                double new_likelihood;
-                double bayesian_f;
+                local double new_likelihood;
+                local double bayesian_f;
                 mot_float_type old_x;
                 bool is_first_work_item = get_local_id(0) == 0;
 
@@ -645,7 +638,7 @@ class _MCMCKernelBuilder(object):
                         _fill_log_likelihood_tmp(data, x_local, log_likelihood_tmp);
 
                         if(is_first_work_item){
-                            _sum_log_likelihood_tmp_private(log_likelihood_tmp, &new_likelihood);
+                            _sum_log_likelihood_tmp(log_likelihood_tmp, &new_likelihood);
 
         '''
         if self._model.is_proposal_symmetric():
