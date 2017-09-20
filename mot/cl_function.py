@@ -176,8 +176,7 @@ class SimpleCLFunction(CLFunction):
             }}
         '''.format(return_type=self._prototype.get_return_type(),
                    cl_function_name=self._prototype.get_cl_function_name(),
-                   parameters=', '.join('{} {}'.format(p.data_type.get_declaration(), p.name.replace('.', '_'))
-                                        for p in self._prototype.get_parameters()),
+                   parameters=', '.join(self._get_parameter_signatures()),
                    body=self._cl_body)
 
         return dedent('''
@@ -204,6 +203,17 @@ class SimpleCLFunction(CLFunction):
 
     def get_dependencies(self):
         return self._dependency_list
+
+    def _get_parameter_signatures(self):
+        """Get the signature of the parameters for the CL function declaration.
+
+        This should return the list of signatures of the parameters for use inside the function signature.
+
+        Returns:
+            list: the signatures of the parameters for the use in the CL code.
+        """
+        return ['{} {}'.format(p.data_type.get_declaration(), p.name.replace('.', '_'))
+                for p in self._prototype.get_parameters()]
 
     def _get_cl_dependency_code(self):
         """Get the CL code for all the CL code for all the dependencies.

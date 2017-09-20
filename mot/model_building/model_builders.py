@@ -2095,6 +2095,7 @@ class _ModelFunctionPriorToCompositeModelPrior(SimpleCLFunction):
         """Simple prior class for easily converting the compartment priors to composite model priors."""
         parameters = [SimpleCLFunctionParameter('mot_float_type', '{}.{}'.format(compartment_name, p.name))
                       for p in model_function_prior.get_parameters()]
+        self._old_params = model_function_prior.get_parameters()
 
         super(_ModelFunctionPriorToCompositeModelPrior, self).__init__(
             model_function_prior.get_return_type(),
@@ -2104,6 +2105,9 @@ class _ModelFunctionPriorToCompositeModelPrior(SimpleCLFunction):
             dependency_list=model_function_prior.get_dependencies(),
             cl_extra=model_function_prior.get_cl_extra()
         )
+
+    def _get_parameter_signatures(self):
+        return ['{} {}'.format(p.data_type.get_declaration(), p.name.replace('.', '_')) for p in self._old_params]
 
 
 class SimpleOptimizeModel(OptimizeModelInterface):
