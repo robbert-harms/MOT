@@ -3,6 +3,11 @@ Changelog
 *********
 
 
+v0.3.8 (2017-09-26)
+===================
+- Small fix to the work group size, this will fix a INVALID_WORK_GROUP_SIZE issue with the procedure runner.
+
+
 v0.3.7 (2017-09-22)
 ===================
 
@@ -15,15 +20,22 @@ Changed
 -------
 - Updates to the model function priors.
 - Updates to the KernelInputDataManager.
-- Changed the sample statistic to still use the CPU for the easy statistics which is faster for large samples
+- Changed the sample statistic to use the CPU again for the easy statistics, for large samples this is faster than using the GPU.
 - Updates to the function evaluator, made the input argument r/w by default and allows for void output functions.
 
 Other
 -----
+- Prepared new release.
 - Refactored the residual calculator, small performance update in MCMC.
 - Removed two old mapping routines, the objective calculators.
+- Project renaming.
+- Work on the log likelihood calculator.
+- Simplified some sampling post processing after changes in MOT.
+- Removed the GPU multivariate ESS again, it was only marginally faster.
+- Small speed update to the GPU univariate ESS method.
 - More work on the procedure evaluator. Moved more data management tasks to the kernel input data manager.
 - Renamed CLHeader to CLPrototype, covers the usage better.
+- Version bump.
 
 
 v0.3.6 (2017-09-06)
