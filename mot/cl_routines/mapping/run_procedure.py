@@ -56,6 +56,9 @@ class _ProcedureWorker(Worker):
         self._workgroup_size = self._kernel.run_procedure.get_work_group_info(
             cl.kernel_work_group_info.PREFERRED_WORK_GROUP_SIZE_MULTIPLE,
             self._cl_environment.device)
+        if not self._use_local_reduction:
+            self._workgroup_size = 1
+
         self._kernel_input = self._get_kernel_input()
 
     def _get_kernel_input(self):
@@ -64,17 +67,13 @@ class _ProcedureWorker(Worker):
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
 
-        mult_factor = 1
-        if self._use_local_reduction:
-            mult_factor = self._workgroup_size
-
         func = self._kernel.run_procedure
         func.set_scalar_arg_dtypes(self._data_struct_manager.get_scalar_arg_dtypes())
         func(self._cl_run_context.queue,
-             (int(nmr_problems * mult_factor), ),
+             (int(nmr_problems * self._workgroup_size), ),
              (int(self._workgroup_size),),
              *self._kernel_input,
-             global_offset=(int(range_start * mult_factor),))
+             global_offset=(int(range_start * self._workgroup_size),))
 
         for ind, name in self._data_struct_manager.get_items_to_write_out():
             self._enqueue_readout(self._kernel_input[ind], self._kernel_data[name].get_data(), range_start, range_end)
@@ -89,10 +88,10 @@ class _ProcedureWorker(Worker):
         kernel_source += '''
             __kernel void run_procedure(
                     ''' + ",\n".join(kernel_param_names) + '''){
-                
+
                 ulong gid = ''' + ('(ulong)(get_global_id(0) / get_local_size(0));'
                                    if self._use_local_reduction else 'get_global_id(0)') + ''';
-                                   
+
                 mot_data_struct data = ''' + self._data_struct_manager.get_struct_init_string('gid') + ''';
                 ''' + self._cl_func_name + '''(&data);
             }
