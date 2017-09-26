@@ -20,10 +20,10 @@ class TruncatedGaussianFit(CLRoutine):
         This uses the first two moments of the truncated normal distribution for approximating the fit.
         Please note that the sample means may lay outside of the high and low boundaries.
 
-        This is basically a CL version of ``scipy.truncnorm.fit_loc_scale``.
+        This is basically a CL version of ``truncnorm(samples, low, high)`` in ``scipy.stats``.
 
         Args:
-            samples (ndarray): the samples from which we want to calculate the mean and std.
+            samples (ndarray): (p, s) array with for p problems s samples.
             low (float): the low boundary for circular mean range
             high (float): the high boundary for circular mean range
 
