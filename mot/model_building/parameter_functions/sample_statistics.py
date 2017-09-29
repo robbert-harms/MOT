@@ -1,4 +1,8 @@
+import multiprocessing
 import numpy as np
+from scipy.optimize import minimize
+from scipy.stats import norm
+import os
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-10-23"
@@ -58,7 +62,7 @@ class TruncatedGaussianFit(ParameterSampleStatistics):
     def __init__(self, low, high):
         """Fits a truncated gaussian distribution on the given samples.
 
-        This may return mean values outside the bounds.
+        This will do a maximum likelihood estimation of the truncated gaussian on the given data.
 
         Args:
             low (float): the lower bound of the truncated gaussian
@@ -68,45 +72,119 @@ class TruncatedGaussianFit(ParameterSampleStatistics):
         self._high = high
 
     def get_statistics(self, samples):
-        from mot.cl_routines.mapping.truncated_gaussian_fit import TruncatedGaussianFit as fitter
-        mean, std = fitter().calculate(samples, high=self._high, low=self._low)
-        return SamplingStatisticsContainer(mean, {'std': std})
+        fitter = _TruncatedNormalFitter(self._low, self._high)
 
+        def samples_generator():
+            for ind in range(samples.shape[0]):
+                yield samples[ind]
 
-class TruncatedGaussianFitClipped(TruncatedGaussianFit):
+        if os.name == 'nt':  # In Windows there is no fork.
+            results = np.array(list(map(fitter, samples_generator())), dtype=samples.dtype)
+        else:
+            try:
+                p = multiprocessing.Pool()
+                results = np.array(list(p.imap(fitter, samples_generator())), dtype=samples.dtype)
+                p.close()
+                p.join()
+            except OSError:
+                results = np.array(list(map(fitter, samples_generator())), dtype=samples.dtype)
+
+        return SamplingStatisticsContainer(results[:, 0], {'std': results[:, 1]})
+
+class _TruncatedNormalFitter(object):
 
     def __init__(self, low, high):
-        """Fits a truncated gaussian distribution on the given samples and clips the mean to the given bounds.
+        """Fit the mean and std of the truncated normal to the given samples.
+
+        This is in a separate class to use the python multiprocessing library.
+        """
+        self._low = low
+        self._high = high
+
+    def __call__(self, samples):
+        result = minimize(_TruncatedNormalFitter.truncated_normal_log_likelihood,
+                          np.array([np.mean(samples), np.std(samples)]),
+                          args=(self._low, self._high, samples,),
+                          method='TNC',
+                          jac=_TruncatedNormalFitter.truncated_normal_ll_gradient,
+                          bounds=[(self._low, self._high), (0, None)],
+                          options=dict(maxiter=20))
+
+        return result.x
+
+    @staticmethod
+    def truncated_normal_log_likelihood(params, low, high, data):
+        """Calculate the log likelihood of the truncated normal distribution.
 
         Args:
-            low (float): the lower bound of the truncated gaussian
-            high (float): the upper bound of the truncated gaussian
+            params: tuple with (mean, std), the parameters under which we evaluate the model
+            low (float): the lower truncation bound
+            high (float): the upper truncation bound
+            data (ndarray): the one dimension list of data points for which we want to calculate the likelihood
+
+        Returns:
+            float: the negative log likelihood of observing the given data under the given parameters.
+                This is meant to be used in minimization routines.
         """
-        super(TruncatedGaussianFitClipped, self).__init__(low, high)
+        mu = params[0]
+        sigma = params[1]
+        ll = np.sum(norm.logpdf(data, mu, sigma))
+        ll -= len(data) * np.log((norm.cdf(high, mu, sigma) - norm.cdf(low, mu, sigma)))
+        return -ll
 
-    def get_statistics(self, samples):
-        statistics = super(TruncatedGaussianFitClipped, self).get_statistics(samples)
-        clipped_expected_value = np.clip(statistics.get_expected_value(), self._low, self._high)
-        return SamplingStatisticsContainer(clipped_expected_value, statistics.get_additional_statistics())
-
-
-class TruncatedGaussianFitModulus(TruncatedGaussianFit):
-
-    def __init__(self, low, high, modulus):
-        """Fits a truncated gaussian distribution on the given samples and applies the modulus on the mean.
+    @staticmethod
+    def truncated_normal_ll_gradient(params, low, high, data):
+        """Return the gradient of the log likelihood of the truncated normal at the given position.
 
         Args:
-            low (float): the lower bound of the truncated gaussian
-            high (float): the upper bound of the truncated gaussian
-            modulus (float): wrap the mean around this modulus
-        """
-        super(TruncatedGaussianFitModulus, self).__init__(low, high)
-        self._modulus = modulus
+            params: tuple with (mean, std), the parameters under which we evaluate the model
+            low (float): the lower truncation bound
+            high (float): the upper truncation bound
+            data (ndarray): the one dimension list of data points for which we want to calculate the likelihood
 
-    def get_statistics(self, samples):
-        statistics = super(TruncatedGaussianFitModulus, self).get_statistics(samples)
-        modulus_expected_value = np.mod(statistics.get_expected_value(), self._modulus)
-        return SamplingStatisticsContainer(modulus_expected_value, statistics.get_additional_statistics())
+        Returns:
+            tuple: the gradient of the log likelihood given as a tuple with (mean, std)
+        """
+        return [_TruncatedNormalFitter.partial_derivative_mu(params[0], params[1], low, high, data),
+                _TruncatedNormalFitter.partial_derivative_sigma(params[0], params[1], low, high, data)]
+
+    @staticmethod
+    def partial_derivative_mu(mu, sigma, low, high, data):
+        """The partial derivative with respect to the mean.
+
+        Args:
+            mu (float): the mean of the truncated normal
+            sigma (float): the std of the truncated normal
+            low (float): the lower truncation bound
+            high (float): the upper truncation bound
+            data (ndarray): the one dimension list of data points for which we want to calculate the likelihood
+
+        Returns:
+            float: the partial derivative evaluated at the given point
+        """
+        pd_mu = np.sum(data - mu) / sigma ** 2
+        pd_mu -= len(data) * ((norm.pdf(low, mu, sigma) - norm.pdf(high, mu, sigma))
+                              / (norm.cdf(high, mu, sigma) - norm.cdf(low, mu, sigma)))
+        return -pd_mu
+
+    @staticmethod
+    def partial_derivative_sigma(mu, sigma, low, high, data):
+        """The partial derivative with respect to the standard deviation.
+
+        Args:
+            mu (float): the mean of the truncated normal
+            sigma (float): the std of the truncated normal
+            low (float): the lower truncation bound
+            high (float): the upper truncation bound
+            data (ndarray): the one dimension list of data points for which we want to calculate the likelihood
+
+        Returns:
+            float: the partial derivative evaluated at the given point
+        """
+        pd_sigma = np.sum(-(1 / sigma) + ((data - mu) ** 2 / (sigma ** 3)))
+        pd_sigma -= len(data) * (((low - mu) * norm.pdf(low, mu, sigma) - (high - mu) * norm.pdf(high, mu, sigma))
+                                 / (sigma * (norm.cdf(high, mu, sigma) - norm.cdf(low, mu, sigma))))
+        return -pd_sigma
 
 
 class SamplingStatistics(object):

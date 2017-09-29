@@ -418,6 +418,27 @@ class _MCMCKernelBuilder(object):
 
                 for(i = 0; i < nmr_iterations; i++){
                 '''
+        if self._store_samples:
+            kernel_source += '''
+                    if(is_first_work_item){
+                        if(i % ''' + str(self._sample_intervals + 1) + ''' == 0){
+
+                            log_likelihoods[problem_ind * ''' + str(self._nmr_samples) + ''' 
+                                            + (ulong)(i / ''' + str(self._sample_intervals + 1) + ''')
+                                ] = *current_likelihood;
+                            log_priors[problem_ind * ''' + str(self._nmr_samples) + ''' 
+                                       + (ulong)(i / ''' + str(self._sample_intervals + 1) + ''')
+                                ] = *current_prior;
+                            
+                            for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
+                                samples[(ulong)(i / ''' + str(self._sample_intervals + 1) + ''') // remove the interval
+                                        + j * ''' + str(self._nmr_samples) + '''  // parameter index
+                                        + problem_ind * ''' + str(self._nmr_params * self._nmr_samples) + '''
+                                    ] = x_local[j];
+                            }
+                        }
+                    }
+            '''
         if self._update_parameter_variances:
             kernel_source += '''
                     if(is_first_work_item){
@@ -443,27 +464,6 @@ class _MCMCKernelBuilder(object):
                                 (', parameter_variance' if self._update_parameter_variances else '')
                                     + ');'
                                if self._use_adaptive_proposals else '') + '''
-        '''
-        if self._store_samples:
-            kernel_source += '''
-                        if(i % ''' + str(self._sample_intervals + 1) + ''' == 0){
-
-                            log_likelihoods[problem_ind * ''' + str(self._nmr_samples) + ''' 
-                                            + (ulong)(i / ''' + str(self._sample_intervals + 1) + ''')
-                                ] = *current_likelihood;
-                            log_priors[problem_ind * ''' + str(self._nmr_samples) + ''' 
-                                       + (ulong)(i / ''' + str(self._sample_intervals + 1) + ''')
-                                ] = *current_prior;
-                            
-                            for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
-                                samples[(ulong)(i / ''' + str(self._sample_intervals + 1) + ''') // remove the interval
-                                        + j * ''' + str(self._nmr_samples) + '''  // parameter index
-                                        + problem_ind * ''' + str(self._nmr_params * self._nmr_samples) + '''
-                                    ] = x_local[j];
-                            }
-                        }
-            '''
-        kernel_source += '''
                     }
                 }
             }
