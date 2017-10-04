@@ -78,10 +78,10 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
         """
         nmr_params = self._nmr_params
 
-        kernel_param_names = ['global mot_float_type* params',
-                              'global char* return_codes']
+        kernel_param_names = ['global mot_float_type* restrict params',
+                              'global char* restrict return_codes']
         kernel_param_names.extend(self._data_struct_manager.get_kernel_arguments())
-        kernel_param_names.append('global mot_float_type* fjac_all')
+        kernel_param_names.append('global mot_float_type* restrict fjac_all')
 
         optimizer_call_args = 'x, (void*)&data'
 

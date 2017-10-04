@@ -84,8 +84,8 @@ class CLDataType(object):
 class SimpleCLDataType(CLDataType):
 
     def __init__(self, raw_data_type, is_pointer_type=False, vector_length=None,
-                 address_space_qualifier=None, pre_data_type_type_qualifiers=None,
-                 post_data_type_type_qualifier=None):
+                 address_space_qualifier=None, pre_asterisk_qualifiers=None,
+                 post_asterisk_qualifiers=None):
         """Create a new CL data type container.
 
         The CL type can either be a CL native type (``half``, ``double``, ``int``, ...) or the
@@ -99,10 +99,10 @@ class SimpleCLDataType(CLDataType):
             address_space_qualifier (str or None): the address space qualifier or None if not used. One of:
                 {``__local``, ``local``, ``__global``, ``global``,
                 ``__constant``, ``constant``, ``__private``, ``private``} or None.
-            pre_data_type_type_qualifiers (list of str or None): the type qualifiers to use before the data type.
-                One of {const, restrict, volatile}
-            post_data_type_type_qualifier (str or None): the type qualifier to use after the data type.
-                Can only be 'const'
+            pre_asterisk_qualifiers (list of str or None): the type qualifiers to use before the (optional) asterisk.
+                One or more of {const, volatile}
+            post_asterisk_qualifiers (list of str or None): the type qualifiers to use after the (optional) asterisk.
+                One or more of {const, restrict}
         """
         self._raw_data_type = str(raw_data_type)
         self._is_pointer_type = is_pointer_type
@@ -112,12 +112,14 @@ class SimpleCLDataType(CLDataType):
             self._vector_length = int(self.vector_length)
 
         self.address_space_qualifier = address_space_qualifier
-        self.pre_data_type_type_qualifiers = pre_data_type_type_qualifiers
 
-        if isinstance(self.pre_data_type_type_qualifiers, six.string_types):
-            self.pre_data_type_type_qualifiers = [self.pre_data_type_type_qualifiers]
+        self.pre_asterisk_qualifiers = pre_asterisk_qualifiers
+        if isinstance(self.pre_asterisk_qualifiers, six.string_types):
+            self.pre_asterisk_qualifiers = [self.pre_asterisk_qualifiers]
 
-        self.post_data_type_type_qualifier = post_data_type_type_qualifier
+        self.post_asterisk_qualifiers = post_asterisk_qualifiers
+        if isinstance(self.post_asterisk_qualifiers, six.string_types):
+            self.post_asterisk_qualifiers = [post_asterisk_qualifiers]
 
     @classmethod
     def from_string(cls, parameter_declaration):
@@ -136,11 +138,11 @@ class SimpleCLDataType(CLDataType):
         declaration = ''
         if self.address_space_qualifier:
             declaration += str(self.address_space_qualifier) + ' '
-        if self.pre_data_type_type_qualifiers:
-            declaration += str(' '.join(self.pre_data_type_type_qualifiers)) + ' '
+        if self.pre_asterisk_qualifiers:
+            declaration += str(' '.join(self.pre_asterisk_qualifiers)) + ' '
         declaration += str(self.declaration_type)
-        if self.post_data_type_type_qualifier:
-            declaration += ' ' + str(self.post_data_type_type_qualifier)
+        if self.post_asterisk_qualifiers:
+            declaration += ' ' + str(' '.join(self.post_asterisk_qualifiers)) + ' '
         return declaration
 
     @property

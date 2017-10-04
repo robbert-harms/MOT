@@ -4,6 +4,8 @@ from scipy.optimize import minimize
 from scipy.stats import norm
 import os
 
+from mot.utils import is_scalar
+
 __author__ = 'Robbert Harms'
 __date__ = "2014-10-23"
 __license__ = "LGPL v3"
@@ -13,11 +15,15 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class ParameterSampleStatistics(object):
 
-    def get_statistics(self, samples):
+    def get_statistics(self, samples, lower_bounds, upper_bounds):
         """Get the statistics for this parameter.
 
         Args:
-            samples (ndarray): The 2d matrix (v, s) with for v voxels, s samples.
+            samples (ndarray): The 2d matrix (p, s) with for p problems, s samples.
+            lower_bounds (ndarray or float): the lower bound(s) for this parameter. This is either a scalar with
+                one lower bound for every problem, or a vector with a lower bound per problem.
+            upper_bounds (ndarray or float): the upper bound(s) for this parameter. This is either a scalar with
+                one upper bound for every problem, or a vector with a lower bound per problem.
 
         Returns:
             SamplingStatistics: an object containing the sampling statistics
@@ -32,16 +38,14 @@ class GaussianFit(ParameterSampleStatistics):
     estimator.
     """
 
-    def get_statistics(self, samples):
-        return SamplingStatisticsContainer(np.mean(samples, axis=1), {'std': np.std(samples, axis=1, ddof=1)})
+    def get_statistics(self, samples, lower_bounds, upper_bounds):
+        return SimpleSamplingStatistics(np.mean(samples, axis=1), {'std': np.std(samples, axis=1, ddof=1)})
 
 
 class CircularGaussianFit(ParameterSampleStatistics):
 
     def __init__(self, max_angle=np.pi, min_angle=0):
         """Compute the circular mean for samples in a range
-
-        The minimum angle is set to 0, the maximum angle can be given.
 
         Args:
             max_angle (float): The maximum angle used in the calculations
@@ -51,65 +55,73 @@ class CircularGaussianFit(ParameterSampleStatistics):
         self.max_angle = max_angle
         self.min_angle = min_angle
 
-    def get_statistics(self, samples):
+    def get_statistics(self, samples, lower_bounds, upper_bounds):
         from mot.cl_routines.mapping.circular_gaussian_fit import CircularGaussianFit
         mean, std = CircularGaussianFit().calculate(samples, high=self.max_angle, low=self.min_angle)
-        return SamplingStatisticsContainer(mean, {'std': std})
+        return SimpleSamplingStatistics(mean, {'std': std})
 
 
 class TruncatedGaussianFit(ParameterSampleStatistics):
 
-    def __init__(self, low, high):
+    def __init__(self, scaling_factor=1):
         """Fits a truncated gaussian distribution on the given samples.
 
-        This will do a maximum likelihood estimation of the truncated gaussian on the given data.
+        This will do a maximum likelihood estimation of the truncated gaussian on the given data where the
+        truncation points are given by the lower and upper bounds.
 
         Args:
-            low (float): the lower bound of the truncated gaussian
-            high (float): the upper bound of the truncated gaussian
+            scaling_factor (float): optionally scale the data with this factor before parameter estimation.
+                This can improve accuracy when the data is in a very high or very low range.
         """
-        self._low = low
-        self._high = high
+        self._scaling_factor = scaling_factor
 
-    def get_statistics(self, samples):
-        fitter = _TruncatedNormalFitter(self._low, self._high)
+    def get_statistics(self, samples, lower_bounds, upper_bounds):
 
-        def samples_generator():
+        def item_generator():
             for ind in range(samples.shape[0]):
-                yield samples[ind]
+                if is_scalar(lower_bounds):
+                    lower_bound = lower_bounds
+                else:
+                    lower_bound = lower_bounds[ind]
+
+                if is_scalar(upper_bounds):
+                    upper_bound = upper_bounds
+                else:
+                    upper_bound = upper_bounds[ind]
+
+                yield (samples[ind] * self._scaling_factor,
+                       lower_bound * self._scaling_factor,
+                       upper_bound * self._scaling_factor)
 
         if os.name == 'nt':  # In Windows there is no fork.
-            results = np.array(list(map(fitter, samples_generator())), dtype=samples.dtype)
+            results = np.array(list(map(_TruncatedNormalFitter(), item_generator())), dtype=samples.dtype)
         else:
             try:
                 p = multiprocessing.Pool()
-                results = np.array(list(p.imap(fitter, samples_generator())), dtype=samples.dtype)
+                results = np.array(list(p.imap(_TruncatedNormalFitter(), item_generator())), dtype=samples.dtype)
                 p.close()
                 p.join()
             except OSError:
-                results = np.array(list(map(fitter, samples_generator())), dtype=samples.dtype)
+                results = np.array(list(map(_TruncatedNormalFitter(), item_generator())), dtype=samples.dtype)
 
-        return SamplingStatisticsContainer(results[:, 0], {'std': results[:, 1]})
+        results /= self._scaling_factor
+        return SimpleSamplingStatistics(results[:, 0], {'std': results[:, 1]})
+
 
 class _TruncatedNormalFitter(object):
 
-    def __init__(self, low, high):
+    def __call__(self, item):
         """Fit the mean and std of the truncated normal to the given samples.
 
         This is in a separate class to use the python multiprocessing library.
         """
-        self._low = low
-        self._high = high
-
-    def __call__(self, samples):
+        samples, lower_bound, upper_bound = item
         result = minimize(_TruncatedNormalFitter.truncated_normal_log_likelihood,
                           np.array([np.mean(samples), np.std(samples)]),
-                          args=(self._low, self._high, samples,),
+                          args=(lower_bound, upper_bound, samples),
                           method='TNC',
                           jac=_TruncatedNormalFitter.truncated_normal_ll_gradient,
-                          bounds=[(self._low, self._high), (0, None)],
-                          options=dict(maxiter=20))
-
+                          bounds=[(lower_bound, upper_bound), (0, None)])
         return result.x
 
     @staticmethod
@@ -145,8 +157,8 @@ class _TruncatedNormalFitter(object):
         Returns:
             tuple: the gradient of the log likelihood given as a tuple with (mean, std)
         """
-        return [_TruncatedNormalFitter.partial_derivative_mu(params[0], params[1], low, high, data),
-                _TruncatedNormalFitter.partial_derivative_sigma(params[0], params[1], low, high, data)]
+        return np.array([_TruncatedNormalFitter.partial_derivative_mu(params[0], params[1], low, high, data),
+                         _TruncatedNormalFitter.partial_derivative_sigma(params[0], params[1], low, high, data)])
 
     @staticmethod
     def partial_derivative_mu(mu, sigma, low, high, data):
@@ -209,7 +221,7 @@ class SamplingStatistics(object):
         raise NotImplementedError()
 
 
-class SamplingStatisticsContainer(SamplingStatistics):
+class SimpleSamplingStatistics(SamplingStatistics):
 
     def __init__(self, expected_value, additional_maps):
         """Simple container for storing the point estimate and the other maps.

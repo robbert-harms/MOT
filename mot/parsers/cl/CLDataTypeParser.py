@@ -11,8 +11,8 @@ class Semantics(CLDataTypeSemantics):
         self._is_pointer_type = False
         self._vector_length = None
         self._address_space_qualifier = None
-        self._pre_data_type_type_qualifiers = None
-        self._post_data_type_type_qualifier = None
+        self._pre_asterisk_qualifiers = None
+        self._post_asterisk_qualifiers = None
 
     def result(self, ast):
         return SimpleCLDataType(
@@ -20,8 +20,8 @@ class Semantics(CLDataTypeSemantics):
             is_pointer_type=self._is_pointer_type,
             vector_length=self._vector_length,
             address_space_qualifier=self._address_space_qualifier,
-            pre_data_type_type_qualifiers=self._pre_data_type_type_qualifiers,
-            post_data_type_type_qualifier=self._post_data_type_type_qualifier)
+            pre_asterisk_qualifiers=self._pre_asterisk_qualifiers,
+            post_asterisk_qualifiers=self._post_asterisk_qualifiers)
 
     def expr(self, ast):
         return ast
@@ -51,12 +51,12 @@ class Semantics(CLDataTypeSemantics):
         self._address_space_qualifier = ast
         return ast
 
-    def pre_data_type_type_qualifiers(self, ast):
-        self._pre_data_type_type_qualifiers = ast
+    def pre_asterisk_qualifiers(self, ast):
+        self._pre_asterisk_qualifiers = ast
         return ast
 
-    def post_data_type_type_qualifier(self, ast):
-        self._post_data_type_type_qualifier = ast
+    def post_asterisk_qualifiers(self, ast):
+        self._post_asterisk_qualifiers = ast
         return ast
 
 

@@ -606,10 +606,10 @@ class KernelInputLocalMemory(KernelInputData):
         return None
 
     def get_struct_declaration(self, name):
-        return 'local {}* {};'.format(dtype_to_ctype(self._dtype), name)
+        return 'local {}* restrict {};'.format(dtype_to_ctype(self._dtype), name)
 
     def get_kernel_argument_declaration(self, name):
-        return 'local {}* {}'.format(dtype_to_ctype(self._dtype), name)
+        return 'local {}* restrict {}'.format(dtype_to_ctype(self._dtype), name)
 
     def get_struct_init_string(self, name, problem_id_substitute):
         return name
@@ -691,10 +691,10 @@ class KernelInputBuffer(KernelInputData):
         return self._is_writable
 
     def get_struct_declaration(self, name):
-        return 'global {}* {};'.format(dtype_to_ctype(self.get_data().dtype), name)
+        return 'global {}* restrict {};'.format(dtype_to_ctype(self.get_data().dtype), name)
 
     def get_kernel_argument_declaration(self, name):
-        return 'global {}* {}'.format(dtype_to_ctype(self.get_data().dtype), name)
+        return 'global {}* restrict {}'.format(dtype_to_ctype(self.get_data().dtype), name)
 
     def get_struct_init_string(self, name, problem_id_substitute):
         offset = self._offset_str.replace('{problem_id}', problem_id_substitute)

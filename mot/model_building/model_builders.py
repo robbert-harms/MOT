@@ -1126,16 +1126,18 @@ class SampleModelBuilder(OptimizeModelBuilder):
                 name = '{}.{}'.format(m.name, p.name)
 
                 if all_elements_equal(self._lower_bounds[name]):
-                    lower_bound = str(get_single_value(self._lower_bounds[name]))
-                    if lower_bound == '-inf':
+                    if np.isneginf(get_single_value(self._lower_bounds[name])):
                         lower_bound = '-INFINITY'
+                    else:
+                        lower_bound = str(get_single_value(self._lower_bounds[name]))
                 else:
                     lower_bound = 'data->var_data_lb_' + name.replace('.', '_') + '[0]'
 
                 if all_elements_equal(self._upper_bounds[name]):
-                    upper_bound = str(get_single_value(self._upper_bounds[name]))
-                    if upper_bound == 'inf':
+                    if np.isposinf(get_single_value(self._upper_bounds[name])):
                         upper_bound = 'INFINITY'
+                    else:
+                        upper_bound = str(get_single_value(self._upper_bounds[name]))
                 else:
                     upper_bound = 'data->var_data_ub_' + name.replace('.', '_') + '[0]'
 

@@ -213,10 +213,10 @@ class Rosenbrock(OptimizeModelInterface):
         return convert_data_to_dtype(params, 'double')
 
     def get_lower_bounds(self):
-        return ['-inf'] * self.n
+        return [-np.inf] * self.n
 
     def get_upper_bounds(self):
-        return ['inf'] * self.n
+        return [np.inf] * self.n
 
     def get_free_param_names(self):
         return list(map(str, range(self.n)))
@@ -329,7 +329,7 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
         return [0, 0]
 
     def get_upper_bounds(self):
-        return ['inf', 'inf']
+        return [np.inf] * 2
 
     def get_free_param_names(self):
         return ['0', '1']

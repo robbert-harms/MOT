@@ -156,8 +156,8 @@ class Random123GeneratorBase(CLRoutine):
         src = random_library.get_cl_code()
         # By setting the rand123 state as kernel arguments the kernel does not need to be recompiled for a new state.
         src += '''
-            __kernel void generate(constant uint* rng_state,
-                                   global ''' + c_type + '''* samples){
+            __kernel void generate(constant uint* restrict rng_state,
+                                   global ''' + c_type + '''* restrict samples){
 
                 rand123_data rng_data = rand123_initialize_data(
                     (uint[]){rng_state[0], rng_state[1], rng_state[2], rng_state[3], rng_state[4], rng_state[5],
@@ -180,8 +180,8 @@ class Random123GeneratorBase(CLRoutine):
         src = random_library.get_cl_code()
         # By setting the rand123 state as kernel arguments the kernel does not need to be recompiled for a new state.
         src += '''
-            __kernel void generate(constant uint* rng_state,
-                                   global ''' + c_type + '''* samples){
+            __kernel void generate(constant uint* restrict rng_state,
+                                   global ''' + c_type + '''* restrict samples){
 
                 rand123_data rng_data = rand123_initialize_data(
                     (uint[]){rng_state[0], rng_state[1], rng_state[2], rng_state[3], rng_state[4], rng_state[5],

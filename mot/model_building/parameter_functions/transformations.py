@@ -78,7 +78,7 @@ class IdentityTransform(AbstractTransformation):
 
 
 class PositiveTransform(AbstractTransformation):
-    """The identity transform does no transformation and returns the input given."""
+    """Restrain the parameter to the positive values, i.e. returns ``max(x, 0)``."""
 
     def get_cl_encode(self):
         return FormatAssignmentConstructor('max({parameter_variable}, (mot_float_type)0)')

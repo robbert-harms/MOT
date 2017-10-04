@@ -1,6 +1,7 @@
-from textwrap import dedent
+import numpy as np
 from mot.cl_data_type import SimpleCLDataType
 from mot.cl_function import CLFunction, SimpleCLFunction, CLPrototype, SimpleCLPrototype
+from mot.model_building.parameter_functions.sample_statistics import TruncatedGaussianFit
 from mot.model_building.parameters import FreeParameter
 from mot.model_building.parameter_functions.priors import ARDGaussian, UniformWithinBoundsPrior, ARDBeta
 from mot.model_building.parameter_functions.proposals import GaussianProposal
@@ -178,7 +179,7 @@ class SimpleModelCLFunction(SampleModelCLFunction, SimpleCLFunction):
 
 class Scalar(SimpleModelCLFunction):
 
-    def __init__(self, name='Scalar', param_name='s', value=0.0, lower_bound=0.0, upper_bound=float('inf'),
+    def __init__(self, name='Scalar', param_name='s', value=0.0, lower_bound=0.0, upper_bound=np.inf,
                  parameter_kwargs=None):
         """A Scalar model function to be used during optimization.
 
@@ -219,7 +220,9 @@ class Weight(Scalar):
         """
         parameter_settings = dict(parameter_transform=CosSqrClampTransform(),
                                   sampling_proposal=GaussianProposal(0.01),
-                                  sampling_prior=UniformWithinBoundsPrior())
+                                  sampling_prior=UniformWithinBoundsPrior(),
+                                  sampling_statistics=TruncatedGaussianFit()
+                                  )
         parameter_settings.update(parameter_kwargs or {})
 
         super(Weight, self).__init__(name=name, param_name='w', value=value, lower_bound=lower_bound,

@@ -85,13 +85,15 @@ class CLDataTypeParser(Parser):
             self._address_space_qualifier_()
 
         def block0():
-            self._pre_data_type_type_qualifiers_()
+            self._pre_asterisk_qualifiers_()
         self._closure(block0)
         self._data_type_()
         with self._optional():
             self._is_pointer_()
-            with self._optional():
-                self._post_data_type_type_qualifier_()
+
+            def block1():
+                self._post_asterisk_qualifiers_()
+            self._closure(block1)
 
     @graken()
     def _data_type_(self):
@@ -195,19 +197,22 @@ class CLDataTypeParser(Parser):
             self._error('expecting one of: __constant __global __local __private constant global local private')
 
     @graken()
-    def _pre_data_type_type_qualifiers_(self):
+    def _pre_asterisk_qualifiers_(self):
+        with self._choice():
+            with self._option():
+                self._token('const')
+            with self._option():
+                self._token('volatile')
+            self._error('expecting one of: const volatile')
+
+    @graken()
+    def _post_asterisk_qualifiers_(self):
         with self._choice():
             with self._option():
                 self._token('const')
             with self._option():
                 self._token('restrict')
-            with self._option():
-                self._token('volatile')
-            self._error('expecting one of: const restrict volatile')
-
-    @graken()
-    def _post_data_type_type_qualifier_(self):
-        self._token('const')
+            self._error('expecting one of: const restrict')
 
 
 class CLDataTypeSemantics(object):
@@ -235,8 +240,8 @@ class CLDataTypeSemantics(object):
     def address_space_qualifier(self, ast):
         return ast
 
-    def pre_data_type_type_qualifiers(self, ast):
+    def pre_asterisk_qualifiers(self, ast):
         return ast
 
-    def post_data_type_type_qualifier(self, ast):
+    def post_asterisk_qualifiers(self, ast):
         return ast

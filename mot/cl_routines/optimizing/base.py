@@ -320,8 +320,8 @@ class AbstractParallelOptimizerWorker(Worker):
         Returns:
             list of str: the list of kernel parameter names
         """
-        kernel_param_names = ['global mot_float_type* params',
-                              'global char* return_codes']
+        kernel_param_names = ['global mot_float_type* restrict params',
+                              'global char* restrict return_codes']
         kernel_param_names.extend(self._data_struct_manager.get_kernel_arguments())
 
         return kernel_param_names

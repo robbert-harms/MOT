@@ -154,7 +154,7 @@ class OptimizeModelInterface(object):
 
         Returns:
             list: For every estimable parameter a scalar or vector with the the lower bound(s) for that parameter.
-                This value can also be the literal string '-inf' for infinity.
+                For infinity use np.inf.
         """
         raise NotImplementedError()
 
@@ -163,7 +163,7 @@ class OptimizeModelInterface(object):
 
         Returns:
             list: For every estimable parameter a scalar or vector with the the upper bound(s) for that parameter.
-                This value can also be the literal string '-inf' for infinity.
+                For infinity use np.inf.
         """
         raise NotImplementedError()
 

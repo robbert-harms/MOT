@@ -351,20 +351,20 @@ class _MCMCKernelBuilder(object):
             'ulong iteration_offset']
 
         kernel_param_names.extend([
-            'global mot_float_type* current_chain_position',
-            'global mot_float_type* global_proposal_state'])
+            'global mot_float_type* restrict current_chain_position',
+            'global mot_float_type* restrict global_proposal_state'])
 
         for mcmc_state_element in sorted(self._mh_state_dict):
             cl_type = self._mh_state_dict[mcmc_state_element]['cl_type']
-            kernel_param_names.append('global {}* global_{}'.format(cl_type, mcmc_state_element))
+            kernel_param_names.append('global {}* restrict global_{}'.format(cl_type, mcmc_state_element))
 
-        kernel_param_names.append('local double* log_likelihood_tmp')
+        kernel_param_names.append('local double* restrict log_likelihood_tmp')
         kernel_param_names.extend(self._data_struct_manager.get_kernel_arguments())
 
         if self._store_samples:
-            kernel_param_names.append('global mot_float_type* samples')
-            kernel_param_names.append('global mot_float_type* log_likelihoods')
-            kernel_param_names.append('global mot_float_type* log_priors')
+            kernel_param_names.append('global mot_float_type* restrict samples')
+            kernel_param_names.append('global mot_float_type* restrict log_likelihoods')
+            kernel_param_names.append('global mot_float_type* restrict log_priors')
 
         proposal_state_size = self._model.get_proposal_state().shape[1]
 
@@ -510,6 +510,7 @@ class _MCMCKernelBuilder(object):
 
                     current_prior = ''' + self._prior_func.get_cl_function_name() + '''(&data, x_local);
                 }
+                barrier(CLK_LOCAL_MEM_FENCE);
 
                 _fill_log_likelihood_tmp(&data, x_local, log_likelihood_tmp);
                 _sum_log_likelihood_tmp(log_likelihood_tmp, &current_likelihood);
@@ -648,9 +649,11 @@ class _MCMCKernelBuilder(object):
         else:
             kernel_source += '''
                             mot_float_type x_to_prop = ''' + \
-                             self._proposal_logpdf_func.get_cl_function_name() + '''(k, old_x, x_local[k], proposal_state);
+                             self._proposal_logpdf_func.get_cl_function_name() + '''(
+                                k, old_x, x_local[k], proposal_state);
                             mot_float_type prop_to_x = ''' + \
-                             self._proposal_logpdf_func.get_cl_function_name() + '''(k, x_local[k], x_local[k], proposal_state);
+                             self._proposal_logpdf_func.get_cl_function_name() + '''(
+                                k, x_local[k], x_local[k], proposal_state);
 
                             bayesian_f = exp((new_likelihood + new_prior + x_to_prop) -
                                                 (*current_likelihood + *current_prior + prop_to_x));

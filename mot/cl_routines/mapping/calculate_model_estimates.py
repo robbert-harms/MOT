@@ -88,7 +88,8 @@ class _EvaluateModelWorker(Worker):
 
         nmr_params = self._parameters.shape[1]
 
-        kernel_param_names = ['global mot_float_type* params', 'global mot_float_type* estimates']
+        kernel_param_names = ['global mot_float_type* restrict params',
+                              'global mot_float_type* restrict estimates']
         kernel_param_names.extend(self._data_struct_manager.get_kernel_arguments())
 
         kernel_source = '''
