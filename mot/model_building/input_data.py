@@ -13,7 +13,7 @@ class InputData(object):
     def protocol(self):
         """Return the protocol data stored in this input data container.
 
-        The protocol data contains information about the experimental setup. In MRI this is the scanner protocol.
+        This typically contains the experimental setup.
 
         Returns:
             collections.Mapping: The protocol data information mapping.
@@ -65,8 +65,9 @@ class InputData(object):
     def noise_std(self):
         """The noise standard deviation we will use during model evaluation.
 
-        During optimization or sampling the model will be evaluated against the observations using an evaluation
-        model. Most of these evaluation models need to have a standard deviation.
+        During optimization or sampling the model will be evaluated against the observations using a
+        likelihood function. Most of these likelihood functions need a standard deviation representing the noise
+        in the data.
 
         Returns:
             number of ndarray: either a scalar or a 2d matrix with one value per problem instance.

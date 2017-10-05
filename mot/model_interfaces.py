@@ -99,7 +99,7 @@ class OptimizeModelInterface(object):
     def get_model_eval_function(self):
         """Get the evaluation function that evaluates the model at the given parameters.
 
-        This returned function should not do any error calculations,
+        The returned function should not do any error calculations,
         it should merely return the result of evaluating the model for the given parameters.
 
         For implementers: please make sure the sign of the return value is correct (namely, positive).
@@ -114,10 +114,10 @@ class OptimizeModelInterface(object):
         raise NotImplementedError()
 
     def get_objective_per_observation_function(self):
-        """Get the objective function that returns the objective value at every measurement instance.
+        """Get the objective function that returns the objective value at a measurement instance.
 
-        This should return the objective values (of each instance point) as such that when linearly summed, we have our
-        objective function value.
+        This should return the objective values (of each instance point) as such that when linearly summed, we have the
+        complete objective value.
 
         Returns:
             mot.utils.NamedCLFunction: A CL function with signature:

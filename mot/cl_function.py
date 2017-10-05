@@ -170,14 +170,14 @@ class SimpleCLFunction(CLFunction):
         return self._prototype.get_parameters()
 
     def get_cl_code(self):
-        cl_code = '''
+        cl_code = dedent('''
             {return_type} {cl_function_name}({parameters}){{
-                {body}
+            {body}
             }}
         '''.format(return_type=self._prototype.get_return_type(),
                    cl_function_name=self._prototype.get_cl_function_name(),
                    parameters=', '.join(self._get_parameter_signatures()),
-                   body=self._cl_body)
+                   body=indent(dedent(self._cl_body), ' '*4*4)))
 
         return dedent('''
             {dependencies}
@@ -189,7 +189,7 @@ class SimpleCLFunction(CLFunction):
         '''.format(dependencies=indent(self._get_cl_dependency_code(), ' ' * 4 * 3),
                    inclusion_guard_name='INCLUDE_GUARD_{}'.format(self.get_cl_function_name()),
                    cl_extra=self._cl_extra if self._cl_extra is not None else '',
-                   code=indent('\n' + cl_code.strip() + '\n', ' ' * 4 * 3)))
+                   code=indent('\n' + cl_code + '\n', ' ' * 4 * 3)))
 
     def get_cl_body(self):
         return self._cl_body

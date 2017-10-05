@@ -17,8 +17,7 @@ class CalculateModelEstimates(CLRoutine):
     def calculate(self, model, parameters):
         """Evaluate the model for every problem and every observation and return the estimates.
 
-        This only evaluates the model at the given data points. It does not use the problem data to calculate
-        objective values.
+        This evaluates only the model and not the likelihood function of the model given the measured data.
 
         Args:
             model (AbstractModel): The model to evaluate.

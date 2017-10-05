@@ -63,15 +63,15 @@ class ModelBuilder(object):
 
 class OptimizeModelBuilder(ModelBuilder):
 
-    def __init__(self, name, model_tree, evaluation_model, signal_noise_model=None,
+    def __init__(self, name, model_tree, likelihood_function, signal_noise_model=None,
                  input_data=None, enforce_weights_sum_to_one=True):
         """Create a new model builder that can construct an optimization model from a combination of model functions.
 
         Args:
             name (str): the name of the model
             model_tree (mot.model_building.trees.CompartmentModelTree): the model tree object
-            evaluation_model (mot.model_building.evaluation_models.EvaluationModel): the evaluation model to
-                use for the resulting complete model
+            likelihood_function (mot.model_building.likelihood_functions.LikelihoodFunction): the likelihood function to
+                use for the resulting complete model.
             signal_noise_model (mot.model_building.signal_noise_models.SignalNoiseModel): the optional signal
                 noise model to use to add noise to the model prediction
             input_data (mot.model_building.input_data.InputData): the input data container
@@ -82,7 +82,7 @@ class OptimizeModelBuilder(ModelBuilder):
         super(OptimizeModelBuilder, self).__init__()
         self._name = name
         self._model_tree = model_tree
-        self._evaluation_model = evaluation_model
+        self._likelihood_function = likelihood_function
         self._signal_noise_model = signal_noise_model
 
         self._enforce_weights_sum_to_one = enforce_weights_sum_to_one
@@ -90,7 +90,7 @@ class OptimizeModelBuilder(ModelBuilder):
         self._double_precision = False
 
         self._model_functions_info = self._init_model_information_container(
-            model_tree, evaluation_model, signal_noise_model)
+            model_tree, likelihood_function, signal_noise_model)
 
         self._lower_bounds = {'{}.{}'.format(m.name, p.name): p.lower_bound for m, p in
                               self._model_functions_info.get_free_parameters_list()}
@@ -104,7 +104,7 @@ class OptimizeModelBuilder(ModelBuilder):
 
         self._set_default_dependencies()
 
-    def _init_model_information_container(self, model_tree, evaluation_model, signal_noise_model):
+    def _init_model_information_container(self, model_tree, likelihood_function, signal_noise_model):
         """Get the model information container object.
 
         The rationale for this function is that some subclasses may have additional parameters not present in
@@ -114,7 +114,7 @@ class OptimizeModelBuilder(ModelBuilder):
         Returns:
             ModelFunctionsInformation: the model function information object
         """
-        return ModelFunctionsInformation(model_tree, evaluation_model, signal_noise_model)
+        return ModelFunctionsInformation(model_tree, likelihood_function, signal_noise_model)
 
     def get_composite_model_function(self):
         """Get the composite model function for the current model tree.
@@ -122,7 +122,7 @@ class OptimizeModelBuilder(ModelBuilder):
         The output model function of this class is a subclass of :class:`~mot.cl_function.CLFunction` meaning it can
         be used to evaluate the model given some input parameters.
 
-        This function does not incorporate the evaluation model (Gaussian, Rician, etc.), but does incorporate the
+        This function does not incorporate the likelihood function (Gaussian, Rician, etc.), but does incorporate the
         signal noise model (JohnsonNoise for example).
 
         Returns:
@@ -360,8 +360,8 @@ class OptimizeModelBuilder(ModelBuilder):
         self._input_data = input_data
         if self._input_data.noise_std is not None:
             self._model_functions_info.set_parameter_value('{}.{}'.format(
-                self._evaluation_model.name,
-                self._evaluation_model.get_noise_std_param_name()), self._input_data.noise_std)
+                self._likelihood_function.name,
+                self._likelihood_function.get_noise_std_param_name()), self._input_data.noise_std)
         return self
 
     def get_input_data(self):
@@ -538,7 +538,7 @@ class OptimizeModelBuilder(ModelBuilder):
 
     def _get_objective_per_observation_function(self, problems_to_analyze):
         eval_function_info = self._get_model_eval_function(problems_to_analyze)
-        eval_model_func = self._evaluation_model.get_minimum_likelihood_function()
+        eval_model_func = self._likelihood_function.get_log_likelihood_function(include_constant_terms=False)
 
         eval_call_args = ['observation', 'model_evaluation']
         param_listing = ''
@@ -559,7 +559,7 @@ class OptimizeModelBuilder(ModelBuilder):
                 
                 ''' + param_listing + '''
                 
-                return ''' + eval_model_func.get_cl_function_name() + '''(''' + ','.join(eval_call_args) + ''');
+                return -''' + eval_model_func.get_cl_function_name() + '''(''' + ','.join(eval_call_args) + ''');
             }
         '''
         return SimpleNamedCLFunction(func, func_name)
@@ -1051,7 +1051,7 @@ class OptimizeModelBuilder(ModelBuilder):
 
 class SampleModelBuilder(OptimizeModelBuilder):
 
-    def __init__(self, model_name, model_tree, evaluation_model, signal_noise_model=None, input_data=None,
+    def __init__(self, model_name, model_tree, likelihood_function, signal_noise_model=None, input_data=None,
                  enforce_weights_sum_to_one=True):
         """Create a new model builder for sampling purposes.
 
@@ -1059,7 +1059,7 @@ class SampleModelBuilder(OptimizeModelBuilder):
             model_priors (list[mot.cl_function.CLFunction]): the list of model priors this class
                 will also use (next to the priors defined in the parameters).
         """
-        super(SampleModelBuilder, self).__init__(model_name, model_tree, evaluation_model, signal_noise_model,
+        super(SampleModelBuilder, self).__init__(model_name, model_tree, likelihood_function, signal_noise_model,
                                                  input_data=input_data,
                                                  enforce_weights_sum_to_one=enforce_weights_sum_to_one)
 
@@ -1076,7 +1076,7 @@ class SampleModelBuilder(OptimizeModelBuilder):
                 for prior in priors:
                     self._model_priors.append(_ModelFunctionPriorToCompositeModelPrior(prior, compartment.name))
 
-    def _init_model_information_container(self, model_tree, evaluation_model, signal_noise_model):
+    def _init_model_information_container(self, model_tree, likelihood_function, signal_noise_model):
         """Get the model information container object.
 
         This is called in the __init__ to provide the new model with the correct subclass function information
@@ -1087,7 +1087,7 @@ class SampleModelBuilder(OptimizeModelBuilder):
         Returns:
             ModelFunctionsInformation: the model function information object
         """
-        return ModelFunctionsInformation(model_tree, evaluation_model, signal_noise_model, enable_prior_parameters=True)
+        return ModelFunctionsInformation(model_tree, likelihood_function, signal_noise_model, enable_prior_parameters=True)
 
     def build(self, problems_to_analyze=None):
         """Construct the final immutable model with the current settings.
@@ -1419,7 +1419,7 @@ class SampleModelBuilder(OptimizeModelBuilder):
 
     def _get_log_likelihood_per_observation_function(self, problems_to_analyze):
         eval_function_info = self._get_model_eval_function(problems_to_analyze)
-        eval_function_signature = self._evaluation_model.get_log_likelihood_function()
+        eval_function_signature = self._likelihood_function.get_log_likelihood_function()
 
         eval_call_args = ['observation', 'model_evaluation']
         param_listing = ''
@@ -1430,7 +1430,7 @@ class SampleModelBuilder(OptimizeModelBuilder):
         preliminary = ''
         preliminary += eval_function_info.get_cl_code()
 
-        eval_model_func = self._evaluation_model.get_log_likelihood_function()
+        eval_model_func = self._likelihood_function.get_log_likelihood_function()
 
         func_name = 'getLogLikelihoodPerObservation'
         func = str(preliminary) + eval_model_func.get_cl_code() + '''
@@ -1597,19 +1597,19 @@ class CompositeModelFunction(SimpleCLFunction):
 
 class ModelFunctionsInformation(object):
 
-    def __init__(self, model_tree, evaluation_model, signal_noise_model=None, enable_prior_parameters=False):
+    def __init__(self, model_tree, likelihood_function, signal_noise_model=None, enable_prior_parameters=False):
         """Contains centralized information about the model functions in the model builder parent.
 
         Args:
             model_tree (mot.model_building.trees.CompartmentModelTree): the model tree object
-            evaluation_model (mot.model_building.evaluation_models.EvaluationModel): the evaluation model to
+            likelihood_function (mot.model_building.likelihood_functions.LikelihoodFunction): the likelihood function to
                 use for the resulting complete model
             signal_noise_model (mot.model_building.signal_noise_models.SignalNoiseModel): the signal
                 noise model to use to add noise to the model prediction
             enable_prior_parameters (boolean): adds possible prior parameters to the list of parameters in the model
         """
         self._model_tree = model_tree
-        self._evaluation_model = evaluation_model
+        self._likelihood_function = likelihood_function
         self._signal_noise_model = signal_noise_model
         self._enable_prior_parameters = enable_prior_parameters
 
@@ -1797,16 +1797,16 @@ class ModelFunctionsInformation(object):
         raise ValueError('The parameter with the name "{}" could not be found in this model.'.format(parameter_name))
 
     def get_non_model_eval_param_listing(self):
-        """Get the model, parameter tuples for all parameters that are not used in the model evaluation function.
+        """Get the model, parameter tuples for all parameters that are not used in the likelihood function.
 
-        Basically this returns the parameters of the evaluation model.
+        Basically this returns the parameters of the likelihood function.
 
         Returns:
             tuple: the (model, parameter) tuple for all non model evaluation parameters
         """
         listing = []
-        for p in self._evaluation_model.get_prototype().get_parameters():
-            listing.append((self._evaluation_model.get_prototype(), p))
+        for p in self._likelihood_function.get_log_likelihood_function().get_parameters():
+            listing.append((self._likelihood_function.get_log_likelihood_function(), p))
         return listing
 
     def is_fixed(self, parameter_name):
@@ -1966,7 +1966,7 @@ class ModelFunctionsInformation(object):
     def _get_model_list(self):
         """Get the list of all the applicable model functions"""
         models = list(self._model_tree.get_compartment_models())
-        models.append(self._evaluation_model.get_prototype())
+        models.append(self._likelihood_function.get_log_likelihood_function())
         if self._signal_noise_model:
             models.append(self._signal_noise_model)
         return models
