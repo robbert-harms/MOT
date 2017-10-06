@@ -1,3 +1,4 @@
+import inspect
 from textwrap import dedent, indent
 
 import numpy as np
@@ -14,7 +15,7 @@ from mot.model_building.parameter_functions.dependencies import SimpleAssignment
 from mot.model_building.utils import ParameterCodec
 from mot.model_interfaces import OptimizeModelInterface, SampleModelInterface
 from mot.utils import is_scalar, all_elements_equal, get_single_value, SimpleNamedCLFunction, convert_data_to_dtype, \
-    KernelInputBuffer, KernelInputScalar
+    KernelInputBuffer, get_class_that_defined_method
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-03-14"
@@ -2116,6 +2117,17 @@ class SimpleSampleModel(SampleModelInterface):
         self._proposal_function_builder = proposal_function_builder
         self._proposal_state_update_function_builder = proposal_state_update_function_builder
 
+    def __getattribute__(self, item):
+        try:
+            value = super(SimpleSampleModel, self).__getattribute__(item)
+            if hasattr(SampleModelInterface, item):
+                if inspect.ismethod(value) or inspect.isfunction(value):
+                    if not issubclass(get_class_that_defined_method(value), SimpleSampleModel):
+                        raise NotImplementedError()
+            return value
+        except NotImplementedError:
+            return getattr(super(SimpleSampleModel, self).__getattribute__('_wrapped_optimize_model'), item)
+
     @property
     def name(self):
         return self._wrapped_optimize_model.name
@@ -2126,36 +2138,6 @@ class SimpleSampleModel(SampleModelInterface):
 
     def get_kernel_data(self):
         return self._wrapped_optimize_model.get_kernel_data()
-
-    def get_nmr_problems(self):
-        return self._wrapped_optimize_model.get_nmr_problems()
-
-    def get_nmr_inst_per_problem(self):
-        return self._wrapped_optimize_model.get_nmr_inst_per_problem()
-
-    def get_nmr_estimable_parameters(self):
-        return self._wrapped_optimize_model.get_nmr_estimable_parameters()
-
-    def get_pre_eval_parameter_modifier(self):
-        return self._wrapped_optimize_model.get_pre_eval_parameter_modifier()
-
-    def get_model_eval_function(self):
-        return self._wrapped_optimize_model.get_model_eval_function()
-
-    def get_objective_per_observation_function(self):
-        return self._wrapped_optimize_model.get_objective_per_observation_function()
-
-    def get_initial_parameters(self):
-        return self._wrapped_optimize_model.get_initial_parameters()
-
-    def get_lower_bounds(self):
-        return self._wrapped_optimize_model.get_lower_bounds()
-
-    def get_upper_bounds(self):
-        return self._wrapped_optimize_model.get_upper_bounds()
-
-    def finalize_optimized_parameters(self, parameters):
-        return self._wrapped_optimize_model.finalize_optimized_parameters(parameters)
 
     def get_proposal_state(self):
         return self._proposal_state
