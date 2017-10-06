@@ -9,13 +9,12 @@ from mot.cl_parameter import SimpleCLFunctionParameter
 from mot.cl_routines.mapping.codec_runner import CodecRunner
 from mot.cl_routines.sampling.metropolis_hastings import DefaultMHState
 from mot.model_building.model_functions import Weight, ModelCLFunction
-from mot.model_building.parameters import CurrentObservationParam, StaticMapParameter, ProtocolParameter, \
-    ModelDataParameter, FreeParameter
+from mot.model_building.parameters import CurrentObservationParam, StaticMapParameter, ProtocolParameter, FreeParameter
 from mot.model_building.parameter_functions.dependencies import SimpleAssignment, AbstractParameterDependency
 from mot.model_building.utils import ParameterCodec
 from mot.model_interfaces import OptimizeModelInterface, SampleModelInterface
 from mot.utils import is_scalar, all_elements_equal, get_single_value, SimpleNamedCLFunction, convert_data_to_dtype, \
-    KernelInputBuffer
+    KernelInputBuffer, KernelInputScalar
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-03-14"
@@ -372,22 +371,10 @@ class OptimizeModelBuilder(ModelBuilder):
         """
         return self._input_data
 
-    def get_required_protocol_names(self):
-        """Get a list with the constant data names that are needed for this model to work.
-
-        For example, an implementing diffusion MRI model might require the presence of the protocol parameter
-        'g' and 'b'. This function should then return ('g', 'b').
-
-        Returns:
-            list: A list of columns names that need to be present in the protocol
-        """
-        return list(set([p.name for m, p in self._model_functions_info.get_model_parameter_list() if
-                         isinstance(p, ProtocolParameter)]))
-
     def set_fixed_parameter_values(self, fixed_values):
         """Given a dictionary with static maps, initialize the values of the static parameters with these values.
 
-        Make sure that if vectors are given, the lengt of the vector should match the length of the number of problems
+        Make sure that if vectors are given, the length of the vector should match the length of the number of problems
         (in the input data).
 
         Args:
@@ -401,7 +388,7 @@ class OptimizeModelBuilder(ModelBuilder):
 
     def get_nmr_inst_per_problem(self):
         """See super class for details"""
-        return self._input_data.get_nmr_inst_per_problem()
+        return self._input_data.nmr_observations
 
     def get_nmr_estimable_parameters(self):
         """See super class for details"""
@@ -421,25 +408,21 @@ class OptimizeModelBuilder(ModelBuilder):
         """See super class for details"""
         if problems_to_analyze is None:
             if self._input_data:
-                return self._input_data.get_nmr_problems()
+                return self._input_data.nmr_problems
             return 0
         return len(problems_to_analyze)
 
     def _get_kernel_data(self, problems_to_analyze):
         data_items = {}
-
         observations = self._get_observations_data(problems_to_analyze)
         if observations is not None:
             data_items['observations'] = KernelInputBuffer(observations)
 
-        for key, cl_data in self._get_variable_data(problems_to_analyze).items():
-            data_items['var_data_' + str(key)] = KernelInputBuffer(cl_data)
+        data_items.update(self._get_fixed_parameters_as_var_data(problems_to_analyze))
+        data_items.update(self._get_static_parameters_as_var_data(problems_to_analyze))
+        data_items.update(self._get_bounds_as_var_data(problems_to_analyze))
+        data_items.update(self._get_protocol_data(problems_to_analyze))
 
-        for key, cl_data in self._get_protocol_data().items():
-            data_items['protocol_data_' + str(key)] = KernelInputBuffer(cl_data, offset_str='0')
-
-        for key, cl_data in self._get_model_data().items():
-            data_items['model_data_' + str(key)] = KernelInputBuffer(cl_data, offset_str='0')
         return data_items
 
     def _get_initial_parameters(self, problems_to_analyze):
@@ -503,7 +486,7 @@ class OptimizeModelBuilder(ModelBuilder):
         def get_preliminary():
             cl_preliminary = ''
             cl_preliminary += composite_model_function.get_cl_code()
-            pre_model_function = self._get_pre_model_expression_eval_function()
+            pre_model_function = self._get_pre_model_expression_eval_function(problems_to_analyze)
             if pre_model_function:
                 cl_preliminary += pre_model_function
             return cl_preliminary
@@ -515,9 +498,10 @@ class OptimizeModelBuilder(ModelBuilder):
 
             body = ''
             body += dedent(param_listing.replace('\t', ' '*4))
-            body += self._get_pre_model_expression_eval_code() or ''
+            body += self._get_pre_model_expression_eval_code(problems_to_analyze) or ''
             body += '\n'
-            body += 'return ' + self._composite_model_to_string(composite_model_function, problems_to_analyze) + ';'
+            body += 'return ' + self._get_composite_model_function_signature(composite_model_function,
+                                                                             problems_to_analyze) + ';'
             return body
 
         function_name = '_evaluateModel'
@@ -576,12 +560,12 @@ class OptimizeModelBuilder(ModelBuilder):
             if all_elements_equal(self._lower_bounds[name]):
                 lower_bound = str(get_single_value(self._lower_bounds[name]))
             else:
-                lower_bound = 'data->var_data_lb_{}[0]'.format(name.replace('.', '_'))
+                lower_bound = 'data->lb_{}[0]'.format(name.replace('.', '_'))
 
             if all_elements_equal(self._upper_bounds[name]):
                 upper_bound = str(get_single_value(self._upper_bounds[name]))
             else:
-                upper_bound = 'data->var_data_ub_{}[0]'.format(name.replace('.', '_'))
+                upper_bound = 'data->ub_{}[0]'.format(name.replace('.', '_'))
 
             s = '{0}[' + str(ind) + '] = ' + transform.get_cl_decode().create_assignment(
                 '{0}[' + str(ind) + ']', lower_bound, upper_bound) + ';'
@@ -594,15 +578,6 @@ class OptimizeModelBuilder(ModelBuilder):
             enc_func_list.append(s)
 
         return tuple(reversed(enc_func_list)), dec_func_list
-
-    def _get_observation_return_function(self):
-        func_name = '_getObservation'
-        func = '''
-            double ''' + func_name + '''(mot_data_struct* data, uint observation_index){
-                return data->observations[observation_index];
-            }
-        '''
-        return SimpleNamedCLFunction(func, func_name)
 
     def _transform_observations(self, observations):
         """Apply a transformation on the observations before fitting.
@@ -622,7 +597,7 @@ class OptimizeModelBuilder(ModelBuilder):
         """
         return observations
 
-    def _composite_model_to_string(self, composite_model, problems_to_analyze):
+    def _get_composite_model_function_signature(self, composite_model, problems_to_analyze):
         """Create the parameter call code for the composite model.
 
         Args:
@@ -631,18 +606,13 @@ class OptimizeModelBuilder(ModelBuilder):
         """
         param_list = []
         for model, param in composite_model.get_model_parameter_list():
+            param_name = '{}.{}'.format(model.name, param.name).replace('.', '_')
+
             if isinstance(param, ProtocolParameter):
                 param_list.append(param.name)
-
-            elif isinstance(param, ModelDataParameter):
-                value = self._model_functions_info.get_parameter_value('{}.{}'.format(model.name, param.name))
-                if all_elements_equal(value):
-                    param_list.append(str(get_single_value(value)))
-                else:
-                    param_list.append('data->model_data_' + param.name)
-
             elif isinstance(param, StaticMapParameter):
                 static_map_value = self._get_static_map_value(model, param, problems_to_analyze)
+
                 if all_elements_equal(static_map_value):
                     param_list.append(str(get_single_value(static_map_value)))
                 else:
@@ -650,12 +620,11 @@ class OptimizeModelBuilder(ModelBuilder):
                     if len(static_map_value.shape) > 1 and static_map_value.shape[1] != 1 \
                         and static_map_value.shape[1] == self.get_nmr_inst_per_problem():
                             pointer_index = 'observation_index'
-                    param_list.append('data->var_data_{}[{}]'.format(
-                        '{}.{}'.format(model.name, param.name).replace('.', '_'), pointer_index))
+                    param_list.append('data->{}[{}]'.format(param_name, pointer_index))
             elif isinstance(param, CurrentObservationParam):
                 param_list.append('data->observations[observation_index]')
             else:
-                param_list.append('{}.{}'.format(model.name, param.name).replace('.', '_'))
+                param_list.append(param_name)
 
         return composite_model.get_cl_function_name() + '(' + ', '.join(param_list) + ')'
 
@@ -701,30 +670,27 @@ class OptimizeModelBuilder(ModelBuilder):
         Args:
             exclude_list: a list of parameters to exclude from this listing
         """
-        protocol_info = self._input_data.protocol
         param_list = self._model_functions_info.get_protocol_parameters_list()
-
         const_params_seen = []
         func = ''
         for m, p in param_list:
             if ('{}.{}'.format(m.name, p.name).replace('.', '_')) not in exclude_list:
+
+                param_value = self._input_data.get_input_data(p.name)
                 data_type = p.data_type.declaration_type
+
                 if p.name not in const_params_seen:
-                    if all_elements_equal(protocol_info[p.name]):
+                    if all_elements_equal(param_value):
                         if p.data_type.is_vector_type:
                             vector_length = p.data_type.vector_length
-                            values = [str(val) for val in protocol_info[p.name][0]]
+                            values = [str(val) for val in param_value[0]]
                             if len(values) < vector_length:
                                 values.append(str(0))
                             assignment = '(' + data_type + ')(' + ', '.join(values) + ')'
                         else:
-                            assignment = str(float(protocol_info[p.name][0]))
+                            assignment = str(float(get_single_value(param_value)))
                     else:
-                        if p.data_type.is_pointer_type:
-                            # this requires generic address spaces available in OpenCL >= 2.0.
-                            assignment = '&data->protocol_data_' + p.name + '[observation_index]'
-                        else:
-                            assignment = 'data->protocol_data_' + p.name + '[observation_index]'
+                        assignment = 'data->' + p.name + '[observation_index]'
                     func += "\t"*4 + data_type + ' ' + p.name + ' = ' + assignment + ';' + "\n"
                     const_params_seen.append(p.name)
         return func
@@ -743,12 +709,13 @@ class OptimizeModelBuilder(ModelBuilder):
             if name not in exclude_list:
                 data_type = p.data_type.raw_data_type
                 value = self._model_functions_info.get_parameter_value('{}.{}'.format(m.name, p.name))
+                param_name = '{}.{}'.format(m.name, p.name).replace('.', '_')
 
                 if all_elements_equal(value):
                     assignment = '(' + data_type + ')' + str(float(get_single_value(value)))
                 else:
-                    assignment = '(' + data_type + ') data->var_data_{}[0]'.format(
-                        '{}.{}'.format(m.name, p.name).replace('.', '_'))
+                    assignment = '(' + data_type + ') data->{}[0]'.format(param_name)
+
                 func += "\t"*4 + data_type + ' ' + name + ' = ' + assignment + ';' + "\n"
         return func
 
@@ -781,42 +748,45 @@ class OptimizeModelBuilder(ModelBuilder):
     def _get_fixed_parameters_as_var_data(self, problems_to_analyze):
         var_data_dict = {}
         for m, p in self._model_functions_info.get_value_fixed_parameters_list():
-            value = self._model_functions_info.get_parameter_value('{}.{}'.format(m.name, p.name))
+            value = convert_data_to_dtype(
+                self._model_functions_info.get_parameter_value('{}.{}'.format(m.name, p.name)),
+                p.data_type, self._get_mot_float_type())
+            param_name = '{}.{}'.format(m.name, p.name).replace('.', '_')
 
             if not all_elements_equal(value):
                 if problems_to_analyze is not None:
                     value = value[problems_to_analyze, ...]
-
-                var_data_dict['{}.{}'.format(m.name, p.name).replace('.', '_')] = convert_data_to_dtype(
-                    value, p.data_type, self._get_mot_float_type())
+                var_data_dict[param_name] = KernelInputBuffer(value)
         return var_data_dict
 
     def _get_static_parameters_as_var_data(self, problems_to_analyze):
         static_data_dict = {}
 
         for m, p in self._model_functions_info.get_static_parameters_list():
-            static_map_value = self._get_static_map_value(m, p, problems_to_analyze)
+            value = convert_data_to_dtype(self._get_static_map_value(m, p, problems_to_analyze),
+                                          p.data_type, self._get_mot_float_type())
+            param_name = '{}.{}'.format(m.name, p.name).replace('.', '_')
 
-            if not all_elements_equal(static_map_value):
-                data = convert_data_to_dtype(static_map_value, p.data_type, self._get_mot_float_type())
-                static_data_dict.update({'{}.{}'.format(m.name, p.name).replace('.', '_'): data})
+            if not all_elements_equal(value):
+                static_data_dict.update({param_name: KernelInputBuffer(value)})
 
         return static_data_dict
 
-    def _get_bounds_as_var_data(self):
+    def _get_bounds_as_var_data(self, problems_to_analyze):
         bounds_dict = {}
 
         for m, p in self._model_functions_info.get_free_parameters_list():
             lower_bound = self._lower_bounds['{}.{}'.format(m.name, p.name)]
             upper_bound = self._upper_bounds['{}.{}'.format(m.name, p.name)]
 
-            if not all_elements_equal(lower_bound):
-                data = convert_data_to_dtype(lower_bound, p.data_type, self._get_mot_float_type())
-                bounds_dict.update({'lb_' + '{}.{}'.format(m.name, p.name).replace('.', '_'): data})
+            for bound_type, value in zip(('lb', 'ub'), (lower_bound, upper_bound)):
+                name = bound_type + '_' + '{}.{}'.format(m.name, p.name).replace('.', '_')
+                data = convert_data_to_dtype(value, p.data_type, self._get_mot_float_type())
 
-            if not all_elements_equal(upper_bound):
-                data = convert_data_to_dtype(upper_bound, p.data_type, self._get_mot_float_type())
-                bounds_dict.update({'ub_' + '{}.{}'.format(m.name, p.name).replace('.', '_'): data})
+                if not all_elements_equal(value):
+                    if problems_to_analyze is not None:
+                        data = data[problems_to_analyze, ...]
+                    bounds_dict.update({name: KernelInputBuffer(data)})
 
         return bounds_dict
 
@@ -846,10 +816,10 @@ class OptimizeModelBuilder(ModelBuilder):
         def resolve_value():
             value = self._model_functions_info.get_parameter_value('{}.{}'.format(model.name, parameter.name))
 
-            if parameter.name in self._input_data.static_maps:
-                value = self._input_data.static_maps[parameter.name]
-            if '{}.{}'.format(model.name, parameter.name) in self._input_data.static_maps:
-                value = self._input_data.static_maps['{}.{}'.format(model.name, parameter.name)]
+            if self._input_data.get_input_data(parameter.name) is not None:
+                value = self._input_data.get_input_data(parameter.name)
+            if self._input_data.get_input_data('{}.{}'.format(model.name, parameter.name)) is not None:
+                value = self._input_data.get_input_data('{}.{}'.format(model.name, parameter.name))
 
             return value
 
@@ -868,16 +838,13 @@ class OptimizeModelBuilder(ModelBuilder):
 
     def _get_param_listing_for_param(self, m, p):
         """Get the param listing for one specific parameter. This can be used for example for the noise model params.
-
-        Please note, that on the moment this function does not support the complete dependency graph for the dependent
-        parameters.
         """
         data_type = p.data_type.raw_data_type
         name = '{}.{}'.format(m.name, p.name).replace('.', '_')
         assignment = ''
 
         if isinstance(p, ProtocolParameter):
-            assignment = 'data->protocol_data_' + p.name + '[observation_index]'
+            assignment = 'data->' + p.name + '[observation_index]'
         elif isinstance(p, FreeParameter):
             assignment = self._get_free_parameter_assignment_value(m, p)
 
@@ -898,11 +865,11 @@ class OptimizeModelBuilder(ModelBuilder):
         assignment = ''
 
         if self._model_functions_info.is_fixed_to_value('{}.{}'.format(m.name, p.name)):
+            param_name = '{}.{}'.format(m.name, p.name).replace('.', '_')
             if all_elements_equal(value):
                 assignment = '(' + data_type + ')' + str(float(get_single_value(value)))
             else:
-                assignment = '(' + data_type + ') data->var_data_{}[0]'.format(
-                    '{}.{}'.format(m.name, p.name).replace('.', '_'))
+                assignment = '(' + data_type + ') data->{}[0]'.format(param_name)
         elif self._model_functions_info.is_fixed_to_dependency(m, p):
             return self._get_dependent_parameters_listing(((m, p),))
         else:
@@ -955,44 +922,23 @@ class OptimizeModelBuilder(ModelBuilder):
             observations = convert_data_to_dtype(observations, 'mot_float_type*', self._get_mot_float_type())
         return observations
 
-    def _get_variable_data(self, problems_to_analyze):
-        """See super class OptimizeModelInterface for details
-
-        When overriding this function, please note that it should adhere to the attribute problems_to_analyze.
-        """
-        var_data_dict = {}
-        var_data_dict.update(self._get_fixed_parameters_as_var_data(problems_to_analyze))
-        var_data_dict.update(self._get_static_parameters_as_var_data(problems_to_analyze))
-        var_data_dict.update(self._get_bounds_as_var_data())
-
-        return var_data_dict
-
-    def _get_protocol_data(self):
-        protocol_info = self._input_data.protocol
+    def _get_protocol_data(self, problems_to_analyze):
         return_data = {}
         for m, p in self._model_functions_info.get_model_parameter_list():
             if isinstance(p, ProtocolParameter):
-                if p.name in protocol_info:
-                    if not all_elements_equal(protocol_info[p.name]):
-                        const_d = {p.name: convert_data_to_dtype(protocol_info[p.name], p.data_type,
-                                                                 self._get_mot_float_type())}
-                        return_data.update(const_d)
-                else:
-                    exception = 'Protocol parameter "{}" could not be resolved'.format('{}.{}'.format(m.name, p.name))
-                    raise ParameterResolutionException(exception)
+                value = convert_data_to_dtype(self._input_data.get_input_data(p.name),
+                                              p.data_type, self._get_mot_float_type())
+                if not all_elements_equal(value):
+                    if value.shape[0] == self._input_data.nmr_problems:
+                        if problems_to_analyze is not None:
+                            value = value[problems_to_analyze, ...]
+                        const_d = {p.name: KernelInputBuffer(value)}
+                    else:
+                        const_d = {p.name: KernelInputBuffer(value, offset_str='0')}
+                    return_data.update(const_d)
         return return_data
 
-    def _get_model_data(self):
-        data_dict = {}
-        for m, p in self._model_functions_info.get_model_parameter_list():
-            if isinstance(p, ModelDataParameter):
-                value = self._model_functions_info.get_parameter_value('{}.{}'.format(m.name, p.name))
-                if not all_elements_equal(value):
-                    data_dict.update({p.name: convert_data_to_dtype(value, p.data_type,
-                                                                    self._get_mot_float_type())})
-        return data_dict
-
-    def _get_pre_model_expression_eval_code(self):
+    def _get_pre_model_expression_eval_code(self, problems_to_analyze):
         """The code called in the evaluation function.
 
         This is called after the parameters are initialized and before the model signal expression. It can call
@@ -1003,7 +949,7 @@ class OptimizeModelBuilder(ModelBuilder):
         """
         return ''
 
-    def _get_pre_model_expression_eval_function(self):
+    def _get_pre_model_expression_eval_function(self, problems_to_analyze):
         """Function used in the model evaluation generation function.
 
         The idea is that some implementing models may need to change some of the protocol or fixed parameters
@@ -1131,7 +1077,7 @@ class SampleModelBuilder(OptimizeModelBuilder):
                     else:
                         lower_bound = str(get_single_value(self._lower_bounds[name]))
                 else:
-                    lower_bound = 'data->var_data_lb_' + name.replace('.', '_') + '[0]'
+                    lower_bound = 'data->lb_' + name.replace('.', '_') + '[0]'
 
                 if all_elements_equal(self._upper_bounds[name]):
                     if np.isposinf(get_single_value(self._upper_bounds[name])):
@@ -1139,7 +1085,7 @@ class SampleModelBuilder(OptimizeModelBuilder):
                     else:
                         upper_bound = str(get_single_value(self._upper_bounds[name]))
                 else:
-                    upper_bound = 'data->var_data_ub_' + name.replace('.', '_') + '[0]'
+                    upper_bound = 'data->ub_' + name.replace('.', '_') + '[0]'
 
                 function_name = p.sampling_prior.get_cl_function_name()
 
@@ -1155,7 +1101,7 @@ class SampleModelBuilder(OptimizeModelBuilder):
                             if all_elements_equal(value):
                                 prior_params.append(str(get_single_value(value)))
                             else:
-                                prior_params.append('data->var_data_' +
+                                prior_params.append('data->' +
                                                     '{}.{}'.format(m.name, prior_param.name).replace('.', '_')) + '[0]'
 
                     cl_str += 'prior *= {}(x[{}], {}, {}, {});\n'.format(function_name, i, lower_bound, upper_bound,

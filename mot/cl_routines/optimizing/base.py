@@ -245,8 +245,14 @@ class AbstractParallelOptimizerWorker(Worker):
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
 
-        self._kernel.minimize(self._cl_run_context.queue, (nmr_problems, ), None, *self._all_buffers,
-                              global_offset=(range_start,))
+        scalar_args = [None, None]
+        scalar_args.extend(self._data_struct_manager.get_scalar_arg_dtypes())
+
+        kernel_func = self._kernel.minimize
+        kernel_func.set_scalar_arg_dtypes(scalar_args)
+
+        kernel_func(self._cl_run_context.queue, (nmr_problems, ), None, *self._all_buffers,
+                    global_offset=(range_start,))
         self._enqueue_readout(self._params_buffer, self._starting_points, range_start, range_end)
         self._enqueue_readout(self._return_code_buffer, self._return_codes, range_start, range_end)
 
@@ -263,9 +269,7 @@ class AbstractParallelOptimizerWorker(Worker):
                                        hostbuf=self._return_codes)
         all_buffers.append(return_code_buffer)
 
-        for data in [self._data_info[key] for key in sorted(self._data_info)]:
-            all_buffers.append(cl.Buffer(self._cl_run_context.context,
-                                         cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data.get_data()))
+        all_buffers.extend(self._data_struct_manager.get_kernel_inputs(self._cl_run_context.context, 1))
 
         return all_buffers, parameters_buffer, return_code_buffer
 

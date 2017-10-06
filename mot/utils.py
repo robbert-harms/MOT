@@ -133,8 +133,8 @@ def results_to_dict(results, param_names):
 
     This basically splits the given nd-matrix into sub matrices based on the second dimension. The length of
     the parameter names should match the length of the second dimension. If a two dimensional matrix of shape (d, p) is
-    given we return a matrix of shape (d,). If a matrix of shape (d, p, s_1, s_2, ..., s_n) is given, we return
-    a matrix of shape (d, s_1, s_2, ..., s_n).
+    given we return p matrices of shape (d,). If a matrix of shape (d, p, s_1, s_2, ..., s_n) is given, we return
+    p matrices of shape (d, s_1, s_2, ..., s_n).
 
     Args:
         results: a multidimensional matrix we index based on the second dimension.

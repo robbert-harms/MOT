@@ -34,48 +34,26 @@ class StaticMapParameter(SimpleCLFunctionParameter):
         These parameters are in usage similar to fixed free parameters. They are defined as static data parameters to
         make clear that they are meant to provide additional observational data.
 
-        They differ from the model data parameters in that those are meant for data that define a model, irrespective
-        of the data that is trying to be optimized. The static data parameters are supportive data about the problems
-        and differ per problem instance. This makes them differ slightly in semantics.
+        Values for this parameter type are typically loaded from the input data. A default is provided in the case
+        that there is no suitable value in the input data.
 
         Args:
             data_type (mot.cl_data_type.SimpleCLDataType): the data type expected by this parameter
             name (str): The name of this parameter
-            value (double or ndarray): A single value for all voxels or a list of values for each voxel
-
-        Attributes:
-            value (double or ndarray): A single value for all voxels or a list of values for each voxel
+            value (double or ndarray): The value used if no value is given in the input data.
         """
         super(StaticMapParameter, self).__init__(data_type, name)
         self.value = value
 
 
 class ProtocolParameter(SimpleCLFunctionParameter):
-    """A protocol data parameter indicates that this parameter is supposed to be fixed using the Protocol data.
+    """A protocol data parameter indicates that similar named parameters may be linked together.
 
-    This class of parameters is used for parameters that are constant per problem instance, but differ for the different
-    measurement points (in diffusion MRI these are called the Protocol parameters).
+    When multiple functions in a composite model share a protocol parameter with the same name, the model
+    builder will only load the data once and link the identical named parameters to the same value.
+
+    The value for a protocol parameter is loaded from the input data.
     """
-
-
-class ModelDataParameter(SimpleCLFunctionParameter):
-
-    def __init__(self, data_type, name, value):
-        """This parameter is meant for data that changes the way a model function behaves.
-
-        These parameters are fixed and remain constant for every problem instance (voxels in DMRI)
-        and for every measurement point (protocol in DMRI). They can consist of vector and array types.
-
-        Args:
-            data_type (mot.cl_data_type.SimpleCLDataType): the data type expected by this parameter
-            name (str): The name of this parameter
-            value (double or ndarray): A single value for all voxels or a list of values for each voxel
-
-        Attributes:
-            value (double or ndarray): A single value for all voxels or a list of values for each voxel
-        """
-        super(ModelDataParameter, self).__init__(data_type, name)
-        self.value = value
 
 
 class FreeParameter(SimpleCLFunctionParameter):
