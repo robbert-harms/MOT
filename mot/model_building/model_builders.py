@@ -154,7 +154,6 @@ class OptimizeModelBuilder(ModelBuilder):
                                    self._get_initial_parameters(problems_to_analyze),
                                    self._get_pre_eval_parameter_modifier(),
                                    self._get_model_eval_function(problems_to_analyze),
-                                   self._get_residual_per_observation_function(problems_to_analyze),
                                    self._get_objective_per_observation_function(problems_to_analyze),
                                    self.get_lower_bounds(),
                                    self.get_upper_bounds())
@@ -458,19 +457,6 @@ class OptimizeModelBuilder(ModelBuilder):
                                           if len(s.shape) < 2 else s for s in starting_points], axis=1)
 
         return convert_data_to_dtype(starting_points, 'mot_float_type', self._get_mot_float_type())
-
-    def _get_residual_per_observation_function(self, problems_to_analyze):
-        eval_function_info = self._get_model_eval_function(problems_to_analyze)
-
-        func_name = '_getResidual'
-        func = eval_function_info.get_cl_code()
-        func += '''
-            double ''' + func_name + '''(mot_data_struct* data, const mot_float_type* const x, uint observation_index){
-                return data->observations[observation_index] - 
-                    ''' + eval_function_info.get_cl_function_name() + '''(data, x, observation_index);
-            }
-        '''
-        return SimpleNamedCLFunction(func, func_name)
 
     def _get_pre_eval_parameter_modifier(self):
         func_name = '_modifyParameters'
@@ -1981,9 +1967,6 @@ class ParameterTransformedModel(OptimizeModelInterface):
     def get_nmr_estimable_parameters(self):
         return self._model.get_nmr_estimable_parameters()
 
-    def get_residual_per_observation_function(self):
-        return self._model.get_residual_per_observation_function()
-
     def get_pre_eval_parameter_modifier(self):
         old_modifier = self._model.get_pre_eval_parameter_modifier()
         new_fname = 'wrapped_' + old_modifier.get_cl_function_name()
@@ -2027,11 +2010,6 @@ class ParameterNameException(Exception):
     pass
 
 
-class ParameterResolutionException(Exception):
-    """Thrown when a fixed parameter could not be resolved."""
-    pass
-
-
 class DoubleModelNameException(Exception):
     """Thrown when there are two models with the same name."""
     pass
@@ -2063,7 +2041,7 @@ class SimpleOptimizeModel(OptimizeModelInterface):
     def __init__(self, used_problem_indices,
                  name, double_precision, kernel_data_info, nmr_problems, nmr_inst_per_problem,
                  nmr_estimable_parameters, initial_parameters, pre_eval_parameter_modifier, eval_function,
-                 residual_function, objective_per_observation_function,
+                 objective_per_observation_function,
                  lower_bounds, upper_bounds):
         self.used_problem_indices = used_problem_indices
         self._name = name
@@ -2075,7 +2053,6 @@ class SimpleOptimizeModel(OptimizeModelInterface):
         self._initial_parameters = initial_parameters
         self._pre_eval_parameter_modifier = pre_eval_parameter_modifier
         self._eval_function = eval_function
-        self._residual_function = residual_function
         self._objective_per_observation_function = objective_per_observation_function
         self._lower_bounds = lower_bounds
         self._upper_bounds = upper_bounds
@@ -2108,9 +2085,6 @@ class SimpleOptimizeModel(OptimizeModelInterface):
 
     def get_objective_per_observation_function(self):
         return self._objective_per_observation_function
-
-    def get_residual_per_observation_function(self):
-        return self._residual_function
 
     def get_initial_parameters(self):
         return self._initial_parameters
@@ -2167,9 +2141,6 @@ class SimpleSampleModel(SampleModelInterface):
 
     def get_model_eval_function(self):
         return self._wrapped_optimize_model.get_model_eval_function()
-
-    def get_residual_per_observation_function(self):
-        return self._wrapped_optimize_model.get_residual_per_observation_function()
 
     def get_objective_per_observation_function(self):
         return self._wrapped_optimize_model.get_objective_per_observation_function()

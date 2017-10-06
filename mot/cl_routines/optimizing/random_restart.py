@@ -163,7 +163,7 @@ class RandomRestart(AbstractOptimizer):
 
     def minimize(self, model, init_params=None):
         opt_output = self._optimizer.minimize(model, init_params)
-        l2_errors = opt_output.get_error_measures()['Errors.l2']
+        objective_value = opt_output.get_objective_values()
         results = opt_output.get_optimization_result()
         return_codes = opt_output.get_return_codes()
 
@@ -171,17 +171,17 @@ class RandomRestart(AbstractOptimizer):
         while starting_points is not None:
             new_opt_output = self._optimizer.minimize(model, starting_points)
             new_results = new_opt_output.get_optimization_result()
-            new_l2_errors = new_opt_output.get_error_measures()['Errors.l2']
+            new_objective_value = new_opt_output.get_objective_values()
             return_codes = new_opt_output.get_return_codes()
 
-            results, l2_errors = self._get_best_results(results, new_results, l2_errors, new_l2_errors)
+            results, objective_value = self._get_best_results(results, new_results, objective_value, new_objective_value)
 
             starting_points = self._starting_point_generator.next(model, results)
 
         return SimpleOptimizationResult(model, results, return_codes)
 
-    def _get_best_results(self, previous_results, new_results, previous_l2_errors, new_l2_errors):
-        result_choice = np.argmin([previous_l2_errors, new_l2_errors], axis=0)
+    def _get_best_results(self, previous_results, new_results, previous_objective_value, new_objective_value):
+        result_choice = np.argmin([previous_objective_value, new_objective_value], axis=0)
 
         results = np.zeros_like(previous_results)
 
@@ -189,7 +189,7 @@ class RandomRestart(AbstractOptimizer):
             choices = np.array([previous_results[:, param_ind], new_results[:, param_ind]])
             results[:, param_ind] = choices[(result_choice, range(result_choice.shape[0]))]
 
-        resulting_l2_errors = np.array([previous_l2_errors, new_l2_errors])[(result_choice,
-                                                                             range(result_choice.shape[0]))]
+        best_objective_value = np.array([previous_objective_value,
+                                         new_objective_value])[(result_choice, range(result_choice.shape[0]))]
 
-        return results, resulting_l2_errors
+        return results, best_objective_value

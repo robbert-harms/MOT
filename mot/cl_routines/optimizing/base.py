@@ -2,8 +2,7 @@ import logging
 import numpy as np
 import pyopencl as cl
 
-from mot.cl_routines.mapping.error_measures import ErrorMeasures
-from mot.cl_routines.mapping.residual_calculator import ResidualCalculator
+from mot.cl_routines.mapping.objective_function_calculator import ObjectiveFunctionCalculator
 from ...utils import get_float_type_def, KernelInputDataManager
 from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
@@ -104,21 +103,11 @@ class OptimizationResults(object):
         """
         raise NotImplementedError()
 
-    def get_residuals(self):
-        """Get the residuals per problem instance.
+    def get_objective_values(self):
+        """Get the objective values for each of the problem instances.
 
         Returns:
-            ndarray: (d, r) matrix with for d problems r residuals
-        """
-        raise NotImplementedError()
-
-    def get_error_measures(self):
-        """Get some error measures.
-
-        Returns:
-            dict: a dictionary with (d,*) matrices with interesting error measures.
-                The first dimension of every return matrix is of length d (for d problems). The other dimensions may
-                vary.
+            ndarray: (d,) matrix with for every problem d, the objective value
         """
         raise NotImplementedError()
 
@@ -130,8 +119,8 @@ class SimpleOptimizationResult(OptimizationResults):
 
         Args:
             model (mot.model_interfaces.OptimizeModelInterface): the model we used to get these results
-            optimization_results (ndarray): a (d, p) matrix with for every d problems and p parameters the estimated
-                value
+            optimization_results (ndarray): a (d, p) matrix with for every d problems the estimated value for
+                every parameter p
             return_codes (ndarray): the return codes as a (d,) vector for every d problems
         """
         self._model = model
@@ -145,15 +134,8 @@ class SimpleOptimizationResult(OptimizationResults):
     def get_return_codes(self):
         return self._return_codes
 
-    def get_residuals(self):
-        return np.nan_to_num(ResidualCalculator().calculate(self._model, self._optimization_results))
-
-    def get_error_measures(self):
-        if self._error_measures is None:
-            self._error_measures = ErrorMeasures(
-                double_precision=self._model.double_precision).calculate(self.get_residuals())
-        self._error_measures = {k: np.nan_to_num(v) for k, v in self._error_measures.items()}
-        return self._error_measures
+    def get_objective_values(self):
+        return np.nan_to_num(ObjectiveFunctionCalculator().calculate(self._model, self._optimization_results))
 
 
 class AbstractParallelOptimizer(AbstractOptimizer):

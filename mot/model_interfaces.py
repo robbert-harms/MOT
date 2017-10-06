@@ -128,18 +128,6 @@ class OptimizeModelInterface(object):
         """
         raise NotImplementedError()
 
-    def get_residual_per_observation_function(self):
-        """Get a function that can calculate the residual for every measurement instance.
-
-        Returns:
-            mot.utils.NamedCLFunction: A CL function with signature:
-
-                .. code-block:: c
-
-                    double <func_name>(mot_data_struct* data, const mot_float_type* const x, uint observation_index);
-        """
-        raise NotImplementedError()
-
     def get_initial_parameters(self):
         """Get a two dimensional matrix with the initial parameters (starting points) for every voxel.
 
