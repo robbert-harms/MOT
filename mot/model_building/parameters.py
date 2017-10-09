@@ -26,7 +26,25 @@ class CurrentObservationParam(SimpleCLFunctionParameter):
         super(CurrentObservationParam, self).__init__(SimpleCLDataType.from_string('mot_float_type'), name)
 
 
-class StaticMapParameter(SimpleCLFunctionParameter):
+class InputDataParameter(SimpleCLFunctionParameter):
+
+    def __init__(self, data_type, name, value):
+        """These parameters signal are meant to be contain data loaded from the input data object.
+
+        In contrast to free parameters which are being optimized (or fixed to values), these parameters are
+        meant to be loaded from the input data. They can contain scalars, vectors or matrices with values
+        to use for each problem instance and each data point.
+
+        Args:
+            data_type (mot.cl_data_type.SimpleCLDataType): the data type expected by this parameter
+            name (str): The name of this parameter
+            value (double or ndarray): The value used if no value is given in the input data.
+        """
+        super(InputDataParameter, self).__init__(data_type, name)
+        self.value = value
+
+
+class StaticMapParameter(InputDataParameter):
 
     def __init__(self, data_type, name, value):
         """This parameter is meant for static data that is different per problem.
@@ -42,18 +60,21 @@ class StaticMapParameter(SimpleCLFunctionParameter):
             name (str): The name of this parameter
             value (double or ndarray): The value used if no value is given in the input data.
         """
-        super(StaticMapParameter, self).__init__(data_type, name)
+        super(StaticMapParameter, self).__init__(data_type, name, value)
         self.value = value
 
 
-class ProtocolParameter(SimpleCLFunctionParameter):
-    """A protocol data parameter indicates that similar named parameters may be linked together.
+class ProtocolParameter(InputDataParameter):
 
-    When multiple functions in a composite model share a protocol parameter with the same name, the model
-    builder will only load the data once and link the identical named parameters to the same value.
+    def __init__(self, data_type, name):
+        """A protocol data parameter indicates that similar named parameters may be linked together.
 
-    The value for a protocol parameter is loaded from the input data.
-    """
+        When multiple functions in a composite model share a protocol parameter with the same name, the model
+        builder will only load the data once and link the identical named parameters to the same value.
+
+        The value for a protocol parameter is loaded from the input data.
+        """
+        super(ProtocolParameter, self).__init__(data_type, name, None)
 
 
 class FreeParameter(SimpleCLFunctionParameter):
