@@ -87,15 +87,23 @@ def convert_data_to_dtype(data, data_type, mot_float_type='float'):
         data = scalar_dtype(data)
 
     if data_type.is_vector_type:
-        if len(data.shape) < 2:
-            data = data[..., None]
-
+        shape = data.shape
         dtype = ctype_to_dtype(data_type, mot_float_type.raw_data_type)
+        ve = np.zeros(shape[:-1], dtype=dtype)
 
-        ve = np.zeros((data.shape[0], 1), dtype=dtype, order='C')
-        for i in range(data.shape[0]):
-            for j in range(data.shape[1]):
-                ve[i, 0][j] = data[i, j]
+        if len(shape) == 1:
+            for vector_ind in range(shape[0]):
+                ve[0][vector_ind] = data[vector_ind]
+        elif len(shape) == 2:
+            for i in range(data.shape[0]):
+                for vector_ind in range(data.shape[1]):
+                    ve[i][vector_ind] = data[i, vector_ind]
+        elif len(shape) == 3:
+            for i in range(data.shape[0]):
+                for j in range(data.shape[1]):
+                    for vector_ind in range(data.shape[2]):
+                        ve[i, j][vector_ind] = data[i, j, vector_ind]
+
         return np.require(ve, requirements=['C', 'A', 'O'])
     return np.require(data, scalar_dtype, ['C', 'A', 'O'])
 
@@ -539,6 +547,16 @@ class KernelInputData(object):
         """
         raise NotImplementedError()
 
+    def include_in_kernel_call(self):
+        """Check if this data needs to be included in the kernel arguments.
+
+        Returns:
+            boolean: if the corresponding data needs to be included in the kernel call arguments. If set to False
+                we typically expect the data to be inlined in the kernel. If set to True, we add the data to the
+                kernel arguments.
+        """
+        raise NotImplementedError()
+
 
 class KernelInputScalar(KernelInputData):
 
@@ -572,10 +590,24 @@ class KernelInputScalar(KernelInputData):
         return '{} {}'.format(dtype_to_ctype(self._value.dtype), name)
 
     def get_struct_init_string(self, name, problem_id_substitute):
-        return name
+        mot_dtype = SimpleCLDataType.from_string(dtype_to_ctype(self._value.dtype))
+        if np.isinf(self._value):
+            assignment = 'INFINITY'
+        elif mot_dtype.is_vector_type:
+            vector_length = mot_dtype.vector_length
+            values = [str(val) for val in self._value[0]]
+            if len(values) < vector_length:
+                values.extend([str(0)] * (vector_length - len(values)))
+            assignment = '(' + dtype_to_ctype(self._value.dtype) + ')(' + ', '.join(values) + ')'
+        else:
+            assignment = str(self._value)
+        return assignment
 
     def get_kernel_inputs(self, cl_context, workgroup_size):
         return self._value
+
+    def include_in_kernel_call(self):
+        return False
 
 
 class KernelInputLocalMemory(KernelInputData):
@@ -617,6 +649,9 @@ class KernelInputLocalMemory(KernelInputData):
 
     def get_kernel_inputs(self, cl_context, workgroup_size):
         return cl.LocalMemory(self._size_func(workgroup_size))
+
+    def include_in_kernel_call(self):
+        return True
 
 
 class KernelInputBuffer(KernelInputData):
@@ -714,6 +749,9 @@ class KernelInputBuffer(KernelInputData):
             flags = cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR
         return cl.Buffer(cl_context, flags, hostbuf=self._data)
 
+    def include_in_kernel_call(self):
+        return True
+
 
 class KernelInputDataManager(object):
 
@@ -725,6 +763,40 @@ class KernelInputDataManager(object):
         """
         self._kernel_input_dict = kernel_input_dict or []
         self._input_order = list(sorted(self._kernel_input_dict))
+        self._data_duplicates = self.get_duplicate_items()
+
+    def get_duplicate_items(self):
+        """Get a list of duplicate kernel inputs such that we don't load duplicate information twice.
+
+        This will search for duplicate elements that are to be loaded in the kernel call, point to exactly the
+        same memory and are defined to be write only.
+
+        Returns:
+            dict: a mapping from duplicate inputs (by name) to the only copy of the duplicate input object we load.
+        """
+        duplicates = {}
+
+        for index in range(len(self._input_order)):
+            key = self._input_order[index]
+            kernel_input = self._kernel_input_dict[key]
+            data = kernel_input.get_data()
+
+            if not kernel_input.include_in_kernel_call() or kernel_input.read_data_back:
+                continue
+
+            if key not in duplicates:
+                for other_index in range(index + 1, len(self._input_order)):
+                    other_key = self._input_order[other_index]
+                    other_kernel_input = self._kernel_input_dict[other_key]
+                    other_data = other_kernel_input.get_data()
+
+                    if not other_kernel_input.include_in_kernel_call() or other_kernel_input.read_data_back:
+                        continue
+
+                    if np.array_equal(data, other_data):
+                        duplicates[other_key] = key
+
+        return duplicates
 
     def get_struct_definition(self):
         """Return the structure definition of the mot_data_struct.
@@ -763,7 +835,8 @@ class KernelInputDataManager(object):
         definitions = []
         for name in self._input_order:
             kernel_input_data = self._kernel_input_dict[name]
-            definitions.append(kernel_input_data.get_kernel_argument_declaration(name))
+            if kernel_input_data.include_in_kernel_call() and name not in self._data_duplicates:
+                definitions.append(kernel_input_data.get_kernel_argument_declaration(name))
         return definitions
 
     def get_struct_init_string(self, problem_id_substitute):
@@ -782,6 +855,10 @@ class KernelInputDataManager(object):
 
         definitions = []
         for name in self._input_order:
+
+            if name in self._data_duplicates:
+                name = self._data_duplicates[name]
+
             kernel_input_data = self._kernel_input_dict[name]
             definitions.append(kernel_input_data.get_struct_init_string(name, problem_id_substitute))
 
@@ -798,8 +875,10 @@ class KernelInputDataManager(object):
             list of kernel input elements (buffers, local memory object, scalars, etc.)
         """
         kernel_inputs = []
-        for data in [self._kernel_input_dict[key] for key in self._input_order]:
-            kernel_inputs.append(data.get_kernel_inputs(cl_context, workgroup_size))
+        for name in self._input_order:
+            data = self._kernel_input_dict[name]
+            if data.include_in_kernel_call() and name not in self._data_duplicates:
+                kernel_inputs.append(data.get_kernel_inputs(cl_context, workgroup_size))
         return kernel_inputs
 
     def get_scalar_arg_dtypes(self):
@@ -809,10 +888,14 @@ class KernelInputDataManager(object):
             list: for every kernel input element either None if the data is a buffer or the numpy data type if
                 if is a scalar.
         """
-        dtypes = [None] * len(self._kernel_input_dict)
-        for ind, data in enumerate([self._kernel_input_dict[key] for key in self._input_order]):
-            if data.is_scalar:
-                dtypes[ind] = data.dtype
+        dtypes = []
+        for ind, name in enumerate(self._input_order):
+            data = self._kernel_input_dict[name]
+            if data.include_in_kernel_call() and name not in self._data_duplicates:
+                if data.is_scalar:
+                    dtypes.append(data.dtype)
+                else:
+                    dtypes.append(None)
         return dtypes
 
     def get_items_to_write_out(self):
@@ -823,9 +906,12 @@ class KernelInputDataManager(object):
                 and the index is the generated buffer index of that item.
         """
         items = []
-        for ind, name in enumerate(self._input_order):
+        input_index = 0
+        for name in self._input_order:
             if self._kernel_input_dict[name].read_data_back:
-                items.append([ind, name])
+                items.append([input_index, name])
+            if self._kernel_input_dict[name].include_in_kernel_call() and name not in self._data_duplicates:
+                input_index += 1
         return items
 
 

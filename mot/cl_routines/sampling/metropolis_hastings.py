@@ -197,6 +197,7 @@ class _MHWorker(Worker):
 
         self._model = model
         self._data_info = self._model.get_kernel_data()
+        self._data_struct_manager = KernelInputDataManager(self._data_info)
         self._current_chain_position = current_chain_position
         self._nmr_params = current_chain_position.shape[1]
         self._samples = samples
@@ -225,6 +226,10 @@ class _MHWorker(Worker):
 
         data_buffers, readout_items = self._get_buffers(workgroup_size)
 
+        kernel_func = self._kernel.sample
+        scalar_args = [None] * (5 + len(self._mh_state_dict))
+        scalar_args.extend(self._data_struct_manager.get_scalar_arg_dtypes())
+
         if self._in_burnin:
             nmr_iterations = self._nmr_samples
         else:
@@ -235,8 +240,11 @@ class _MHWorker(Worker):
                                    hostbuf=item)
                 data_buffers.append(buffer)
                 readout_items.append([buffer, item])
+                scalar_args.append(None)
 
-        self._kernel.sample(
+        kernel_func.set_scalar_arg_dtypes(scalar_args)
+
+        kernel_func(
             self._cl_run_context.queue,
             (int(nmr_problems * workgroup_size),),
             (int(workgroup_size),),
@@ -277,10 +285,11 @@ class _MHWorker(Worker):
             readout_items.append([buffer, host_array])
 
         data_buffers.append(cl.LocalMemory(workgroup_size * np.dtype('double').itemsize))
-
-        for data in [self._data_info[key] for key in sorted(self._data_info)]:
-            data_buffers.append(cl.Buffer(self._cl_run_context.context,
-                                          cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data.get_data()))
+        data_buffers.extend(self._data_struct_manager.get_kernel_inputs(self._cl_run_context.context, workgroup_size))
+        #
+        # for data in [self._data_info[key] for key in sorted(self._data_info)]:
+        #     data_buffers.append(cl.Buffer(self._cl_run_context.context,
+        #                                   cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data.get_data()))
 
         return data_buffers, readout_items
 

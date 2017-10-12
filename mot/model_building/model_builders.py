@@ -10,12 +10,13 @@ from mot.cl_parameter import SimpleCLFunctionParameter
 from mot.cl_routines.mapping.codec_runner import CodecRunner
 from mot.cl_routines.sampling.metropolis_hastings import DefaultMHState
 from mot.model_building.model_functions import Weight, ModelCLFunction
-from mot.model_building.parameters import CurrentObservationParam, StaticMapParameter, ProtocolParameter, FreeParameter
+from mot.model_building.parameters import CurrentObservationParam, StaticMapParameter, ProtocolParameter, FreeParameter, \
+    InputDataParameter
 from mot.model_building.parameter_functions.dependencies import SimpleAssignment, AbstractParameterDependency
 from mot.model_building.utils import ParameterCodec
 from mot.model_interfaces import OptimizeModelInterface, SampleModelInterface
 from mot.utils import is_scalar, all_elements_equal, get_single_value, SimpleNamedCLFunction, convert_data_to_dtype, \
-    KernelInputBuffer, get_class_that_defined_method
+    KernelInputBuffer, get_class_that_defined_method, KernelInputScalar
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-03-14"
@@ -783,8 +784,8 @@ class OptimizeModelBuilder(ModelBuilder):
         The resolution order is as follows, with a latter stage taking preference over an earlier stage
 
         1. the value defined in the parameter definition
-        2. the <param_name> in the static maps of the input data
-        3. the <model_name>.<param_name> in the static maps of the input data
+        2. the <param_name> in the input data
+        3. the <model_name>.<param_name> in the input data
         4. the <param_name> in the provided initial values
         5. the <model_name>.<param_name> in the provided initial values
         6. the <param_name> in the provided fixed values
@@ -805,10 +806,11 @@ class OptimizeModelBuilder(ModelBuilder):
 
             if self._input_data.get_input_data(parameter.name) is not None:
                 value = self._input_data.get_input_data(parameter.name)
+
             if self._input_data.get_input_data('{}.{}'.format(model.name, parameter.name)) is not None:
                 value = self._input_data.get_input_data('{}.{}'.format(model.name, parameter.name))
 
-            return value
+            return np.squeeze(value)
 
         param_data = resolve_value()
 
@@ -818,8 +820,9 @@ class OptimizeModelBuilder(ModelBuilder):
         if is_scalar(param_data):
             return get_single_value(param_data)
 
-        if problems_to_analyze is not None:
-            return param_data[problems_to_analyze, ...]
+        if param_data.shape[0] == self._input_data.nmr_problems:
+            if problems_to_analyze is not None:
+                return param_data[problems_to_analyze, ...]
 
         return param_data
 
@@ -911,7 +914,16 @@ class OptimizeModelBuilder(ModelBuilder):
 
     def _get_protocol_data(self, problems_to_analyze):
         return_data = {}
+
+        def get_duplicate_key(value):
+            for key, input_buffer in return_data.items():
+                if np.array_equal(input_buffer.get_data(), value):
+                    return key
+            return None
+
         for m, p in self._model_functions_info.get_model_parameter_list():
+            param_name = '{}.{}'.format(m.name, p.name).replace('.', '_')
+
             if isinstance(p, ProtocolParameter):
                 value = convert_data_to_dtype(self._input_data.get_input_data(p.name),
                                               p.data_type, self._get_mot_float_type())
@@ -1477,15 +1489,6 @@ class CompositeModelFunction(SimpleCLFunction):
             else:
                 model_expression += '(' + tree + ');'
             return model_expression
-
-        def build_parameters():
-            params = self._get_model_function_parameters()
-            cl_parameters = []
-
-            for m, p, name, _ in params:
-                cl_type = p.data_type.declaration_type
-                cl_parameters.append('{} {}'.format(cl_type, name))
-            return cl_parameters
 
         return_str = 'return ' + build_model_expression()
         return dedent(return_str.replace('\t', '    '))

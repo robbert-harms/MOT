@@ -179,16 +179,13 @@ class AbstractParallelOptimizer(AbstractOptimizer):
 
         self._logger.info('Finished optimization preliminaries')
         self._logger.info('Starting optimization')
-
         workers = self._create_workers(self._get_worker_generator(self, model, parameters,
                                                                   nmr_params, return_codes,
                                                                   self._optimizer_settings))
         self.load_balancer.process(workers, model.get_nmr_problems())
-
         self._logger.info('Finished optimization')
 
         parameters = model.finalize_optimized_parameters(parameters)
-
         return SimpleOptimizationResult(model, parameters, return_codes)
 
     def _get_worker_generator(self, *args):
