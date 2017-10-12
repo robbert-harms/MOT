@@ -10,8 +10,7 @@ from mot.cl_parameter import SimpleCLFunctionParameter
 from mot.cl_routines.mapping.codec_runner import CodecRunner
 from mot.cl_routines.sampling.metropolis_hastings import DefaultMHState
 from mot.model_building.model_functions import Weight, ModelCLFunction
-from mot.model_building.parameters import CurrentObservationParam, StaticMapParameter, ProtocolParameter, FreeParameter, \
-    InputDataParameter
+from mot.model_building.parameters import CurrentObservationParam, StaticMapParameter, ProtocolParameter, FreeParameter
 from mot.model_building.parameter_functions.dependencies import SimpleAssignment, AbstractParameterDependency
 from mot.model_building.utils import ParameterCodec
 from mot.model_interfaces import OptimizeModelInterface, SampleModelInterface
