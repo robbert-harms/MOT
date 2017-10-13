@@ -30,6 +30,23 @@ class ParameterSampleStatistics(object):
         """
         raise NotImplementedError()
 
+    def get_distance_from_expected(self, samples, expected_value):
+        """Get the distance from the expected value according to this sampling statistic.
+
+        This is used in the computation of the sample covariance matrix. For most implementations this is simply
+        ``samples - mean``. For circular distributions this might be different.
+
+        Args:
+            samples (ndarray): The 2d matrix (p, s) with for p problems, s samples
+            expected_value (ndarray): A 1d array with the expected values for each of the p problems.
+                This should be computed using :meth:`get_statistics`.
+
+        Returns:
+            ndarray: a 2d array of the same size as the samples, containing the distances to the mean for
+                the given parameter.
+        """
+        raise NotImplementedError()
+
 
 class GaussianFit(ParameterSampleStatistics):
     """Calculates the mean and the standard deviation of the given samples.
@@ -37,28 +54,41 @@ class GaussianFit(ParameterSampleStatistics):
     The standard deviation is calculated with a degree of freedom of one, meaning we are returning the unbiased
     estimator.
     """
-
     def get_statistics(self, samples, lower_bounds, upper_bounds):
         return SimpleSamplingStatistics(np.mean(samples, axis=1), {'std': np.std(samples, axis=1, ddof=1)})
+
+    def get_distance_from_expected(self, samples, expected_value):
+        return samples - expected_value[:, None]
 
 
 class CircularGaussianFit(ParameterSampleStatistics):
 
-    def __init__(self, max_angle=np.pi, min_angle=0):
+    def __init__(self, high=np.pi, low=0):
         """Compute the circular mean for samples in a range
 
         Args:
-            max_angle (float): The maximum angle used in the calculations
-            min_angle (float): The minimum wrapped angle
+            high (float): The maximum wrap point
+            low (float): The minimum wrap point
         """
         super(CircularGaussianFit, self).__init__()
-        self.max_angle = max_angle
-        self.min_angle = min_angle
+        self.high = high
+        self.low = low
 
     def get_statistics(self, samples, lower_bounds, upper_bounds):
         from mot.cl_routines.mapping.circular_gaussian_fit import CircularGaussianFit
-        mean, std = CircularGaussianFit().calculate(samples, high=self.max_angle, low=self.min_angle)
+        mean, std = CircularGaussianFit().calculate(samples, high=self.high, low=self.low)
         return SimpleSamplingStatistics(mean, {'std': std})
+
+    def get_distance_from_expected(self, samples, expected_value):
+        distance_direct = samples - expected_value[:, None]
+
+        distance_circular_chooser = expected_value[:, None] > samples
+        distance_circular = \
+            distance_circular_chooser * ((self.high - expected_value[:, None]) + (samples - self.low)) \
+            - np.logical_not(distance_circular_chooser) * ((self.high - samples) + (expected_value[:, None] - self.low))
+
+        use_circular = np.abs(distance_circular) < np.abs(distance_direct)
+        return use_circular * distance_circular + np.logical_not(use_circular) * distance_direct
 
 
 class TruncatedGaussianFit(ParameterSampleStatistics):
@@ -74,6 +104,9 @@ class TruncatedGaussianFit(ParameterSampleStatistics):
                 This can improve accuracy when the data is in a very high or very low range.
         """
         self._scaling_factor = scaling_factor
+
+    def get_distance_from_expected(self, samples, expected_value):
+        return samples - expected_value[:, None]
 
     def get_statistics(self, samples, lower_bounds, upper_bounds):
 

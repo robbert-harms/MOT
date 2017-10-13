@@ -102,8 +102,6 @@ class OptimizeModelInterface(object):
         The returned function should not do any error calculations,
         it should merely return the result of evaluating the model for the given parameters.
 
-        For implementers: please make sure the sign of the return value is correct (namely, positive).
-
         Returns:
             mot.utils.NamedCLFunction: a named CL function with the following signature:
 
