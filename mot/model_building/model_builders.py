@@ -143,7 +143,7 @@ class OptimizeModelBuilder(ModelBuilder):
             RuntimeError: if some of the required items are not set prior to building.
         """
         if self._input_data is None:
-            raise RuntimeError('Problem data is not set, can not build the model.')
+            raise RuntimeError('Input data is not set, can not build the model.')
 
         return SimpleOptimizeModel(problems_to_analyze,
                                    self.name,
@@ -914,15 +914,7 @@ class OptimizeModelBuilder(ModelBuilder):
     def _get_protocol_data(self, problems_to_analyze):
         return_data = {}
 
-        def get_duplicate_key(value):
-            for key, input_buffer in return_data.items():
-                if np.array_equal(input_buffer.get_data(), value):
-                    return key
-            return None
-
         for m, p in self._model_functions_info.get_model_parameter_list():
-            param_name = '{}.{}'.format(m.name, p.name).replace('.', '_')
-
             if isinstance(p, ProtocolParameter):
                 value = convert_data_to_dtype(self._input_data.get_input_data(p.name),
                                               p.data_type, self._get_mot_float_type())

@@ -47,7 +47,6 @@ def multivariate_ess(samples, batch_size_generator=None):
         p.close()
         p.join()
         return return_data
-
     except OSError:
         return np.array(list(map(_MultivariateESSMultiProcessing(batch_size_generator),
                                  samples_generator())))

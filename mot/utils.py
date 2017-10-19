@@ -456,6 +456,31 @@ def split_in_batches(nmr_elements, max_batch_size):
     return batch_sizes
 
 
+def get_class_that_defined_method(method):
+    """Get the class that defined the given method.
+
+    This is taken from one of the answers of:
+    ``https://stackoverflow.com/questions/3589311/get-defining-class-of-unbound-method-object-in-python-3/25959545``
+
+    Args:
+        method (func): a python function or method
+
+    Returns:
+        cls: the class that defined the given method
+    """
+    if inspect.ismethod(method):
+        for cls in inspect.getmro(method.__self__.__class__):
+            if cls.__dict__.get(method.__name__) is method:
+                return cls
+        method = method.__func__
+    if inspect.isfunction(method):
+        cls = getattr(inspect.getmodule(method),
+                      method.__qualname__.split('.<locals>', 1)[0].rsplit('.', 1)[0])
+        if isinstance(cls, type):
+            return cls
+    return getattr(method, '__objclass__', None)
+
+
 class KernelInputData(object):
 
     @property
@@ -470,20 +495,25 @@ class KernelInputData(object):
         raise NotImplementedError()
 
     @property
-    def dtype(self):
-        """Get the numpy data type of this input data.
-
-        Returns:
-             numpy dtype: the numpy data type of this data
-        """
-        raise NotImplementedError()
-
-    @property
     def read_data_back(self):
         """Check if this input data should be read back after kernel execution.
 
         Returns:
             boolean: if, after kernel launch, the data should be mapped from the compute device back to host memory.
+        """
+        raise NotImplementedError()
+
+    def get_scalar_arg_dtype(self):
+        """Get the numpy data type we should report in the kernel call for this input element.
+
+        If we are inserting scalars in the kernel we need to provide the CL runtime with the correct data type
+        of the function.
+
+        Args:
+            mot_float_dtype (dtype): the data type of the mot_float_type
+
+        Returns:
+            dtype: the numpy data type for this element, or None if this is not a scalar.
         """
         raise NotImplementedError()
 
@@ -573,12 +603,11 @@ class KernelInputScalar(KernelInputData):
         return True
 
     @property
-    def dtype(self):
-        return self._value.dtype
-
-    @property
     def read_data_back(self):
         return False
+
+    def get_scalar_arg_dtype(self):
+        return self._value.dtype
 
     def get_data(self):
         return self._value
@@ -628,12 +657,11 @@ class KernelInputLocalMemory(KernelInputData):
         return False
 
     @property
-    def dtype(self):
-        return self._dtype
-
-    @property
     def read_data_back(self):
         return False
+
+    def get_scalar_arg_dtype(self):
+        return None
 
     def get_data(self):
         return None
@@ -735,6 +763,9 @@ class KernelInputBuffer(KernelInputData):
     def get_struct_init_string(self, name, problem_id_substitute):
         offset = self._offset_str.replace('{problem_id}', problem_id_substitute)
         return name + ' + ' + offset
+
+    def get_scalar_arg_dtype(self):
+        return None
 
     def get_data(self):
         return self._data
@@ -892,10 +923,7 @@ class KernelInputDataManager(object):
         for ind, name in enumerate(self._input_order):
             data = self._kernel_input_dict[name]
             if data.include_in_kernel_call() and name not in self._data_duplicates:
-                if data.is_scalar:
-                    dtypes.append(data.dtype)
-                else:
-                    dtypes.append(None)
+                dtypes.append(data.get_scalar_arg_dtype())
         return dtypes
 
     def get_items_to_write_out(self):
@@ -913,28 +941,3 @@ class KernelInputDataManager(object):
             if self._kernel_input_dict[name].include_in_kernel_call() and name not in self._data_duplicates:
                 input_index += 1
         return items
-
-
-def get_class_that_defined_method(method):
-    """Get the class that defined the given method.
-
-    This is taken from one of the answers of:
-    ``https://stackoverflow.com/questions/3589311/get-defining-class-of-unbound-method-object-in-python-3/25959545``
-
-    Args:
-        method (func): a python function or method
-
-    Returns:
-        cls: the class that defined the given method
-    """
-    if inspect.ismethod(method):
-        for cls in inspect.getmro(method.__self__.__class__):
-            if cls.__dict__.get(method.__name__) is method:
-                return cls
-        method = method.__func__
-    if inspect.isfunction(method):
-        cls = getattr(inspect.getmodule(method),
-                      method.__qualname__.split('.<locals>', 1)[0].rsplit('.', 1)[0])
-        if isinstance(cls, type):
-            return cls
-    return getattr(method, '__objclass__', None)

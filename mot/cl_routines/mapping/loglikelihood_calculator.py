@@ -1,6 +1,6 @@
 import numpy as np
 from mot.cl_routines.mapping.run_procedure import RunProcedure
-from ...utils import KernelInputBuffer, KernelInputScalar, SimpleNamedCLFunction, KernelInputLocalMemory, dtype_to_ctype
+from ...utils import KernelInputBuffer, KernelInputScalar, SimpleNamedCLFunction, KernelInputLocalMemory
 from ...cl_routines.base import CLRoutine
 
 
