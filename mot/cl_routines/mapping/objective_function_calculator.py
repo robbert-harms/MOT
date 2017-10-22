@@ -1,6 +1,6 @@
 import numpy as np
 from mot.cl_routines.mapping.run_procedure import RunProcedure
-from ...utils import KernelInputBuffer, KernelInputScalar, SimpleNamedCLFunction, KernelInputLocalMemory, dtype_to_ctype
+from ...utils import KernelInputBuffer, SimpleNamedCLFunction, KernelInputLocalMemory
 from ...cl_routines.base import CLRoutine
 
 
@@ -61,16 +61,18 @@ class ObjectiveFunctionCalculator(CLRoutine):
                 ulong local_id = get_local_id(0);
                 objective_value_tmp[local_id] = 0;
                 uint workgroup_size = get_local_size(0);
+                uint elements_for_workitem = ceil(''' + str(model.get_nmr_inst_per_problem()) + ''' 
+                                                  / (mot_float_type)workgroup_size);
                 
-                for(uint i = 0; i < ceil(''' + str(model.get_nmr_inst_per_problem()) + ''' 
-                                         / (mot_float_type)workgroup_size); i++){
-
+                if(workgroup_size * (elements_for_workitem - 1) + local_id 
+                        >= ''' + str(model.get_nmr_inst_per_problem()) + '''){
+                    elements_for_workitem -= 1;
+                }
+                
+                for(uint i = 0; i < elements_for_workitem; i++){
                     observation_ind = i * workgroup_size + local_id;
-                    
-                    if(observation_ind < ''' + str(model.get_nmr_inst_per_problem()) + '''){
-                        objective_value_tmp[local_id] += ''' + objective_func.get_cl_function_name() + '''(
-                            data, x, observation_ind);
-                    }
+                    objective_value_tmp[local_id] += ''' + objective_func.get_cl_function_name() + '''(
+                        data, x, observation_ind);
                 }
 
                 barrier(CLK_LOCAL_MEM_FENCE);

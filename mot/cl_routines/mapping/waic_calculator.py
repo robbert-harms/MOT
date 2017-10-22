@@ -217,22 +217,26 @@ class _LLWorker(Worker):
                     ulong obs_ind = (ulong)(get_global_id(0) / get_local_size(0));
                     ulong local_id = get_local_id(0);
                     uint workgroup_size = get_local_size(0);
-
+                    uint elements_for_workitem = ceil(''' + str(self._nmr_samples) + ''' 
+                                                      / (mot_float_type)workgroup_size);
+                
+                    if(workgroup_size * (elements_for_workitem - 1) + local_id >= ''' + str(self._nmr_samples) + '''){
+                        elements_for_workitem -= 1;
+                    }
+                
                     ulong sample_ind;
 
                     double ll;
                     double max_ll = -HUGE_VAL;
                     double mean_sum = 0;
 
-                    for(uint i = 0; i < ceil(''' + str(self._nmr_samples) + ''' / (mot_float_type)workgroup_size); i++){
+                    for(uint i = 0; i < elements_for_workitem; i++){
                         sample_ind = i * workgroup_size + local_id;
+                        
+                        ll = lls[obs_ind * ''' + str(self._nmr_samples) + ''' + sample_ind];
 
-                        if(sample_ind < ''' + str(self._nmr_samples) + '''){
-                            ll = lls[obs_ind * ''' + str(self._nmr_samples) + ''' + sample_ind];
-
-                            max_ll = max(max_ll, ll);
-                            mean_sum += ll;
-                        }
+                        max_ll = max(max_ll, ll);
+                        mean_sum += ll;
                     }
                     lse_tmp[local_id] = max_ll;
                     var_tmp[local_id] = mean_sum;

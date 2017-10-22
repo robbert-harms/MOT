@@ -286,10 +286,6 @@ class _MHWorker(Worker):
 
         data_buffers.append(cl.LocalMemory(workgroup_size * np.dtype('double').itemsize))
         data_buffers.extend(self._data_struct_manager.get_kernel_inputs(self._cl_run_context.context, workgroup_size))
-        #
-        # for data in [self._data_info[key] for key in sorted(self._data_info)]:
-        #     data_buffers.append(cl.Buffer(self._cl_run_context.context,
-        #                                   cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data.get_data()))
 
         return data_buffers, readout_items
 
@@ -586,19 +582,22 @@ class _MCMCKernelBuilder(object):
                 ulong local_id = get_local_id(0);
                 log_likelihood_tmp[local_id] = 0;
                 uint workgroup_size = get_local_size(0);
-
+                uint elements_for_workitem = ceil(NMR_INST_PER_PROBLEM / (mot_float_type)workgroup_size);
+                
+                if(workgroup_size * (elements_for_workitem - 1) + local_id >= NMR_INST_PER_PROBLEM){
+                    elements_for_workitem -= 1;
+                }
+                
                 mot_float_type x_private[''' + str(self._nmr_params) + '''];
                 for(uint i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                     x_private[i] = x_local[i];
                 }
 
-                for(uint i = 0; i < ceil(NMR_INST_PER_PROBLEM / (mot_float_type)workgroup_size); i++){
+                for(uint i = 0; i < elements_for_workitem; i++){
                     observation_ind = i * workgroup_size + local_id;
-
-                    if(observation_ind < NMR_INST_PER_PROBLEM){
-                        log_likelihood_tmp[local_id] += ''' + ll_func.get_cl_function_name() + '''(
-                            data, x_private, observation_ind);
-                    }
+                    
+                    log_likelihood_tmp[local_id] += ''' + ll_func.get_cl_function_name() + '''(
+                        data, x_private, observation_ind);
                 }
 
                 barrier(CLK_LOCAL_MEM_FENCE);
