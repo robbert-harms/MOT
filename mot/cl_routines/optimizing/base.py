@@ -247,7 +247,6 @@ class AbstractParallelOptimizerWorker(Worker):
                                        cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
                                        hostbuf=self._return_codes)
         all_buffers.append(return_code_buffer)
-
         all_buffers.extend(self._data_struct_manager.get_kernel_inputs(self._cl_run_context.context, 1))
 
         return all_buffers, parameters_buffer, return_code_buffer

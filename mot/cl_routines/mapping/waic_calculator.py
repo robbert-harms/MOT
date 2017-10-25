@@ -117,8 +117,8 @@ class _LLWorker(Worker):
         buffers = copy(self._ll_calculating_buffers)
         buffers.insert(0, np.uint32(self._problem_index))
 
-        arg_dtypes = [None] * len(buffers)
-        arg_dtypes[0] = np.uint32
+        arg_dtypes = [np.uint32, None, None]
+        arg_dtypes.extend(self._data_struct_manager.get_scalar_arg_dtypes())
 
         kernel = self._ll_calculating_kernel.run_kernel
         kernel.set_scalar_arg_dtypes(arg_dtypes)
@@ -168,10 +168,7 @@ class _LLWorker(Worker):
                                    hostbuf=self._samples_per_voxel)
 
         ll_calculating_buffers = [samples_buffer, ll_buffer]
-
-        for data in [self._data_info[key] for key in sorted(self._data_info)]:
-            ll_calculating_buffers.append(cl.Buffer(self._cl_run_context.context,
-                                          cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=data.get_data()))
+        ll_calculating_buffers.extend(self._data_struct_manager.get_kernel_inputs(self._cl_run_context.context, 1))
 
         return ll_calculating_buffers, ll_buffer, lse_buffer, variances_buffer
 
