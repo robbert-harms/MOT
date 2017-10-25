@@ -1,5 +1,5 @@
 from mot.cl_routines.mapping.run_procedure import RunProcedure
-from ...utils import SimpleNamedCLFunction, KernelInputBuffer, KernelInputScalar
+from ...utils import SimpleNamedCLFunction, KernelInputArray, KernelInputScalar, KernelInputAllocatedOutput
 from ...cl_routines.base import CLRoutine
 import numpy as np
 
@@ -30,26 +30,17 @@ class GaussianFit(CLRoutine):
         Returns:
             tuple: mean and deviation arrays
         """
-        double_precision = samples.dtype == np.float64
-
-        np_dtype = np.float32
-        if double_precision:
-            np_dtype = np.float64
-
-        means = np.zeros(samples.shape[0], dtype=np_dtype, order='C')
-        deviations = np.zeros(samples.shape[0], dtype=np_dtype, order='C')
-        samples = np.require(samples, np_dtype, requirements=['C', 'A', 'O'])
-
-        all_kernel_data = {'samples': KernelInputBuffer(samples),
-                           'means': KernelInputBuffer(means, is_readable=False, is_writable=True),
-                           'deviations': KernelInputBuffer(deviations, is_readable=False, is_writable=True),
-                           'nmr_samples': KernelInputScalar(samples.shape[1]),
-                           'ddof': KernelInputScalar(ddof)
-                           }
+        all_kernel_data = {
+            'samples': KernelInputArray(samples, ctype='mot_float_type'),
+            'means': KernelInputAllocatedOutput(samples.shape[0], 'mot_float_type', is_readable=False),
+            'deviations': KernelInputAllocatedOutput(samples.shape[0], 'mot_float_type', is_readable=False),
+            'nmr_samples': KernelInputScalar(samples.shape[1]),
+            'ddof': KernelInputScalar(ddof)
+        }
 
         runner = RunProcedure(**self.get_cl_routine_kwargs())
         runner.run_procedure(self._get_wrapped_function(return_variance), all_kernel_data, samples.shape[0],
-                             double_precision=double_precision)
+                             double_precision=(samples.dtype == np.float64))
 
         return all_kernel_data['means'].get_data(), all_kernel_data['deviations'].get_data()
 

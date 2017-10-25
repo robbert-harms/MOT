@@ -2,6 +2,7 @@ from ...utils import get_float_type_def, KernelInputDataManager
 from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
 import pyopencl as cl
+import numpy as np
 
 __author__ = 'Robbert Harms'
 __date__ = '2017-08-31'
@@ -51,7 +52,11 @@ class _ProcedureWorker(Worker):
         self._double_precision = double_precision
         self._use_local_reduction = use_local_reduction
 
-        self._data_struct_manager = KernelInputDataManager(self._kernel_data)
+        mot_float_dtype = np.float32
+        if double_precision:
+            mot_float_dtype = np.float64
+
+        self._data_struct_manager = KernelInputDataManager(self._kernel_data, mot_float_dtype)
         self._kernel = self._build_kernel(self._get_kernel_source(), compile_flags)
         self._workgroup_size = self._kernel.run_procedure.get_work_group_info(
             cl.kernel_work_group_info.PREFERRED_WORK_GROUP_SIZE_MULTIPLE,

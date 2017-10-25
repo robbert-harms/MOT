@@ -361,3 +361,61 @@ class SampleModelInterface(OptimizeModelInterface):
             mot.cl_routines.sampling.metropolis_hastings.MHState: the current Metropolis Hastings state
         """
         raise NotImplementedError()
+
+
+class NumericalDerivativeInterface(OptimizeModelInterface):
+    """Extends the model interface with information necessary for calculating numerical derivatives.
+
+    For calculating derivatives (gradients / Hessians) numerically, we need few additional information, like the
+    step size for each parameter, a method for checking boundary conditions and possible parameter transformations
+    for circular parameters. All these elements are represented in this interface.
+    """
+
+    def numdiff_get_max_step(self):
+        """Get for each estimable parameter the maximum step size to use for calculating numerical derivatives.
+
+        The derivative calculation method typically uses an adaptive step size to determine the step with the best
+        trade-off between numerical errors and localization of the derivative. This method must return the
+        initial and largest step size to use.
+
+        Returns:
+            list[float]: per parameter a single float with the step size for that parameter
+        """
+        raise NotImplementedError()
+
+    def numdiff_get_scaling_factors(self):
+        """Get for each estimable parameter a scaling factor that is to be used for scaling this parameter to unitary.
+
+        Since numerical differentiation is sensitive to differences in step sizes, it is better to rescale
+        the parameters to a unitary range instead of changing the step sizes for the parameters.
+
+        This should return numbers such that when the parameter is multiplied with this value, the magnitude of the
+        parameter is about one.
+
+        Returns:
+            list[float]: per parameter a single float with the parameter scaling to use for that parameter.
+                The identity value is one.
+        """
+        raise NotImplementedError()
+
+    def numdiff_get_bound_check_function(self):
+        """Get a CL function that can be used to check the boundary conditions of a proposed step.
+
+        This needs to return a function with signature:
+
+        .. code-block:: c
+
+            bool _step_within_bounds(mot_data_struct* data, mot_float_type param_value,
+                                     mot_float_type param_step, uint param_ind);
+
+        Where ``data`` is the data containing structure, ``param_value`` is the value of the parameter we are stepping,
+        ``param_step`` is the step we wish to take in that parameter and param_ind is the index of the parameter in
+        the list of estimable parameters.
+
+        This method will need to check if ``param_value +/- param_step`` is within bounds.
+
+        Returns:
+            mot.utils.NamedCLFunction: The function that the numerical differentiation function can use to
+                check if a proposed step is within bounds.
+        """
+        raise NotImplementedError()

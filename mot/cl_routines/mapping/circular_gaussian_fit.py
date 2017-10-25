@@ -1,5 +1,5 @@
 from mot.cl_routines.mapping.run_procedure import RunProcedure
-from ...utils import SimpleNamedCLFunction, KernelInputBuffer, KernelInputScalar
+from ...utils import SimpleNamedCLFunction, KernelInputArray, KernelInputScalar, KernelInputAllocatedOutput
 from ...cl_routines.base import CLRoutine
 import numpy as np
 
@@ -23,19 +23,9 @@ class CircularGaussianFit(CLRoutine):
         Returns:
             tuple: mean and std arrays
         """
-        double_precision = samples.dtype == np.float64
-
-        np_dtype = np.float32
-        if double_precision:
-            np_dtype = np.float64
-
-        means = np.zeros(samples.shape[0], dtype=np_dtype, order='C')
-        stds = np.zeros(samples.shape[0], dtype=np_dtype, order='C')
-        samples = np.require(samples, np_dtype, requirements=['C', 'A', 'O'])
-
-        all_kernel_data = {'samples': KernelInputBuffer(samples),
-                           'means': KernelInputBuffer(means, is_readable=False, is_writable=True),
-                           'stds': KernelInputBuffer(stds, is_readable=False, is_writable=True),
+        all_kernel_data = {'samples': KernelInputArray(samples, 'mot_float_type'),
+                           'means': KernelInputAllocatedOutput(samples.shape[0], 'mot_float_type', is_readable=False),
+                           'stds': KernelInputAllocatedOutput(samples.shape[0], 'mot_float_type', is_readable=False),
                            'nmr_samples': KernelInputScalar(samples.shape[1]),
                            'low': KernelInputScalar(low),
                            'high': KernelInputScalar(high),
@@ -43,7 +33,7 @@ class CircularGaussianFit(CLRoutine):
 
         runner = RunProcedure(**self.get_cl_routine_kwargs())
         runner.run_procedure(self._get_wrapped_function(), all_kernel_data, samples.shape[0],
-                             double_precision=double_precision)
+                             double_precision=(samples.dtype == np.float64))
 
         return all_kernel_data['means'].get_data(), all_kernel_data['stds'].get_data()
 

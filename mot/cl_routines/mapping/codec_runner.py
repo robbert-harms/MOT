@@ -1,6 +1,6 @@
 import logging
 from mot.cl_routines.mapping.run_procedure import RunProcedure
-from ...utils import SimpleNamedCLFunction, KernelInputBuffer
+from ...utils import SimpleNamedCLFunction, KernelInputArray
 from ...cl_routines.base import CLRoutine
 
 
@@ -85,7 +85,7 @@ class CodecRunner(CLRoutine):
         cl_named_func = self._get_codec_function_wrapper(cl_func, cl_func_name, parameters.shape[1])
 
         all_kernel_data = dict(kernel_data)
-        all_kernel_data['x'] = KernelInputBuffer(parameters, is_writable=True)
+        all_kernel_data['x'] = KernelInputArray(parameters, ctype='mot_float_type', is_writable=True)
 
         runner = RunProcedure(**self.get_cl_routine_kwargs())
         runner.run_procedure(cl_named_func, all_kernel_data, parameters.shape[0], double_precision=double_precision)

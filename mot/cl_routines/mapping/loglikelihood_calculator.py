@@ -1,6 +1,7 @@
 import numpy as np
 from mot.cl_routines.mapping.run_procedure import RunProcedure
-from ...utils import KernelInputBuffer, KernelInputScalar, SimpleNamedCLFunction, KernelInputLocalMemory
+from ...utils import KernelInputArray, KernelInputScalar, SimpleNamedCLFunction, KernelInputLocalMemory, \
+    KernelInputAllocatedOutput
 from ...cl_routines.base import CLRoutine
 
 
@@ -30,29 +31,24 @@ class LogLikelihoodCalculator(CLRoutine):
         Returns:
             ndarray: per problem the log likelihood, or, per problem per sample the calculate log likelihood.
         """
-        np_dtype = np.float32
-        if model.double_precision:
-            np_dtype = np.float64
-
         all_kernel_data = dict(model.get_kernel_data())
         all_kernel_data.update({
-            'parameters': KernelInputBuffer(parameters),
+            'parameters': KernelInputArray(parameters),
         })
 
         shape = parameters.shape
         if len(shape) > 2:
-            log_likelihoods = np.zeros((shape[0], shape[2]), dtype=np_dtype, order='C')
             all_kernel_data.update({
-                'log_likelihoods': KernelInputBuffer(log_likelihoods, is_readable=False, is_writable=True),
+                'log_likelihoods': KernelInputAllocatedOutput((shape[0], shape[2]), 'mot_float_type',
+                                                              is_readable=False),
                 'nmr_params': KernelInputScalar(parameters.shape[1]),
                 'nmr_samples': KernelInputScalar(parameters.shape[2]),
-                'local_reduction_lls': KernelInputLocalMemory(np.float64)
+                'local_reduction_lls': KernelInputLocalMemory('double')
             })
         else:
-            log_likelihoods = np.zeros(shape[0], dtype=np_dtype, order='C')
             all_kernel_data.update({
-                'log_likelihoods': KernelInputBuffer(log_likelihoods, is_readable=False, is_writable=True),
-                'local_reduction_lls': KernelInputLocalMemory(np.float64)
+                'log_likelihoods': KernelInputAllocatedOutput((shape[0],), 'mot_float_type', is_readable=False),
+                'local_reduction_lls': KernelInputLocalMemory('double')
             })
 
         runner = RunProcedure(**self.get_cl_routine_kwargs())

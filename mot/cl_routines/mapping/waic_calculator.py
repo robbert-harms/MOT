@@ -33,23 +33,23 @@ class WAICCalculator(CLRoutine):
         Returns:
             ndarray: per problem the calculated WAIC
         """
-        np_dtype = np.float32
+        mot_float_dtype = np.float32
         if model.double_precision:
-            np_dtype = np.float64
+            mot_float_dtype = np.float64
 
         nmr_problems = samples.shape[0]
         nmr_observations = model.get_nmr_inst_per_problem()
 
         waics = np.zeros((nmr_problems,))
 
-        samples = np.require(samples, dtype=np_dtype, requirements=['C', 'A', 'O'])
+        samples = np.require(samples, dtype=mot_float_dtype, requirements=['C', 'A', 'O'])
         logsumexps = np.zeros(nmr_observations, dtype=np.float64, order='C')
         variances = np.zeros(nmr_observations, dtype=np.float64, order='C')
 
         workers = self._create_workers(
             lambda cl_environment: _LLWorker(cl_environment,
                                              self.get_compile_flags_list(model.double_precision),
-                                             model, samples, logsumexps, variances))
+                                             model, samples, logsumexps, variances, mot_float_dtype))
 
         for problem_ind in range(nmr_problems):
 
@@ -69,14 +69,14 @@ class WAICCalculator(CLRoutine):
 
 class _LLWorker(Worker):
 
-    def __init__(self, cl_environment, compile_flags, model, samples, logsumexps, variances):
+    def __init__(self, cl_environment, compile_flags, model, samples, logsumexps, variances, mot_float_dtype):
         super(_LLWorker, self).__init__(cl_environment)
 
         self._problem_index = 0
 
         self._model = model
         self._data_info = self._model.get_kernel_data()
-        self._data_struct_manager = KernelInputDataManager(self._data_info)
+        self._data_struct_manager = KernelInputDataManager(self._data_info, mot_float_dtype)
         self._double_precision = model.double_precision
 
         self._samples = samples

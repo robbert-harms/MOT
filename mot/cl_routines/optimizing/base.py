@@ -163,14 +163,14 @@ class AbstractParallelOptimizer(AbstractOptimizer):
 
         self._logger.info('Starting optimization preliminaries')
 
-        np_dtype = np.float32
+        mot_float_dtype = np.float32
         if model.double_precision:
-            np_dtype = np.float64
+            mot_float_dtype = np.float64
 
         if init_params is None:
             init_params = model.get_initial_parameters()
 
-        parameters = np.require(init_params, np_dtype,
+        parameters = np.require(init_params, mot_float_dtype,
                                 requirements=['C', 'A', 'O', 'W'])
 
         nmr_params = parameters.shape[1]
@@ -180,8 +180,8 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         self._logger.info('Finished optimization preliminaries')
         self._logger.info('Starting optimization')
         workers = self._create_workers(self._get_worker_generator(self, model, parameters,
-                                                                  nmr_params, return_codes,
-                                                                  self._optimizer_settings))
+                                                                  nmr_params, return_codes, mot_float_dtype,
+                                                                  self._optimizer_settings, ))
         self.load_balancer.process(workers, model.get_nmr_problems())
         self._logger.info('Finished optimization')
 
@@ -202,7 +202,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
 class AbstractParallelOptimizerWorker(Worker):
 
     def __init__(self, cl_environment, parent_optimizer, model, starting_points,
-                 nmr_params, return_codes, optimizer_settings=None):
+                 nmr_params, return_codes, mot_float_dtype, optimizer_settings=None):
         super(AbstractParallelOptimizerWorker, self).__init__(cl_environment)
 
         self._optimizer_settings = optimizer_settings
@@ -211,7 +211,7 @@ class AbstractParallelOptimizerWorker(Worker):
 
         self._model = model
         self._data_info = self._model.get_kernel_data()
-        self._data_struct_manager = KernelInputDataManager(self._data_info)
+        self._data_struct_manager = KernelInputDataManager(self._data_info, mot_float_dtype)
         self._double_precision = model.double_precision
         self._nmr_params = nmr_params
 

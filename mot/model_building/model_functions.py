@@ -1,6 +1,7 @@
 import numpy as np
 from mot.cl_data_type import SimpleCLDataType
 from mot.cl_function import CLFunction, SimpleCLFunction, CLPrototype, SimpleCLPrototype
+from mot.model_building.parameter_functions.numdiff_info import SimpleNumDiffInfo
 from mot.model_building.parameter_functions.sample_statistics import TruncatedGaussianFit
 from mot.model_building.parameters import FreeParameter
 from mot.model_building.parameter_functions.priors import ARDGaussian, UniformWithinBoundsPrior, ARDBeta
@@ -221,7 +222,8 @@ class Weight(Scalar):
         parameter_settings = dict(parameter_transform=CosSqrClampTransform(),
                                   sampling_proposal=GaussianProposal(0.01),
                                   sampling_prior=UniformWithinBoundsPrior(),
-                                  sampling_statistics=TruncatedGaussianFit()
+                                  sampling_statistics=TruncatedGaussianFit(),
+                                  numdiff_info=SimpleNumDiffInfo(scale_factor=10)
                                   )
         parameter_settings.update(parameter_kwargs or {})
 

@@ -1,8 +1,8 @@
 import numpy as np
 
 from mot.cl_routines.mapping.run_procedure import RunProcedure
-from ...utils import SimpleNamedCLFunction, convert_data_to_dtype, KernelInputBuffer, KernelInputData, is_scalar, \
-    KernelInputScalar
+from ...utils import SimpleNamedCLFunction, convert_data_to_dtype, KernelInputArray, KernelInputData, is_scalar, \
+    KernelInputScalar, KernelInputAllocatedOutput
 from ...cl_routines.base import CLRoutine
 
 
@@ -45,10 +45,8 @@ class CLFunctionEvaluator(CLRoutine):
         kernel_items = self._wrap_input_data(cl_function, input_data, double_precision)
 
         if cl_function.get_return_type() != 'void':
-            kernel_items['_results'] = KernelInputBuffer(
-                convert_data_to_dtype(np.ones(nmr_data_points), cl_function.get_return_type(),
-                                      mot_float_type='double' if double_precision else 'float'),
-                is_writable=True)
+            kernel_items['_results'] = KernelInputAllocatedOutput((nmr_data_points,), cl_function.get_return_type(),
+                                                                  is_readable=False)
 
         runner = RunProcedure(**self.get_cl_routine_kwargs())
         runner.run_procedure(self._wrap_cl_function(cl_function, kernel_items),
@@ -75,16 +73,12 @@ class CLFunctionEvaluator(CLRoutine):
                 kernel_items[self._get_param_cl_name(param.name)] = KernelInputScalar(input_data[param.name])
             else:
                 if is_scalar(input_data[param.name]):
-                    data = convert_data_to_dtype(np.ones(min_data_length) * input_data[param.name],
-                                                 param.data_type.ctype,
-                                                 mot_float_type='double' if double_precision else 'float')
+                    data = np.ones(min_data_length) * input_data[param.name]
                 else:
-                    data = convert_data_to_dtype(input_data[param.name],
-                                                 param.data_type.ctype,
-                                                 mot_float_type='double' if double_precision else 'float')
+                    data = input_data[param.name]
 
-                kernel_items[self._get_param_cl_name(param.name)] = KernelInputBuffer(
-                    data, is_writable=True, is_readable=True)
+                kernel_items[self._get_param_cl_name(param.name)] = KernelInputArray(
+                    data, ctype=param.data_type.ctype, is_writable=True, is_readable=True)
 
         return kernel_items
 
@@ -129,7 +123,7 @@ class CLFunctionEvaluator(CLRoutine):
         else:
             func += '''
                 void ''' + func_name + '''(mot_data_struct* data){
-                    data->_results[0] = ''' + cl_function.get_cl_function_name() + '(' + ', '.join(func_args) + ''');  
+                    *(data->_results) = ''' + cl_function.get_cl_function_name() + '(' + ', '.join(func_args) + ''');  
                 }
             '''
         return SimpleNamedCLFunction(func, func_name)

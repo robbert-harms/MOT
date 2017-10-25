@@ -26,19 +26,20 @@ class CalculateModelEstimates(CLRoutine):
         Returns:
             ndarray: Return per problem instance the evaluation per data point.
         """
-        np_dtype = np.float32
+        mot_float_dtype = np.float32
         if model.double_precision:
-            np_dtype = np.float64
+            mot_float_dtype = np.float64
 
         nmr_inst_per_problem = model.get_nmr_inst_per_problem()
 
-        parameters = np.require(parameters, np_dtype, requirements=['C', 'A', 'O'])
+        parameters = np.require(parameters, mot_float_dtype, requirements=['C', 'A', 'O'])
 
         nmr_problems = parameters.shape[0]
-        evaluations = np.zeros((nmr_problems, nmr_inst_per_problem), dtype=np_dtype, order='C')
+        evaluations = np.zeros((nmr_problems, nmr_inst_per_problem), dtype=mot_float_dtype, order='C')
 
         workers = self._create_workers(lambda cl_environment: _EvaluateModelWorker(
-            cl_environment, self.get_compile_flags_list(model.double_precision), model, parameters, evaluations))
+            cl_environment, self.get_compile_flags_list(model.double_precision), model, parameters, evaluations,
+            mot_float_dtype))
         self.load_balancer.process(workers, nmr_problems)
 
         return evaluations
@@ -46,12 +47,12 @@ class CalculateModelEstimates(CLRoutine):
 
 class _EvaluateModelWorker(Worker):
 
-    def __init__(self, cl_environment, compile_flags, model, parameters, evaluations):
+    def __init__(self, cl_environment, compile_flags, model, parameters, evaluations, mot_float_dtype):
         super(_EvaluateModelWorker, self).__init__(cl_environment)
 
         self._model = model
         self._data_info = self._model.get_kernel_data()
-        self._data_struct_manager = KernelInputDataManager(self._data_info)
+        self._data_struct_manager = KernelInputDataManager(self._data_info, mot_float_dtype)
         self._double_precision = model.double_precision
         self._evaluations = evaluations
         self._parameters = parameters

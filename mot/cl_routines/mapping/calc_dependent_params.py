@@ -1,5 +1,5 @@
 from mot.cl_routines.mapping.run_procedure import RunProcedure
-from ...utils import results_to_dict, SimpleNamedCLFunction, KernelInputBuffer
+from ...utils import results_to_dict, SimpleNamedCLFunction, KernelInputArray, KernelInputAllocatedOutput
 from ...cl_routines.base import CLRoutine
 import numpy as np
 
@@ -45,19 +45,10 @@ class CalculateDependentParameters(CLRoutine):
         cl_named_func = self._get_wrapped_function(estimated_parameters_list, parameters_listing,
                                                    dependent_parameter_names)
 
-        np_dtype = np.float32
-        if self._double_precision:
-            np_dtype = np.float64
-
-        results = np.zeros(
-            (estimated_parameters_list[0].shape[0], len(dependent_parameter_names)),
-            dtype=np_dtype, order='C')
-        estimated_parameters = np.require(np.dstack(estimated_parameters_list),
-                                          np_dtype, requirements=['C', 'A', 'O'])[0, ...]
-
         all_kernel_data = dict(kernel_data)
-        all_kernel_data['x'] = KernelInputBuffer(estimated_parameters)
-        all_kernel_data['_results'] = KernelInputBuffer(results, is_writable=True)
+        all_kernel_data['x'] = KernelInputArray(np.dstack(estimated_parameters_list)[0, ...], ctype='mot_float_type')
+        all_kernel_data['_results'] = KernelInputAllocatedOutput(
+            (estimated_parameters_list[0].shape[0], len(dependent_parameter_names)), 'mot_float_type')
 
         runner = RunProcedure(**self.get_cl_routine_kwargs())
         runner.run_procedure(cl_named_func, all_kernel_data, estimated_parameters_list[0].shape[0],

@@ -1,6 +1,6 @@
 import numpy as np
 from mot.cl_routines.mapping.run_procedure import RunProcedure
-from ...utils import KernelInputBuffer, SimpleNamedCLFunction, KernelInputLocalMemory
+from ...utils import KernelInputArray, SimpleNamedCLFunction, KernelInputLocalMemory, KernelInputAllocatedOutput
 from ...cl_routines.base import CLRoutine
 
 
@@ -24,20 +24,12 @@ class ObjectiveFunctionCalculator(CLRoutine):
         Returns:
             ndarray: per problem the objective function.
         """
-        np_dtype = np.float32
-        if model.double_precision:
-            np_dtype = np.float64
-
+        shape = parameters.shape
         all_kernel_data = dict(model.get_kernel_data())
         all_kernel_data.update({
-            'parameters': KernelInputBuffer(parameters),
-        })
-
-        shape = parameters.shape
-        objective_values = np.zeros(shape[0], dtype=np_dtype, order='C')
-        all_kernel_data.update({
-            'objective_values': KernelInputBuffer(objective_values, is_readable=False, is_writable=True),
-            'local_reduction_lls': KernelInputLocalMemory(np.float64)
+            'parameters': KernelInputArray(parameters),
+            'objective_values': KernelInputAllocatedOutput((shape[0],), 'mot_float_type', is_readable=False),
+            'local_reduction_lls': KernelInputLocalMemory('double')
         })
 
         runner = RunProcedure(**self.get_cl_routine_kwargs())

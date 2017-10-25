@@ -13,9 +13,9 @@ from mot.model_building.model_functions import Weight, ModelCLFunction
 from mot.model_building.parameters import CurrentObservationParam, StaticMapParameter, ProtocolParameter, FreeParameter
 from mot.model_building.parameter_functions.dependencies import SimpleAssignment, AbstractParameterDependency
 from mot.model_building.utils import ParameterCodec
-from mot.model_interfaces import OptimizeModelInterface, SampleModelInterface
+from mot.model_interfaces import OptimizeModelInterface, SampleModelInterface, NumericalDerivativeInterface
 from mot.utils import is_scalar, all_elements_equal, get_single_value, SimpleNamedCLFunction, convert_data_to_dtype, \
-    KernelInputBuffer, get_class_that_defined_method, KernelInputScalar
+    KernelInputArray, get_class_that_defined_method, KernelInputScalar
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-03-14"
@@ -157,7 +157,10 @@ class OptimizeModelBuilder(ModelBuilder):
                                    self._get_model_eval_function(problems_to_analyze),
                                    self._get_objective_per_observation_function(problems_to_analyze),
                                    self.get_lower_bounds(),
-                                   self.get_upper_bounds())
+                                   self.get_upper_bounds(),
+                                   self._get_max_numdiff_step(),
+                                   self._get_numdiff_scaling_factors(),
+                                   self._get_numdiff_bound_check_function())
 
     def build_with_codec(self, problems_to_analyze):
         return ParameterTransformedModel(self.build(problems_to_analyze), self.get_parameter_codec())
@@ -414,15 +417,11 @@ class OptimizeModelBuilder(ModelBuilder):
 
     def _get_kernel_data(self, problems_to_analyze):
         data_items = {}
-        observations = self._get_observations_data(problems_to_analyze)
-        if observations is not None:
-            data_items['observations'] = KernelInputBuffer(observations)
-
+        data_items.update(self._get_observations_data(problems_to_analyze))
         data_items.update(self._get_fixed_parameters_as_var_data(problems_to_analyze))
         data_items.update(self._get_static_parameters_as_var_data(problems_to_analyze))
         data_items.update(self._get_bounds_as_var_data(problems_to_analyze))
         data_items.update(self._get_protocol_data(problems_to_analyze))
-
         return data_items
 
     def _get_initial_parameters(self, problems_to_analyze):
@@ -544,15 +543,8 @@ class OptimizeModelBuilder(ModelBuilder):
             ind = self._model_functions_info.get_parameter_estimable_index(m, p)
             transform = parameter.parameter_transform
 
-            if all_elements_equal(self._lower_bounds[name]):
-                lower_bound = str(get_single_value(self._lower_bounds[name]))
-            else:
-                lower_bound = 'data->lb_{}[0]'.format(name.replace('.', '_'))
-
-            if all_elements_equal(self._upper_bounds[name]):
-                upper_bound = str(get_single_value(self._upper_bounds[name]))
-            else:
-                upper_bound = 'data->ub_{}[0]'.format(name.replace('.', '_'))
+            lower_bound = self._get_bound_definition(name, 'lower')
+            upper_bound = self._get_bound_definition(name, 'upper')
 
             s = '{0}[' + str(ind) + '] = ' + transform.get_cl_decode().create_assignment(
                 '{0}[' + str(ind) + ']', lower_bound, upper_bound) + ';'
@@ -565,6 +557,77 @@ class OptimizeModelBuilder(ModelBuilder):
             enc_func_list.append(s)
 
         return tuple(reversed(enc_func_list)), dec_func_list
+
+    def _get_bound_definition(self, parameter_name, bound_type):
+        """Get the definition of the lower bound to use in model functions.
+
+        Since the lower bounds are not added to the ``data`` structure if they are all equal, we have a variable
+        way of referencing the lower bound.
+
+        Args:
+            parameter_name (str): the name of the parameter as ``<model>.<parameter>``.
+            bound_type (str): either ``upper`` or ``lower``.
+
+        Returns:
+            str: the way to reference the bound
+        """
+        if bound_type == 'lower':
+            if all_elements_equal(self._lower_bounds[parameter_name]):
+                return str(get_single_value(self._lower_bounds[parameter_name]))
+            else:
+                return 'data->lb_{}[0]'.format(parameter_name.replace('.', '_'))
+        else:
+            if all_elements_equal(self._upper_bounds[parameter_name]):
+                return str(get_single_value(self._upper_bounds[parameter_name]))
+            else:
+                return 'data->ub_{}[0]'.format(parameter_name.replace('.', '_'))
+
+    def _get_max_numdiff_step(self):
+        """Get the numerical differentiation step for each parameter.
+
+        Returns:
+            list[float]: for each free parameter the numerical differentiation step size to use
+        """
+        return [p.numdiff_info.max_step for _, p in self._model_functions_info.get_estimable_parameters_list()]
+
+    def _get_numdiff_scaling_factors(self):
+        """Get the parameter scaling factor for each parameter.
+
+        Returns:
+            list[float]: for each parameter the scaling factor to use.
+        """
+        return [p.numdiff_info.scaling_factor for _, p in self._model_functions_info.get_estimable_parameters_list()]
+
+    def _get_numdiff_bound_check_function(self):
+        """Get the bound check function for the numerical differentiation algorithm.
+
+        Returns:
+            mot.utils.NamedCLFunction: a function with signature:
+                .. code-block:: c
+
+                    bool _step_within_bounds(mot_data_struct* data, mot_float_type* params,
+                                             global mot_float_type* steps);
+        """
+        checks = []
+        for ind, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
+            if p.numdiff_info.use_bounds:
+                name = '{}.{}'.format(m.name, p.name)
+                lower_bound = self._get_bound_definition(name, 'lower')
+                upper_bound = self._get_bound_definition(name, 'upper')
+                checks.append('if(param_ind == {ind} && '
+                              '     (param_value - param_step < {lb} || param_value + param_step > {ub})){{'
+                              '         return false;'
+                              '}}'.format(ind=ind, lb=lower_bound, ub=upper_bound))
+
+        func_name = '_step_within_bounds'
+        func = '''
+            bool ''' + func_name + '''(mot_data_struct* data, mot_float_type param_value,
+                                       mot_float_type param_step, uint param_ind){
+                ''' + '\n'.join(checks) + '''
+                return true;
+            }
+        '''
+        return SimpleNamedCLFunction(func, func_name)
 
     def _transform_observations(self, observations):
         """Apply a transformation on the observations before fitting.
@@ -735,27 +798,24 @@ class OptimizeModelBuilder(ModelBuilder):
     def _get_fixed_parameters_as_var_data(self, problems_to_analyze):
         var_data_dict = {}
         for m, p in self._model_functions_info.get_value_fixed_parameters_list():
-            value = convert_data_to_dtype(
-                self._model_functions_info.get_parameter_value('{}.{}'.format(m.name, p.name)),
-                p.data_type, self._get_mot_float_type())
+            value = self._model_functions_info.get_parameter_value('{}.{}'.format(m.name, p.name))
             param_name = '{}.{}'.format(m.name, p.name).replace('.', '_')
 
             if not all_elements_equal(value):
                 if problems_to_analyze is not None:
                     value = value[problems_to_analyze, ...]
-                var_data_dict[param_name] = KernelInputBuffer(value)
+                var_data_dict[param_name] = KernelInputArray(value, ctype=p.data_type.declaration_type)
         return var_data_dict
 
     def _get_static_parameters_as_var_data(self, problems_to_analyze):
         static_data_dict = {}
 
         for m, p in self._model_functions_info.get_static_parameters_list():
-            value = convert_data_to_dtype(self._get_static_map_value(m, p, problems_to_analyze),
-                                          p.data_type, self._get_mot_float_type())
+            value = self._get_static_map_value(m, p, problems_to_analyze)
             param_name = '{}.{}'.format(m.name, p.name).replace('.', '_')
 
             if not all_elements_equal(value):
-                static_data_dict.update({param_name: KernelInputBuffer(value)})
+                static_data_dict.update({param_name: KernelInputArray(value, ctype=p.data_type.declaration_type)})
 
         return static_data_dict
 
@@ -768,12 +828,12 @@ class OptimizeModelBuilder(ModelBuilder):
 
             for bound_type, value in zip(('lb', 'ub'), (lower_bound, upper_bound)):
                 name = bound_type + '_' + '{}.{}'.format(m.name, p.name).replace('.', '_')
-                data = convert_data_to_dtype(value, p.data_type, self._get_mot_float_type())
+                data = value
 
                 if not all_elements_equal(value):
                     if problems_to_analyze is not None:
                         data = data[problems_to_analyze, ...]
-                    bounds_dict.update({name: KernelInputBuffer(data)})
+                    bounds_dict.update({name: KernelInputArray(data, ctype=p.data_type.declaration_type)})
 
         return bounds_dict
 
@@ -908,23 +968,22 @@ class OptimizeModelBuilder(ModelBuilder):
             if problems_to_analyze is not None:
                 observations = observations[problems_to_analyze, ...]
             observations = self._transform_observations(observations)
-            observations = convert_data_to_dtype(observations, 'mot_float_type*', self._get_mot_float_type())
-        return observations
+            return {'observations': KernelInputArray(observations)}
+        return {}
 
     def _get_protocol_data(self, problems_to_analyze):
         return_data = {}
 
         for m, p in self._model_functions_info.get_model_parameter_list():
             if isinstance(p, ProtocolParameter):
-                value = convert_data_to_dtype(self._input_data.get_input_data(p.name),
-                                              p.data_type, self._get_mot_float_type())
+                value = self._input_data.get_input_data(p.name)
                 if not all_elements_equal(value):
                     if value.shape[0] == self._input_data.nmr_problems:
                         if problems_to_analyze is not None:
                             value = value[problems_to_analyze, ...]
-                        const_d = {p.name: KernelInputBuffer(value)}
+                        const_d = {p.name: KernelInputArray(value, ctype=p.data_type.declaration_type)}
                     else:
-                        const_d = {p.name: KernelInputBuffer(value, offset_str='0')}
+                        const_d = {p.name: KernelInputArray(value, ctype=p.data_type.declaration_type, offset_str='0')}
                     return_data.update(const_d)
         return return_data
 
@@ -1023,7 +1082,8 @@ class SampleModelBuilder(OptimizeModelBuilder):
         Returns:
             ModelFunctionsInformation: the model function information object
         """
-        return ModelFunctionsInformation(model_tree, likelihood_function, signal_noise_model, enable_prior_parameters=True)
+        return ModelFunctionsInformation(model_tree, likelihood_function, signal_noise_model,
+                                         enable_prior_parameters=True)
 
     def build(self, problems_to_analyze=None):
         """Construct the final immutable model with the current settings.
@@ -1737,13 +1797,13 @@ class ModelFunctionsInformation(object):
         return listing
 
     def is_fixed(self, parameter_name):
-        """Check if the given (free) parameter is fixed or not
+        """Check if the given (free) parameter is fixed or not (either to a value or to a dependency).
 
         Args:
             parameter_name (str): the name of the parameter to fix or unfix
 
         Returns:
-            boolean: if the parameter is fixed or not (can be fixed to a value and dependency).
+            boolean: if the parameter is fixed or not (can be fixed to a value or dependency).
         """
         return parameter_name in self._fixed_parameters and self._fixed_parameters[parameter_name]
 
@@ -2031,13 +2091,13 @@ class _ModelFunctionPriorToCompositeModelPrior(SimpleCLFunction):
         return ['{} {}'.format(p.data_type.get_declaration(), p.name.replace('.', '_')) for p in self._old_params]
 
 
-class SimpleOptimizeModel(OptimizeModelInterface):
+class SimpleOptimizeModel(NumericalDerivativeInterface):
 
     def __init__(self, used_problem_indices,
                  name, double_precision, kernel_data_info, nmr_problems, nmr_inst_per_problem,
                  nmr_estimable_parameters, initial_parameters, pre_eval_parameter_modifier, eval_function,
-                 objective_per_observation_function,
-                 lower_bounds, upper_bounds):
+                 objective_per_observation_function, lower_bounds, upper_bounds, numdiff_step,
+                 numdiff_scaling_factors, numdiff_bound_check_function):
         self.used_problem_indices = used_problem_indices
         self._name = name
         self._double_precision = double_precision
@@ -2051,6 +2111,9 @@ class SimpleOptimizeModel(OptimizeModelInterface):
         self._objective_per_observation_function = objective_per_observation_function
         self._lower_bounds = lower_bounds
         self._upper_bounds = upper_bounds
+        self._numdiff_step = numdiff_step
+        self._numdiff_scaling_factors = numdiff_scaling_factors
+        self._numdiff_bound_check_function = numdiff_bound_check_function
 
     @property
     def name(self):
@@ -2093,6 +2156,15 @@ class SimpleOptimizeModel(OptimizeModelInterface):
     def finalize_optimized_parameters(self, parameters):
         return parameters
 
+    def numdiff_get_max_step(self):
+        return self._numdiff_step
+
+    def numdiff_get_scaling_factors(self):
+        return self._numdiff_scaling_factors
+
+    def numdiff_get_bound_check_function(self):
+        return self._numdiff_bound_check_function
+
 
 class SimpleSampleModel(SampleModelInterface):
 
@@ -2120,6 +2192,8 @@ class SimpleSampleModel(SampleModelInterface):
                         raise NotImplementedError()
             return value
         except NotImplementedError:
+            return getattr(super(SimpleSampleModel, self).__getattribute__('_wrapped_optimize_model'), item)
+        except AttributeError:
             return getattr(super(SimpleSampleModel, self).__getattribute__('_wrapped_optimize_model'), item)
 
     @property

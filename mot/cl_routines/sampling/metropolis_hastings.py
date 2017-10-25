@@ -60,9 +60,9 @@ class MetropolisHastings(AbstractSampler):
         Returns:
             MHSampleOutput: extension of the default output with some more data
         """
-        float_dtype = np.float32
+        mot_float_dtype = np.float32
         if model.double_precision:
-            float_dtype = np.float64
+            mot_float_dtype = np.float64
 
         self._do_initial_logging(model)
 
@@ -71,14 +71,14 @@ class MetropolisHastings(AbstractSampler):
 
         nmr_params = init_params.shape[1]
 
-        current_chain_position = np.require(init_params, float_dtype, requirements=['C', 'A', 'O', 'W'])
-        proposal_state = np.require(model.get_proposal_state(), float_dtype, requirements=['C', 'A', 'O', 'W'])
-        mh_state = _prepare_mh_state(model.get_metropolis_hastings_state(), float_dtype)
+        current_chain_position = np.require(init_params, mot_float_dtype, requirements=['C', 'A', 'O', 'W'])
+        proposal_state = np.require(model.get_proposal_state(), mot_float_dtype, requirements=['C', 'A', 'O', 'W'])
+        mh_state = _prepare_mh_state(model.get_metropolis_hastings_state(), mot_float_dtype)
 
         samples = np.zeros((model.get_nmr_problems(), nmr_params, self.nmr_samples),
-                           dtype=float_dtype, order='C')
-        log_likelihoods = np.zeros((model.get_nmr_problems(), self.nmr_samples), dtype=float_dtype, order='C')
-        log_priors = np.zeros((model.get_nmr_problems(), self.nmr_samples), dtype=float_dtype, order='C')
+                           dtype=mot_float_dtype, order='C')
+        log_likelihoods = np.zeros((model.get_nmr_problems(), self.nmr_samples), dtype=mot_float_dtype, order='C')
+        log_priors = np.zeros((model.get_nmr_problems(), self.nmr_samples), dtype=mot_float_dtype, order='C')
 
         def run(_samples, _log_likelihoods, _log_priors, _mh_state, nmr_samples, in_burnin=False):
             """Create the worker, process it, store the results in the given sample array and return a new mh state."""
@@ -90,7 +90,7 @@ class MetropolisHastings(AbstractSampler):
             workers = self._create_workers(lambda cl_environment: _MHWorker(
                 cl_environment, self.get_compile_flags_list(model.double_precision), model, current_chain_position,
                 _samples, _log_likelihoods, _log_priors, proposal_state, _mh_state, nmr_samples, in_burnin,
-                sample_interval, self.use_adaptive_proposals))
+                sample_interval, self.use_adaptive_proposals, mot_float_dtype))
             self.load_balancer.process(workers, model.get_nmr_problems())
             return _mh_state.with_nmr_samples_drawn(_mh_state.nmr_samples_drawn + nmr_samples * (sample_interval + 1))
 
@@ -101,9 +101,9 @@ class MetropolisHastings(AbstractSampler):
 
         for batch_ind, batch_size in enumerate(split_in_batches(self.nmr_samples, 1000)):
             samples_subset = np.zeros((model.get_nmr_problems(), nmr_params, batch_size),
-                                      dtype=float_dtype, order='C')
-            ll_subset = np.zeros((model.get_nmr_problems(), batch_size), dtype=float_dtype, order='C')
-            lp_subset = np.zeros((model.get_nmr_problems(), batch_size), dtype=float_dtype, order='C')
+                                      dtype=mot_float_dtype, order='C')
+            ll_subset = np.zeros((model.get_nmr_problems(), batch_size), dtype=mot_float_dtype, order='C')
+            lp_subset = np.zeros((model.get_nmr_problems(), batch_size), dtype=mot_float_dtype, order='C')
 
             mh_state = run(samples_subset, ll_subset, lp_subset, mh_state, batch_size)
 
@@ -192,12 +192,12 @@ class _MHWorker(Worker):
 
     def __init__(self, cl_environment, compile_flags, model, current_chain_position, samples,
                  log_likelihoods, log_priors, proposal_state, mh_state, nmr_samples, in_burnin,
-                 sample_intervals, use_adaptive_proposals):
+                 sample_intervals, use_adaptive_proposals, mot_float_dtype):
         super(_MHWorker, self).__init__(cl_environment)
 
         self._model = model
         self._data_info = self._model.get_kernel_data()
-        self._data_struct_manager = KernelInputDataManager(self._data_info)
+        self._data_struct_manager = KernelInputDataManager(self._data_info, mot_float_dtype)
         self._current_chain_position = current_chain_position
         self._nmr_params = current_chain_position.shape[1]
         self._samples = samples
@@ -214,7 +214,7 @@ class _MHWorker(Worker):
 
         kernel_builder = _MCMCKernelBuilder(
             compile_flags, self._mh_state_dict, cl_environment, model,
-            nmr_samples, not in_burnin, sample_intervals, use_adaptive_proposals, self._nmr_params)
+            nmr_samples, not in_burnin, sample_intervals, use_adaptive_proposals, self._nmr_params, mot_float_dtype)
 
         self._kernel = kernel_builder.build()
 
@@ -316,14 +316,15 @@ class _MHWorker(Worker):
 class _MCMCKernelBuilder(object):
 
     def __init__(self, compile_flags, mh_state_dict, cl_environment, model,
-                 nmr_samples, store_samples, sample_intervals, use_adaptive_proposals, nmr_params):
+                 nmr_samples, store_samples, sample_intervals, use_adaptive_proposals, nmr_params,
+                 mot_float_dtype):
         self._cl_run_context = cl_environment.get_cl_context()
         self._compile_flags = compile_flags
         self._mh_state_dict = mh_state_dict
         self._cl_environment = cl_environment
         self._model = model
         self._data_info = self._model.get_kernel_data()
-        self._data_struct_manager = KernelInputDataManager(self._data_info)
+        self._data_struct_manager = KernelInputDataManager(self._data_info, mot_float_dtype)
         self._nmr_params = nmr_params
         self._nmr_samples = nmr_samples
         self._store_samples = store_samples
@@ -908,7 +909,7 @@ def _prepare_mh_state(mh_state, float_dtype):
 
     Args:
         mh_state (MHState): the MH state we wish to sanitize
-        float_dtype (np.dtype): the numpy dtype for the floats, either np.float32 or np.float64
+        float_dtype (dtype): the numpy dtype for the floats, either np.float32 or np.float64
 
     Returns:
         SimpleMHState: MH state with the same data only then possibly sanitized
