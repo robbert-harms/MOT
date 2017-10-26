@@ -160,7 +160,7 @@ class OptimizeModelBuilder(ModelBuilder):
                                    self.get_upper_bounds(),
                                    self._get_max_numdiff_step(),
                                    self._get_numdiff_scaling_factors(),
-                                   self._get_numdiff_bound_check_function())
+                                   self._get_numdiff_use_bounds())
 
     def build_with_codec(self, problems_to_analyze):
         return ParameterTransformedModel(self.build(problems_to_analyze), self.get_parameter_codec())
@@ -598,36 +598,14 @@ class OptimizeModelBuilder(ModelBuilder):
         """
         return [p.numdiff_info.scaling_factor for _, p in self._model_functions_info.get_estimable_parameters_list()]
 
-    def _get_numdiff_bound_check_function(self):
-        """Get the bound check function for the numerical differentiation algorithm.
+    def _get_numdiff_use_bounds(self):
+        """Get the boolean array indicating the use the of the bounds when taking the numerical derivative.
 
         Returns:
-            mot.utils.NamedCLFunction: a function with signature:
-                .. code-block:: c
-
-                    bool _step_within_bounds(mot_data_struct* data, mot_float_type* params,
-                                             global mot_float_type* steps);
+            list[bool]: a list with booleans, with True if we should use the bounds for that parameter, and False
+                if we don't have to.
         """
-        checks = []
-        for ind, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
-            if p.numdiff_info.use_bounds:
-                name = '{}.{}'.format(m.name, p.name)
-                lower_bound = self._get_bound_definition(name, 'lower')
-                upper_bound = self._get_bound_definition(name, 'upper')
-                checks.append('if(param_ind == {ind} && '
-                              '     (param_value - param_step < {lb} || param_value + param_step > {ub})){{'
-                              '         return false;'
-                              '}}'.format(ind=ind, lb=lower_bound, ub=upper_bound))
-
-        func_name = '_step_within_bounds'
-        func = '''
-            bool ''' + func_name + '''(mot_data_struct* data, mot_float_type param_value,
-                                       mot_float_type param_step, uint param_ind){
-                ''' + '\n'.join(checks) + '''
-                return true;
-            }
-        '''
-        return SimpleNamedCLFunction(func, func_name)
+        return [p.numdiff_info.use_bounds for _, p in self._model_functions_info.get_estimable_parameters_list()]
 
     def _transform_observations(self, observations):
         """Apply a transformation on the observations before fitting.
@@ -2097,7 +2075,7 @@ class SimpleOptimizeModel(NumericalDerivativeInterface):
                  name, double_precision, kernel_data_info, nmr_problems, nmr_inst_per_problem,
                  nmr_estimable_parameters, initial_parameters, pre_eval_parameter_modifier, eval_function,
                  objective_per_observation_function, lower_bounds, upper_bounds, numdiff_step,
-                 numdiff_scaling_factors, numdiff_bound_check_function):
+                 numdiff_scaling_factors, numdiff_use_bounds):
         self.used_problem_indices = used_problem_indices
         self._name = name
         self._double_precision = double_precision
@@ -2113,7 +2091,7 @@ class SimpleOptimizeModel(NumericalDerivativeInterface):
         self._upper_bounds = upper_bounds
         self._numdiff_step = numdiff_step
         self._numdiff_scaling_factors = numdiff_scaling_factors
-        self._numdiff_bound_check_function = numdiff_bound_check_function
+        self._numdiff_use_bounds = numdiff_use_bounds
 
     @property
     def name(self):
@@ -2162,8 +2140,8 @@ class SimpleOptimizeModel(NumericalDerivativeInterface):
     def numdiff_get_scaling_factors(self):
         return self._numdiff_scaling_factors
 
-    def numdiff_get_bound_check_function(self):
-        return self._numdiff_bound_check_function
+    def numdiff_use_bounds(self):
+        return self._numdiff_use_bounds
 
 
 class SimpleSampleModel(SampleModelInterface):

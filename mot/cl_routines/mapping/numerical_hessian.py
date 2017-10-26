@@ -17,7 +17,7 @@ __licence__ = 'LGPL v3'
 
 class NumericalHessian(CLRoutine):
 
-    def calculate(self, model, parameters, codec=None, double_precision=False, nmr_steps=15, step_ratio=2):
+    def calculate(self, model, parameters, codec=None, double_precision=False, step_ratio=2, nmr_steps=15):
         """Calculate and return the Hessian of the given function at the given parameters.
 
         This calculates the Hessian using a central difference at a 2nd order Taylor expansion.
@@ -48,14 +48,16 @@ class NumericalHessian(CLRoutine):
             codec (mot.model_building.utils.ParameterCodec): a parameter codec used to constrain the parameters
                 within bounds.
             double_precision (boolean): if we want to calculate everything in double precision
-            nmr_steps (int): the number of smaller and smaller step sizes we will generate. We will
-                calculate the derivative for each of these step sizes and extrapolate the best step size
-                from among them.
             step_ratio (float): the ratio at which the steps diminish.
+            nmr_steps (int): the number of steps we will generate. We will calculate the derivative for each of these
+                step sizes and extrapolate the best step size from among them. The minimum number of steps is 2.
 
         Returns:
             ndarray: the gradients for each of the parameters for each of the problems
         """
+        if nmr_steps < 2:
+            raise ValueError('Number of steps needs to be at least 2, {} given.'.format(nmr_steps))
+
         if len(parameters.shape) == 1:
             parameters = parameters[None, :]
         nmr_params = parameters.shape[1]
@@ -63,14 +65,14 @@ class NumericalHessian(CLRoutine):
         parameter_scalings = np.array(model.numdiff_get_scaling_factors())
 
         elements_needed = (nmr_params**2 - nmr_params) // 2 + nmr_params
-        steps = np.zeros((parameters.shape[0], nmr_steps, nmr_params))
+        initial_step = self._get_initial_step_size(model, parameters)
 
         all_kernel_data = dict(model.get_kernel_data())
         all_kernel_data.update({
             'parameters': KernelInputArray(parameters, ctype='mot_float_type'),
             'local_reduction_lls': KernelInputLocalMemory('double'),
-            'parameter_scalings': KernelInputArray(parameter_scalings, ctype='double', offset_str='0'),
-            'steps': KernelInputArray(steps, ctype='mot_float_type', is_writable=True),
+            'parameter_scalings_inv': KernelInputArray(1./parameter_scalings, ctype='double', offset_str='0'),
+            'initial_step': KernelInputArray(initial_step, ctype='mot_float_type', is_writable=True),
             'step_evaluates': KernelInputAllocatedOutput(
                 (parameters.shape[0], nmr_steps, elements_needed), 'double'),
             'step_evaluates_convoluted': KernelInputAllocatedOutput(
@@ -87,7 +89,6 @@ class NumericalHessian(CLRoutine):
 
         print(time.time() - start)
 
-        steps = all_kernel_data['steps'].get_data()
         step_evaluates = all_kernel_data['step_evaluates'].get_data()
         step_evaluates_convoluted = all_kernel_data['step_evaluates_convoluted'].get_data()
 
@@ -113,11 +114,15 @@ class NumericalHessian(CLRoutine):
 
         # print(steps)
 
+        def generate_steps(problem_ind):
+            return np.tile(initial_step[problem_ind], (nmr_steps, 1)) \
+                   * (float(step_ratio) ** -np.arange(nmr_steps))[:, None]
+
         def data_iterator():
-            for param_ind in range(parameters.shape[0]):
-                yield (full_step_evaluates[param_ind],
-                       full_step_evaluates_convoluted[param_ind],
-                       steps[param_ind],
+            for problem_ind in range(parameters.shape[0]):
+                yield (full_step_evaluates[problem_ind],
+                       full_step_evaluates_convoluted[problem_ind],
+                       generate_steps(problem_ind),
                        nmr_params)
 
         # result = np.array(list(map(extrapolate, data_iterator())))
@@ -134,6 +139,39 @@ class NumericalHessian(CLRoutine):
                 result = np.array(list(map(extrapolate, data_iterator())))
 
         return result * np.outer(parameter_scalings, parameter_scalings)
+
+    def _get_initial_step_size(self, model, parameters):
+        """Get an initial step size to use for every parameter.
+
+        This chooses the maximum of the maximum step defined in the model and the minimum step possible
+        for a parameter given its bounds.
+
+        Args:
+            model (mot.model_interfaces.NumericalDerivativeInterface): the model to use for calculating the
+                derivative.
+            parameters (ndarray): The parameters at which to evaluate the gradient. A (d, p) matrix with d problems,
+                p parameters and n samples.
+
+        Returns:
+            ndarray: for every problem instance the vector with the initial step size for each parameter.
+        """
+        upper_bounds = model.get_upper_bounds()
+        lower_bounds = model.get_lower_bounds()
+
+        max_step = model.numdiff_get_max_step()
+        minimum_allowed_step = np.minimum(np.abs(parameters - lower_bounds),
+                                          np.abs(np.array(upper_bounds) - parameters)) \
+                               * model.numdiff_get_scaling_factors()
+
+        initial_step = np.zeros_like(minimum_allowed_step)
+
+        for ind in range(parameters.shape[1]):
+            if model.numdiff_use_bounds()[ind]:
+                initial_step[:, ind] = np.minimum(minimum_allowed_step[:, ind], max_step[ind])
+            else:
+                initial_step[:, ind] = max_step[ind]
+
+        return initial_step
 
     def _get_richardson_rules(self, step_ratio):
         """Get the matrix with the convolution rules.
@@ -168,7 +206,6 @@ class NumericalHessian(CLRoutine):
 
     def _get_wrapped_function(self, model, parameters, codec, step_ratio, max_steps, nmr_steps):
         ll_function = model.get_objective_per_observation_function()
-        bound_check_function = model.numdiff_get_bound_check_function()
         nmr_inst_per_problem = model.get_nmr_inst_per_problem()
 
         nmr_params = parameters.shape[1]
@@ -182,7 +219,6 @@ class NumericalHessian(CLRoutine):
             func += codec.get_parameter_encode_function(function_name='encode')
 
         func += ll_function.get_cl_code()
-        func += bound_check_function.get_cl_code()
 
         func += '''
             double _calculate_function(mot_data_struct* data, mot_float_type* x){
@@ -234,29 +270,29 @@ class NumericalHessian(CLRoutine):
             }
             
             /**
-             * Evaluate the model with a little perturbation on two axis.
+             * Evaluate the model with a perturbation in two dimensions.
              * 
              * Args:
              *  data: the data container
              *  x_input: the array with the input parameters
-             *  perturb_loc_0: the index (into the x_input parameters) of the first parameter to perturbate
-             *  perturb_0: the added perturbation of the first parameter, corresponds to ``perturb_loc_0``
-             *  perturb_loc_1: the index (into the x_input parameters) of the second parameter to perturbate
-             *  perturb_1: the added perturbation of the second parameter, corresponds to ``perturb_loc_1``
+             *  perturb_dim_0: the index (into the x_input parameters) of the first parameter to perturbate
+             *  perturb_0: the added perturbation of the first parameter, corresponds to ``perturb_dim_0``
+             *  perturb_dim_1: the index (into the x_input parameters) of the second parameter to perturbate
+             *  perturb_1: the added perturbation of the second parameter, corresponds to ``perturb_dim_1``
              *
              * Returns:
              *  the function evaluated at the parameters plus their perturbation.
              */ 
             double _eval_step(mot_data_struct* data, mot_float_type* x_input, 
-                             uint perturb_loc_0, mot_float_type perturb_0,
-                             uint perturb_loc_1, mot_float_type perturb_1){
+                             uint perturb_dim_0, mot_float_type perturb_0,
+                             uint perturb_dim_1, mot_float_type perturb_1){
             
                 mot_float_type x_tmp[''' + str(nmr_params) + '''];
                 for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
                     x_tmp[i] = x_input[i];
                 }
-                x_tmp[perturb_loc_0] += perturb_0;
-                x_tmp[perturb_loc_1] += perturb_1;
+                x_tmp[perturb_dim_0] += perturb_0;
+                x_tmp[perturb_dim_1] += perturb_1;
                 
                 _prepare_parameters(data, x_tmp);
                 return _calculate_function(data, x_tmp);                
@@ -268,7 +304,7 @@ class NumericalHessian(CLRoutine):
              * This method uses a central difference method at the 2nd order Taylor expansion. 
              */
             void _compute_step(mot_data_struct* data, mot_float_type* x_input, mot_float_type f_x_input, 
-                              global mot_float_type* step_sizes, global double* step_evaluate_ptr){
+                               mot_float_type* step_sizes, global double* step_evaluate_ptr){
                 
                 mot_float_type perturbation[''' + str(nmr_params) + '''];
                 double calc;
@@ -277,10 +313,10 @@ class NumericalHessian(CLRoutine):
                 for(uint px = 0; px < ''' + str(nmr_params) + '''; px++){
                     calc = (
                           _eval_step(data, x_input, 
-                                    px, 2 * (step_sizes[px] / data->parameter_scalings[px]),
+                                    px, 2 * (step_sizes[px] * data->parameter_scalings_inv[px]),
                                     0, 0)
                         + _eval_step(data, x_input, 
-                                    px, -2 * (step_sizes[px] / data->parameter_scalings[px]),
+                                    px, -2 * (step_sizes[px] * data->parameter_scalings_inv[px]),
                                     0, 0)
                         - 2 * f_x_input
                         ) / (4 * step_sizes[px] * step_sizes[px]);
@@ -292,79 +328,18 @@ class NumericalHessian(CLRoutine):
                     for(uint py = px + 1; py < ''' + str(nmr_params) + '''; py++){
                         calc = (
                               _eval_step(data, x_input, 
-                                        px, step_sizes[px] / data->parameter_scalings[px],
-                                        py, step_sizes[py] / data->parameter_scalings[py])
+                                        px, step_sizes[px] * data->parameter_scalings_inv[px],
+                                        py, step_sizes[py] * data->parameter_scalings_inv[py])
                             - _eval_step(data, x_input, 
-                                        px, step_sizes[px] / data->parameter_scalings[px],
-                                        py, -step_sizes[py] / data->parameter_scalings[py])
+                                        px, step_sizes[px] * data->parameter_scalings_inv[px],
+                                        py, -step_sizes[py] * data->parameter_scalings_inv[py])
                             - _eval_step(data, x_input, 
-                                        px, -step_sizes[px] / data->parameter_scalings[px],
-                                        py, step_sizes[py] / data->parameter_scalings[py])
+                                        px, -step_sizes[px] * data->parameter_scalings_inv[px],
+                                        py, step_sizes[py] * data->parameter_scalings_inv[py])
                             + _eval_step(data, x_input, 
-                                        px, -step_sizes[px] / data->parameter_scalings[px],
-                                        py, -step_sizes[py] / data->parameter_scalings[py])
+                                        px, -step_sizes[px] * data->parameter_scalings_inv[px],
+                                        py, -step_sizes[py] * data->parameter_scalings_inv[py])
                         ) / (4 * step_sizes[px] * step_sizes[py]);
-                        
-                        /*
-                        calc = (
-                            -63 * (
-                                _eval_step(data, x_input, 
-                                        px, step_sizes[px] / data->parameter_scalings[px],
-                                        py, -2 * step_sizes[py] / data->parameter_scalings[py])
-                                + _eval_step(data, x_input, 
-                                        px, 2 * step_sizes[px] / data->parameter_scalings[px],
-                                        py, -step_sizes[py] / data->parameter_scalings[py])
-                                + _eval_step(data, x_input, 
-                                        px, -2 * step_sizes[px] / data->parameter_scalings[px],
-                                        py, step_sizes[py] / data->parameter_scalings[py])
-                                + _eval_step(data, x_input, 
-                                        px, -step_sizes[px] / data->parameter_scalings[px],
-                                        py, 2 * step_sizes[py] / data->parameter_scalings[py])
-                            ) +  
-                            63 * (
-                                _eval_step(data, x_input, 
-                                        px, -step_sizes[px] / data->parameter_scalings[px],
-                                        py, -2 * step_sizes[py] / data->parameter_scalings[py])
-                                + _eval_step(data, x_input, 
-                                        px, -2 * step_sizes[px] / data->parameter_scalings[px],
-                                        py, -step_sizes[py] / data->parameter_scalings[py])
-                                + _eval_step(data, x_input, 
-                                        px, step_sizes[px] / data->parameter_scalings[px],
-                                        py, 2 * step_sizes[py] / data->parameter_scalings[py])
-                                + _eval_step(data, x_input, 
-                                        px, 2 * step_sizes[px] / data->parameter_scalings[px],
-                                        py, step_sizes[py] / data->parameter_scalings[py])
-                            )  +  
-                            44 * (
-                                _eval_step(data, x_input, 
-                                        px, 2 * step_sizes[px] / data->parameter_scalings[px],
-                                        py, -2 * step_sizes[py] / data->parameter_scalings[py])
-                                + _eval_step(data, x_input, 
-                                        px, -2 * step_sizes[px] / data->parameter_scalings[px],
-                                        py, 2 * step_sizes[py] / data->parameter_scalings[py])
-                                - _eval_step(data, x_input, 
-                                        px, -2 * step_sizes[px] / data->parameter_scalings[px],
-                                        py, -2 * step_sizes[py] / data->parameter_scalings[py])
-                                - _eval_step(data, x_input, 
-                                        px, 2 * step_sizes[px] / data->parameter_scalings[px],
-                                        py, 2 * step_sizes[py] / data->parameter_scalings[py])
-                            )  +  
-                            74 * (
-                                _eval_step(data, x_input, 
-                                        px, -step_sizes[px] / data->parameter_scalings[px],
-                                        py, -step_sizes[py] / data->parameter_scalings[py])
-                                + _eval_step(data, x_input, 
-                                        px, step_sizes[px] / data->parameter_scalings[px],
-                                        py, step_sizes[py] / data->parameter_scalings[py])
-                                - _eval_step(data, x_input, 
-                                        px, step_sizes[px] / data->parameter_scalings[px],
-                                        py, -step_sizes[py] / data->parameter_scalings[py])
-                                - _eval_step(data, x_input, 
-                                        px, -step_sizes[px] / data->parameter_scalings[px],
-                                        py, step_sizes[py] / data->parameter_scalings[py])
-                            ) 
-                        ) / (600 * step_sizes[px] * step_sizes[py]);
-                        */
                         
                         if(get_local_id(0) == 0){
                             step_evaluate_ptr[result_ind++] = calc;
@@ -439,104 +414,30 @@ class NumericalHessian(CLRoutine):
                     }
                 }
             }
-            
-            /**
-             * Check if the initial point is within bounds. If not, we can not continue.
-             */
-            bool _initial_point_within_bounds(mot_data_struct* data, mot_float_type* x){
-                for(uint param_ind = 0; param_ind < ''' + str(nmr_steps) + '''; param_ind++){ 
-                    if(!''' + bound_check_function.get_cl_function_name() + '''(data, x[param_ind], 0, param_ind)){
-                        return false;
-                    }
-                }
-                return true;
-            }
-            
-            /**
-             * Generate set of step sizes for each parameter.
-             * 
-             * This first tries to find for every parameter an initial step size that is within bounds. 
-             * Next, it generates steps of decreasing magnitude according to the user specified step ratio until
-             * we reached the number of desired steps.
-             *
-             * This will write the step sizes directly into the step_sizes matrix.
-             *
-             * Returns:
-             *   false if no suitable steps could be generated for this parameter, true if it could.
-             */
-            bool _generate_grid_points(mot_data_struct* data, mot_float_type* x_input, 
-                                       global mot_float_type* step_sizes){
-                
-                mot_float_type max_steps[''' + str(nmr_params) + '''] = {''' + ', '.join(map(str, max_steps)) + '''};
-                mot_float_type first_step;
-                bool first_step_found = true;
-                
-                for(uint param_ind = 0; param_ind < ''' + str(nmr_params) + '''; param_ind++){ 
-                    first_step = max_steps[param_ind];
-                    
-                    // heuristic, try halving the parameter 10 times to see if we can get an acceptable initial step.
-                    for(uint i = 0; i < 10; i++){
-                        if(''' + bound_check_function.get_cl_function_name() + '''(
-                               data, x_input[param_ind], first_step / data->parameter_scalings[param_ind], param_ind)){
-                            step_sizes[param_ind] = first_step;
-                            first_step_found = true;
-                        }
-                        else{
-                            first_step /= 2.0;
-                        }    
-                    }
-                    if(!first_step_found){
-                        return false;
-                    }
-                    
-                    for(uint step_ind = 1; step_ind < ''' + str(nmr_steps) + '''; step_ind++){
-                        step_sizes[param_ind + step_ind * ''' + str(nmr_params) + '''] = 
-                            first_step / pown(''' + str(float(step_ratio)) + ''', step_ind);
-                    }
-                }
-                return true;
-            }
-            
+          
             void compute(mot_data_struct* data){
                 uint param_ind;
                 double eval;
                 double f_x_input;
 
                 mot_float_type x_input[''' + str(nmr_params) + '''];
-                mot_float_type bound_check_steps[''' + str(nmr_params) + '''];
+                mot_float_type current_steps[''' + str(nmr_params) + '''];
                 local bool within_bounds;
-                
-                global double* step_evaluate_ptr;
-                global double* step_evaluate_convoluted_ptr;
-                global mot_float_type* parameter_steps_ptr;
                 
                 for(param_ind = 0; param_ind < ''' + str(nmr_params) + '''; param_ind++){
                     x_input[param_ind] = data->parameters[param_ind];
                 }
                 f_x_input = _calculate_function(data, x_input);
-                
-                if(get_local_id(0) == 0){
-                    within_bounds = _initial_point_within_bounds(data, x_input);
-                }
-                barrier(CLK_GLOBAL_MEM_FENCE);
-                if(!within_bounds){
-                    return;
-                }
-                
-                if(get_local_id(0) == 0){
-                    within_bounds = _generate_grid_points(data, x_input, data->steps);
-                }
-                barrier(CLK_GLOBAL_MEM_FENCE);
-                if(!within_bounds){
-                    return;
-                }
-                                
+               
                 for(uint step_ind = 0; step_ind < ''' + str(nmr_steps) + '''; step_ind++){ 
-                    parameter_steps_ptr = data->steps + step_ind * ''' + str(nmr_params) + ''';
-                    step_evaluate_ptr = data->step_evaluates + step_ind * ''' + str(elements_needed) + ''';
-                    step_evaluate_convoluted_ptr = data->step_evaluates_convoluted + step_ind * ''' + str(elements_needed) + ''';
-                       
-                    _compute_step(data, x_input, f_x_input, parameter_steps_ptr, step_evaluate_ptr);
+                    for(uint param_ind = 0; param_ind < ''' + str(nmr_params) + '''; param_ind++){
+                        current_steps[param_ind] = data->initial_step[param_ind] 
+                            / pown(''' + str(float(step_ratio)) + ''', step_ind);
+                    }
+                    
+                    _compute_step(data, x_input, f_x_input, current_steps, 
+                        data->step_evaluates + step_ind * ''' + str(elements_needed) + '''
+                    );
                 }
                 barrier(CLK_GLOBAL_MEM_FENCE);
                 

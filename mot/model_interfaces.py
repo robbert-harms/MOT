@@ -393,29 +393,15 @@ class NumericalDerivativeInterface(OptimizeModelInterface):
         parameter is about one.
 
         Returns:
-            list[float]: per parameter a single float with the parameter scaling to use for that parameter.
-                The identity value is one.
+            list[float]: per estimable parameter a single float with the parameter scaling to use for that parameter.
+                Use 1 as identity.
         """
         raise NotImplementedError()
 
-    def numdiff_get_bound_check_function(self):
-        """Get a CL function that can be used to check the boundary conditions of a proposed step.
-
-        This needs to return a function with signature:
-
-        .. code-block:: c
-
-            bool _step_within_bounds(mot_data_struct* data, mot_float_type param_value,
-                                     mot_float_type param_step, uint param_ind);
-
-        Where ``data`` is the data containing structure, ``param_value`` is the value of the parameter we are stepping,
-        ``param_step`` is the step we wish to take in that parameter and param_ind is the index of the parameter in
-        the list of estimable parameters.
-
-        This method will need to check if ``param_value +/- param_step`` is within bounds.
+    def numdiff_use_bounds(self):
+        """Check for each parameter if we should be using the bounds for that parameter when taking the derivative.
 
         Returns:
-            mot.utils.NamedCLFunction: The function that the numerical differentiation function can use to
-                check if a proposed step is within bounds.
+            list[bool]: per parameter a boolean to identify if we should use the bounds for that parameter.
         """
         raise NotImplementedError()

@@ -481,6 +481,56 @@ def get_class_that_defined_method(method):
     return getattr(method, '__objclass__', None)
 
 
+def hessian_to_covariance(hessian):
+    """Calculate a covariance matrix from a Hessian by inverting the Hessian.
+
+    Mathematically we can calculate the covariance matrix from the Hessian (the Hessian at the Maximum Likelihood
+    Estimator), by a simple matrix inversion. However, round-off errors can make the Hessian singular and making an
+    exact inverse not possible. This method uses an exact inverse where possible yet will fallback on a pseudo inverse
+    where needed.
+
+    After the inversion we make the diagonal (representing the variances of each parameter) absolute.
+
+    Args:
+        hessian (ndarray): a matrix of shape (n, p, p) where for n problems we have a matrix of shape (p, p) for
+            p parameters and we take the inverse for every (p, p) matrix.
+
+    Returns:
+        ndarray: the covariance matrix calculated by inverting all the Hessians.
+    """
+    covars = np.zeros_like(hessian)
+    for roi_ind in range(hessian.shape[0]):
+        try:
+            covars[roi_ind] = np.linalg.inv(hessian[roi_ind])
+        except np.linalg.linalg.LinAlgError:
+            covars[roi_ind] = np.linalg.pinv(hessian[roi_ind])
+
+    diagonal_ind = np.arange(hessian.shape[1])
+    covars[:, diagonal_ind, diagonal_ind] = np.abs(covars[:, diagonal_ind, diagonal_ind])
+
+    return covars
+
+
+def covariance_to_correlations(covariance):
+    """Transform a covariance matrix into a correlations matrix.
+
+    This can be seen as dividing a covariance matrix by the outer product of the diagonal.
+
+    As post processing we replace the infinities and the NaNs with zeros and clip the result to [-1, 1].
+
+    Args:
+        covariance (ndarray): a matrix of shape (n, p, p) with for n problems the covariance matrix of shape (p, p).
+
+    Returns:
+        ndarray: the correlations matrix
+    """
+    diagonal_ind = np.arange(covariance.shape[1])
+    diagonal_els = covariance[:, diagonal_ind, diagonal_ind]
+    result = covariance / np.sqrt(diagonal_els[:, :, None] * diagonal_els[:, None, :])
+    result[np.isinf(result)] = 0
+    return np.clip(np.nan_to_num(result), -1, 1)
+
+
 class KernelInputData(object):
 
     def set_mot_float_dtype(self, mot_float_dtype):
