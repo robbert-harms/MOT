@@ -17,7 +17,7 @@ __licence__ = 'LGPL v3'
 
 class NumericalHessian(CLRoutine):
 
-    def calculate(self, model, parameters, codec=None, double_precision=False, step_ratio=2, nmr_steps=15):
+    def calculate(self, model, parameters, double_precision=False, step_ratio=2, nmr_steps=15, step_offset=None):
         """Calculate and return the Hessian of the given function at the given parameters.
 
         This calculates the Hessian using a central difference at a 2nd order Taylor expansion.
@@ -35,22 +35,21 @@ class NumericalHessian(CLRoutine):
 
         Steps are generated according to a exponentially diminishing ratio defined as:
 
-            steps = max_step * step_ratio**-i, i=0, 1,.., nmr_steps-1.
+            steps = max_step * step_ratio**-(i+offset), i=0, 1,.., nmr_steps-1.
 
         Where the max step is taken from the model. For example, a maximum step of 2 with a step ratio of 2 with 4 steps
-        gives: [2.0, 1.0, 0.5, 0.25].
+        gives: [2.0, 1.0, 0.5, 0.25]. If offset would be set to 2, we would get instead: [0.5, 0.25, 0.125, 0.0625].
 
         Args:
             model (mot.model_interfaces.NumericalDerivativeInterface): the model to use for calculating the
                 derivative.
             parameters (ndarray): The parameters at which to evaluate the gradient. A (d, p) matrix with d problems,
                 p parameters and n samples.
-            codec (mot.model_building.utils.ParameterCodec): a parameter codec used to constrain the parameters
-                within bounds.
             double_precision (boolean): if we want to calculate everything in double precision
             step_ratio (float): the ratio at which the steps diminish.
             nmr_steps (int): the number of steps we will generate. We will calculate the derivative for each of these
                 step sizes and extrapolate the best step size from among them. The minimum number of steps is 2.
+            step_offset (the offset in the steps, if set we start the steps from the given offset.
 
         Returns:
             ndarray: the gradients for each of the parameters for each of the problems
@@ -66,6 +65,8 @@ class NumericalHessian(CLRoutine):
 
         elements_needed = (nmr_params**2 - nmr_params) // 2 + nmr_params
         initial_step = self._get_initial_step_size(model, parameters)
+        if step_offset:
+            initial_step *= float(step_ratio) ** -step_offset
 
         all_kernel_data = dict(model.get_kernel_data())
         all_kernel_data.update({
@@ -83,7 +84,7 @@ class NumericalHessian(CLRoutine):
         start = time.time()
         runner = RunProcedure(**self.get_cl_routine_kwargs())
         runner.run_procedure(self._get_wrapped_function(
-            model, parameters, codec, step_ratio, model.numdiff_get_max_step(), nmr_steps),
+            model, parameters, step_ratio, nmr_steps),
             all_kernel_data, parameters.shape[0], double_precision=double_precision,
             use_local_reduction=True)
 
@@ -204,21 +205,18 @@ class NumericalHessian(CLRoutine):
 
         return [linalg.pinv(r_matrix(step, seq_length))[0] for seq_length in range(1, 3)]
 
-    def _get_wrapped_function(self, model, parameters, codec, step_ratio, max_steps, nmr_steps):
+    def _get_wrapped_function(self, model, parameters, step_ratio, nmr_steps):
         ll_function = model.get_objective_per_observation_function()
         nmr_inst_per_problem = model.get_nmr_inst_per_problem()
+        numdiff_param_transform = model.numdiff_parameter_transformation()
 
         nmr_params = parameters.shape[1]
         elements_needed = (nmr_params ** 2 - nmr_params) // 2 + nmr_params
         richardson_rules = self._get_richardson_rules(step_ratio)
 
         func = ''
-
-        if codec is not None:
-            func += codec.get_parameter_decode_function(function_name='decode')
-            func += codec.get_parameter_encode_function(function_name='encode')
-
         func += ll_function.get_cl_code()
+        func += numdiff_param_transform.get_cl_code()
 
         func += '''
             double _calculate_function(mot_data_struct* data, mot_float_type* x){
@@ -226,13 +224,13 @@ class NumericalHessian(CLRoutine):
                 ulong local_id = get_local_id(0);
                 data->local_reduction_lls[local_id] = 0;
                 uint workgroup_size = get_local_size(0);
-                uint elements_for_workitem = ceil(''' + str(nmr_inst_per_problem) + ''' 
+                uint elements_for_workitem = ceil(''' + str(nmr_inst_per_problem) + '''
                                                   / (mot_float_type)workgroup_size);
-                
+
                 if(workgroup_size * (elements_for_workitem - 1) + local_id >= ''' + str(nmr_inst_per_problem) + '''){
                     elements_for_workitem -= 1;
                 }
-                
+
                 for(uint i = 0; i < elements_for_workitem; i++){
                     observation_ind = i * workgroup_size + local_id;
                     data->local_reduction_lls[local_id] += ''' + ll_function.get_cl_function_name() + '''(
@@ -249,29 +247,8 @@ class NumericalHessian(CLRoutine):
             }
 
             /**
-             * Prepare the parameters for evaluation.
-             * 
-             * This is where the user can enter possible parameter transformations like a modulus transformation.
-             *
-             * For boundary condition checks please use the ``_step_within_bounds`` function instead.
-             *  
-             * Args:
-             *  data: the data container
-             *  params: the parameters we wish to input into the model, changes can be done in place.
-             */
-            void _prepare_parameters(mot_data_struct* data, mot_float_type* params){
-        '''
-        if codec is not None:
-            func += '''
-                encode(data, params);
-                decode(data, params);
-            '''
-        func += '''
-            }
-            
-            /**
              * Evaluate the model with a perturbation in two dimensions.
-             * 
+             *
              * Args:
              *  data: the data container
              *  x_input: the array with the input parameters
@@ -282,98 +259,98 @@ class NumericalHessian(CLRoutine):
              *
              * Returns:
              *  the function evaluated at the parameters plus their perturbation.
-             */ 
-            double _eval_step(mot_data_struct* data, mot_float_type* x_input, 
+             */
+            double _eval_step(mot_data_struct* data, mot_float_type* x_input,
                              uint perturb_dim_0, mot_float_type perturb_0,
                              uint perturb_dim_1, mot_float_type perturb_1){
-            
+
                 mot_float_type x_tmp[''' + str(nmr_params) + '''];
                 for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
                     x_tmp[i] = x_input[i];
                 }
                 x_tmp[perturb_dim_0] += perturb_0;
                 x_tmp[perturb_dim_1] += perturb_1;
-                
-                _prepare_parameters(data, x_tmp);
-                return _calculate_function(data, x_tmp);                
+
+                ''' + numdiff_param_transform.get_cl_function_name() + '''(data, x_tmp);
+                return _calculate_function(data, x_tmp);
             }
-            
-            /** 
+
+            /**
              * Compute the Hessian for one row of step sizes.
              *
-             * This method uses a central difference method at the 2nd order Taylor expansion. 
+             * This method uses a central difference method at the 2nd order Taylor expansion.
              */
-            void _compute_step(mot_data_struct* data, mot_float_type* x_input, mot_float_type f_x_input, 
+            void _compute_step(mot_data_struct* data, mot_float_type* x_input, mot_float_type f_x_input,
                                mot_float_type* step_sizes, global double* step_evaluate_ptr){
-                
+
                 mot_float_type perturbation[''' + str(nmr_params) + '''];
                 double calc;
                 uint result_ind = 0;
-                
+
                 for(uint px = 0; px < ''' + str(nmr_params) + '''; px++){
                     calc = (
-                          _eval_step(data, x_input, 
+                          _eval_step(data, x_input,
                                     px, 2 * (step_sizes[px] * data->parameter_scalings_inv[px]),
                                     0, 0)
-                        + _eval_step(data, x_input, 
+                        + _eval_step(data, x_input,
                                     px, -2 * (step_sizes[px] * data->parameter_scalings_inv[px]),
                                     0, 0)
                         - 2 * f_x_input
                         ) / (4 * step_sizes[px] * step_sizes[px]);
-                    
+
                     if(get_local_id(0) == 0){
                         step_evaluate_ptr[result_ind++] = calc;
                     }
-                    
+
                     for(uint py = px + 1; py < ''' + str(nmr_params) + '''; py++){
                         calc = (
-                              _eval_step(data, x_input, 
+                              _eval_step(data, x_input,
                                         px, step_sizes[px] * data->parameter_scalings_inv[px],
                                         py, step_sizes[py] * data->parameter_scalings_inv[py])
-                            - _eval_step(data, x_input, 
+                            - _eval_step(data, x_input,
                                         px, step_sizes[px] * data->parameter_scalings_inv[px],
                                         py, -step_sizes[py] * data->parameter_scalings_inv[py])
-                            - _eval_step(data, x_input, 
+                            - _eval_step(data, x_input,
                                         px, -step_sizes[px] * data->parameter_scalings_inv[px],
                                         py, step_sizes[py] * data->parameter_scalings_inv[py])
-                            + _eval_step(data, x_input, 
+                            + _eval_step(data, x_input,
                                         px, -step_sizes[px] * data->parameter_scalings_inv[px],
                                         py, -step_sizes[py] * data->parameter_scalings_inv[py])
                         ) / (4 * step_sizes[px] * step_sizes[py]);
-                        
+
                         if(get_local_id(0) == 0){
                             step_evaluate_ptr[result_ind++] = calc;
                         }
                     }
-                }    
+                }
             }
-            
+
             /**
              * Apply a simple kernel convolution over the results from each row of steps.
-             * 
-             * This applies a convolution starting from the starting step index that contained a valid move. 
+             *
+             * This applies a convolution starting from the starting step index that contained a valid move.
              * It uses the mode 'reflect' to deal with outside points.
-             * 
+             *
              * Please note that this kernel is hard coded to work with 2nd order Taylor expansions derivatives only.
-             
+
              * Args:
              *  step_evaluates: the step evaluates for each row of the step sizes
-             *  step_evaluates_convoluted: the array to place the convoluted results in 
-             */ 
+             *  step_evaluates_convoluted: the array to place the convoluted results in
+             */
             void _apply_richardson_convolution(
                     global double* step_evaluates,
                     global double* step_evaluates_convoluted){
-                    
+
                 double kernel_2[2] = {''' + ', '.join(map(str, richardson_rules[0])) + '''};
                 double kernel_3[3] = {''' + ', '.join(map(str, richardson_rules[1])) + '''};
-                
+
                 double* kernel_ptr;
                 uint kernel_length;
-                
+
                 if(''' + str(nmr_steps) + ''' <= 1){
                     return;
                 }
-                
+
                 if(''' + str(nmr_steps) + ''' == 2){
                     kernel_ptr = kernel_2;
                     kernel_length = 2;
@@ -382,39 +359,39 @@ class NumericalHessian(CLRoutine):
                     kernel_ptr = kernel_3;
                     kernel_length = 3;
                 }
-                
+
                 uint kernel_step_ind;
                 ulong local_id = get_local_id(0);
                 uint workgroup_size = get_local_size(0);
                 uint element_ind;
                 uint elements_for_workitem = ceil(''' + str(elements_needed) + ''' / (mot_float_type)workgroup_size);
-                
+
                 if(workgroup_size * (elements_for_workitem - 1) + local_id >= ''' + str(elements_needed) + '''){
                     elements_for_workitem -= 1;
                 }
-                
+
                 for(uint i = 0; i < elements_for_workitem; i++){
-                    element_ind = i * workgroup_size + local_id;        
-                    
+                    element_ind = i * workgroup_size + local_id;
+
                     for(uint step_ind = 0; step_ind < ''' + str(nmr_steps) + '''; step_ind++){
-                        
+
                         // convolute kernel
                         for(uint kernel_ind = 0; kernel_ind < kernel_length; kernel_ind++){
                             kernel_step_ind = step_ind + kernel_ind;
-                            
+
                             // reflect
                             if(kernel_step_ind >= ''' + str(nmr_steps) + '''){
-                                kernel_step_ind -= 2 * (kernel_step_ind - ''' + str(nmr_steps) + ''') + 1;  
+                                kernel_step_ind -= 2 * (kernel_step_ind - ''' + str(nmr_steps) + ''') + 1;
                             }
-                         
-                            step_evaluates_convoluted[step_ind * ''' + str(elements_needed) + ''' + element_ind] += 
-                                (step_evaluates[kernel_step_ind * ''' + str(elements_needed) + ''' + element_ind] 
+
+                            step_evaluates_convoluted[step_ind * ''' + str(elements_needed) + ''' + element_ind] +=
+                                (step_evaluates[kernel_step_ind * ''' + str(elements_needed) + ''' + element_ind]
                                     * kernel_ptr[kernel_ind]);
                         }
                     }
                 }
             }
-          
+
             void compute(mot_data_struct* data){
                 uint param_ind;
                 double eval;
@@ -423,24 +400,24 @@ class NumericalHessian(CLRoutine):
                 mot_float_type x_input[''' + str(nmr_params) + '''];
                 mot_float_type current_steps[''' + str(nmr_params) + '''];
                 local bool within_bounds;
-                
+
                 for(param_ind = 0; param_ind < ''' + str(nmr_params) + '''; param_ind++){
                     x_input[param_ind] = data->parameters[param_ind];
                 }
                 f_x_input = _calculate_function(data, x_input);
-               
-                for(uint step_ind = 0; step_ind < ''' + str(nmr_steps) + '''; step_ind++){ 
+
+                for(uint step_ind = 0; step_ind < ''' + str(nmr_steps) + '''; step_ind++){
                     for(uint param_ind = 0; param_ind < ''' + str(nmr_params) + '''; param_ind++){
-                        current_steps[param_ind] = data->initial_step[param_ind] 
+                        current_steps[param_ind] = data->initial_step[param_ind]
                             / pown(''' + str(float(step_ratio)) + ''', step_ind);
                     }
-                    
-                    _compute_step(data, x_input, f_x_input, current_steps, 
+
+                    _compute_step(data, x_input, f_x_input, current_steps,
                         data->step_evaluates + step_ind * ''' + str(elements_needed) + '''
                     );
                 }
                 barrier(CLK_GLOBAL_MEM_FENCE);
-                
+
                 _apply_richardson_convolution(data->step_evaluates, data->step_evaluates_convoluted);
             }
         '''

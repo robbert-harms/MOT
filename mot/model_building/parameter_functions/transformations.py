@@ -174,12 +174,12 @@ class AbsModXTransform(AbstractTransformation):
         self._x = x
 
     def get_cl_encode(self):
-        return FormatAssignmentConstructor('fmod((mot_float_type)fabs({parameter_variable}), '
-                                           '(mot_float_type)' + str(self._x) + ')')
+        return FormatAssignmentConstructor(
+            '({parameter_variable} - (' + str(self._x) + ' * floor({parameter_variable} / ' + str(self._x) + ')))')
 
     def get_cl_decode(self):
-        return FormatAssignmentConstructor('fmod((mot_float_type)fabs({parameter_variable}), '
-                                           '(mot_float_type)' + str(self._x) + ')')
+        return FormatAssignmentConstructor(
+            '({parameter_variable} - (' + str(self._x) + ' * floor({parameter_variable} / ' + str(self._x) + ')))')
 
 
 class AbsModPiTransform(AbsModXTransform):

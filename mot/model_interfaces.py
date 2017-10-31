@@ -405,3 +405,22 @@ class NumericalDerivativeInterface(OptimizeModelInterface):
             list[bool]: per parameter a boolean to identify if we should use the bounds for that parameter.
         """
         raise NotImplementedError()
+
+    def numdiff_parameter_transformation(self):
+        """A transformation that can prepare the parameter +/- the proposed step for evaluation in the model function.
+
+        Some parameters require for example a modulus operation before the proposed step can be used in the model
+        This is the place to define them. Please note that this function does not need to incorporate boundary checks
+        as those are handled already by the numerical differentiation routine.
+
+        Returns:
+            mot.utils.NamedCLFunction: A function with the signature:
+                .. code-block:: c
+
+                    void <func_name>(mot_data_struct* data, mot_float_type* params);
+
+                Where the data is the kernel data struct and params is the vector with the suggested parameters and
+                which can be modified in place. Note that this is called two times, one with the parameters plus
+                the step and one time without.
+        """
+        raise NotImplementedError()

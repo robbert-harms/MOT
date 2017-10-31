@@ -160,7 +160,8 @@ class OptimizeModelBuilder(ModelBuilder):
                                    self.get_upper_bounds(),
                                    self._get_max_numdiff_step(),
                                    self._get_numdiff_scaling_factors(),
-                                   self._get_numdiff_use_bounds())
+                                   self._get_numdiff_use_bounds(),
+                                   self._get_numdiff_param_transform())
 
     def build_with_codec(self, problems_to_analyze):
         return ParameterTransformedModel(self.build(problems_to_analyze), self.get_parameter_codec())
@@ -497,7 +498,7 @@ class OptimizeModelBuilder(ModelBuilder):
                     mot_data_struct* data,
                     const mot_float_type* const x,
                     uint observation_index){{
-                
+
                 {body}
             }}
         '''.format(function_name=function_name, body=indent(get_function_body(), ' '*4*4)[4*4:])
@@ -526,9 +527,9 @@ class OptimizeModelBuilder(ModelBuilder):
                 double observation = data->observations[observation_index];
                 double model_evaluation = ''' + eval_function_info.get_cl_function_name() + '''(
                     data, x, observation_index);
-                
+
                 ''' + param_listing + '''
-                
+
                 return -''' + eval_model_func.get_cl_function_name() + '''(''' + ','.join(eval_call_args) + ''');
             }
         '''
@@ -606,6 +607,35 @@ class OptimizeModelBuilder(ModelBuilder):
                 if we don't have to.
         """
         return [p.numdiff_info.use_bounds for _, p in self._model_functions_info.get_estimable_parameters_list()]
+
+    def _get_numdiff_param_transform(self):
+        """Get the parameter transformation for use in the numerical differentiation algorithm.
+
+        Returns:
+            mot.utils.NamedCLFunction: A function with the signature:
+                .. code-block:: c
+
+                    void <func_name>(mot_data_struct* data, mot_float_type* params);
+
+                Where the data is the kernel data struct and params is the vector with the suggested parameters and
+                which can be modified in place. Note that this is called two times, one with the parameters plus
+                the step and one time without.
+        """
+        transforms = []
+        for ind, (_, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
+            if p.numdiff_info.modulus is not None and p.numdiff_info.modulus > 0:
+                transforms.append(
+                    'params[{ind}] = (params[{ind}] - '
+                    '({div} * floor(params[{ind}] / {div})));'.format(ind=ind, div=p.numdiff_info.modulus))
+
+        func_name = 'param_transform'
+        func = '''
+            void {func_name}(mot_data_struct* data, mot_float_type* params){{
+                {transforms}
+            }}
+        '''.format(func_name=func_name, transforms='\n'.join(transforms))
+        return SimpleNamedCLFunction(func, func_name)
+
 
     def _transform_observations(self, observations):
         """Apply a transformation on the observations before fitting.
@@ -1408,9 +1438,9 @@ class SampleModelBuilder(OptimizeModelBuilder):
 
         func_name = 'getLogLikelihoodPerObservation'
         func = str(preliminary) + eval_model_func.get_cl_code() + '''
-           double ''' + func_name + '''(mot_data_struct* data, const mot_float_type* const x, 
+           double ''' + func_name + '''(mot_data_struct* data, const mot_float_type* const x,
                                         uint observation_index){
-               
+
                double observation = data->observations[observation_index];
                double model_evaluation = ''' + eval_function_info.get_cl_function_name() + '''(
                    data, x, observation_index);
@@ -2075,7 +2105,7 @@ class SimpleOptimizeModel(NumericalDerivativeInterface):
                  name, double_precision, kernel_data_info, nmr_problems, nmr_inst_per_problem,
                  nmr_estimable_parameters, initial_parameters, pre_eval_parameter_modifier, eval_function,
                  objective_per_observation_function, lower_bounds, upper_bounds, numdiff_step,
-                 numdiff_scaling_factors, numdiff_use_bounds):
+                 numdiff_scaling_factors, numdiff_use_bounds, numdiff_param_transform):
         self.used_problem_indices = used_problem_indices
         self._name = name
         self._double_precision = double_precision
@@ -2092,6 +2122,7 @@ class SimpleOptimizeModel(NumericalDerivativeInterface):
         self._numdiff_step = numdiff_step
         self._numdiff_scaling_factors = numdiff_scaling_factors
         self._numdiff_use_bounds = numdiff_use_bounds
+        self._numdiff_param_transform = numdiff_param_transform
 
     @property
     def name(self):
@@ -2142,6 +2173,9 @@ class SimpleOptimizeModel(NumericalDerivativeInterface):
 
     def numdiff_use_bounds(self):
         return self._numdiff_use_bounds
+
+    def numdiff_parameter_transformation(self):
+        return self._numdiff_param_transform
 
 
 class SimpleSampleModel(SampleModelInterface):
