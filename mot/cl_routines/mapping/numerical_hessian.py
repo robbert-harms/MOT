@@ -20,7 +20,8 @@ class NumericalHessian(CLRoutine):
     def calculate(self, model, parameters, double_precision=False, step_ratio=2, nmr_steps=15, step_offset=None):
         """Calculate and return the Hessian of the given function at the given parameters.
 
-        This calculates the Hessian using a central difference at a 2nd order Taylor expansion.
+        This calculates the Hessian using central difference at a 2nd order Taylor expansion with Richardson
+        extrapolation over the proposed steps.
 
         .. math::
             \quad  ((f(x + d_j e_j + d_k e_k) - f(x + d_j e_j - d_k e_k)) -
@@ -29,9 +30,6 @@ class NumericalHessian(CLRoutine):
 
         where :math:`e_j` is a vector where element :math:`j` is one and the rest are zero
         and :math:`d_j` is a scalar spacing :math:`steps_j`.
-
-        This method evaluates the Hessian at various step sizes and uses the Richardson extrapolation method
-        to approximate the final Hessian.
 
         Steps are generated according to a exponentially diminishing ratio defined as:
 
