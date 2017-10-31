@@ -506,7 +506,8 @@ def hessian_to_covariance(hessian):
     exact inverse not possible. This method uses an exact inverse where possible yet will fallback on a pseudo inverse
     where needed.
 
-    After the inversion we make the diagonal (representing the variances of each parameter) absolute.
+    After the inversion we make the diagonal (representing the variances of each parameter) positive where needed by
+    taking the absolute.
 
     Args:
         hessian (ndarray): a matrix of shape (n, p, p) where for n problems we have a matrix of shape (p, p) for
@@ -520,7 +521,10 @@ def hessian_to_covariance(hessian):
         try:
             covars[roi_ind] = np.linalg.inv(hessian[roi_ind])
         except np.linalg.linalg.LinAlgError:
-            covars[roi_ind] = np.linalg.pinv(hessian[roi_ind])
+            try:
+                covars[roi_ind] = np.linalg.pinv(hessian[roi_ind])
+            except np.linalg.linalg.LinAlgError:
+                covars[roi_ind] = np.zeros(hessian[roi_ind].shape)
 
     diagonal_ind = np.arange(hessian.shape[1])
     covars[:, diagonal_ind, diagonal_ind] = np.abs(covars[:, diagonal_ind, diagonal_ind])
