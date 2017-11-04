@@ -5,7 +5,7 @@ import numpy as np
 import pyopencl as cl
 from numpy.testing import assert_array_equal
 
-from mot.utils import device_type_from_string, device_supports_double, results_to_dict, get_float_type_def, is_scalar, \
+from mot.utils import device_type_from_string, device_supports_double, get_float_type_def, is_scalar, \
     all_elements_equal, get_single_value, topological_sort
 
 __author__ = 'Robbert Harms'
@@ -39,34 +39,6 @@ class test_device_supports_double(unittest.TestCase):
             for device in platform.get_devices():
                 has_double = device.get_info(cl.device_info.DOUBLE_FP_CONFIG) == 63
                 assert(device_supports_double(device) == has_double)
-
-
-class test_results_to_dict(unittest.TestCase):
-
-    def test_mismatch(self):
-        results = np.zeros((2, 3, 4))
-        param_names = ['only_one_name_for_three_params']
-        self.assertRaises(ValueError, results_to_dict, results, param_names)
-
-    def test_2d_matrix(self):
-        results = np.random.rand(2, 3)
-        param_names = ['p1', 'p2', 'p3']
-        results_dict = results_to_dict(results, param_names)
-
-        assert(all(name in results_dict for name in param_names))
-
-        for ind, name in enumerate(param_names):
-            assert_array_equal(results_dict[name], results[:, ind])
-
-    def test_3d_matrix(self):
-        results = np.random.rand(2, 3, 4)
-        param_names = ['p1', 'p2', 'p3']
-        results_dict = results_to_dict(results, param_names)
-
-        assert(all(name in results_dict for name in param_names))
-
-        for ind, name in enumerate(param_names):
-            assert_array_equal(results_dict[name], results[:, ind, :])
 
 
 class test_get_float_type_def(unittest.TestCase):

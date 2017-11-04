@@ -1,10 +1,5 @@
-import multiprocessing
 import numpy as np
-from scipy.optimize import minimize
-from scipy.stats import norm
-import os
-
-from mot.utils import is_scalar
+from mot.statistics import fit_gaussian, fit_truncated_gaussian, fit_circular_gaussian
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-10-23"
@@ -55,7 +50,8 @@ class GaussianFit(ParameterSampleStatistics):
     estimator.
     """
     def get_statistics(self, samples, lower_bounds, upper_bounds):
-        return SimpleSamplingStatistics(np.mean(samples, axis=1), {'std': np.std(samples, axis=1, ddof=1)})
+        mean, std = fit_gaussian(samples, ddof=1)
+        return SimpleSamplingStatistics(mean, std)
 
     def get_distance_from_expected(self, samples, expected_value):
         return samples - expected_value[:, None]
@@ -75,9 +71,8 @@ class CircularGaussianFit(ParameterSampleStatistics):
         self.low = low
 
     def get_statistics(self, samples, lower_bounds, upper_bounds):
-        from mot.cl_routines.mapping.circular_gaussian_fit import CircularGaussianFit
-        mean, std = CircularGaussianFit().calculate(samples, high=self.high, low=self.low)
-        return SimpleSamplingStatistics(mean, {'std': std})
+        mean, std = fit_circular_gaussian(samples, high=self.high, low=self.low)
+        return SimpleSamplingStatistics(mean, std)
 
     def get_distance_from_expected(self, samples, expected_value):
         distance_direct = samples - expected_value[:, None]
@@ -109,165 +104,67 @@ class TruncatedGaussianFit(ParameterSampleStatistics):
         return samples - expected_value[:, None]
 
     def get_statistics(self, samples, lower_bounds, upper_bounds):
-
-        def item_generator():
-            for ind in range(samples.shape[0]):
-                if is_scalar(lower_bounds):
-                    lower_bound = lower_bounds
-                else:
-                    lower_bound = lower_bounds[ind]
-
-                if is_scalar(upper_bounds):
-                    upper_bound = upper_bounds
-                else:
-                    upper_bound = upper_bounds[ind]
-
-                yield (samples[ind] * self._scaling_factor,
-                       lower_bound * self._scaling_factor,
-                       upper_bound * self._scaling_factor)
-
-        if os.name == 'nt':  # In Windows there is no fork.
-            results = np.array(list(map(_TruncatedNormalFitter(), item_generator())), dtype=samples.dtype)
-        else:
-            try:
-                p = multiprocessing.Pool()
-                results = np.array(list(p.imap(_TruncatedNormalFitter(), item_generator())), dtype=samples.dtype)
-                p.close()
-                p.join()
-            except OSError:
-                results = np.array(list(map(_TruncatedNormalFitter(), item_generator())), dtype=samples.dtype)
-
-        results /= self._scaling_factor
-        return SimpleSamplingStatistics(results[:, 0], {'std': results[:, 1]})
-
-
-class _TruncatedNormalFitter(object):
-
-    def __call__(self, item):
-        """Fit the mean and std of the truncated normal to the given samples.
-
-        This is in a separate class to use the python multiprocessing library.
-        """
-        samples, lower_bound, upper_bound = item
-        result = minimize(_TruncatedNormalFitter.truncated_normal_log_likelihood,
-                          np.array([np.mean(samples), np.std(samples)]),
-                          args=(lower_bound, upper_bound, samples),
-                          method='TNC',
-                          jac=_TruncatedNormalFitter.truncated_normal_ll_gradient,
-                          bounds=[(lower_bound, upper_bound), (0, None)])
-        return result.x
-
-    @staticmethod
-    def truncated_normal_log_likelihood(params, low, high, data):
-        """Calculate the log likelihood of the truncated normal distribution.
-
-        Args:
-            params: tuple with (mean, std), the parameters under which we evaluate the model
-            low (float): the lower truncation bound
-            high (float): the upper truncation bound
-            data (ndarray): the one dimension list of data points for which we want to calculate the likelihood
-
-        Returns:
-            float: the negative log likelihood of observing the given data under the given parameters.
-                This is meant to be used in minimization routines.
-        """
-        mu = params[0]
-        sigma = params[1]
-        ll = np.sum(norm.logpdf(data, mu, sigma))
-        ll -= len(data) * np.log((norm.cdf(high, mu, sigma) - norm.cdf(low, mu, sigma)))
-        return -ll
-
-    @staticmethod
-    def truncated_normal_ll_gradient(params, low, high, data):
-        """Return the gradient of the log likelihood of the truncated normal at the given position.
-
-        Args:
-            params: tuple with (mean, std), the parameters under which we evaluate the model
-            low (float): the lower truncation bound
-            high (float): the upper truncation bound
-            data (ndarray): the one dimension list of data points for which we want to calculate the likelihood
-
-        Returns:
-            tuple: the gradient of the log likelihood given as a tuple with (mean, std)
-        """
-        return np.array([_TruncatedNormalFitter.partial_derivative_mu(params[0], params[1], low, high, data),
-                         _TruncatedNormalFitter.partial_derivative_sigma(params[0], params[1], low, high, data)])
-
-    @staticmethod
-    def partial_derivative_mu(mu, sigma, low, high, data):
-        """The partial derivative with respect to the mean.
-
-        Args:
-            mu (float): the mean of the truncated normal
-            sigma (float): the std of the truncated normal
-            low (float): the lower truncation bound
-            high (float): the upper truncation bound
-            data (ndarray): the one dimension list of data points for which we want to calculate the likelihood
-
-        Returns:
-            float: the partial derivative evaluated at the given point
-        """
-        pd_mu = np.sum(data - mu) / sigma ** 2
-        pd_mu -= len(data) * ((norm.pdf(low, mu, sigma) - norm.pdf(high, mu, sigma))
-                              / (norm.cdf(high, mu, sigma) - norm.cdf(low, mu, sigma)))
-        return -pd_mu
-
-    @staticmethod
-    def partial_derivative_sigma(mu, sigma, low, high, data):
-        """The partial derivative with respect to the standard deviation.
-
-        Args:
-            mu (float): the mean of the truncated normal
-            sigma (float): the std of the truncated normal
-            low (float): the lower truncation bound
-            high (float): the upper truncation bound
-            data (ndarray): the one dimension list of data points for which we want to calculate the likelihood
-
-        Returns:
-            float: the partial derivative evaluated at the given point
-        """
-        pd_sigma = np.sum(-(1 / sigma) + ((data - mu) ** 2 / (sigma ** 3)))
-        pd_sigma -= len(data) * (((low - mu) * norm.pdf(low, mu, sigma) - (high - mu) * norm.pdf(high, mu, sigma))
-                                 / (sigma * (norm.cdf(high, mu, sigma) - norm.cdf(low, mu, sigma))))
-        return -pd_sigma
+        mean, std = fit_truncated_gaussian(samples*self._scaling_factor,
+                                           lower_bounds*self._scaling_factor,
+                                           upper_bounds* self._scaling_factor)
+        return SimpleSamplingStatistics(mean / self._scaling_factor, std / self._scaling_factor)
 
 
 class SamplingStatistics(object):
 
-    def get_expected_value(self):
-        """Get the expected value (typically the mean) of the given dataset.
+    @property
+    def mean(self):
+        """Get the mean of the calculated statistics.
 
         Returns:
-            ndarray: The point estimate for every voxel.
+            ndarray: The mean or point-estimate for every problem element.
+        """
+        raise NotImplementedError()
+
+    @property
+    def std(self):
+        """Get the standard deviation of the calculated statistics.
+
+        This should return the positive square root of the second central moment, the variance.
+
+        Returns:
+            ndarray: the standard deviation for every problem element.
         """
         raise NotImplementedError()
 
     def get_additional_statistics(self):
         """Get additional statistics about the parameter distribution.
 
-        This normally returns only a dictionary with a standard deviation map, but it can return more statistics
-        if desired.
+        This should return a dictionary with additional elements to be stored for this distribution. For example,
+        after fitting a Beta distribution this can return the found alpha and beta parameters.
 
         Returns:
-            dict: dictionary with additional statistics. Example: ``{'std': ...}``
+            dict: dictionary with additional statistics. Example: ``{'alpha': <ndarray>}``
         """
         raise NotImplementedError()
 
 
 class SimpleSamplingStatistics(SamplingStatistics):
 
-    def __init__(self, expected_value, additional_maps):
+    def __init__(self, mean, std, additional_maps=None):
         """Simple container for storing the point estimate and the other maps.
 
         Args:
-            expected_value (ndarray): the array with the expected value (mean)
+            mean (ndarray): the array with the expected value (mean)
+            std (ndarray): the array with the standard deviations
             additional_maps (dict): the additional maps
         """
-        self._expected_value = expected_value
-        self._additional_maps = additional_maps
+        self._mean = mean
+        self._std = std
+        self._additional_statistics = additional_maps or {}
 
-    def get_expected_value(self):
-        return self._expected_value
+    @property
+    def mean(self):
+        return self._mean
+
+    @property
+    def std(self):
+        return self._std
 
     def get_additional_statistics(self):
-        return self._additional_maps
+        return self._additional_statistics

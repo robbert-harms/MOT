@@ -2,12 +2,15 @@ import inspect
 import logging
 from contextlib import contextmanager
 from functools import reduce
+
+import multiprocessing
 import numpy as np
 import pyopencl as cl
 import numbers
 from mot.cl_data_type import SimpleCLDataType
 import pyopencl.array as cl_array
 from scipy.special import jnp_zeros
+import os
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-05-13"
@@ -152,27 +155,6 @@ def device_supports_double(cl_device):
         boolean: True if the given cl_device supports double, false otherwise.
     """
     return cl_device.get_info(cl.device_info.DOUBLE_FP_CONFIG) == 63
-
-
-def results_to_dict(results, param_names):
-    """Create a dictionary out of the results.
-
-    This basically splits the given nd-matrix into sub matrices based on the second dimension. The length of
-    the parameter names should match the length of the second dimension. If a two dimensional matrix of shape (d, p) is
-    given we return p matrices of shape (d,). If a matrix of shape (d, p, s_1, s_2, ..., s_n) is given, we return
-    p matrices of shape (d, s_1, s_2, ..., s_n).
-
-    Args:
-        results: a multidimensional matrix we index based on the second dimension.
-        param_names (list of str): the names of the parameters, one per column
-
-    Returns:
-        dict: the results packed in a dictionary
-    """
-    if results.shape[1] != len(param_names):
-        raise ValueError('The number of columns ({}) in the matrix does not match '
-                         'the number of dictionary keys provided ({}).'.format(results.shape[1], len(param_names)))
-    return {name: results[:, i, ...] for i, name in enumerate(param_names)}
 
 
 def get_float_type_def(double_precision):
@@ -1176,3 +1158,26 @@ class KernelInputDataManager(object):
             if self._kernel_input_dict[name].include_in_kernel_call() and name not in self._data_duplicates:
                 input_index += 1
         return items
+
+
+def multiprocess_mapping(func, iterable):
+    """Multiprocess mapping the given function on the given iterable.
+
+    This only works in Linux and Mac systems since Windows has no forking capability. On Windows we fall back on
+    single processing. Also, if we reach memory limits we fall back on single cpu processing.
+
+    Args:
+        func (func): the function to apply
+        iterable (iterable): the iterable with the elements we want to apply the function on
+    """
+    if os.name == 'nt': # In Windows there is no fork.
+        return list(map(func, iterable))
+    try:
+        p = multiprocessing.Pool()
+        return_data = list(p.imap(func, iterable))
+        p.close()
+        p.join()
+        return return_data
+    except OSError:
+        return list(map(func, iterable))
+

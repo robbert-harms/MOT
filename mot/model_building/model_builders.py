@@ -1027,7 +1027,7 @@ class OptimizeModelBuilder(ModelBuilder):
         self._init_fixed_duplicates_dependencies()
         if self._enforce_weights_sum_to_one:
             names = ['{}.{}'.format(m.name, p.name) for (m, p) in self._model_functions_info.get_weights()]
-            if len(names):
+            if len(names) > 1:
                 self.fix(names[0], SimpleAssignment('max((double)1 - ({}), (double)0)'.format(' + '.join(names[1:]))))
 
     def _get_mot_float_type(self):
@@ -1042,7 +1042,7 @@ class OptimizeModelBuilder(ModelBuilder):
         for (m, p) in self._model_functions_info.get_estimable_weights():
             weight_indices.append(self._model_functions_info.get_parameter_estimable_index(m, p))
 
-        if weight_indices:
+        if len(weight_indices) > 1:
             return '''
                 mot_float_type _weight_sum = ''' + ' + '.join('x[{}]'.format(index) for index in weight_indices) + ''';
                 if(_weight_sum > 1.0){

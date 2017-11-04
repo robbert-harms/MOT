@@ -2,7 +2,8 @@ import multiprocessing
 import numpy as np
 import os
 from mot.cl_routines.mapping.run_procedure import RunProcedure
-from ...utils import KernelInputArray, SimpleNamedCLFunction, KernelInputLocalMemory, KernelInputAllocatedOutput
+from ...utils import KernelInputArray, SimpleNamedCLFunction, KernelInputLocalMemory, KernelInputAllocatedOutput, \
+    multiprocess_mapping
 from ...cl_routines.base import CLRoutine
 from scipy import linalg
 import warnings
@@ -78,15 +79,11 @@ class NumericalHessian(CLRoutine):
                 (parameters.shape[0], nmr_steps, elements_needed), 'double')
         })
 
-        import time
-        start = time.time()
         runner = RunProcedure(**self.get_cl_routine_kwargs())
         runner.run_procedure(self._get_wrapped_function(
             model, parameters, step_ratio, nmr_steps),
             all_kernel_data, parameters.shape[0], double_precision=double_precision,
             use_local_reduction=True)
-
-        print(time.time() - start)
 
         step_evaluates = all_kernel_data['step_evaluates'].get_data()
         step_evaluates_convoluted = all_kernel_data['step_evaluates_convoluted'].get_data()
@@ -111,8 +108,6 @@ class NumericalHessian(CLRoutine):
 
         extrapolate = Extrapolate(step_ratio)
 
-        # print(steps)
-
         def generate_steps(problem_ind):
             return np.tile(initial_step[problem_ind], (nmr_steps, 1)) \
                    * (float(step_ratio) ** -np.arange(nmr_steps))[:, None]
@@ -125,18 +120,7 @@ class NumericalHessian(CLRoutine):
                        nmr_params)
 
         # result = np.array(list(map(extrapolate, data_iterator())))
-
-        if os.name == 'nt':  # In Windows there is no fork.
-            result = np.array(list(map(extrapolate, data_iterator())))
-        else:
-            try:
-                p = multiprocessing.Pool()
-                result = np.array(list(p.imap(extrapolate, data_iterator())))
-                p.close()
-                p.join()
-            except OSError:
-                result = np.array(list(map(extrapolate, data_iterator())))
-
+        result = np.array(multiprocess_mapping(extrapolate, data_iterator()))
         return result * np.outer(parameter_scalings, parameter_scalings)
 
     def _get_initial_step_size(self, model, parameters):

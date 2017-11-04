@@ -364,11 +364,11 @@ class SampleModelInterface(OptimizeModelInterface):
 
 
 class NumericalDerivativeInterface(OptimizeModelInterface):
-    """Extends the model interface with information necessary for calculating numerical derivatives.
+    """Extends the model with information necessary for calculating numerical derivatives of the objective function.
 
-    For calculating derivatives (gradients / Hessians) numerically, we need few additional information, like the
-    step size for each parameter, a method for checking boundary conditions and possible parameter transformations
-    for circular parameters. All these elements are represented in this interface.
+    For calculating derivatives (gradients / Hessians) numerically, we need a likelihood function and some additional
+    information, like the step size for each parameter, a method for checking boundary conditions and possible parameter
+    transformations for circular parameters. All these extra elements are represented in this interface.
     """
 
     def numdiff_get_max_step(self):

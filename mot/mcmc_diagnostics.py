@@ -3,15 +3,14 @@
 The two most important functions are :func:`multivariate_ess` and :func:`univariate_ess` to calculate the effective
 sample size of your samples.
 """
-import os
 from collections import Mapping
-import multiprocessing
 import itertools
 import numpy as np
 from numpy.linalg import det
 from scipy.special import gammaln
 from scipy.stats import chi2
 
+from mot.utils import multiprocess_mapping
 
 __author__ = 'Robbert Harms'
 __date__ = "2017-03-07"
@@ -35,21 +34,7 @@ def multivariate_ess(samples, batch_size_generator=None):
         ndarray: the multivariate ESS per problem
     """
     samples_generator = _get_sample_generator(samples)
-
-    if os.name == 'nt': # In Windows there is no fork.
-        return np.array(list(map(_MultivariateESSMultiProcessing(batch_size_generator),
-                                 samples_generator())))
-
-    try:
-        p = multiprocessing.Pool()
-        return_data = np.array(list(p.imap(_MultivariateESSMultiProcessing(batch_size_generator),
-                                           samples_generator())))
-        p.close()
-        p.join()
-        return return_data
-    except OSError:
-        return np.array(list(map(_MultivariateESSMultiProcessing(batch_size_generator),
-                                 samples_generator())))
+    return np.array(multiprocess_mapping(_MultivariateESSMultiProcessing(batch_size_generator), samples_generator()))
 
 
 class _MultivariateESSMultiProcessing(object):
@@ -94,17 +79,7 @@ def univariate_ess(samples, method='standard_error', **kwargs):
           IEEE Press, Piscataway, NJ, USA, 226-230.
     """
     samples_generator = _get_sample_generator(samples)
-
-    if os.name == 'nt':  # In Windows there is no fork.
-        return np.array(list(map(_UnivariateESSMultiProcessing(method, **kwargs),
-                                 samples_generator())))
-
-    p = multiprocessing.Pool()
-    return_data = np.array(list(p.imap(_UnivariateESSMultiProcessing(method, **kwargs),
-                                       samples_generator())))
-    p.close()
-    p.join()
-    return return_data
+    return np.array(multiprocess_mapping(_UnivariateESSMultiProcessing(method, **kwargs), samples_generator()))
 
 
 class _UnivariateESSMultiProcessing(object):

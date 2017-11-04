@@ -14,14 +14,13 @@ import numpy as np
 
 import mot
 from mot import configuration
-from mot.cl_routines.mapping.residual_calculator import ResidualCalculator
 from mot.cl_routines.optimizing.nmsimplex import NMSimplex
 from mot.cl_routines.optimizing.levenberg_marquardt import LevenbergMarquardt
 from mot.cl_routines.optimizing.powell import Powell
 from mot.cl_routines.filters.gaussian import GaussianFilter
 from mot.cl_routines.filters.mean import MeanFilter
 from mot.cl_routines.filters.median import MedianFilter
-from mot.utils import results_to_dict, SimpleNamedCLFunction, convert_data_to_dtype
+from mot.utils import SimpleNamedCLFunction, convert_data_to_dtype
 
 from mot.model_interfaces import OptimizeModelInterface
 
@@ -184,16 +183,8 @@ class Rosenbrock(OptimizeModelInterface):
         '''
         return SimpleNamedCLFunction(func, func_name)
 
-    def get_initial_parameters(self, previous_results=None):
+    def get_initial_parameters(self):
         params = np.ones((1, self.n)) * 3
-
-        if isinstance(previous_results, np.ndarray):
-            previous_results = results_to_dict(previous_results, self.get_free_param_names())
-
-        if previous_results:
-            for i in range(self.n):
-                if i in previous_results:
-                    params[0, i] = previous_results[i]
         return convert_data_to_dtype(params, 'double')
 
     def get_lower_bounds(self):
@@ -281,16 +272,8 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
         '''
         return SimpleNamedCLFunction(func, func_name)
 
-    def get_initial_parameters(self, previous_results=None):
+    def get_initial_parameters(self):
         params = np.array([[0.3, 0.4]])
-
-        if isinstance(previous_results, np.ndarray):
-            previous_results = results_to_dict(previous_results, self.get_free_param_names())
-
-        if previous_results:
-            for i in range(2):
-                if i in previous_results:
-                    params[0, i] = previous_results[i]
         return convert_data_to_dtype(params, 'double')
 
     def get_lower_bounds(self):
