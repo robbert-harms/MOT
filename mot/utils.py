@@ -488,8 +488,8 @@ def hessian_to_covariance(hessian):
     exact inverse not possible. This method uses an exact inverse where possible yet will fallback on a pseudo inverse
     where needed.
 
-    After the inversion we make the diagonal (representing the variances of each parameter) positive where needed by
-    taking the absolute.
+    Before the matrix inversion it will set NaN's to 0. After the inversion we make the diagonal (representing the
+    variances of each parameter) positive where needed by taking the absolute.
 
     Args:
         hessian (ndarray): a matrix of shape (n, p, p) where for n problems we have a matrix of shape (p, p) for
@@ -498,6 +498,8 @@ def hessian_to_covariance(hessian):
     Returns:
         ndarray: the covariance matrix calculated by inverting all the Hessians.
     """
+    hessian = np.nan_to_num(hessian)
+
     covars = np.zeros_like(hessian)
     for roi_ind in range(hessian.shape[0]):
         try:
