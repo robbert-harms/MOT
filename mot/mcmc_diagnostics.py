@@ -24,7 +24,7 @@ def multivariate_ess(samples, batch_size_generator=None):
     This essentially applies :func:`estimate_multivariate_ess` to every problem.
 
     Args:
-        samples (ndarray, dict or generator): either an matrix of shape (d, p, n) with d problems, p parameters and
+        samples (ndarray, dict or generator): either a matrix of shape (d, p, n) with d problems, p parameters and
             n samples, or a dictionary with for every parameter a matrix with shape (d, n) or, finally,
             a generator function that yields sample arrays of shape (p, n).
         batch_size_generator (MultiVariateESSBatchSizeGenerator): the batch size generator, tells us how many

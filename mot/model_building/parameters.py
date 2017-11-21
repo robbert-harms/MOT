@@ -3,7 +3,6 @@ from mot.cl_parameter import SimpleCLFunctionParameter
 from mot.model_building.parameter_functions.numdiff_info import SimpleNumDiffInfo
 from mot.model_building.parameter_functions.priors import UniformWithinBoundsPrior
 from mot.model_building.parameter_functions.proposals import GaussianProposal
-from mot.model_building.parameter_functions.sample_statistics import GaussianFit
 from mot.model_building.parameter_functions.transformations import IdentityTransform
 
 __author__ = 'Robbert Harms'
@@ -82,7 +81,7 @@ class FreeParameter(SimpleCLFunctionParameter):
 
     def __init__(self, data_type, name, fixed, value, lower_bound, upper_bound,
                  parameter_transform=None, sampling_proposal=None,
-                 sampling_prior=None, sampling_statistics=None, numdiff_info=None):
+                 sampling_prior=None, numdiff_info=None):
         """This are the kind of parameters that are generally meant to be optimized.
 
         These parameters may optionally be fixed to a value or list of values for all voxels.
@@ -97,8 +96,6 @@ class FreeParameter(SimpleCLFunctionParameter):
             parameter_transform (AbstractTransformation): The parameter transformation function
             sampling_proposal (ParameterProposal): The proposal function for use in model sampling
             sampling_prior (ParameterPrior): The prior function for use in model sampling
-            sampling_statistics (ParameterSampleStatistics): The statistic functions used to get
-                statistics out of the samples
             numdiff_info (mot.model_building.parameter_functions.numdiff_info.NumDiffInfo): the information
                 for taking the numerical derivative with respect to this parameter.
         """
@@ -111,7 +108,6 @@ class FreeParameter(SimpleCLFunctionParameter):
         self._parameter_transform = parameter_transform or IdentityTransform()
         self._sampling_proposal = sampling_proposal or GaussianProposal(1.0)
         self._sampling_prior = sampling_prior or UniformWithinBoundsPrior()
-        self._sampling_statistics = sampling_statistics or GaussianFit()
         self._numdiff_info = numdiff_info or SimpleNumDiffInfo()
 
     @property
@@ -141,10 +137,6 @@ class FreeParameter(SimpleCLFunctionParameter):
     @property
     def sampling_prior(self):
         return self._sampling_prior
-
-    @property
-    def sampling_statistics(self):
-        return self._sampling_statistics
 
     @property
     def numdiff_info(self):

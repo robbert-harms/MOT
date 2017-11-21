@@ -1,6 +1,4 @@
-import multiprocessing
 import numpy as np
-import os
 from mot.cl_routines.mapping.run_procedure import RunProcedure
 from ...utils import KernelInputArray, SimpleNamedCLFunction, KernelInputLocalMemory, KernelInputAllocatedOutput, \
     multiprocess_mapping
@@ -21,8 +19,10 @@ class NumericalHessian(CLRoutine):
     def calculate(self, model, parameters, double_precision=False, step_ratio=2, nmr_steps=15, step_offset=None):
         """Calculate and return the Hessian of the given function at the given parameters.
 
-        This calculates the Hessian using central difference at a 2nd order Taylor expansion with Richardson
-        extrapolation over the proposed steps.
+        This calculates the Hessian using central difference (using a 2nd order Taylor expansion) with a Richardson
+        extrapolation over the proposed sequence of steps.
+
+        The Hessian is evaluated at the steps:
 
         .. math::
             \quad  ((f(x + d_j e_j + d_k e_k) - f(x + d_j e_j - d_k e_k)) -
@@ -36,8 +36,12 @@ class NumericalHessian(CLRoutine):
 
             steps = max_step * step_ratio**-(i+offset), i=0, 1,.., nmr_steps-1.
 
-        Where the max step is taken from the model. For example, a maximum step of 2 with a step ratio of 2 with 4 steps
-        gives: [2.0, 1.0, 0.5, 0.25]. If offset would be set to 2, we would get instead: [0.5, 0.25, 0.125, 0.0625].
+        Where the max step is taken from the model. For example, a maximum step of 2 with a step ratio of 2 and with
+        4 steps gives: [2.0, 1.0, 0.5, 0.25]. If offset would be 2, we would instead get: [0.5, 0.25, 0.125, 0.0625].
+
+        If number of steps is 1, we use not Richardson extrapolation and return the results of the first step. If the
+        number of steps is 2 we use a first order Richardson extrapolation step. For all higher number of steps
+        we use a second order Richardson extrapolation.
 
         Args:
             model (mot.model_interfaces.NumericalDerivativeInterface): the model to use for calculating the
@@ -53,16 +57,47 @@ class NumericalHessian(CLRoutine):
         Returns:
             ndarray: the gradients for each of the parameters for each of the problems
         """
-        if nmr_steps < 2:
-            raise ValueError('Number of steps needs to be at least 2, {} given.'.format(nmr_steps))
-
         if len(parameters.shape) == 1:
             parameters = parameters[None, :]
         nmr_params = parameters.shape[1]
 
         parameter_scalings = np.array(model.numdiff_get_scaling_factors())
 
-        elements_needed = (nmr_params**2 - nmr_params) // 2 + nmr_params
+        derivatives = self._compute_derivatives(model, parameters, double_precision, step_ratio, step_offset, nmr_steps)
+
+        if nmr_steps == 1:
+            return self._results_vector_to_matrix(derivatives[..., 0], nmr_params) \
+                   * np.outer(parameter_scalings, parameter_scalings)
+
+        richardson_derivatives, richardson_errors = self._richardson_convolutions(
+            derivatives, step_ratio, double_precision)
+
+        if nmr_steps == 2:
+            return self._results_vector_to_matrix(richardson_derivatives[..., 0], nmr_params) \
+                   * np.outer(parameter_scalings, parameter_scalings)
+
+        extrapolate = Extrapolate(step_ratio)
+
+        def data_iterator():
+            for problem_ind in range(parameters.shape[0]):
+                yield (richardson_derivatives[problem_ind].T,
+                       richardson_errors[problem_ind].T,
+                       nmr_params)
+
+        # result = np.array(list(map(extrapolate, data_iterator())))
+        result = np.array(multiprocess_mapping(extrapolate, data_iterator()))
+        return self._results_vector_to_matrix(result, nmr_params) * np.outer(parameter_scalings, parameter_scalings)
+
+    def _compute_derivatives(self, model, parameters, double_precision, step_ratio, step_offset, nmr_steps):
+        """Compute the second derivative using the central difference method.
+
+        This calculates for the given step the numerical derivative and returns that value directly.
+        """
+        parameter_scalings = np.array(model.numdiff_get_scaling_factors())
+
+        nmr_params = parameters.shape[1]
+        nmr_derivatives = (nmr_params ** 2 - nmr_params) // 2 + nmr_params
+
         initial_step = self._get_initial_step_size(model, parameters)
         if step_offset:
             initial_step *= float(step_ratio) ** -step_offset
@@ -71,57 +106,66 @@ class NumericalHessian(CLRoutine):
         all_kernel_data.update({
             'parameters': KernelInputArray(parameters, ctype='mot_float_type'),
             'local_reduction_lls': KernelInputLocalMemory('double'),
-            'parameter_scalings_inv': KernelInputArray(1./parameter_scalings, ctype='double', offset_str='0'),
+            'parameter_scalings_inv': KernelInputArray(1. / parameter_scalings, ctype='double', offset_str='0'),
             'initial_step': KernelInputArray(initial_step, ctype='mot_float_type', is_writable=True),
-            'step_evaluates': KernelInputAllocatedOutput(
-                (parameters.shape[0], nmr_steps, elements_needed), 'double'),
-            'step_evaluates_convoluted': KernelInputAllocatedOutput(
-                (parameters.shape[0], nmr_steps, elements_needed), 'double')
+            'step_evaluates': KernelInputAllocatedOutput((parameters.shape[0], nmr_derivatives, nmr_steps), 'double'),
         })
 
         runner = RunProcedure(**self.get_cl_routine_kwargs())
-        runner.run_procedure(self._get_wrapped_function(
-            model, parameters, step_ratio, nmr_steps),
-            all_kernel_data, parameters.shape[0], double_precision=double_precision,
-            use_local_reduction=True)
+        runner.run_procedure(self._get_single_step_kernel(model, nmr_params, nmr_steps, step_ratio),
+                             all_kernel_data, parameters.shape[0], double_precision=double_precision,
+                             use_local_reduction=True)
 
-        step_evaluates = all_kernel_data['step_evaluates'].get_data()
-        step_evaluates_convoluted = all_kernel_data['step_evaluates_convoluted'].get_data()
+        return all_kernel_data['step_evaluates'].get_data()
 
-        full_step_evaluates = np.zeros((parameters.shape[0], nmr_steps, nmr_params, nmr_params), dtype=np.float64)
-        full_step_evaluates_convoluted = np.zeros((parameters.shape[0], nmr_steps, nmr_params, nmr_params), dtype=np.float64)
+    def _richardson_convolutions(self, derivatives, step_ratio, double_precision):
+        nmr_problems, nmr_derivatives, nmr_steps = derivatives.shape
+        richardson_coefficients = self._get_richardson_coefficients(step_ratio, min(nmr_steps, 3) - 1)
+        nmr_convolutions = nmr_steps - (len(richardson_coefficients) - 2)
+        final_nmr_convolutions = nmr_convolutions - 1
+
+        kernel_data = {
+            'derivatives': KernelInputArray(derivatives, 'double', offset_str='{problem_id} * ' + str(nmr_steps)),
+            'richardson_convolutions': KernelInputAllocatedOutput(
+                (nmr_problems * nmr_derivatives, nmr_convolutions), 'double'),
+            'errors': KernelInputAllocatedOutput(
+                (nmr_problems * nmr_derivatives, final_nmr_convolutions), 'double'),
+        }
+
+        runner = RunProcedure(**self.get_cl_routine_kwargs())
+        runner.run_procedure(self._richardson_error_kernel(nmr_steps, nmr_convolutions, richardson_coefficients),
+                             kernel_data, nmr_problems * nmr_derivatives, double_precision=double_precision,
+                             use_local_reduction=False)
+
+        convolutions = np.reshape(kernel_data['richardson_convolutions'].get_data(),
+                          (nmr_problems, nmr_derivatives, nmr_convolutions))
+        errors = np.reshape(kernel_data['errors'].get_data(),
+                            (nmr_problems, nmr_derivatives, final_nmr_convolutions))
+
+        return convolutions[..., :final_nmr_convolutions], errors
+
+    def _results_vector_to_matrix(self, vectors, nmr_params):
+        """Transform for every problem (and optionally every step size) the vector results to a square matrix.
+
+        Since we only process the lower triangular items, we have to convert the 1d vectors into 2d matrices for every
+        problem. This function does that.
+
+        Args:
+            vectors (ndarray): for every problem (and step size) the 1d vector with results
+            matrices (ndarray): for every problem the 2d square matrix with the results placed in matrix form
+        """
+        matrices = np.zeros(vectors.shape[:-1] + (nmr_params, nmr_params), dtype=vectors.dtype)
 
         ltr_ind = 0
         for px in range(nmr_params):
-            full_step_evaluates[..., px, px] = step_evaluates[..., ltr_ind]
-            full_step_evaluates_convoluted[..., px, px] = step_evaluates_convoluted[..., ltr_ind]
+            matrices[..., px, px] = vectors[..., ltr_ind]
             ltr_ind += 1
 
             for py in range(px + 1, nmr_params):
-                full_step_evaluates[..., px, py] = step_evaluates[..., ltr_ind]
-                full_step_evaluates_convoluted[..., px, py] = step_evaluates_convoluted[..., ltr_ind]
-
-                full_step_evaluates[..., py, px] = step_evaluates[..., ltr_ind]
-                full_step_evaluates_convoluted[..., py, px] = step_evaluates_convoluted[..., ltr_ind]
-
+                matrices[..., px, py] = vectors[..., ltr_ind]
+                matrices[..., py, px] = vectors[..., ltr_ind]
                 ltr_ind += 1
-
-        extrapolate = Extrapolate(step_ratio)
-
-        def generate_steps(problem_ind):
-            return np.tile(initial_step[problem_ind], (nmr_steps, 1)) \
-                   * (float(step_ratio) ** -np.arange(nmr_steps))[:, None]
-
-        def data_iterator():
-            for problem_ind in range(parameters.shape[0]):
-                yield (full_step_evaluates[problem_ind],
-                       full_step_evaluates_convoluted[problem_ind],
-                       generate_steps(problem_ind),
-                       nmr_params)
-
-        # result = np.array(list(map(extrapolate, data_iterator())))
-        result = np.array(multiprocess_mapping(extrapolate, data_iterator()))
-        return result * np.outer(parameter_scalings, parameter_scalings)
+        return matrices
 
     def _get_initial_step_size(self, model, parameters):
         """Get an initial step size to use for every parameter.
@@ -156,7 +200,7 @@ class NumericalHessian(CLRoutine):
 
         return initial_step
 
-    def _get_richardson_rules(self, step_ratio):
+    def _get_richardson_coefficients(self, step_ratio, nmr_extrapolations):
         """Get the matrix with the convolution rules.
 
         In the kernel we will extrapolate the sequence based on the Richardsons method.
@@ -171,36 +215,40 @@ class NumericalHessian(CLRoutine):
         of approximations.
 
         Instead of using all the generated points at the same time, we convolute the Richardson method over the
-        acquired steps to be able to approximate the errors.
+        acquired steps to approximate the higher order error terms.
 
         Args:
             step_ratio (float): the ratio at which the steps diminish.
+            nmr_extrapolations (int): the number of extrapolations we want to do. Each extrapolation requires
+                an evaluation at an exponentially decreasing step size.
+
+        Returns:
+            ndarray: a vector with the extrapolation coefficients.
         """
-        step = 2
+        if nmr_extrapolations == 0:
+            return np.array([1])
+
+        error_diminishing_per_step = 2
         taylor_expansion_order = 2
 
-        def r_matrix(step, num_terms):
+        def r_matrix(num_terms):
             i, j = np.ogrid[0:num_terms + 1, 0:num_terms]
             r_mat = np.ones((num_terms + 1, num_terms + 1))
-            r_mat[:, 1:] = (1.0 / step_ratio) ** (i * (step * j + taylor_expansion_order))
+            r_mat[:, 1:] = (1.0 / step_ratio) ** (i * (error_diminishing_per_step * j + taylor_expansion_order))
             return r_mat
 
-        return [linalg.pinv(r_matrix(step, seq_length))[0] for seq_length in range(1, 3)]
+        return linalg.pinv(r_matrix(nmr_extrapolations))[0]
 
-    def _get_wrapped_function(self, model, parameters, step_ratio, nmr_steps):
+    def _get_compute_functions_cl(self, model, nmr_params, nmr_steps, step_ratio):
         ll_function = model.get_objective_per_observation_function()
-        nmr_inst_per_problem = model.get_nmr_inst_per_problem()
         numdiff_param_transform = model.numdiff_parameter_transformation()
 
-        nmr_params = parameters.shape[1]
-        elements_needed = (nmr_params ** 2 - nmr_params) // 2 + nmr_params
-        richardson_rules = self._get_richardson_rules(step_ratio)
+        nmr_inst_per_problem = model.get_nmr_inst_per_problem()
 
-        func = ''
-        func += ll_function.get_cl_code()
+        func = ll_function.get_cl_code()
         func += numdiff_param_transform.get_cl_code()
 
-        func += '''
+        return func + '''
             double _calculate_function(mot_data_struct* data, mot_float_type* x){
                 ulong observation_ind;
                 ulong local_id = get_local_id(0);
@@ -220,14 +268,14 @@ class NumericalHessian(CLRoutine):
                 }
 
                 barrier(CLK_LOCAL_MEM_FENCE);
-
+                
                 double ll = 0;
                 for(uint i = 0; i < workgroup_size; i++){
                     ll += data->local_reduction_lls[i];
                 }
                 return ll;
             }
-
+            
             /**
              * Evaluate the model with a perturbation in two dimensions.
              *
@@ -235,16 +283,16 @@ class NumericalHessian(CLRoutine):
              *  data: the data container
              *  x_input: the array with the input parameters
              *  perturb_dim_0: the index (into the x_input parameters) of the first parameter to perturbate
-             *  perturb_0: the added perturbation of the first parameter, corresponds to ``perturb_dim_0``
+             *  perturb_0: the added perturbation of the index corresponding to ``perturb_dim_0``
              *  perturb_dim_1: the index (into the x_input parameters) of the second parameter to perturbate
-             *  perturb_1: the added perturbation of the second parameter, corresponds to ``perturb_dim_1``
+             *  perturb_1: the added perturbation of the index corresponding to ``perturb_dim_1``
              *
              * Returns:
              *  the function evaluated at the parameters plus their perturbation.
              */
             double _eval_step(mot_data_struct* data, mot_float_type* x_input,
-                             uint perturb_dim_0, mot_float_type perturb_0,
-                             uint perturb_dim_1, mot_float_type perturb_1){
+                              uint perturb_dim_0, mot_float_type perturb_0,
+                              uint perturb_dim_1, mot_float_type perturb_1){
 
                 mot_float_type x_tmp[''' + str(nmr_params) + '''];
                 for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
@@ -256,57 +304,68 @@ class NumericalHessian(CLRoutine):
                 ''' + numdiff_param_transform.get_cl_function_name() + '''(data, x_tmp);
                 return _calculate_function(data, x_tmp);
             }
-
+            
             /**
-             * Compute the Hessian for one row of step sizes.
-             *
-             * This method uses a central difference method at the 2nd order Taylor expansion.
+             * Compute the 2nd derivative of one element of the Hessian for a number of steps.
              */
-            void _compute_step(mot_data_struct* data, mot_float_type* x_input, mot_float_type f_x_input,
-                               mot_float_type* step_sizes, global double* step_evaluate_ptr){
-
-                mot_float_type perturbation[''' + str(nmr_params) + '''];
-                double calc;
-                uint result_ind = 0;
-
-                for(uint px = 0; px < ''' + str(nmr_params) + '''; px++){
-                    calc = (
-                          _eval_step(data, x_input,
-                                    px, 2 * (step_sizes[px] * data->parameter_scalings_inv[px]),
-                                    0, 0)
-                        + _eval_step(data, x_input,
-                                    px, -2 * (step_sizes[px] * data->parameter_scalings_inv[px]),
-                                    0, 0)
-                        - 2 * f_x_input
-                        ) / (4 * step_sizes[px] * step_sizes[px]);
-
-                    if(get_local_id(0) == 0){
-                        step_evaluate_ptr[result_ind++] = calc;
-                    }
-
-                    for(uint py = px + 1; py < ''' + str(nmr_params) + '''; py++){
-                        calc = (
+            void _compute_steps(mot_data_struct* data, mot_float_type* x_input, mot_float_type f_x_input,
+                                uint px, uint py, global double* step_evaluate_ptr){
+                
+                double step_x;
+                double step_y;
+                double tmp;
+                bool is_first_workitem = get_local_id(0) == 0;
+                
+                if(px == py){
+                    for(uint step_ind = 0; step_ind < ''' + str(nmr_steps) + '''; step_ind++){
+                        step_x = data->initial_step[px] / pown(''' + str(float(step_ratio)) + ''', step_ind);
+                        
+                        tmp = (
                               _eval_step(data, x_input,
-                                        px, step_sizes[px] * data->parameter_scalings_inv[px],
-                                        py, step_sizes[py] * data->parameter_scalings_inv[py])
-                            - _eval_step(data, x_input,
-                                        px, step_sizes[px] * data->parameter_scalings_inv[px],
-                                        py, -step_sizes[py] * data->parameter_scalings_inv[py])
-                            - _eval_step(data, x_input,
-                                        px, -step_sizes[px] * data->parameter_scalings_inv[px],
-                                        py, step_sizes[py] * data->parameter_scalings_inv[py])
+                                         px, 2 * (step_x * data->parameter_scalings_inv[px]),
+                                         0, 0)
                             + _eval_step(data, x_input,
-                                        px, -step_sizes[px] * data->parameter_scalings_inv[px],
-                                        py, -step_sizes[py] * data->parameter_scalings_inv[py])
-                        ) / (4 * step_sizes[px] * step_sizes[py]);
-
-                        if(get_local_id(0) == 0){
-                            step_evaluate_ptr[result_ind++] = calc;
+                                         px, -2 * (step_x * data->parameter_scalings_inv[px]),
+                                         0, 0)
+                            - 2 * f_x_input
+                        ) / (4 * step_x * step_x);
+                        
+                        if(is_first_workitem){
+                            step_evaluate_ptr[step_ind] = tmp;
                         }
                     }
                 }
+                else{
+                    for(uint step_ind = 0; step_ind < ''' + str(nmr_steps) + '''; step_ind++){
+                        step_x = data->initial_step[px] / pown(''' + str(float(step_ratio)) + ''', step_ind);
+                        step_y = data->initial_step[py] / pown(''' + str(float(step_ratio)) + ''', step_ind);
+                        
+                        tmp = (
+                              _eval_step(data, x_input,
+                                         px, step_x * data->parameter_scalings_inv[px],
+                                         py, step_y * data->parameter_scalings_inv[py])
+                            - _eval_step(data, x_input,
+                                         px, step_x * data->parameter_scalings_inv[px],
+                                         py, -step_y * data->parameter_scalings_inv[py])
+                            - _eval_step(data, x_input,
+                                         px, -step_x * data->parameter_scalings_inv[px],
+                                         py, step_y * data->parameter_scalings_inv[py])
+                            + _eval_step(data, x_input,
+                                         px, -step_x * data->parameter_scalings_inv[px],
+                                         py, -step_y * data->parameter_scalings_inv[py])
+                        ) / (4 * step_x * step_y);
+    
+                        if(is_first_workitem){
+                            step_evaluate_ptr[step_ind] = tmp;
+                        }                       
+                    }
+                }
             }
+        '''
 
+    def _get_error_estimate_functions_cl(self, nmr_steps, nmr_convolutions,
+                                         richardson_coefficients):
+        func = '''
             /**
              * Apply a simple kernel convolution over the results from each row of steps.
              *
@@ -317,90 +376,118 @@ class NumericalHessian(CLRoutine):
 
              * Args:
              *  step_evaluates: the step evaluates for each row of the step sizes
-             *  step_evaluates_convoluted: the array to place the convoluted results in
+             *  richardson_extrapolations: the array to place the convoluted results in
              */
             void _apply_richardson_convolution(
-                    global double* step_evaluates,
-                    global double* step_evaluates_convoluted){
+                    global double* derivatives,
+                    global double* richardson_convolutions){
 
-                double kernel_2[2] = {''' + ', '.join(map(str, richardson_rules[0])) + '''};
-                double kernel_3[3] = {''' + ', '.join(map(str, richardson_rules[1])) + '''};
+                double convolution_kernel[''' + str(len(richardson_coefficients)) + '''] = {''' + \
+                    ', '.join(map(str, richardson_coefficients)) + '''};
+                
+                for(uint step_ind = 0; step_ind < ''' + str(nmr_convolutions) + '''; step_ind++){
+                    
+                    // convolute the Richardson coefficients
+                    for(uint kernel_ind = 0; kernel_ind < ''' + str(len(richardson_coefficients)) + '''; kernel_ind++){
+                        
+                        uint kernel_step_ind = step_ind + kernel_ind;
 
-                double* kernel_ptr;
-                uint kernel_length;
-
-                if(''' + str(nmr_steps) + ''' <= 1){
-                    return;
-                }
-
-                if(''' + str(nmr_steps) + ''' == 2){
-                    kernel_ptr = kernel_2;
-                    kernel_length = 2;
-                }
-                else{
-                    kernel_ptr = kernel_3;
-                    kernel_length = 3;
-                }
-
-                uint kernel_step_ind;
-                ulong local_id = get_local_id(0);
-                uint workgroup_size = get_local_size(0);
-                uint element_ind;
-                uint elements_for_workitem = ceil(''' + str(elements_needed) + ''' / (mot_float_type)workgroup_size);
-
-                if(workgroup_size * (elements_for_workitem - 1) + local_id >= ''' + str(elements_needed) + '''){
-                    elements_for_workitem -= 1;
-                }
-
-                for(uint i = 0; i < elements_for_workitem; i++){
-                    element_ind = i * workgroup_size + local_id;
-
-                    for(uint step_ind = 0; step_ind < ''' + str(nmr_steps) + '''; step_ind++){
-
-                        // convolute kernel
-                        for(uint kernel_ind = 0; kernel_ind < kernel_length; kernel_ind++){
-                            kernel_step_ind = step_ind + kernel_ind;
-
-                            // reflect
-                            if(kernel_step_ind >= ''' + str(nmr_steps) + '''){
-                                kernel_step_ind -= 2 * (kernel_step_ind - ''' + str(nmr_steps) + ''') + 1;
-                            }
-
-                            step_evaluates_convoluted[step_ind * ''' + str(elements_needed) + ''' + element_ind] +=
-                                (step_evaluates[kernel_step_ind * ''' + str(elements_needed) + ''' + element_ind]
-                                    * kernel_ptr[kernel_ind]);
+                        // reflect
+                        if(kernel_step_ind >= ''' + str(nmr_steps) + '''){
+                            kernel_step_ind -= 2 * (kernel_step_ind - ''' + str(nmr_steps) + ''') + 1;
                         }
+
+                        richardson_convolutions[step_ind] +=
+                            derivatives[kernel_step_ind] * convolution_kernel[kernel_ind];
                     }
                 }
             }
+            
+            /**
+             * Compute the errors from using the Richardson extrapolation.
+             *
+             * "A neat trick to compute the statistical uncertainty in the estimate of our desired derivative is to use 
+             *  statistical methodology for that error estimate. While I do appreciate that there is nothing truly 
+             *  statistical or stochastic in this estimate, the approach still works nicely, providing a very 
+             *  reasonable estimate in practice. A three term Richardson-like extrapolant, then evaluated at four 
+             *  distinct values for \delta, will yield an estimate of the standard error of the constant term, with one 
+             *  spare degree of freedom. The uncertainty is then derived by multiplying that standard error by the 
+             *  appropriate percentile from the Students-t distribution." 
+             * 
+             * Cited from https://numdifftools.readthedocs.io/en/latest/src/numerical/derivest.html
+             * 
+             * In addition to the error derived from the various estimates, we also approximate the numerical round-off 
+             * errors in this method. All in all, the resulting errors should reflect the absolute error of the
+             * estimates.
+             */ 
+            void _compute_richardson_errors(
+                    global double* derivatives, 
+                    global double* richardson_convolutions,
+                    global double* errors){
+                
+                //the magic number 12.7062... follows from the student T distribution with one dof. 
+                // Example computation: 
+                // >>> import scipy.stats as ss
+                // >>> allclose(ss.t.cdf(12.7062047361747, 1), 0.975) # True
+                double fact = max(
+                    (mot_float_type)''' + str(12.7062047361747 * np.sqrt(np.sum(richardson_coefficients**2))) + ''',
+                    (mot_float_type)MOT_EPSILON * 10);
+                
+                double tolerance;
+                double error;
+                
+                for(uint conv_ind = 0; conv_ind < ''' + str(nmr_convolutions - 1) + '''; conv_ind++){
+                    tolerance = max(fabs(richardson_convolutions[conv_ind + 1]), 
+                                    fabs(richardson_convolutions[conv_ind])
+                                    ) * MOT_EPSILON * fact;
+                    
+                    error = fabs(richardson_convolutions[conv_ind] - richardson_convolutions[conv_ind + 1]) * fact;
+                    
+                    if(error <= tolerance){
+                        error += tolerance * 10;
+                    }
+                    else{
+                        error += fabs(richardson_convolutions[conv_ind] - 
+                                      derivatives[''' + str(nmr_steps - nmr_convolutions + 1) + ''' + conv_ind]) * fact;
+                    }
+                    
+                    errors[conv_ind] = error;
+                }
+            }
+        '''
+        return func
 
+    def _richardson_error_kernel(self, nmr_steps, nmr_convolutions, richardson_coefficients):
+        func = ''
+        func += self._get_error_estimate_functions_cl(nmr_steps, nmr_convolutions, richardson_coefficients)
+        func += '''
+            void convolute(mot_data_struct* data){
+                _apply_richardson_convolution(data->derivatives, data->richardson_convolutions);
+                _compute_richardson_errors(data->derivatives, data->richardson_convolutions, data->errors);
+            }
+        '''
+        return SimpleNamedCLFunction(func, 'convolute')
+
+    def _get_single_step_kernel(self, model, nmr_params, nmr_steps, step_ratio):
+        func = ''
+        func += self._get_compute_functions_cl(model, nmr_params, nmr_steps, step_ratio)
+        func += '''
             void compute(mot_data_struct* data){
-                uint param_ind;
-                double eval;
-                double f_x_input;
-
                 mot_float_type x_input[''' + str(nmr_params) + '''];
-                mot_float_type current_steps[''' + str(nmr_params) + '''];
-                local bool within_bounds;
-
-                for(param_ind = 0; param_ind < ''' + str(nmr_params) + '''; param_ind++){
+                
+                for(uint param_ind = 0; param_ind < ''' + str(nmr_params) + '''; param_ind++){
                     x_input[param_ind] = data->parameters[param_ind];
                 }
-                f_x_input = _calculate_function(data, x_input);
-
-                for(uint step_ind = 0; step_ind < ''' + str(nmr_steps) + '''; step_ind++){
-                    for(uint param_ind = 0; param_ind < ''' + str(nmr_params) + '''; param_ind++){
-                        current_steps[param_ind] = data->initial_step[param_ind]
-                            / pown(''' + str(float(step_ratio)) + ''', step_ind);
+                double f_x_input = _calculate_function(data, x_input);
+                
+                uint param_ind = 0;
+                for(uint px = 0; px < ''' + str(nmr_params) + '''; px++){
+                    for(uint py = px; py < ''' + str(nmr_params) + '''; py++){
+                        _compute_steps(data, x_input, f_x_input, px, py, 
+                                       data->step_evaluates + param_ind * ''' + str(nmr_steps) + ''');    
+                        param_ind += 1;
                     }
-
-                    _compute_step(data, x_input, f_x_input, current_steps,
-                        data->step_evaluates + step_ind * ''' + str(elements_needed) + '''
-                    );
                 }
-                barrier(CLK_GLOBAL_MEM_FENCE);
-
-                _apply_richardson_convolution(data->step_evaluates, data->step_evaluates_convoluted);
             }
         '''
         return SimpleNamedCLFunction(func, 'compute')
@@ -419,22 +506,11 @@ class Extrapolate(object):
         self._step_ratio = step_ratio
 
     def __call__(self, el):
-        step_evaluates, step_evaluates_convoluted, steps, nmr_params = el
-        richardson = Richardson(step_ratio=self._step_ratio, step=2, order=2, num_terms=2)
+        richardson_derivatives, richardson_errors, nmr_params = el
 
-        if len(step_evaluates) == 0:
-            return np.zeros((nmr_params, nmr_params))
-
-        def _vstack(sequence, steps):
-            original_shape = np.shape(sequence[0])
-            f_del = np.vstack(list(np.ravel(r)) for r in sequence)
-            h = np.vstack(list(np.ravel(np.ones(original_shape) * step))
-                          for step in steps)
-            return f_del, h, original_shape
-
-        def _wynn_extrapolate(der, steps):
+        def _wynn_extrapolate(der):
             der, errors = dea3(der[0:-2], der[1:-1], der[2:], symmetric=False)
-            return der, errors, steps[2:]
+            return der, errors
 
         def _add_error_to_outliers(der, trim_fact=10):
             # discard any estimate that differs wildly from the
@@ -469,26 +545,36 @@ class Extrapolate(object):
                 arg_mins[i] = idx[idx.size // 2]
             return np.ravel_multi_index((arg_mins, np.arange(shape[1])), shape)
 
-        def _get_best_estimate(der, errors, steps, shape):
+        def _get_best_estimate(der, errors):
             errors += _add_error_to_outliers(der)
             ix = _get_arg_min(errors)
-            final_step = steps.flat[ix].reshape(shape)
-            err = errors.flat[ix].reshape(shape)
-            return der.flat[ix].reshape(shape), final_step, err
+            err = errors.flat[ix]
+            return der.flat[ix], err
 
-        r_conv, _, _ = _vstack(step_evaluates_convoluted, steps)
-        results, steps, shape = _vstack(step_evaluates, steps)
+        def _results_vector_to_matrix(vectors, nmr_params):
+            matrices = np.zeros(vectors.shape[:-1] + (nmr_params, nmr_params), dtype=vectors.dtype)
 
-        der1, errors1, steps = richardson(results, r_conv, steps)
-        if len(der1) > 2:
-            der1, errors1, steps = _wynn_extrapolate(der1, steps)
-        der, final_step, err = _get_best_estimate(der1, errors1, steps, shape)
-        return der
+            ltr_ind = 0
+            for px in range(nmr_params):
+                matrices[..., px, px] = vectors[..., ltr_ind]
+                ltr_ind += 1
+
+                for py in range(px + 1, nmr_params):
+                    matrices[..., px, py] = vectors[..., ltr_ind]
+                    matrices[..., py, px] = vectors[..., ltr_ind]
+                    ltr_ind += 1
+            return matrices
+
+        if len(richardson_derivatives) > 2:
+            richardson_derivatives, richardson_errors = _wynn_extrapolate(richardson_derivatives)
+        derivatives, err_test = _get_best_estimate(richardson_derivatives, richardson_errors)
+
+        return derivatives
 
 
-EPS = np.finfo(float).eps
+EPS = np.finfo(np.float64).eps
 _EPS = EPS
-_TINY = np.finfo(float).tiny
+_TINY = np.finfo(np.float64).tiny
 
 
 def max_abs(a1, a2):
@@ -571,104 +657,3 @@ def dea3(v0, v1, v2, symmetric=False):
     if symmetric and len(result) > 1:
         return result[:-1], abserr[1:]
     return result, abserr
-
-
-class Richardson(object):
-
-    """
-    Extrapolates as sequence with Richardsons method
-
-    Notes
-    -----
-    Suppose you have series expansion that goes like this
-
-    L = f(h) + a0 * h^p_0 + a1 * h^p_1+ a2 * h^p_2 + ...
-
-    where p_i = order + step * i  and f(h) -> L as h -> 0, but f(0) != L.
-
-    If we evaluate the right hand side for different stepsizes h
-    we can fit a polynomial to that sequence of approximations.
-    This is exactly what this class does.
-
-    Example
-    -------
-    >>> import numpy as np
-    >>> import numdifftools as nd
-    >>> n = 3
-    >>> Ei = np.zeros((n,1))
-    >>> h = np.zeros((n,1))
-    >>> linfun = lambda i : np.linspace(0, np.pi/2., 2**(i+5)+1)
-    >>> for k in np.arange(n):
-    ...    x = linfun(k)
-    ...    h[k] = x[1]
-    ...    Ei[k] = np.trapz(np.sin(x),x)
-    >>> En, err, step = nd.Richardson(step=1, order=1)(Ei, h)
-    >>> truErr = Ei-1.
-    >>> (truErr, err, En)
-    (array([[ -2.00805680e-04],
-           [ -5.01999079e-05],
-           [ -1.25498825e-05]]), array([[ 0.00160242]]), array([[ 1.]]))
-
-    """
-
-    def __init__(self, step_ratio=2.0, step=1, order=1, num_terms=2):
-        self.num_terms = num_terms
-        self.order = order
-        self.step = step
-        self.step_ratio = step_ratio
-
-    def _r_matrix(self, num_terms):
-        step = self.step
-        i, j = np.ogrid[0:num_terms + 1, 0:num_terms]
-        r_mat = np.ones((num_terms + 1, num_terms + 1))
-        r_mat[:, 1:] = (1.0 / self.step_ratio) ** (i * (step * j + self.order))
-        return r_mat
-
-    def rule(self, sequence_length=None):
-        if sequence_length is None:
-            sequence_length = self.num_terms + 1
-        num_terms = min(self.num_terms, sequence_length - 1)
-        if num_terms > 0:
-            r_mat = self._r_matrix(num_terms)
-            return linalg.pinv(r_mat)[0]
-        return np.ones((1,))
-
-    @staticmethod
-    def _estimate_error(new_sequence, old_sequence, steps, rule):
-        m = new_sequence.shape[0]
-        mo = old_sequence.shape[0]
-        cov1 = np.sum(rule**2)  # 1 spare dof
-        fact = np.maximum(12.7062047361747 * np.sqrt(cov1), EPS * 10.)
-        if mo < 2:
-            return (np.abs(new_sequence) * EPS + steps) * fact
-        if m < 2:
-            delta = np.diff(old_sequence, axis=0)
-            tol = max_abs(old_sequence[:-1], old_sequence[1:]) * fact
-            err = np.abs(delta)
-            converged = err <= tol
-            abserr = err[-m:] + np.where(converged[-m:], tol[-m:] * 10,
-                                abs(new_sequence - old_sequence[-m:]) * fact)
-            return abserr
-#         if mo>2:
-#             res, abserr = dea3(old_sequence[:-2], old_sequence[1:-1],
-#                               old_sequence[2:] )
-#             return abserr[-m:] * fact
-        err = np.abs(np.diff(new_sequence, axis=0)) * fact
-        tol = max_abs(new_sequence[1:], new_sequence[:-1]) * EPS * fact
-        converged = err <= tol
-        abserr = err + np.where(converged, tol * 10,
-                                abs(new_sequence[:-1] -
-                                    old_sequence[-m+1:]) * fact)
-        return abserr
-
-    def extrapolate(self, sequence, steps):
-        return self.__call__(sequence, steps)
-
-    def __call__(self, sequence, new_sequence, steps):
-        ne = sequence.shape[0]
-        rule = self.rule(ne)
-        nr = rule.size - 1
-        m = ne - nr
-        mm = min(ne, m+1)
-        abserr = self._estimate_error(new_sequence[:mm], sequence, steps, rule)
-        return new_sequence[:m], abserr[:m], steps[:m]

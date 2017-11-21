@@ -902,8 +902,8 @@ class KernelInputAllocatedOutput(KernelInputData):
             shape (tuple): the shape of the output array
             offset_str (str): the offset definition, can use ``{problem_id}`` for multiplication purposes. Set to 0
                 for no offset.
-            is_writable (boolean): if the data must be loaded writable or not, defaults to False
-            is_readable (boolean): if this data must be made readable
+            is_writable (boolean): if the data must be loaded writable or not, defaults to True
+            is_readable (boolean): if this data must be made readable, defaults to True
         """
         self._requirements = ['C', 'A', 'O']
         if is_writable:

@@ -1,13 +1,4 @@
-"""A collection of routines for calculating statistics on multiple sets of data.
-
-All routines expect the input to be two dimensional and assume we want to calculate the statistics over the
-second dimension. Similar to what in numpy would be for estimating the normal distribution::
-
-    np.mean(samples, axis=1)
-    np.std(samples, axis=1)
-
-Where possible these routines will use OpenCL accelerated routines.
-"""
+import itertools
 import numpy as np
 import scipy
 from scipy.optimize import minimize
@@ -27,9 +18,12 @@ def fit_gaussian(samples, ddof=0):
     """Calculates the mean and the standard deviation of the given samples.
 
     Args:
-        samples (ndarray): the two dimensional array for which we calculate the statistics over the second dimension
+        samples (ndarray): a one or two dimensional array. If one dimensional we calculate the fit using all
+            values. If two dimensional, we fit the Gaussian for every set of samples over the first dimension.
         ddof (int): the difference degrees of freedom in the std calculation. See numpy.
     """
+    if len(samples.shape) == 1:
+        return np.mean(samples), np.std(samples, ddof=ddof)
     return np.mean(samples, axis=1), np.std(samples, axis=1, ddof=ddof)
 
 
@@ -37,10 +31,14 @@ def fit_circular_gaussian(samples, high=np.pi, low=0):
     """Compute the circular mean for samples in a range
 
     Args:
-        samples (ndarray): the two dimensional array for which we calculate the statistics over the second dimension
+        samples (ndarray): a one or two dimensional array. If one dimensional we calculate the fit using all
+            values. If two dimensional, we fit the Gaussian for every set of samples over the first dimension.
         high (float): The maximum wrap point
         low (float): The minimum wrap point
     """
+    if len(samples.shape) == 1:
+        mean, std = CircularGaussianFit().calculate(samples[None, :], high=high, low=low)
+        return mean[0], std[0]
     return CircularGaussianFit().calculate(samples, high=high, low=low)
 
 
@@ -51,12 +49,20 @@ def fit_truncated_gaussian(samples, lower_bounds, upper_bounds):
     truncation points given by the lower and upper bounds.
 
     Args:
-        samples (ndarray): the two dimensional array for which we calculate the statistics over the second dimension
+        samples (ndarray): a one or two dimensional array. If one dimensional we fit the truncated Gaussian on all
+            values. If two dimensional, we calculate the truncated Gaussian for every set of samples over the
+            first dimension.
         lower_bounds (ndarray or float): the lower bound, either a scalar or a lower bound per problem (first index of
             samples)
         upper_bounds (ndarray or float): the upper bound, either a scalar or an upper bound per problem (first index of
             samples)
+
+    Returns:
+        mean, std: the mean and std of the fitted truncated Gaussian
     """
+    if len(samples.shape) == 1:
+        return _TruncatedNormalFitter()((samples, lower_bounds, upper_bounds))
+
     def item_generator():
         for ind in range(samples.shape[0]):
             if is_scalar(lower_bounds):
@@ -73,6 +79,60 @@ def fit_truncated_gaussian(samples, lower_bounds, upper_bounds):
 
     results = np.array(multiprocess_mapping(_TruncatedNormalFitter(), item_generator()))
     return results[:, 0], results[:, 1]
+
+
+def fit_multivariate_gaussian(samples, lower_bounds, upper_bounds, distribution_types=None):
+    """Fit a multivariate unimodal Gaussian to your samples.
+
+    Multivariate means that the samples contains more than one parameter, unimodal means we are only fitting a
+    single Gaussian instead of one with multiple peaks.
+
+    The mean of a multivariate Gaussian is identical to the list of means of each of the marginals. Also, the
+    covariance can be calculated by calculating the covariance between any pair of parameters. Based on that, we can
+    easily allow for different distribution types for each of the parameters (like circular and truncated Gaussians)
+    by using those instead of a regular Gaussian for each of the marginals.
+
+    The distribution types, if provided, should be a list with for every parameter an implementation
+    of :class:`mot.statistics.UnimodalGaussianType`. If not provided, we simply fit a non-truncated multivariate
+    Gaussian to the samples.
+
+    Args:
+        samples (ndarray): a matrix of shape (d, p, n) with d problems, p parameters and n samples
+        lower_bounds (list): for each parameter the lower bounds
+        upper_bounds (list): for each parameter the upper bounds
+        distribution_types (list): if None we fit a simple multivariate Gaussian. If given, it should contain per
+            parameter the type of Gaussian we use for that marginal, i.e. truncated, circular, or standard Gaussian.
+
+    Returns:
+        tuple: the means and the covariances
+    """
+    covars = np.zeros([samples.shape[0], samples.shape[1], samples.shape[1]])
+
+    if distribution_types is None:
+        covars = np.zeros([samples.shape[0], samples.shape[1], samples.shape[1]])
+        for ind in range(samples.shape[0]):
+            covars[ind] = np.cov(samples[ind])
+        means = np.mean(samples, axis=2)
+        return means, covars
+
+    means = np.zeros([samples.shape[0], samples.shape[1]])
+
+    for ind in range(samples.shape[1]):
+        param_means, param_stds = distribution_types[ind].get_statistics(
+            samples[:, ind], lower_bounds[ind], upper_bounds[ind])
+        means[:, ind] = param_means
+        covars[:, ind, ind] = param_stds**2
+
+    for ind0, ind1 in itertools.product(range(samples.shape[1]), range(samples.shape[1])):
+        distances0 = distribution_types[ind0].get_distance_from_expected(
+            samples[:, ind0, ...], means[:, ind0], lower_bounds[ind0], upper_bounds[ind0])
+        distances1 = distribution_types[ind1].get_distance_from_expected(
+            samples[:, ind1, ...], means[:, ind1], lower_bounds[ind1], upper_bounds[ind1])
+        param_covars = np.sum(distances0 * distances1, axis=1) / (samples.shape[2] - 1)
+        covars[:, ind0, ind1] = param_covars
+        covars[:, ind1, ind0] = param_covars
+
+    return means, covars
 
 
 def gaussian_overlapping_coefficient(means_0, stds_0, means_1, stds_1, lower=None, upper=None):
@@ -220,13 +280,17 @@ class _TruncatedNormalFitter(object):
         Helper function of :func:`fit_truncated_gaussian`.
         """
         samples, lower_bound, upper_bound = item
+        scaling_factor = 10 ** -np.round(np.log10(np.mean(samples)))
         result = minimize(_TruncatedNormalFitter.truncated_normal_log_likelihood,
-                          np.array([np.mean(samples), np.std(samples)]),
-                          args=(lower_bound, upper_bound, samples),
-                          method='TNC',
+                          np.array([np.mean(samples), np.std(samples)]) * scaling_factor,
+                          args=(lower_bound * scaling_factor,
+                                upper_bound * scaling_factor,
+                                samples * scaling_factor),
+                          method='L-BFGS-B',
                           jac=_TruncatedNormalFitter.truncated_normal_ll_gradient,
-                          bounds=[(lower_bound, upper_bound), (0, None)])
-        return result.x
+                          bounds=[(lower_bound * scaling_factor, upper_bound * scaling_factor), (0, None)]
+        )
+        return result.x / scaling_factor
 
     @staticmethod
     def truncated_normal_log_likelihood(params, low, high, data):
@@ -244,6 +308,8 @@ class _TruncatedNormalFitter(object):
         """
         mu = params[0]
         sigma = params[1]
+        if sigma == 0:
+            return np.inf
         ll = np.sum(norm.logpdf(data, mu, sigma))
         ll -= len(data) * np.log((norm.cdf(high, mu, sigma) - norm.cdf(low, mu, sigma)))
         return -ll
@@ -261,6 +327,9 @@ class _TruncatedNormalFitter(object):
         Returns:
             tuple: the gradient of the log likelihood given as a tuple with (mean, std)
         """
+        if params[1] == 0:
+            return np.array([np.inf, np.inf])
+
         return np.array([_TruncatedNormalFitter.partial_derivative_mu(params[0], params[1], low, high, data),
                          _TruncatedNormalFitter.partial_derivative_sigma(params[0], params[1], low, high, data)])
 
@@ -301,3 +370,92 @@ class _TruncatedNormalFitter(object):
         pd_sigma -= len(data) * (((low - mu) * norm.pdf(low, mu, sigma) - (high - mu) * norm.pdf(high, mu, sigma))
                                  / (sigma * (norm.cdf(high, mu, sigma) - norm.cdf(low, mu, sigma))))
         return -pd_sigma
+
+
+class UnimodalGaussianType(object):
+    """The type of unimodal Gaussian we can fit on the marginal of one of the parameters."""
+
+    def get_statistics(self, samples, lower_bounds, upper_bounds):
+        """Get the statistics for this parameter.
+
+        Args:
+            samples (ndarray): The 2d matrix (p, s) with for p problems, s samples.
+            lower_bounds (ndarray or float): the lower bound(s) for this parameter. This is either a scalar with
+                one lower bound for every problem, or a vector with a lower bound per problem.
+            upper_bounds (ndarray or float): the upper bound(s) for this parameter. This is either a scalar with
+                one upper bound for every problem, or a vector with a lower bound per problem.
+
+        Returns:
+            tuple: the mean and std of the fitted Gaussian
+        """
+        raise NotImplementedError()
+
+    def get_distance_from_expected(self, samples, expected_value, lower_bounds, upper_bounds):
+        """Get the distance from the expected value according to this sampling statistic.
+
+        This is used in the computation of the sample covariance matrix. For most implementations this is simply
+        ``samples - mean``. For circular distributions this might be different.
+
+        Args:
+            samples (ndarray): The 2d matrix (p, s) with for p problems, s samples
+            expected_value (ndarray): A 1d array with the expected values for each of the p problems.
+                This should be computed using :meth:`get_statistics`.
+            lower_bounds (ndarray or float): the lower bound(s) for this parameter. This is either a scalar with
+                one lower bound for every problem, or a vector with a lower bound per problem.
+            upper_bounds (ndarray or float): the upper bound(s) for this parameter. This is either a scalar with
+                one upper bound for every problem, or a vector with a lower bound per problem.
+
+        Returns:
+            ndarray: a 2d array of the same size as the samples, containing the distances to the mean for
+                the given parameter.
+        """
+        raise NotImplementedError()
+
+
+class StandardGaussian(UnimodalGaussianType):
+    """Calculates the mean and the standard deviation of the given samples.
+
+    The standard deviation is calculated with a degree of freedom of one, meaning we are returning the unbiased
+    estimator.
+    """
+    def get_statistics(self, samples, lower_bounds, upper_bounds):
+        return fit_gaussian(samples, ddof=1)
+
+    def get_distance_from_expected(self, samples, expected_value, lower_bounds, upper_bounds):
+        return samples - expected_value[:, None]
+
+
+class CircularGaussian(UnimodalGaussianType):
+    """Compute the circular mean for samples in a range"""
+
+    def get_statistics(self, samples, lower_bounds, upper_bounds):
+        return fit_circular_gaussian(samples, high=upper_bounds, low=lower_bounds)
+
+    def get_distance_from_expected(self, samples, expected_value, lower_bounds, upper_bounds):
+        distance_direct = samples - expected_value[:, None]
+
+        distance_circular_chooser = expected_value[:, None] > samples
+        distance_circular = \
+            distance_circular_chooser \
+                * ((upper_bounds - expected_value[:, None]) + (samples - lower_bounds)) \
+            - np.logical_not(distance_circular_chooser) \
+                * ((upper_bounds - samples) + (expected_value[:, None] - lower_bounds))
+
+        use_circular = np.abs(distance_circular) < np.abs(distance_direct)
+        return use_circular * distance_circular + np.logical_not(use_circular) * distance_direct
+
+
+class TruncatedGaussian(UnimodalGaussianType):
+
+    def __init__(self):
+        """Fits a truncated gaussian distribution on the given samples.
+
+        This will do a maximum likelihood estimation of the truncated gaussian on the given data where the
+        truncation points are given by the lower and upper bounds.
+        """
+
+    def get_statistics(self, samples, lower_bounds, upper_bounds):
+        return fit_truncated_gaussian(samples, lower_bounds, upper_bounds)
+
+    def get_distance_from_expected(self, samples, expected_value, lower_bounds, upper_bounds):
+        return samples - expected_value[:, None]
