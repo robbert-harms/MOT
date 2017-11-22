@@ -69,29 +69,44 @@ class NumericalHessian(CLRoutine):
             return self._results_vector_to_matrix(derivatives[..., 0], nmr_params) \
                    * np.outer(parameter_scalings, parameter_scalings)
 
-        richardson_derivatives, richardson_errors = self._richardson_convolutions(
-            derivatives, step_ratio, double_precision)
+        derivatives, errors = self._richardson_extrapolation(derivatives, step_ratio, double_precision)
 
-        if nmr_steps == 2:
-            return self._results_vector_to_matrix(richardson_derivatives[..., 0], nmr_params) \
+        if nmr_steps <= 3:
+            return self._results_vector_to_matrix(derivatives[..., 0], nmr_params) \
+                   * np.outer(parameter_scalings, parameter_scalings)
+
+        if derivatives.shape[2] > 2:
+            derivatives, errors = self._wynn_extrapolate(derivatives, double_precision)
+
+        if derivatives.shape[2] == 1:
+            return self._results_vector_to_matrix(derivatives[..., 0], nmr_params) \
                    * np.outer(parameter_scalings, parameter_scalings)
 
         extrapolate = Extrapolate(step_ratio)
 
         def data_iterator():
             for problem_ind in range(parameters.shape[0]):
-                yield (richardson_derivatives[problem_ind].T,
-                       richardson_errors[problem_ind].T,
+                yield (derivatives[problem_ind],
+                       errors[problem_ind],
                        nmr_params)
 
-        # result = np.array(list(map(extrapolate, data_iterator())))
-        result = np.array(multiprocess_mapping(extrapolate, data_iterator()))
+        result = np.array(list(map(extrapolate, data_iterator())))
+        # result = np.array(multiprocess_mapping(extrapolate, data_iterator()))
         return self._results_vector_to_matrix(result, nmr_params) * np.outer(parameter_scalings, parameter_scalings)
 
     def _compute_derivatives(self, model, parameters, double_precision, step_ratio, step_offset, nmr_steps):
-        """Compute the second derivative using the central difference method.
+        """Compute the lower triangular elements of the Hessian using the central difference method.
 
-        This calculates for the given step the numerical derivative and returns that value directly.
+        This will compute the elements of the Hessian multiple times with decreasing step sizes.
+
+        Args:
+            model: the log likelihood model we are trying to differentiate
+            parameters (ndarray): a (n, p) matrix with for for every problem n, p parameters. These are the points
+                at which we want to calculate the derivative
+            double_precision (boolean): if we are calculating in double precision or not
+            step_ratio (float): the ratio at which the steps exponentially diminish
+            step_offset (int): ignore the first few step sizes by this offset
+            nmr_steps (int): the number of steps to compute and return (after the step offset)
         """
         parameter_scalings = np.array(model.numdiff_get_scaling_factors())
 
@@ -118,31 +133,67 @@ class NumericalHessian(CLRoutine):
 
         return all_kernel_data['step_evaluates'].get_data()
 
-    def _richardson_convolutions(self, derivatives, step_ratio, double_precision):
+    def _richardson_extrapolation(self, derivatives, step_ratio, double_precision):
+        """Apply the Richardson extrapolation to the derivatives computed with different steps.
+
+        Having for every problem instance and every Hessian element multiple derivatives computed with decreasing steps,
+        we can now apply Richardson extrapolation to reduce the error term from :math:`\mathcal{O}(h^{2})` to
+        :math:`\mathcal{O}(h^{4})` or :math:`\mathcal{O}(h^{6})` depending on how many steps we have calculated.
+
+        This method only considers extrapolation up to the sixth error order. For a set of two derivatives we compute
+        a single fourth order approximation, for three derivatives and up we compute ``n-2`` sixth order approximations.
+        Expected errors for approximation ``i`` are computed using the ``i+1`` derivative plus a statistical error
+        based on the machine precision.
+
+        Args:
+            derivatives (ndarray): (n, p, s), a matrix with for n problems and p parameters, s step sizes.
+            step_ratio (ndarray): the diminishing ratio of the steps used to compute the derivatives.
+            double_precision (bool): if we are computing in double or not.
+        """
         nmr_problems, nmr_derivatives, nmr_steps = derivatives.shape
         richardson_coefficients = self._get_richardson_coefficients(step_ratio, min(nmr_steps, 3) - 1)
-        nmr_convolutions = nmr_steps - (len(richardson_coefficients) - 2)
-        final_nmr_convolutions = nmr_convolutions - 1
+        nmr_convolutions_needed = nmr_steps - (len(richardson_coefficients) - 2)
+        final_nmr_convolutions = nmr_convolutions_needed - 1
 
         kernel_data = {
             'derivatives': KernelInputArray(derivatives, 'double', offset_str='{problem_id} * ' + str(nmr_steps)),
-            'richardson_convolutions': KernelInputAllocatedOutput(
-                (nmr_problems * nmr_derivatives, nmr_convolutions), 'double'),
+            'richardson_extrapolations': KernelInputAllocatedOutput(
+                (nmr_problems * nmr_derivatives, nmr_convolutions_needed), 'double'),
             'errors': KernelInputAllocatedOutput(
                 (nmr_problems * nmr_derivatives, final_nmr_convolutions), 'double'),
         }
 
         runner = RunProcedure(**self.get_cl_routine_kwargs())
-        runner.run_procedure(self._richardson_error_kernel(nmr_steps, nmr_convolutions, richardson_coefficients),
+        runner.run_procedure(self._richardson_error_kernel(nmr_steps, nmr_convolutions_needed, richardson_coefficients),
                              kernel_data, nmr_problems * nmr_derivatives, double_precision=double_precision,
                              use_local_reduction=False)
 
-        convolutions = np.reshape(kernel_data['richardson_convolutions'].get_data(),
-                          (nmr_problems, nmr_derivatives, nmr_convolutions))
+        richardson_extrapolations = np.reshape(kernel_data['richardson_extrapolations'].get_data(),
+                                               (nmr_problems, nmr_derivatives, nmr_convolutions_needed))
         errors = np.reshape(kernel_data['errors'].get_data(),
                             (nmr_problems, nmr_derivatives, final_nmr_convolutions))
 
-        return convolutions[..., :final_nmr_convolutions], errors
+        return richardson_extrapolations[..., :final_nmr_convolutions], errors
+
+    def _wynn_extrapolate(self, derivatives, double_precision):
+        nmr_problems, nmr_derivatives, nmr_steps = derivatives.shape
+        nmr_extrapolations = nmr_steps - 2
+
+        kernel_data = {
+            'derivatives': KernelInputArray(derivatives, 'double', offset_str='{problem_id} * ' + str(nmr_steps)),
+            'extrapolations': KernelInputAllocatedOutput((nmr_problems * nmr_derivatives, nmr_extrapolations), 'double'),
+            'errors': KernelInputAllocatedOutput((nmr_problems * nmr_derivatives, nmr_extrapolations), 'double'),
+        }
+
+        runner = RunProcedure(**self.get_cl_routine_kwargs())
+        runner.run_procedure(self._wynn_extrapolation_kernel(nmr_steps),
+                             kernel_data, nmr_problems * nmr_derivatives, double_precision=double_precision,
+                             use_local_reduction=False)
+
+        extrapolations = np.reshape(kernel_data['extrapolations'].get_data(),
+                                    (nmr_problems, nmr_derivatives, nmr_extrapolations))
+        errors = np.reshape(kernel_data['errors'].get_data(), (nmr_problems, nmr_derivatives, nmr_extrapolations))
+        return extrapolations, errors
 
     def _results_vector_to_matrix(self, vectors, nmr_params):
         """Transform for every problem (and optionally every step size) the vector results to a square matrix.
@@ -306,7 +357,9 @@ class NumericalHessian(CLRoutine):
             }
             
             /**
-             * Compute the 2nd derivative of one element of the Hessian for a number of steps.
+             * Compute one element of the Hessian for a number of steps.
+             * 
+             * This uses the initial steps in the data structure, indexed by the parameters to change (px, py).
              */
             void _compute_steps(mot_data_struct* data, mot_float_type* x_input, mot_float_type f_x_input,
                                 uint px, uint py, global double* step_evaluate_ptr){
@@ -380,7 +433,7 @@ class NumericalHessian(CLRoutine):
              */
             void _apply_richardson_convolution(
                     global double* derivatives,
-                    global double* richardson_convolutions){
+                    global double* richardson_extrapolations){
 
                 double convolution_kernel[''' + str(len(richardson_coefficients)) + '''] = {''' + \
                     ', '.join(map(str, richardson_coefficients)) + '''};
@@ -397,7 +450,7 @@ class NumericalHessian(CLRoutine):
                             kernel_step_ind -= 2 * (kernel_step_ind - ''' + str(nmr_steps) + ''') + 1;
                         }
 
-                        richardson_convolutions[step_ind] +=
+                        richardson_extrapolations[step_ind] +=
                             derivatives[kernel_step_ind] * convolution_kernel[kernel_ind];
                     }
                 }
@@ -422,13 +475,12 @@ class NumericalHessian(CLRoutine):
              */ 
             void _compute_richardson_errors(
                     global double* derivatives, 
-                    global double* richardson_convolutions,
+                    global double* richardson_extrapolations,
                     global double* errors){
                 
-                //the magic number 12.7062... follows from the student T distribution with one dof. 
-                // Example computation: 
-                // >>> import scipy.stats as ss
-                // >>> allclose(ss.t.cdf(12.7062047361747, 1), 0.975) # True
+                // The magic number 12.7062... follows from the student T distribution with one dof. 
+                //  >>> import scipy.stats as ss
+                //  >>> allclose(ss.t.cdf(12.7062047361747, 1), 0.975) # True
                 double fact = max(
                     (mot_float_type)''' + str(12.7062047361747 * np.sqrt(np.sum(richardson_coefficients**2))) + ''',
                     (mot_float_type)MOT_EPSILON * 10);
@@ -437,17 +489,17 @@ class NumericalHessian(CLRoutine):
                 double error;
                 
                 for(uint conv_ind = 0; conv_ind < ''' + str(nmr_convolutions - 1) + '''; conv_ind++){
-                    tolerance = max(fabs(richardson_convolutions[conv_ind + 1]), 
-                                    fabs(richardson_convolutions[conv_ind])
+                    tolerance = max(fabs(richardson_extrapolations[conv_ind + 1]), 
+                                    fabs(richardson_extrapolations[conv_ind])
                                     ) * MOT_EPSILON * fact;
                     
-                    error = fabs(richardson_convolutions[conv_ind] - richardson_convolutions[conv_ind + 1]) * fact;
+                    error = fabs(richardson_extrapolations[conv_ind] - richardson_extrapolations[conv_ind + 1]) * fact;
                     
                     if(error <= tolerance){
                         error += tolerance * 10;
                     }
                     else{
-                        error += fabs(richardson_convolutions[conv_ind] - 
+                        error += fabs(richardson_extrapolations[conv_ind] - 
                                       derivatives[''' + str(nmr_steps - nmr_convolutions + 1) + ''' + conv_ind]) * fact;
                     }
                     
@@ -456,17 +508,6 @@ class NumericalHessian(CLRoutine):
             }
         '''
         return func
-
-    def _richardson_error_kernel(self, nmr_steps, nmr_convolutions, richardson_coefficients):
-        func = ''
-        func += self._get_error_estimate_functions_cl(nmr_steps, nmr_convolutions, richardson_coefficients)
-        func += '''
-            void convolute(mot_data_struct* data){
-                _apply_richardson_convolution(data->derivatives, data->richardson_convolutions);
-                _compute_richardson_errors(data->derivatives, data->richardson_convolutions, data->errors);
-            }
-        '''
-        return SimpleNamedCLFunction(func, 'convolute')
 
     def _get_single_step_kernel(self, model, nmr_params, nmr_steps, step_ratio):
         func = ''
@@ -492,6 +533,87 @@ class NumericalHessian(CLRoutine):
         '''
         return SimpleNamedCLFunction(func, 'compute')
 
+    def _richardson_error_kernel(self, nmr_steps, nmr_convolutions, richardson_coefficients):
+        func = ''
+        func += self._get_error_estimate_functions_cl(nmr_steps, nmr_convolutions, richardson_coefficients)
+        func += '''
+            void convolute(mot_data_struct* data){
+                _apply_richardson_convolution(data->derivatives, data->richardson_extrapolations);
+                _compute_richardson_errors(data->derivatives, data->richardson_extrapolations, data->errors);
+            }
+        '''
+        return SimpleNamedCLFunction(func, 'convolute')
+
+    def _wynn_extrapolation_kernel(self, nmr_steps):
+        """OpenCL kernel for extrapolating a slowly convergent sequence.
+
+        This algorithm, known in the Python Numdifftools as DEA3, attempts to extrapolate nonlinearly to a better estimate
+        of the sequence's limiting value, thus improving the rate of convergence. The routine is based on the epsilon
+        algorithm of P. Wynn [1].
+
+        References:
+        - [1] C. Brezinski and M. Redivo Zaglia (1991)
+                "Extrapolation Methods. Theory and Practice", North-Holland.
+
+        - [2] C. Brezinski (1977)
+                "Acceleration de la convergence en analyse numerique",
+                "Lecture Notes in Math.", vol. 584,
+                Springer-Verlag, New York, 1977.
+
+        - [3] E. J. Weniger (1989)
+                "Nonlinear sequence transformations for the acceleration of
+                convergence and the summation of divergent series"
+                Computer Physics Reports Vol. 10, 189 - 371
+                http://arxiv.org/abs/math/0306302v1
+        """
+        func = ''
+        func += '''
+            void compute(mot_data_struct* data){
+                double v0, v1, v2; 
+                
+                double delta0, delta1; 
+                double err0, err1; 
+                double tol0, tol1; 
+                
+                double ss;
+                bool converged;
+                
+                double result;
+                
+                for(uint i = 0; i < ''' + str(nmr_steps - 2) + '''; i++){
+                    v0 = data->derivatives[i];
+                    v1 = data->derivatives[i + 1];
+                    v2 = data->derivatives[i + 2];
+                    
+                    delta0 = v1 - v0;
+                    delta1 = v2 - v1;
+                    
+                    err0 = fabs(delta0);
+                    err1 = fabs(delta1);
+                    
+                    tol0 = max(fabs(v0), fabs(v1)) * MOT_EPSILON;
+                    tol1 = max(fabs(v1), fabs(v2)) * MOT_EPSILON;
+                    
+                    // avoid division by zero and overflow
+                    if(err0 < MOT_MIN){
+                        delta0 = MOT_MIN;
+                    }
+                    if(err1 < MOT_MIN){
+                        delta1 = MOT_MIN;
+                    }
+                    
+                    ss = 1.0 / delta1 - 1.0 / delta0 + MOT_MIN;
+                    converged = ((err0 <= tol0) && (err1 <= tol1)) || (fabs(ss * v1) <= 1e-3);
+                    
+                    result = (converged ? v2 : v1 + 1.0/ss);
+                    
+                    data->extrapolations[i] = result;
+                    data->errors[i] = err0 + err1 + (converged ? tol1 * 10 : fabs(result - v2));
+                }
+            }
+        '''
+        return SimpleNamedCLFunction(func, 'compute')
+
 
 """
 Everything under this comment is copied from numdifftools (https://github.com/pbrod/numdifftools) to remove a dependency.
@@ -506,24 +628,15 @@ class Extrapolate(object):
         self._step_ratio = step_ratio
 
     def __call__(self, el):
-        richardson_derivatives, richardson_errors, nmr_params = el
-
-        def _wynn_extrapolate(der):
-            der, errors = dea3(der[0:-2], der[1:-1], der[2:], symmetric=False)
-            return der, errors
-
-        def _add_error_to_outliers(der, trim_fact=10):
+        def _get_outliers_errors(der, trim_fact=10):
             # discard any estimate that differs wildly from the
             # median of all estimates. A factor of 10 to 1 in either
             # direction is probably wild enough here. The actual
             # trimming factor is defined as a parameter.
-            try:
-                median = np.nanmedian(der, axis=0)
-                p75 = np.nanpercentile(der, 75, axis=0)
-                p25 = np.nanpercentile(der, 25, axis=0)
-                iqr = np.abs(p75 - p25)
-            except ValueError as msg:
-                return 0 * der
+            median = np.nanmedian(der, axis=1)[..., None]
+            p75 = np.nanpercentile(der, 75, axis=1)[..., None]
+            p25 = np.nanpercentile(der, 25, axis=1)[..., None]
+            iqr = np.abs(p75 - p25)
 
             a_median = np.abs(median)
             outliers = (((abs(der) < (a_median / trim_fact)) +
@@ -532,128 +645,21 @@ class Extrapolate(object):
             errors = outliers * np.abs(der - median)
             return errors
 
-        def _get_arg_min(errors):
-            shape = errors.shape
-            try:
-                arg_mins = np.nanargmin(errors, axis=0)
-                min_errors = np.nanmin(errors, axis=0)
-            except ValueError as msg:
-                return np.arange(shape[1])
-
-            for i, min_error in enumerate(min_errors):
-                idx = np.flatnonzero(errors[:, i] == min_error)
-                arg_mins[i] = idx[idx.size // 2]
-            return np.ravel_multi_index((arg_mins, np.arange(shape[1])), shape)
-
         def _get_best_estimate(der, errors):
-            errors += _add_error_to_outliers(der)
-            ix = _get_arg_min(errors)
-            err = errors.flat[ix]
-            return der.flat[ix], err
+            all_nan = np.where(np.sum(np.isnan(errors), axis=1) == errors.shape[1])
+            errors[all_nan, 0] = 0
+            der[all_nan, 0] = 0
 
-        def _results_vector_to_matrix(vectors, nmr_params):
-            matrices = np.zeros(vectors.shape[:-1] + (nmr_params, nmr_params), dtype=vectors.dtype)
+            errors += _get_outliers_errors(der)
 
-            ltr_ind = 0
-            for px in range(nmr_params):
-                matrices[..., px, px] = vectors[..., ltr_ind]
-                ltr_ind += 1
+            minpos = np.nanargmin(errors, axis=1)
+            ders, errors = der[range(len(minpos)), minpos], errors[range(len(minpos)), minpos]
 
-                for py in range(px + 1, nmr_params):
-                    matrices[..., px, py] = vectors[..., ltr_ind]
-                    matrices[..., py, px] = vectors[..., ltr_ind]
-                    ltr_ind += 1
-            return matrices
+            ders[all_nan] = np.nan
+            errors[all_nan] = np.nan
 
-        if len(richardson_derivatives) > 2:
-            richardson_derivatives, richardson_errors = _wynn_extrapolate(richardson_derivatives)
-        derivatives, err_test = _get_best_estimate(richardson_derivatives, richardson_errors)
+            return ders, errors
 
+        derivatives, errors, nmr_params = el
+        derivatives, errors = _get_best_estimate(derivatives, errors)
         return derivatives
-
-
-EPS = np.finfo(np.float64).eps
-_EPS = EPS
-_TINY = np.finfo(np.float64).tiny
-
-
-def max_abs(a1, a2):
-    return np.maximum(np.abs(a1), np.abs(a2))
-
-
-def dea3(v0, v1, v2, symmetric=False):
-    """
-    Extrapolate a slowly convergent sequence
-
-    Parameters
-    ----------
-    v0, v1, v2 : array-like
-        3 values of a convergent sequence to extrapolate
-
-    Returns
-    -------
-    result : array-like
-        extrapolated value
-    abserr : array-like
-        absolute error estimate
-
-    Description
-    -----------
-    DEA3 attempts to extrapolate nonlinearly to a better estimate
-    of the sequence's limiting value, thus improving the rate of
-    convergence. The routine is based on the epsilon algorithm of
-    P. Wynn, see [1]_.
-
-     Example
-     -------
-     # integrate sin(x) from 0 to pi/2
-
-     >>> import numpy as np
-     >>> import numdifftools as nd
-     >>> Ei= np.zeros(3)
-     >>> linfun = lambda i : np.linspace(0, np.pi/2., 2**(i+5)+1)
-     >>> for k in np.arange(3):
-     ...    x = linfun(k)
-     ...    Ei[k] = np.trapz(np.sin(x),x)
-     >>> [En, err] = nd.dea3(Ei[0], Ei[1], Ei[2])
-     >>> truErr = Ei-1.
-     >>> (truErr, err, En)
-     (array([ -2.00805680e-04,  -5.01999079e-05,  -1.25498825e-05]),
-     array([ 0.00020081]), array([ 1.]))
-
-     See also
-     --------
-     dea
-
-     Reference
-     ---------
-     .. [1] C. Brezinski and M. Redivo Zaglia (1991)
-            "Extrapolation Methods. Theory and Practice", North-Holland.
-
-    ..  [2] C. Brezinski (1977)
-            "Acceleration de la convergence en analyse numerique",
-            "Lecture Notes in Math.", vol. 584,
-            Springer-Verlag, New York, 1977.
-
-    ..  [3] E. J. Weniger (1989)
-            "Nonlinear sequence transformations for the acceleration of
-            convergence and the summation of divergent series"
-            Computer Physics Reports Vol. 10, 189 - 371
-            http://arxiv.org/abs/math/0306302v1
-    """
-    e0, e1, e2 = np.atleast_1d(v0, v1, v2)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")  # ignore division by zero and overflow
-        delta2, delta1 = e2 - e1, e1 - e0
-        err2, err1 = np.abs(delta2), np.abs(delta1)
-        tol2, tol1 = max_abs(e2, e1) * _EPS, max_abs(e1, e0) * _EPS
-        delta1[err1 < _TINY] = _TINY
-        delta2[err2 < _TINY] = _TINY  # avoid division by zero and overflow
-        ss = 1.0 / delta2 - 1.0 / delta1 + _TINY
-        smalle2 = abs(ss * e1) <= 1.0e-3
-        converged = (err1 <= tol1) & (err2 <= tol2) | smalle2
-        result = np.where(converged, e2 * 1.0, e1 + 1.0 / ss)
-    abserr = err1 + err2 + np.where(converged, tol2 * 10, np.abs(result - e2))
-    if symmetric and len(result) > 1:
-        return result[:-1], abserr[1:]
-    return result, abserr
