@@ -63,36 +63,29 @@ class NumericalHessian(CLRoutine):
 
         parameter_scalings = np.array(model.numdiff_get_scaling_factors())
 
+        def finalize_derivatives(derivatives):
+            """Transforms the derivatives from vector to matrix and apply the parameter scalings."""
+            return self._results_vector_to_matrix(derivatives, nmr_params) \
+                   * np.outer(parameter_scalings, parameter_scalings)
+
         derivatives = self._compute_derivatives(model, parameters, double_precision, step_ratio, step_offset, nmr_steps)
 
         if nmr_steps == 1:
-            return self._results_vector_to_matrix(derivatives[..., 0], nmr_params) \
-                   * np.outer(parameter_scalings, parameter_scalings)
+            return finalize_derivatives(derivatives[..., 0])
 
         derivatives, errors = self._richardson_extrapolation(derivatives, step_ratio, double_precision)
 
         if nmr_steps <= 3:
-            return self._results_vector_to_matrix(derivatives[..., 0], nmr_params) \
-                   * np.outer(parameter_scalings, parameter_scalings)
+            return finalize_derivatives(derivatives[..., 0])
 
         if derivatives.shape[2] > 2:
             derivatives, errors = self._wynn_extrapolate(derivatives, double_precision)
 
         if derivatives.shape[2] == 1:
-            return self._results_vector_to_matrix(derivatives[..., 0], nmr_params) \
-                   * np.outer(parameter_scalings, parameter_scalings)
+            return finalize_derivatives(derivatives[..., 0])
 
-        extrapolate = Extrapolate(step_ratio)
-
-        def data_iterator():
-            for problem_ind in range(parameters.shape[0]):
-                yield (derivatives[problem_ind],
-                       errors[problem_ind],
-                       nmr_params)
-
-        result = np.array(list(map(extrapolate, data_iterator())))
-        # result = np.array(multiprocess_mapping(extrapolate, data_iterator()))
-        return self._results_vector_to_matrix(result, nmr_params) * np.outer(parameter_scalings, parameter_scalings)
+        derivatives, errors = self._median_outlier_extrapolation(derivatives, errors)
+        return finalize_derivatives(derivatives)
 
     def _compute_derivatives(self, model, parameters, double_precision, step_ratio, step_offset, nmr_steps):
         """Compute the lower triangular elements of the Hessian using the central difference method.
@@ -194,6 +187,44 @@ class NumericalHessian(CLRoutine):
                                     (nmr_problems, nmr_derivatives, nmr_extrapolations))
         errors = np.reshape(kernel_data['errors'].get_data(), (nmr_problems, nmr_derivatives, nmr_extrapolations))
         return extrapolations, errors
+
+    def _median_outlier_extrapolation(self, derivatives, errors):
+        """Add an error to outliers and afterwards return the derivatives with the lowest errors.
+
+        This seems to be the slowest function in the library. Perhaps one day update this to OpenCL as well.
+        Some ideas are in: http://krstn.eu/np.nanpercentile()-there-has-to-be-a-faster-way/
+        """
+        def _get_median_outliers_errors(der, trim_fact=10):
+            """Discards any estimate that differs wildly from the median of the estimates (of that derivative).
+
+            A factor of 10 to 1 in either direction . The actual trimming factor is
+            defined as a parameter.
+            """
+            p25, median, p75 = np.nanpercentile(der, q=[25, 50, 75], axis=2)[..., None]
+            iqr = np.abs(p75 - p25)
+
+            a_median = np.abs(median)
+            outliers = (((abs(der) < (a_median / trim_fact)) +
+                         (abs(der) > (a_median * trim_fact))) * (a_median > 1e-8) +
+                        ((der < p25 - 1.5 * iqr) + (p75 + 1.5 * iqr < der)))
+            return outliers * np.abs(der - median)
+
+        all_nan = np.where(np.sum(np.isnan(errors), axis=2) == errors.shape[2])
+        errors[all_nan[0], all_nan[1], 0] = 0
+        derivatives[all_nan[0], all_nan[1], 0] = 0
+
+        errors += _get_median_outliers_errors(derivatives)
+
+        minpos = np.nanargmin(errors, axis=2)
+        indices = np.indices(minpos.shape)
+
+        derivatives_final = derivatives[indices[0], indices[1], minpos]
+        errors_final = errors[indices[0], indices[1], minpos]
+
+        derivatives_final[all_nan[0], all_nan[1]] = np.nan
+        errors_final[all_nan[0], all_nan[1]] = np.nan
+
+        return derivatives_final, errors_final
 
     def _results_vector_to_matrix(self, vectors, nmr_params):
         """Transform for every problem (and optionally every step size) the vector results to a square matrix.
@@ -613,53 +644,3 @@ class NumericalHessian(CLRoutine):
             }
         '''
         return SimpleNamedCLFunction(func, 'compute')
-
-
-"""
-Everything under this comment is copied from numdifftools (https://github.com/pbrod/numdifftools) to remove a dependency.
-
-In the future these extrapolation methods should be translated to OpenCL for fast evaluation over multiple instances.
-"""
-
-
-class Extrapolate(object):
-
-    def __init__(self, step_ratio):
-        self._step_ratio = step_ratio
-
-    def __call__(self, el):
-        def _get_outliers_errors(der, trim_fact=10):
-            # discard any estimate that differs wildly from the
-            # median of all estimates. A factor of 10 to 1 in either
-            # direction is probably wild enough here. The actual
-            # trimming factor is defined as a parameter.
-            median = np.nanmedian(der, axis=1)[..., None]
-            p75 = np.nanpercentile(der, 75, axis=1)[..., None]
-            p25 = np.nanpercentile(der, 25, axis=1)[..., None]
-            iqr = np.abs(p75 - p25)
-
-            a_median = np.abs(median)
-            outliers = (((abs(der) < (a_median / trim_fact)) +
-                         (abs(der) > (a_median * trim_fact))) * (a_median > 1e-8) +
-                        ((der < p25 - 1.5 * iqr) + (p75 + 1.5 * iqr < der)))
-            errors = outliers * np.abs(der - median)
-            return errors
-
-        def _get_best_estimate(der, errors):
-            all_nan = np.where(np.sum(np.isnan(errors), axis=1) == errors.shape[1])
-            errors[all_nan, 0] = 0
-            der[all_nan, 0] = 0
-
-            errors += _get_outliers_errors(der)
-
-            minpos = np.nanargmin(errors, axis=1)
-            ders, errors = der[range(len(minpos)), minpos], errors[range(len(minpos)), minpos]
-
-            ders[all_nan] = np.nan
-            errors[all_nan] = np.nan
-
-            return ders, errors
-
-        derivatives, errors, nmr_params = el
-        derivatives, errors = _get_best_estimate(derivatives, errors)
-        return derivatives
