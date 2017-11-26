@@ -58,7 +58,7 @@ class NumDiffInfo(object):
 
 class SimpleNumDiffInfo(NumDiffInfo):
 
-    def __init__(self, max_step=1, scale_factor=1, use_bounds=True, modulus=None):
+    def __init__(self, max_step=0.1, scale_factor=1, use_bounds=True, modulus=None):
         """A basic implementation of the numerical differentiation info for a parameter.
 
         Args:

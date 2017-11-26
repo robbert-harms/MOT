@@ -1,10 +1,9 @@
+import itertools
 import numpy as np
 from mot.cl_routines.mapping.run_procedure import RunProcedure
-from ...utils import KernelInputArray, SimpleNamedCLFunction, KernelInputLocalMemory, KernelInputAllocatedOutput, \
-    multiprocess_mapping
+from ...utils import KernelInputArray, SimpleNamedCLFunction, KernelInputLocalMemory, KernelInputAllocatedOutput
 from ...cl_routines.base import CLRoutine
 from scipy import linalg
-import warnings
 
 
 __author__ = 'Robbert Harms'
@@ -114,13 +113,13 @@ class NumericalHessian(CLRoutine):
         all_kernel_data.update({
             'parameters': KernelInputArray(parameters, ctype='mot_float_type'),
             'local_reduction_lls': KernelInputLocalMemory('double'),
-            'parameter_scalings_inv': KernelInputArray(1. / parameter_scalings, ctype='double', offset_str='0'),
-            'initial_step': KernelInputArray(initial_step, ctype='mot_float_type', is_writable=True),
+            'parameter_scalings_inv': KernelInputArray(1. / parameter_scalings, ctype='float', offset_str='0'),
+            'initial_step': KernelInputArray(initial_step, ctype='float'),
             'step_evaluates': KernelInputAllocatedOutput((parameters.shape[0], nmr_derivatives, nmr_steps), 'double'),
         })
 
         runner = RunProcedure(**self.get_cl_routine_kwargs())
-        runner.run_procedure(self._get_single_step_kernel(model, nmr_params, nmr_steps, step_ratio),
+        runner.run_procedure(self._derivation_kernel(model, nmr_params, nmr_steps, step_ratio),
                              all_kernel_data, parameters.shape[0], double_precision=double_precision,
                              use_local_reduction=True)
 
@@ -174,7 +173,8 @@ class NumericalHessian(CLRoutine):
 
         kernel_data = {
             'derivatives': KernelInputArray(derivatives, 'double', offset_str='{problem_id} * ' + str(nmr_steps)),
-            'extrapolations': KernelInputAllocatedOutput((nmr_problems * nmr_derivatives, nmr_extrapolations), 'double'),
+            'extrapolations': KernelInputAllocatedOutput((nmr_problems * nmr_derivatives, nmr_extrapolations),
+                                                         'double'),
             'errors': KernelInputAllocatedOutput((nmr_problems * nmr_derivatives, nmr_extrapolations), 'double'),
         }
 
@@ -393,7 +393,7 @@ class NumericalHessian(CLRoutine):
              * This uses the initial steps in the data structure, indexed by the parameters to change (px, py).
              */
             void _compute_steps(mot_data_struct* data, mot_float_type* x_input, mot_float_type f_x_input,
-                                uint px, uint py, global double* step_evaluate_ptr){
+                                uint px, uint py, global double* step_evaluates){
                 
                 double step_x;
                 double step_y;
@@ -415,7 +415,7 @@ class NumericalHessian(CLRoutine):
                         ) / (4 * step_x * step_x);
                         
                         if(is_first_workitem){
-                            step_evaluate_ptr[step_ind] = tmp;
+                            step_evaluates[step_ind] = tmp;
                         }
                     }
                 }
@@ -440,7 +440,7 @@ class NumericalHessian(CLRoutine):
                         ) / (4 * step_x * step_y);
     
                         if(is_first_workitem){
-                            step_evaluate_ptr[step_ind] = tmp;
+                            step_evaluates[step_ind] = tmp;
                         }                       
                     }
                 }
@@ -540,7 +540,9 @@ class NumericalHessian(CLRoutine):
         '''
         return func
 
-    def _get_single_step_kernel(self, model, nmr_params, nmr_steps, step_ratio):
+    def _derivation_kernel(self, model, nmr_params, nmr_steps, step_ratio):
+        coords = [(x, y) for x, y in itertools.combinations_with_replacement(range(nmr_params), 2)]
+
         func = ''
         func += self._get_compute_functions_cl(model, nmr_params, nmr_steps, step_ratio)
         func += '''
@@ -552,13 +554,13 @@ class NumericalHessian(CLRoutine):
                 }
                 double f_x_input = _calculate_function(data, x_input);
                 
-                uint param_ind = 0;
-                for(uint px = 0; px < ''' + str(nmr_params) + '''; px++){
-                    for(uint py = px; py < ''' + str(nmr_params) + '''; py++){
-                        _compute_steps(data, x_input, f_x_input, px, py, 
-                                       data->step_evaluates + param_ind * ''' + str(nmr_steps) + ''');    
-                        param_ind += 1;
-                    }
+                uint coords[''' + str(len(coords)) + '''][2] = {
+                    ''' + ', '.join('{{{}, {}}}'.format(*c) for c in coords)  + '''
+                };
+                
+                for(uint coord_ind = 0; coord_ind < ''' + str(len(coords)) + '''; coord_ind++){
+                    _compute_steps(data, x_input, f_x_input, coords[coord_ind][0], coords[coord_ind][1], 
+                                   data->step_evaluates + coord_ind * ''' + str(nmr_steps) + ''');
                 }
             }
         '''
