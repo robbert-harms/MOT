@@ -268,15 +268,25 @@ class NumericalHessian(CLRoutine):
         lower_bounds = model.get_lower_bounds()
 
         max_step = model.numdiff_get_max_step()
-        minimum_allowed_step = np.minimum(np.abs(parameters - lower_bounds),
-                                          np.abs(np.array(upper_bounds) - parameters)) \
-                               * model.numdiff_get_scaling_factors()
 
-        initial_step = np.zeros_like(minimum_allowed_step)
+        initial_step = np.zeros_like(parameters)
 
         for ind in range(parameters.shape[1]):
             if model.numdiff_use_bounds()[ind]:
-                initial_step[:, ind] = np.minimum(minimum_allowed_step[:, ind], max_step[ind])
+                use_lower = model.numdiff_use_lower_bounds()[ind]
+                use_upper = model.numdiff_use_upper_bounds()[ind]
+
+                if use_upper and not use_lower:
+                    minimum_allowed_step = np.abs(upper_bounds[ind] - parameters[:, ind]) \
+                                           * model.numdiff_get_scaling_factors()[ind]
+                elif use_lower and not use_upper:
+                    minimum_allowed_step = np.abs(parameters[:, ind] - lower_bounds[ind]) \
+                                           * model.numdiff_get_scaling_factors()[ind]
+                else:
+                    minimum_allowed_step = np.minimum(np.abs(parameters[:, ind] - lower_bounds[ind]),
+                                                      np.abs(upper_bounds[ind] - parameters[:, ind])) \
+                                           * model.numdiff_get_scaling_factors()[ind]
+                initial_step[:, ind] = np.minimum(minimum_allowed_step, max_step[ind])
             else:
                 initial_step[:, ind] = max_step[ind]
 

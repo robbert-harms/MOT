@@ -161,6 +161,8 @@ class OptimizeModelBuilder(ModelBuilder):
                                    self._get_max_numdiff_step(),
                                    self._get_numdiff_scaling_factors(),
                                    self._get_numdiff_use_bounds(),
+                                   self._get_numdiff_use_lower_bounds(),
+                                   self._get_numdiff_use_upper_bounds(),
                                    self._get_numdiff_param_transform())
 
     def build_with_codec(self, problems_to_analyze):
@@ -607,6 +609,26 @@ class OptimizeModelBuilder(ModelBuilder):
                 if we don't have to.
         """
         return [p.numdiff_info.use_bounds for _, p in self._model_functions_info.get_estimable_parameters_list()]
+
+    def _get_numdiff_use_upper_bounds(self):
+        """Check for each parameter if we should be using the upper bounds when taking the derivative.
+
+        This is only used if use_bounds is True for a parameter.
+
+        Returns:
+            list[bool]: per parameter a boolean to identify if we should use the upper bounds for that parameter.
+        """
+        return [p.numdiff_info.use_upper_bound for _, p in self._model_functions_info.get_estimable_parameters_list()]
+
+    def _get_numdiff_use_lower_bounds(self):
+        """Check for each parameter if we should be using the lower bounds when taking the derivative.
+
+        This is only used if use_bounds is True for a parameter.
+
+        Returns:
+            list[bool]: per parameter a boolean to identify if we should use the lower bounds for that parameter.
+        """
+        return [p.numdiff_info.use_lower_bound for _, p in self._model_functions_info.get_estimable_parameters_list()]
 
     def _get_numdiff_param_transform(self):
         """Get the parameter transformation for use in the numerical differentiation algorithm.
@@ -2105,7 +2127,8 @@ class SimpleOptimizeModel(NumericalDerivativeInterface):
                  name, double_precision, kernel_data_info, nmr_problems, nmr_inst_per_problem,
                  nmr_estimable_parameters, initial_parameters, pre_eval_parameter_modifier, eval_function,
                  objective_per_observation_function, lower_bounds, upper_bounds, numdiff_step,
-                 numdiff_scaling_factors, numdiff_use_bounds, numdiff_param_transform):
+                 numdiff_scaling_factors, numdiff_use_bounds, numdiff_use_lower_bounds,
+                 numdiff_use_upper_bounds, numdiff_param_transform):
         self.used_problem_indices = used_problem_indices
         self._name = name
         self._double_precision = double_precision
@@ -2122,6 +2145,8 @@ class SimpleOptimizeModel(NumericalDerivativeInterface):
         self._numdiff_step = numdiff_step
         self._numdiff_scaling_factors = numdiff_scaling_factors
         self._numdiff_use_bounds = numdiff_use_bounds
+        self._numdiff_use_lower_bounds = numdiff_use_lower_bounds
+        self._numdiff_use_upper_bounds = numdiff_use_upper_bounds
         self._numdiff_param_transform = numdiff_param_transform
 
     @property
@@ -2176,6 +2201,12 @@ class SimpleOptimizeModel(NumericalDerivativeInterface):
 
     def numdiff_parameter_transformation(self):
         return self._numdiff_param_transform
+
+    def numdiff_use_upper_bounds(self):
+        return self._numdiff_use_upper_bounds
+
+    def numdiff_use_lower_bounds(self):
+        return self._numdiff_use_lower_bounds
 
 
 class SimpleSampleModel(SampleModelInterface):

@@ -406,6 +406,26 @@ class NumericalDerivativeInterface(OptimizeModelInterface):
         """
         raise NotImplementedError()
 
+    def numdiff_use_upper_bounds(self):
+        """Check for each parameter if we should be using the upper bounds when taking the derivative.
+
+        This is only used if use_bounds is True for a parameter.
+
+        Returns:
+            list[bool]: per parameter a boolean to identify if we should use the upper bounds for that parameter.
+        """
+        raise NotImplementedError()
+
+    def numdiff_use_lower_bounds(self):
+        """Check for each parameter if we should be using the lower bounds when taking the derivative.
+
+        This is only used if use_bounds is True for a parameter.
+
+        Returns:
+            list[bool]: per parameter a boolean to identify if we should use the lower bounds for that parameter.
+        """
+        raise NotImplementedError()
+
     def numdiff_parameter_transformation(self):
         """A transformation that can prepare the parameter +/- the proposed step for evaluation in the model function.
 

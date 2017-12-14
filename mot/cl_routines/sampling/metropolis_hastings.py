@@ -2,7 +2,7 @@ import warnings
 import numpy as np
 import pyopencl as cl
 from mot.library_functions import Rand123
-from ...cl_routines.sampling.base import AbstractSampler, SamplingOutput, SimpleSampleOutput
+from ...cl_routines.sampling.base import AbstractSampler, SimpleSampleOutput
 from ...load_balance_strategies import Worker
 from ...utils import get_float_type_def, KernelInputDataManager, split_in_batches
 
@@ -99,7 +99,9 @@ class MetropolisHastings(AbstractSampler):
         if self.burn_length > 0:
             mh_state = run(samples, None, None, mh_state, self.burn_length, in_burnin=True)
 
-        for batch_ind, batch_size in enumerate(split_in_batches(self.nmr_samples, 1000)):
+        for batch_start, batch_end in split_in_batches(self.nmr_samples, 1000):
+            batch_size = batch_end - batch_start
+
             samples_subset = np.zeros((model.get_nmr_problems(), nmr_params, batch_size),
                                       dtype=mot_float_dtype, order='C')
             ll_subset = np.zeros((model.get_nmr_problems(), batch_size), dtype=mot_float_dtype, order='C')
@@ -107,9 +109,9 @@ class MetropolisHastings(AbstractSampler):
 
             mh_state = run(samples_subset, ll_subset, lp_subset, mh_state, batch_size)
 
-            samples[..., (batch_ind * batch_size):((batch_ind + 1) * batch_size)] = samples_subset
-            log_likelihoods[..., (batch_ind * batch_size):((batch_ind + 1) * batch_size)] = ll_subset
-            log_priors[..., (batch_ind * batch_size):((batch_ind + 1) * batch_size)] = lp_subset
+            samples[..., batch_start:batch_end] = samples_subset
+            log_likelihoods[..., batch_start:batch_end] = ll_subset
+            log_priors[..., batch_start:batch_end] = lp_subset
 
         self._logger.info('Finished sampling')
 

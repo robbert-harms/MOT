@@ -438,21 +438,26 @@ def cartesian(arrays, out=None):
 
 
 def split_in_batches(nmr_elements, max_batch_size):
-    """Split the total number of elements into batches of the specified maximum size or smaller.
+    """Split the total number of elements into batches of the specified maximum size.
 
-    Examples:
-        split_in_batches(30, 8) -> [8, 8, 8, 6]
+    Examples::
+        split_in_batches(30, 8) -> [(0, 8), (8, 15), (16, 23), (24, 29)]
 
-    Returns:
-        list: the list of batch sizes
+        for batch_start, batch_end in split_in_batches(2000, 100):
+            array[batch_start:batch_end]
+
+    Yields:
+        tuple: the start and end point of the next batch
     """
-    if max_batch_size > nmr_elements:
-        return [nmr_elements]
+    offset = 0
+    elements_left = nmr_elements
+    while elements_left > 0:
+        next_batch = (offset, offset + min(elements_left, max_batch_size))
+        yield next_batch
 
-    batch_sizes = [max_batch_size] * (nmr_elements // max_batch_size)
-    if nmr_elements % max_batch_size > 0:
-        batch_sizes.append(nmr_elements % max_batch_size)
-    return batch_sizes
+        batch_size = min(elements_left, max_batch_size)
+        elements_left -= batch_size
+        offset += batch_size
 
 
 def get_class_that_defined_method(method):
@@ -484,12 +489,11 @@ def hessian_to_covariance(hessian):
     """Calculate a covariance matrix from a Hessian by inverting the Hessian.
 
     Mathematically we can calculate the covariance matrix from the Hessian (the Hessian at the Maximum Likelihood
-    Estimator), by a simple matrix inversion. However, round-off errors can make the Hessian singular and making an
-    exact inverse not possible. This method uses an exact inverse where possible yet will fallback on a pseudo inverse
-    where needed.
+    Estimator), by a simple matrix inversion. However, round-off errors can make the Hessian singular, making an
+    exact inverse impossible. This method uses an exact inverse if possible with a fall back on a pseudo inverse.
 
-    Before the matrix inversion it will set NaN's to 0. After the inversion we make the diagonal (representing the
-    variances of each parameter) positive where needed by taking the absolute.
+    Important: Before the matrix inversion it will set NaN's to 0. After the inversion we make the diagonal
+    (representing the variances of each parameter) positive where needed by taking the absolute.
 
     Args:
         hessian (ndarray): a matrix of shape (n, p, p) where for n problems we have a matrix of shape (p, p) for

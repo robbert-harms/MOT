@@ -58,7 +58,8 @@ class NumDiffInfo(object):
 
 class SimpleNumDiffInfo(NumDiffInfo):
 
-    def __init__(self, max_step=0.1, scale_factor=1, use_bounds=True, modulus=None):
+    def __init__(self, max_step=0.1, scale_factor=1, use_bounds=True, modulus=None,
+                 use_lower_bound=True, use_upper_bound=True):
         """A basic implementation of the numerical differentiation info for a parameter.
 
         Args:
@@ -66,11 +67,15 @@ class SimpleNumDiffInfo(NumDiffInfo):
             scale_factor (float): a scaling factor to rescale the parameter a unitary range
             use_bounds (boolean): if we need to use the boundary condition for this parameter
             modulus (float): if this parameter wraps around a certain value, set this to a value > 0.
+            use_lower_bound (boolean): if we are using bounds, if we are using the lower bound
+            use_upper_bound (boolean): if we are using bounds, if we are using the upper bound
         """
         self._numdiff_step = max_step
         self._scale_factor = scale_factor
         self._use_bounds = use_bounds
         self._modulus = modulus
+        self._use_lower_bound = use_lower_bound
+        self._use_upper_bound = use_upper_bound
 
     @property
     def max_step(self):
@@ -87,3 +92,11 @@ class SimpleNumDiffInfo(NumDiffInfo):
     @property
     def modulus(self):
         return self._modulus
+
+    @property
+    def use_lower_bound(self):
+        return self._use_lower_bound
+
+    @property
+    def use_upper_bound(self):
+        return self._use_upper_bound
