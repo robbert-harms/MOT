@@ -410,6 +410,13 @@ class OptimizeModelBuilder(ModelBuilder):
         return [self._upper_bounds['{}.{}'.format(m.name, p.name)] for m, p in
                 self._model_functions_info.get_estimable_parameters_list()]
 
+    def get_initial_parameters(self):
+        starting_points = []
+        for m, p in self._model_functions_info.get_estimable_parameters_list():
+            param_name = '{}.{}'.format(m.name, p.name)
+            starting_points.append(self._model_functions_info.get_parameter_value(param_name))
+        return starting_points
+
     def _get_nmr_problems(self, problems_to_analyze):
         """See super class for details"""
         if problems_to_analyze is None:
