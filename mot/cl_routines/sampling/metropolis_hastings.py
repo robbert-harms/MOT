@@ -22,12 +22,13 @@ class MetropolisHastings(AbstractSampler):
         This implementation uses a random walk single component updating strategy for the sampling.
 
         Args:
-            nmr_samples (int): The length of the (returned) chain per voxel, defaults to 0
+            nmr_samples (int): The length of the (returned) chain per voxel, defaults to 1
             burn_length (int): The length of the burn in (per voxel), these are extra samples,
-                jump is set to 1 (no thinning)
-            sample_intervals (int): how many sample we wait before storing one.
-                This will draw extra samples (chain_length * sample_intervals). If set to zero we
-                store every sample after the burn in.
+                during burn-in we don't apply the thinning.
+            sample_intervals (int): how many sample we wait before storing a new one.
+                This will draw extra samples such that the total number of samples generated is
+                ``chain_length * (sample_intervals + 1)`` and the number of samples stored is
+                ``chain_length``. If set to zero we store every sample after the burn in.
             use_adaptive_proposals (boolean): if we use the adaptive proposals (set to True) or not (set to False).
         """
         super(MetropolisHastings, self).__init__(**kwargs)
@@ -431,13 +432,13 @@ class _MCMCKernelBuilder(object):
                     if(is_first_work_item){
                         if(i % ''' + str(self._sample_intervals + 1) + ''' == 0){
 
-                            log_likelihoods[problem_ind * ''' + str(self._nmr_samples) + ''' 
+                            log_likelihoods[problem_ind * ''' + str(self._nmr_samples) + '''
                                             + (ulong)(i / ''' + str(self._sample_intervals + 1) + ''')
                                 ] = *current_likelihood;
-                            log_priors[problem_ind * ''' + str(self._nmr_samples) + ''' 
+                            log_priors[problem_ind * ''' + str(self._nmr_samples) + '''
                                        + (ulong)(i / ''' + str(self._sample_intervals + 1) + ''')
                                 ] = *current_prior;
-                            
+
                             for(j = 0; j < ''' + str(self._nmr_params) + '''; j++){
                                 samples[(ulong)(i / ''' + str(self._sample_intervals + 1) + ''') // remove the interval
                                         + j * ''' + str(self._nmr_samples) + '''  // parameter index
@@ -586,11 +587,11 @@ class _MCMCKernelBuilder(object):
                 log_likelihood_tmp[local_id] = 0;
                 uint workgroup_size = get_local_size(0);
                 uint elements_for_workitem = ceil(NMR_INST_PER_PROBLEM / (mot_float_type)workgroup_size);
-                
+
                 if(workgroup_size * (elements_for_workitem - 1) + local_id >= NMR_INST_PER_PROBLEM){
                     elements_for_workitem -= 1;
                 }
-                
+
                 mot_float_type x_private[''' + str(self._nmr_params) + '''];
                 for(uint i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                     x_private[i] = x_local[i];
@@ -598,7 +599,7 @@ class _MCMCKernelBuilder(object):
 
                 for(uint i = 0; i < elements_for_workitem; i++){
                     observation_ind = i * workgroup_size + local_id;
-                    
+
                     log_likelihood_tmp[local_id] += ''' + ll_func.get_cl_function_name() + '''(
                         data, x_private, observation_ind);
                 }
@@ -645,7 +646,7 @@ class _MCMCKernelBuilder(object):
                         new_prior = ''' + self._prior_func.get_cl_function_name() + '''(data, x_local);
                     }
                     barrier(CLK_LOCAL_MEM_FENCE);
-                    
+
                     if(exp(new_prior) > 0){
                         _fill_log_likelihood_tmp(data, x_local, log_likelihood_tmp);
 
