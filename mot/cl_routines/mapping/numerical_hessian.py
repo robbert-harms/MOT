@@ -590,9 +590,9 @@ class NumericalHessian(CLRoutine):
     def _wynn_extrapolation_kernel(self, nmr_steps):
         """OpenCL kernel for extrapolating a slowly convergent sequence.
 
-        This algorithm, known in the Python Numdifftools as DEA3, attempts to extrapolate nonlinearly to a better estimate
-        of the sequence's limiting value, thus improving the rate of convergence. The routine is based on the epsilon
-        algorithm of P. Wynn [1].
+        This algorithm, known in the Python Numdifftools as DEA3, attempts to extrapolate nonlinearly to a better
+        estimate of the sequence's limiting value, thus improving the rate of convergence. The routine is based on the
+        epsilon algorithm of P. Wynn [1].
 
         References:
         - [1] C. Brezinski and M. Redivo Zaglia (1991)
