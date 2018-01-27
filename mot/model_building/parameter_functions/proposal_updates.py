@@ -89,7 +89,7 @@ class SimpleProposalUpdate(ProposalUpdate):
 
             #endif //{include_guard_name}
 
-        '''.format(include_guard_name='PROPOSAL_UPDATE_{}'.format(self._function_name.upper()),
+        '''.format(include_guard_name=self.get_function_name(proposal_parameters).upper(),
                    function_name=self.get_function_name(proposal_parameters), params=', '.join(params),
                    function_body=function_body)
 
@@ -116,7 +116,7 @@ class NoOperationUpdateFunction(SimpleProposalUpdate):
 
 class AcceptanceRateScaling(SimpleProposalUpdate):
 
-    def __init__(self, target_acceptance_rate=0.44, batch_size=50, damping_factor=1):
+    def __init__(self, target_acceptance_rate=0.44, batch_size=50, damping_factor=1, min_val=1e-15, max_val=1e3):
         """Scales the proposal parameter (typically the std) such that it oscillates towards the chosen acceptance rate.
 
         This uses an scaling similar to the one in: "Examples of Adaptive MCMC",
@@ -131,11 +131,15 @@ class AcceptanceRateScaling(SimpleProposalUpdate):
         Args:
             target_acceptance_rate (float): the target acceptance rate between 0 and 1.
             batch_size (int): the size of the batches inbetween which we update the parameters
+            min_val (float): the minimum value the standard deviation can take
+            max_val (float): the maximum value the standard deviation can take
         """
         super(AcceptanceRateScaling, self).__init__('acceptance_rate_scaling')
         self._target_acceptance_rate = target_acceptance_rate
         self._batch_size = batch_size
         self._damping_factor = damping_factor
+        self._min_val = min_val
+        self._max_val = max_val
 
         if target_acceptance_rate > 1 or target_acceptance_rate < 0:
             raise ValueError('The target acceptance rate should be '
@@ -154,18 +158,18 @@ class AcceptanceRateScaling(SimpleProposalUpdate):
                     *std /= exp(delta);
                 }}
 
-                *std = clamp(*std, (mot_float_type)1e-13, (mot_float_type)1e3);
+                *std = clamp(*std, (mot_float_type){min_val}, (mot_float_type){max_val});
 
                 *acceptance_counter = 0;
             }}
         '''.format(batch_size=self._batch_size, target_ar=self._target_acceptance_rate,
-                   damping_factor=self._damping_factor)
+                   damping_factor=self._damping_factor, min_val=self._min_val, max_val=self._max_val)
         return self._update_function_template(body, proposal_parameters, address_space)
 
 
 class FSLAcceptanceRateScaling(SimpleProposalUpdate):
 
-    def __init__(self, batch_size=50, min_val=1e-13, max_val=1e3):
+    def __init__(self, batch_size=50, min_val=1e-15, max_val=1e3):
         """An acceptance rate scaling algorithm found in a Neuroscience package called FSL.
 
         This scaling algorithm scales the std. by :math:`\sqrt(a/(n - a))` where a is the number of accepted samples
@@ -179,8 +183,8 @@ class FSLAcceptanceRateScaling(SimpleProposalUpdate):
 
         Args:
             batch_size (int): the size of the batches in between which we update the parameters
-            min_val (float): the minimum value the parameter can take
-            max_val (float): the maximum value the parameter can take
+            min_val (float): the minimum value the standard deviation can take
+            max_val (float): the maximum value the standard deviation can take
         """
         super(FSLAcceptanceRateScaling, self).__init__('fsl_acceptance_rate_scaling')
         self._batch_size = batch_size
