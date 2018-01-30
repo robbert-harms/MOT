@@ -7,45 +7,30 @@ v0.3.9 (2018-01-30)
 
 Added
 -----
+- Numerical Hessian now with OpenCL support
 - Adds method to get the initial parameters of a model.
 - Adds initial lower and upper bound support to the numerical Hessian method.
-- Adds small helper routine.
 - Adds a method to the sampling statistics to compute the distance to the mean.
 - Adds InputDataParameter as superclass of ProtocolParameter and StaticMapParameter.
 - Adds support for restrict keyword in CL functions.
 
 Changed
 -------
-- Updates comments.
-- Updates to the comments.
-- Updates to the numerical Hessian calculation, translated more functions to OpenCL. Small update to how the sampling post processing works, moved the sample statistics out of the parameters.
-- Updated the buffer allocation in some methods to the latest way of doing it.
+- Updates to the numerical Hessian calculation, translated more functions to OpenCL.
+- Updated the buffer allocation in some methods to the new way of doing it.
 - Updates to the numerical Hessian calculation, small improvement in local workgroup reductions.
 - Changed the interface of the input data object to get the value for a parameter using a method call.
 
 Other
 -----
-- Small update to the proposal update classes.
-- Merge branch 'master' of github.com:cbclab/MOT.
-- Small comment update.
 - Sets the default step size to 0.1 for the numerical differentiation, small updates to the numerical Hessian computation.
 - Most of the numerical Hessian computations are now in OpenCL. Only thing remaining is median outlier removal.
-- More speed ups in the numerical Hessian.
-- Comment update.
-- Some refactorings, adds some functional modules and updates to the numerical Hessian.
-- Small update to the comments.
-- More work on the numerical differentiation.
-- Merge branch 'master' of github.com:cbclab/MOT.
-- Update to comments.
-- More work on the Hessian calculation.
-- More work on the numerical differentiation. Adds KernelInputAllocatedOutput for easily allocating an empty output buffer.
-- First working version of the numerical Hessian computation. This version also contains a gradient calculator although that will be removed in the next version (it is purely there for back history purpose).
-- Removed unused import.
 - Made the KernelInputDataManager smarter such that it can detect duplicate buffers and only load those once. Furthermore, KernelInputScalars are now inlined in the kernel call.
 - Made the method wrapping in the wrapped model easier.
 - Lets the random restart use the model objective function instead of the L2 error. Furthermore, removed residual calculations in favor of objective function calculating.
 - Renamed EvaluationModels to LikelihoodFunctions, which covers the usage better.
-- Removed the GPU accelerated truncated gaussian fit since it was not doing the right thing. Added a MLE based truncated normal statistic calculator. In MCMC, changed the order of processing such that the starting point is stored as the first sample.
+- Removed the GPU accelerated truncated gaussian fit since it was not doing the right thing. Added a MLE based truncated normal statistic calculator.
+- In MCMC, changed the order of processing such that the starting point is stored as the first sample.
 
 
 v0.3.8 (2017-09-26)
@@ -80,7 +65,6 @@ Other
 - Small speed update to the GPU univariate ESS method.
 - More work on the procedure evaluator. Moved more data management tasks to the kernel input data manager.
 - Renamed CLHeader to CLPrototype, covers the usage better.
-- Version bump.
 
 
 v0.3.6 (2017-09-06)
@@ -109,7 +93,6 @@ Other
 - Moved the mot_data_struct generation from the model to the kernel functions.
 - More changes to adding the mot_data_struct type.
 - Intermediate work on the sampling mle and map calculator.
-- Version bump.
 
 
 v0.3.5 (2017-08-29)
@@ -147,7 +130,6 @@ Added
 
 Other
 -----
-- Version bump.
 - Removed the const keyword from the data pointer in the model functions. Allows the user more freedom.
 - Removed the get observation return function from the model interface.
 
@@ -186,9 +168,7 @@ v0.3.2 (2017-07-26)
 
 Changed
 -------
-- Updates in this version:
-  - Update to the documentation
-- Updates to the docs.
+- Update to the documentation
 
 
 v0.3.1 (2017-07-25)
@@ -216,7 +196,6 @@ Other
 - Made the processing strategy log statement debug level instead of info level.
 - Refactored the model builders to the actual builder pattern. Small change in the OffsetGaussian objective per observation function to properly account for the noise. Removed the objective function and LL function and replaced it with objective_per_observation and LL_per_observation. Introduced get_pre_eval_parameter_modifier in the model interface for obvious speed gains.
 - Introduced the KernelDataInfo as an intermediate object containing the information about the kernel data of the model.
-- Small typo fix.
 
 
 v0.3.0 (2017-06-11)
@@ -225,10 +204,13 @@ v0.3.0 (2017-06-11)
 Added
 -----
 - Adds fixed check in the init value method. This to prevent overwriting fixations by initialization.
+- Added priors to the model functions.
+- Add a routine that calculates the WAIC information criteria.
 
 Changed
 -------
 - Changed support for the post optimization modifiers. Small change in the sampling statistics.
+- Changed the rand123 library such that it no longer automatically adds the global id to the random state. Initializing the proper state is now part of the caller.
 
 Fixed
 -----
@@ -236,11 +218,8 @@ Fixed
 
 Other
 -----
-- Minor version bump.
-- Some refactorings. Implements a routine that calculates the WAIC information criteria.
-- More refactoring, added priors to the model functions.
 - The get_extra_results_maps function of the compartments now receives and gives the dictionaries without the compartment name, making things easier.
-- - Changed the rand123 library such that it no longer automatically adds the global id to the random state. Initializing the proper state is now part of the caller. - Moved the data from the model builder to the ModelFunctionsInfo class. - Adds a mechanism for adding model wide priors.
+- Moved the data from the model builder to the ModelFunctionsInfo class.
+- Adds a mechanism for adding model wide priors.
 - Removed redundant comment Refactored one of the priors.
 - Moved the codec out of the optimization routines.
-- Small change to readme.
