@@ -119,8 +119,8 @@ class AcceptanceRateScaling(SimpleProposalUpdate):
     def __init__(self, target_acceptance_rate=0.44, batch_size=50, damping_factor=1, min_val=1e-15, max_val=1e3):
         """Scales the proposal parameter (typically the std) such that it oscillates towards the chosen acceptance rate.
 
-        This uses an scaling similar to the one in: "Examples of Adaptive MCMC",
-        Gareth O. Roberts & Jeffrey S. Rosenthal (2009)
+        This uses an scaling similar to the 'Adaptive Metropolis-Within-Gibbs' method described in:
+        "Examples of Adaptive MCMC", Gareth O. Roberts & Jeffrey S. Rosenthal (2009)
 
         This class implements the delta function as: :math:`\delta(n) = \sqrt{1 / (d*n)}`.
         Where n is the current batch index and d is the damping factor.
