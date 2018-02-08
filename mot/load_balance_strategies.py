@@ -163,7 +163,7 @@ class Worker(object):
 
 class SimpleLoadBalanceStrategy(LoadBalanceStrategy):
 
-    def __init__(self, run_in_batches=True, single_batch_length=1e6):
+    def __init__(self, run_in_batches=True, single_batch_length=1e4):
         """An abstract class for quickly implementing load balancing strategies.
 
         Args:
