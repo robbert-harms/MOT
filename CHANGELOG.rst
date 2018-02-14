@@ -2,6 +2,14 @@
 Changelog
 *********
 
+v0.3.10 (2018-02-14)
+====================
+
+Changed
+-------
+- Changed the default load balancing batch size.
+
+
 v0.3.9 (2018-01-30)
 ===================
 
