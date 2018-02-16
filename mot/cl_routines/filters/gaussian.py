@@ -39,29 +39,29 @@ class _GaussianFilterWorker(AbstractFilterWorker):
     def calculate(self, range_start, range_end):
         volumes_to_run = [self._volumes_list[i] for i in range(len(self._volumes_list)) if range_start <= i < range_end]
 
-        volume_buf = cl.Buffer(self._cl_run_context.context,
+        volume_buf = cl.Buffer(self._cl_context,
                                cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
                                hostbuf=volumes_to_run[0][1])
 
-        results_buf = cl.Buffer(self._cl_run_context.context,
+        results_buf = cl.Buffer(self._cl_context,
                                 cl.mem_flags.WRITE_ONLY | cl.mem_flags.COPY_HOST_PTR,
                                 hostbuf=self._results_dict[volumes_to_run[0][0]])
 
         for volume_name, volume in volumes_to_run:
-            cl.enqueue_copy(self._cl_run_context.queue, volume_buf, volume, is_blocking=False)
-            cl.enqueue_copy(self._cl_run_context.queue, results_buf, self._results_dict[volume_name], is_blocking=False)
+            cl.enqueue_copy(self._cl_queue, volume_buf, volume, is_blocking=False)
+            cl.enqueue_copy(self._cl_queue, results_buf, self._results_dict[volume_name], is_blocking=False)
 
             for dimension in range(len(self._volume_shape)):
                 kernel_length = self._calculate_kernel_size_in_dimension(dimension)
                 kernel_sigma = self._get_sigma_in_dimension(dimension)
 
                 filter_kernel = self._get_1d_gaussian_kernel_array(kernel_length, kernel_sigma)
-                filter_kernel_buf = cl.Buffer(self._cl_run_context.context,
+                filter_kernel_buf = cl.Buffer(self._cl_context,
                                               cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
                                               hostbuf=filter_kernel)
 
                 kernel_source = self._get_gaussian_kernel_source(dimension)
-                kernel = cl.Program(self._cl_run_context.context, kernel_source).build()
+                kernel = cl.Program(self._cl_context, kernel_source).build()
 
                 if dimension % 2 == 0:
                     buffers_list = self._list_all_buffers(volume_buf, filter_kernel_buf, results_buf)
@@ -70,10 +70,10 @@ class _GaussianFilterWorker(AbstractFilterWorker):
                     buffers_list = self._list_all_buffers(results_buf, filter_kernel_buf, volume_buf)
                     results_buf_ptr = volume_buf
 
-                kernel.filter(self._cl_run_context.queue, self._volume_shape, None, *buffers_list)
+                kernel.filter(self._cl_queue, self._volume_shape, None, *buffers_list)
 
                 if dimension == len(self._volume_shape) - 1:
-                    cl.enqueue_copy(self._cl_run_context.queue, self._results_dict[volume_name],
+                    cl.enqueue_copy(self._cl_queue, self._results_dict[volume_name],
                                     results_buf_ptr, is_blocking=False)
 
     def _build_kernel(self, kernel_source, compile_flags=()):

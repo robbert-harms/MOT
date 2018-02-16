@@ -69,20 +69,20 @@ class _EvaluateModelWorker(Worker):
         scalar_args.extend(self._data_struct_manager.get_scalar_arg_dtypes())
         kernel_func.set_scalar_arg_dtypes(scalar_args)
 
-        kernel_func(self._cl_run_context.queue, (int(nmr_problems), ), None,
+        kernel_func(self._cl_queue, (int(nmr_problems), ), None,
                     *self._all_buffers, global_offset=(int(range_start),))
         self._enqueue_readout(self._evaluations_buffer, self._evaluations, range_start, range_end)
 
     def _create_buffers(self):
-        evaluations_buffer = cl.Buffer(self._cl_run_context.context,
+        evaluations_buffer = cl.Buffer(self._cl_context,
                                        cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
                                        hostbuf=self._evaluations)
 
-        all_buffers = [cl.Buffer(self._cl_run_context.context,
+        all_buffers = [cl.Buffer(self._cl_context,
                                  cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR,
                                  hostbuf=self._parameters),
                        evaluations_buffer]
-        all_buffers.extend(self._data_struct_manager.get_kernel_inputs(self._cl_run_context.context, 1))
+        all_buffers.extend(self._data_struct_manager.get_kernel_inputs(self._cl_context, 1))
         return all_buffers, evaluations_buffer
 
     def _get_kernel_source(self):

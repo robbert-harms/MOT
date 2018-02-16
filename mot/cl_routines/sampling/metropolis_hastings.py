@@ -238,7 +238,7 @@ class _MHWorker(Worker):
         else:
             nmr_iterations = self._nmr_samples * (self._sample_intervals + 1)
             for item in [self._samples, self._log_likelihoods, self._log_priors]:
-                buffer = cl.Buffer(self._cl_run_context.context,
+                buffer = cl.Buffer(self._cl_context,
                                    cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
                                    hostbuf=item)
                 data_buffers.append(buffer)
@@ -248,7 +248,7 @@ class _MHWorker(Worker):
         kernel_func.set_scalar_arg_dtypes(scalar_args)
 
         kernel_func(
-            self._cl_run_context.queue,
+            self._cl_queue,
             (int(nmr_problems * workgroup_size),),
             (int(workgroup_size),),
             np.uint64(nmr_iterations),
@@ -263,13 +263,13 @@ class _MHWorker(Worker):
         data_buffers = []
         readout_items = []
 
-        current_chain_position_buffer = cl.Buffer(self._cl_run_context.context,
+        current_chain_position_buffer = cl.Buffer(self._cl_context,
                                                   cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR,
                                                   hostbuf=self._current_chain_position)
         data_buffers.append(current_chain_position_buffer)
         readout_items.append([current_chain_position_buffer, self._current_chain_position])
 
-        proposal_buffer = cl.Buffer(self._cl_run_context.context,
+        proposal_buffer = cl.Buffer(self._cl_context,
                                     cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR,
                                     hostbuf=self._proposal_state)
         data_buffers.append(proposal_buffer)
@@ -279,7 +279,7 @@ class _MHWorker(Worker):
         for mcmc_state_element in sorted(self._mh_state_dict):
             host_array = self._mh_state_dict[mcmc_state_element]['data']
 
-            buffer = cl.Buffer(self._cl_run_context.context,
+            buffer = cl.Buffer(self._cl_context,
                                cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR,
                                hostbuf=host_array)
             mcmc_state_buffers[mcmc_state_element] = buffer
@@ -288,7 +288,7 @@ class _MHWorker(Worker):
             readout_items.append([buffer, host_array])
 
         data_buffers.append(cl.LocalMemory(workgroup_size * np.dtype('double').itemsize))
-        data_buffers.extend(self._data_struct_manager.get_kernel_inputs(self._cl_run_context.context, workgroup_size))
+        data_buffers.extend(self._data_struct_manager.get_kernel_inputs(self._cl_context, workgroup_size))
 
         return data_buffers, readout_items
 
@@ -321,7 +321,7 @@ class _MCMCKernelBuilder(object):
     def __init__(self, compile_flags, mh_state_dict, cl_environment, model,
                  nmr_samples, store_samples, sample_intervals, use_adaptive_proposals, nmr_params,
                  mot_float_dtype):
-        self._cl_run_context = cl_environment.get_cl_context()
+        self._cl_context = cl_environment.context
         self._compile_flags = compile_flags
         self._mh_state_dict = mh_state_dict
         self._cl_environment = cl_environment
@@ -351,7 +351,7 @@ class _MCMCKernelBuilder(object):
         from mot import configuration
         if configuration.should_ignore_kernel_compile_warnings():
             warnings.simplefilter("ignore")
-        return cl.Program(self._cl_run_context.context, kernel_source).build(' '.join(self._compile_flags))
+        return cl.Program(self._cl_context, kernel_source).build(' '.join(self._compile_flags))
 
     def _get_kernel_source(self):
 

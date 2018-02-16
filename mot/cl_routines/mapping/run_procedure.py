@@ -67,14 +67,14 @@ class _ProcedureWorker(Worker):
         self._kernel_input = self._get_kernel_input()
 
     def _get_kernel_input(self):
-        return self._data_struct_manager.get_kernel_inputs(self._cl_run_context.context, self._workgroup_size)
+        return self._data_struct_manager.get_kernel_inputs(self._cl_context, self._workgroup_size)
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
 
         func = self._kernel.run_procedure
         func.set_scalar_arg_dtypes(self._data_struct_manager.get_scalar_arg_dtypes())
-        func(self._cl_run_context.queue,
+        func(self._cl_queue,
              (int(nmr_problems * self._workgroup_size), ),
              (int(self._workgroup_size),),
              *self._kernel_input,

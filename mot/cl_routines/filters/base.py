@@ -126,7 +126,7 @@ class AbstractFilterWorker(Worker):
             self._use_mask = False
         else:
             self._use_mask = True
-            self._mask_buf = cl.Buffer(self._cl_run_context.context,
+            self._mask_buf = cl.Buffer(self._cl_context,
                                        cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
                                        hostbuf=self._mask)
 
@@ -135,25 +135,25 @@ class AbstractFilterWorker(Worker):
     def calculate(self, range_start, range_end):
         volumes_to_run = [self._volumes_list[i] for i in range(len(self._volumes_list)) if range_start <= i < range_end]
 
-        volume_buf = cl.Buffer(self._cl_run_context.context,
+        volume_buf = cl.Buffer(self._cl_context,
                                cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
                                hostbuf=volumes_to_run[0][1])
 
-        results_buf = cl.Buffer(self._cl_run_context.context,
+        results_buf = cl.Buffer(self._cl_context,
                                 cl.mem_flags.WRITE_ONLY | cl.mem_flags.COPY_HOST_PTR,
                                 hostbuf=self._results_dict[volumes_to_run[0][0]])
 
         for key, value in volumes_to_run:
-            cl.enqueue_copy(self._cl_run_context.queue, volume_buf, value, is_blocking=False)
-            cl.enqueue_copy(self._cl_run_context.queue, results_buf, self._results_dict[key], is_blocking=False)
+            cl.enqueue_copy(self._cl_queue, volume_buf, value, is_blocking=False)
+            cl.enqueue_copy(self._cl_queue, results_buf, self._results_dict[key], is_blocking=False)
 
             buffers = [volume_buf]
             if self._use_mask:
                 buffers.append(self._mask_buf)
             buffers.append(results_buf)
 
-            self._kernel.filter(self._cl_run_context.queue, self._volume_shape, None, *buffers)
-            cl.enqueue_copy(self._cl_run_context.queue, self._results_dict[key], results_buf, is_blocking=False)
+            self._kernel.filter(self._cl_queue, self._volume_shape, None, *buffers)
+            cl.enqueue_copy(self._cl_queue, self._results_dict[key], results_buf, is_blocking=False)
 
     def _get_kernel_source(self):
         """Get the kernel source for this filtering kernel.

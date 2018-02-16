@@ -81,7 +81,8 @@ class Worker(object):
             cl_environment (CLEnvironment): The cl environment, can be used to determine the load
         """
         self._cl_environment = cl_environment
-        self._cl_run_context = self._cl_environment.get_cl_context()
+        self._cl_context = cl_environment.context
+        self._cl_queue = cl_environment.queue
 
     @property
     def cl_environment(self):
@@ -100,7 +101,7 @@ class Worker(object):
         Returns:
             list of pyopencl queues: the list of queues
         """
-        return [self._cl_run_context.queue]
+        return [self._cl_queue]
 
     def calculate(self, range_start, range_end):
         """Calculate for this problem the given range.
@@ -136,7 +137,7 @@ class Worker(object):
         from mot import configuration
         if configuration.should_ignore_kernel_compile_warnings():
             warnings.simplefilter("ignore")
-        return cl.Program(self._cl_run_context.context, kernel_source).build(' '.join(compile_flags))
+        return cl.Program(self._cl_context, kernel_source).build(' '.join(compile_flags))
 
     def _enqueue_readout(self, buffer, host_array, range_start, range_end, wait_for=None, is_blocking=False):
         """Enqueue a readout for a buffer created with use_host_ptr.
@@ -156,7 +157,7 @@ class Worker(object):
         """
         nmr_problems = range_end - range_start
         return cl.enqueue_map_buffer(
-            self._cl_run_context.queue, buffer, cl.map_flags.READ, range_start * host_array.strides[0],
+            self._cl_queue, buffer, cl.map_flags.READ, range_start * host_array.strides[0],
             (nmr_problems, ) + host_array.shape[1:], host_array.dtype, order="C", wait_for=wait_for,
             is_blocking=is_blocking)[1]
 

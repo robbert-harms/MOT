@@ -100,7 +100,7 @@ class _LLWorker(Worker):
         self._problem_index = problem_index
         samples = self._samples[self._problem_index]
         mapped_buf = cl.enqueue_map_buffer(
-            self._cl_run_context.queue, self._ll_calculating_buffers[0],
+            self._cl_queue, self._ll_calculating_buffers[0],
             cl.map_flags.WRITE, 0, samples.shape, samples.dtype)[0]
         mapped_buf[:] = samples
 
@@ -123,7 +123,7 @@ class _LLWorker(Worker):
         kernel = self._ll_calculating_kernel.run_kernel
         kernel.set_scalar_arg_dtypes(arg_dtypes)
 
-        kernel(self._cl_run_context.queue, (int(nmr_problems), int(self._nmr_samples)), None,
+        kernel(self._cl_queue, (int(nmr_problems), int(self._nmr_samples)), None,
                *buffers, global_offset=(int(range_start), 0))
 
     def _calculate_statistics(self, range_start, range_end):
@@ -143,32 +143,32 @@ class _LLWorker(Worker):
         buffers = [self._ll_buffer, self._lse_buffer, self._variances_buffer, lse_tmp_buffer, var_tmp_buffer]
 
         self._statistic_kernels.mean_and_max(
-            self._cl_run_context.queue, (int(nmr_problems * workgroup_size),), (int(workgroup_size),),
+            self._cl_queue, (int(nmr_problems * workgroup_size),), (int(workgroup_size),),
             *buffers, global_offset=(int(range_start * workgroup_size),))
 
         self._statistic_kernels.logsum_variance(
-            self._cl_run_context.queue, (int(nmr_problems * workgroup_size),), (int(workgroup_size),),
+            self._cl_queue, (int(nmr_problems * workgroup_size),), (int(workgroup_size),),
             *buffers, global_offset=(int(range_start * workgroup_size),))
 
     def _create_buffers(self):
-        ll_buffer = cl.Buffer(self._cl_run_context.context,
+        ll_buffer = cl.Buffer(self._cl_context,
                               cl.mem_flags.READ_WRITE,
                               size=(np.dtype(np.float64).itemsize * self._nmr_observations * self._nmr_samples))
 
-        lse_buffer = cl.Buffer(self._cl_run_context.context,
+        lse_buffer = cl.Buffer(self._cl_context,
                                cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR,
                                hostbuf=self._log_sum_exps)
 
-        variances_buffer = cl.Buffer(self._cl_run_context.context,
+        variances_buffer = cl.Buffer(self._cl_context,
                                      cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR,
                                      hostbuf=self._variances)
 
-        samples_buffer = cl.Buffer(self._cl_run_context.context,
+        samples_buffer = cl.Buffer(self._cl_context,
                                    cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR,
                                    hostbuf=self._samples_per_voxel)
 
         ll_calculating_buffers = [samples_buffer, ll_buffer]
-        ll_calculating_buffers.extend(self._data_struct_manager.get_kernel_inputs(self._cl_run_context.context, 1))
+        ll_calculating_buffers.extend(self._data_struct_manager.get_kernel_inputs(self._cl_context, 1))
 
         return ll_calculating_buffers, ll_buffer, lse_buffer, variances_buffer
 

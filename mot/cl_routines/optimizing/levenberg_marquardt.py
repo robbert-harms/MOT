@@ -61,7 +61,7 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
 
         fjac_items = self._nmr_params * self._model.get_nmr_inst_per_problem() * self._starting_points.shape[0]
         fjac_buffer_size = fjac_items * self._starting_points.dtype.itemsize
-        fjac_buffer = cl.Buffer(self._cl_run_context.context, cl.mem_flags.READ_WRITE, size=fjac_buffer_size)
+        fjac_buffer = cl.Buffer(self._cl_context, cl.mem_flags.READ_WRITE, size=fjac_buffer_size)
         all_buffers.append(fjac_buffer)
 
         return all_buffers, parameters_buffer, return_code_buffer

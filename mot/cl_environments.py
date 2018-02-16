@@ -20,15 +20,26 @@ class CLEnvironment(object):
         """
         self._platform = platform
         self._device = device
-        self._cl_context = CLRunContext(self)
+        self._context = cl.Context([device])
+        self._queue = cl.CommandQueue(self._context, device=device)
 
-    def get_cl_context(self):
-        """Get a CL context from this environment.
+    @property
+    def context(self):
+        """Get a CL context containing this device.
 
         Returns:
-            CLContext: a CL context for the computations
+            cl.Context: a PyOpenCL device context
         """
-        return self._cl_context
+        return self._context
+
+    @property
+    def queue(self):
+        """Get a CL queue for this device and context.
+
+        Returns:
+            cl.Queue: a PyOpenCL queue
+        """
+        return self._queue
 
     @property
     def supports_double(self):
@@ -138,18 +149,6 @@ class CLEnvironment(object):
         if isinstance(other, CLEnvironment):
             return other.platform == self.platform and other.device == self.device
         return False
-
-
-class CLRunContext(object):
-
-    def __init__(self, cl_environment):
-        """Context for single run use
-
-        Arguments:
-            cl_environment (CLEnvironment): The environment for which to create a context and queue.
-        """
-        self.context = cl.Context([cl_environment.device])
-        self.queue = cl.CommandQueue(self.context, device=cl_environment.device)
 
 
 class CLEnvironmentFactory(object):

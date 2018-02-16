@@ -80,7 +80,7 @@ class Random123GeneratorBase(CLRoutine):
             seed (float): the seed, if not given a random seed is used.
         """
         super(Random123GeneratorBase, self).__init__(**kwargs)
-        self.context = self.cl_environments[0].get_cl_context().context
+        self.context = self.cl_environments[0].context
         self._rng_state = self._get_rng_state(seed)
 
     def _get_rng_state(self, seed):
@@ -209,10 +209,10 @@ class _Random123Worker(Worker):
         self._kernel_source = kernel_source
         self._rng_state = rng_state
 
-        self._samples_buf = cl.Buffer(self._cl_run_context.context, cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
+        self._samples_buf = cl.Buffer(self._cl_context, cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
                                       hostbuf=self._samples)
 
-        self._rng_state_buffer = cl.Buffer(self._cl_run_context.context,
+        self._rng_state_buffer = cl.Buffer(self._cl_context,
                                            cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=self._rng_state)
 
         self._kernel = self._build_kernel(self._get_kernel_source())
@@ -220,7 +220,7 @@ class _Random123Worker(Worker):
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
         kernel_args = [self._rng_state_buffer, self._samples_buf]
-        self._kernel.generate(self._cl_run_context.queue, (int(nmr_problems), ), None,
+        self._kernel.generate(self._cl_queue, (int(nmr_problems), ), None,
                               *kernel_args, global_offset=(range_start,))
         self._enqueue_readout(self._samples_buf, self._samples, range_start * 4, range_end * 4)
 
