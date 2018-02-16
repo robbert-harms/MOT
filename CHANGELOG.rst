@@ -2,6 +2,11 @@
 Changelog
 *********
 
+v0.3.11 (2018-02-16)
+====================
+- Simplified the CL context generation in the hope it fixes issue #5.
+
+
 v0.3.10 (2018-02-14)
 ====================
 
