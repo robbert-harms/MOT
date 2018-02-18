@@ -485,12 +485,13 @@ def get_class_that_defined_method(method):
     return getattr(method, '__objclass__', None)
 
 
-def hessian_to_covariance(hessian):
+def hessian_to_covariance(hessian, output_singularity=False):
     """Calculate a covariance matrix from a Hessian by inverting the Hessian.
 
     Mathematically we can calculate the covariance matrix from the Hessian (the Hessian at the Maximum Likelihood
     Estimator), by a simple matrix inversion. However, round-off errors can make the Hessian singular, making an
     exact inverse impossible. This method uses an exact inverse if possible with a fall back on a pseudo inverse.
+    If also the pseudo inverse fails, this function returns zeros as covariance for that Hessian.
 
     Important: Before the matrix inversion it will set NaN's to 0. After the inversion we make the diagonal
     (representing the variances of each parameter) positive where needed by taking the absolute.
@@ -498,16 +499,29 @@ def hessian_to_covariance(hessian):
     Args:
         hessian (ndarray): a matrix of shape (n, p, p) where for n problems we have a matrix of shape (p, p) for
             p parameters and we take the inverse for every (p, p) matrix.
+        output_singularity (boolean): if set to True, we additionally output a boolean matrix with the location
+            of singular Hessians.
 
     Returns:
-        ndarray: the covariance matrix calculated by inverting all the Hessians.
+        ndarray or tuple: if ``output_singularity`` is set to False, only output the inverse of the Hessians as the
+            covariance matrix. If ``output_singularity`` is set to True this function returns a tuple with:
+            (``covariance_matrix``, ``is_singular``).
     """
     hessian = np.nan_to_num(hessian)
 
+    if output_singularity:
+        is_singular = np.zeros(hessian.shape[0], dtype=bool)
+
     covars = np.zeros_like(hessian)
     for roi_ind in range(hessian.shape[0]):
+        if output_singularity:
+            is_singular[roi_ind] = True
+
         try:
             covars[roi_ind] = np.linalg.inv(hessian[roi_ind])
+
+            if output_singularity:
+                is_singular[roi_ind] = False
         except np.linalg.linalg.LinAlgError:
             try:
                 covars[roi_ind] = np.linalg.pinv(hessian[roi_ind])
@@ -517,6 +531,8 @@ def hessian_to_covariance(hessian):
     diagonal_ind = np.arange(hessian.shape[1])
     covars[:, diagonal_ind, diagonal_ind] = np.abs(covars[:, diagonal_ind, diagonal_ind])
 
+    if output_singularity:
+        return covars, is_singular
     return covars
 
 
