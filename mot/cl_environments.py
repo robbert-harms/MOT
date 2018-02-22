@@ -9,6 +9,9 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
+_context_cache = {}
+
+
 class CLEnvironment(object):
 
     def __init__(self, platform, device):
@@ -20,7 +23,12 @@ class CLEnvironment(object):
         """
         self._platform = platform
         self._device = device
-        self._context = cl.Context([device])
+
+        if (self._platform, self._device) not in _context_cache:
+            context = cl.Context([device])
+            _context_cache[(self._platform, self._device)] = context
+
+        self._context = _context_cache[(self._platform, self._device)]
         self._queue = cl.CommandQueue(self._context, device=device)
 
     @property
