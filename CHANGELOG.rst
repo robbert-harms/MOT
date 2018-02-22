@@ -2,6 +2,15 @@
 Changelog
 *********
 
+v0.3.12 (2018-02-22)
+====================
+
+Added
+-----
+- Adds CL context cache to fix issue #5.
+- Adds singularity boolean matrix to the output of the Hessian to covariance matrix.
+
+
 v0.3.11 (2018-02-16)
 ====================
 - Simplified the CL context generation in the hope it fixes issue #5.
