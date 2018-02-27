@@ -1,4 +1,4 @@
-from mot.model_building.model_functions import SimpleModelCLFunction, SimpleSampleModelCLPrototype
+from mot.model_building.model_functions import SimpleModelCLFunction
 from mot.model_building.parameters import FreeParameter
 from mot.library_functions import LogBesseli0
 from mot.model_building.parameter_functions.transformations import ClampTransform
@@ -57,21 +57,27 @@ class LikelihoodFunction(object):
 
 class AbstractLikelihoodFunction(LikelihoodFunction):
 
-    def __init__(self, name, cl_function_name, parameter_list, noise_std_param_name=None, dependency_list=()):
+    def __init__(self, name, cl_function_name, parameter_list=None, noise_std_param_name=None, dependency_list=()):
         """The likelihood model is the model under which you evaluate your model estimates against observations.
 
         Args:
             name (str): the name of the likelihood model
             cl_function_name (str): the name of the function
-            parameter_list (list or tuple): the list of parameters this model requires to function correctly
+            parameter_list (list or tuple): the list of parameters this model requires to function correctly.
+                If set to None we set it to a default of three parameters, the observation, the model evaluation and
+                the noise std.
             noise_std_param_name (str): the name of the noise sigma parameter
             dependency_list (list or tuple): the list of function dependencies
         """
         self._name = name
         self._cl_function_name = cl_function_name
-        self._parameter_list = parameter_list
-        self._noise_std_param_name = noise_std_param_name
-        self._dependency_list = dependency_list
+        self._parameter_list = parameter_list or [
+            ('double', 'observation'),
+            ('double', 'model_evaluation'),
+            FreeParameter('mot_float_type', 'sigma', True, 1, 0, 'INFINITY', parameter_transform=ClampTransform())
+        ]
+        self._noise_std_param_name = noise_std_param_name or 'sigma'
+        self._dependency_list = dependency_list or ()
 
     @property
     def name(self):
@@ -114,12 +120,7 @@ class GaussianLikelihoodFunction(AbstractLikelihoodFunction):
 
             log(PDF) = - ((observation - evaluation)^2 / (2 * sigma^2)) - log(sigma * sqrt(2*pi))
         """
-        super(GaussianLikelihoodFunction, self).__init__(
-            'GaussianNoiseModel', 'gaussianNoise',
-            [('double', 'observation'),
-             ('double', 'model_evaluation'),
-             FreeParameter('mot_float_type', 'sigma', True, 1, 0, 'INFINITY', parameter_transform=ClampTransform())],
-            noise_std_param_name='sigma')
+        super(GaussianLikelihoodFunction, self).__init__('GaussianNoiseModel', 'gaussianNoise')
 
     def _get_log_likelihood_body(self, include_constant_terms):
         if include_constant_terms:
@@ -150,12 +151,7 @@ class OffsetGaussianLikelihoodFunction(AbstractLikelihoodFunction):
 
             log(PDF) = - ((observation - sqrt(evaluation^2 + sigma^2))^2 / (2 * sigma^2)) - log(sigma * sqrt(2*pi))
         """
-        super(OffsetGaussianLikelihoodFunction, self).__init__(
-            'OffsetGaussianNoise', 'offsetGaussian',
-            [('double', 'observation'),
-             ('double', 'model_evaluation'),
-             FreeParameter('mot_float_type', 'sigma', True, 1, 0, 'INFINITY', parameter_transform=ClampTransform())],
-            noise_std_param_name='sigma')
+        super(OffsetGaussianLikelihoodFunction, self).__init__('OffsetGaussianNoise', 'offsetGaussian')
 
     def _get_log_likelihood_body(self, include_constant_terms):
         if include_constant_terms:
@@ -192,24 +188,18 @@ class RicianLikelihoodFunction(AbstractLikelihoodFunction):
                         - (observation^2 + evaluation^2) / (2 * sigma^2)
                         + log(bessel_i0((observation * evaluation) / sigma^2))
         """
-        super(RicianLikelihoodFunction, self).__init__(
-            'RicianNoise', 'ricianNoise',
-            [('double', 'observation'),
-             ('double', 'model_evaluation'),
-             FreeParameter('mot_float_type', 'sigma', True, 1, 0, 'INFINITY', parameter_transform=ClampTransform())],
-            noise_std_param_name='sigma',
-            dependency_list=(LogBesseli0(),))
+        super(RicianLikelihoodFunction, self).__init__('RicianNoise', 'ricianNoise', dependency_list=(LogBesseli0(),))
 
     def _get_log_likelihood_body(self, include_constant_terms):
         if include_constant_terms:
             return '''
-                return - ((model_evaluation * model_evaluation) / (2 * sigma * sigma))  
+                return - ((model_evaluation * model_evaluation) / (2 * sigma * sigma))
                        + log_bessel_i0((observation * model_evaluation) / (sigma * sigma))
                        + log(observation / (sigma * sigma))
                        - ((observation * observation) / (2 * sigma * sigma));
             '''
         else:
             return '''
-                return  - ((model_evaluation * model_evaluation) / (2 * sigma * sigma)) 
+                return  - ((model_evaluation * model_evaluation) / (2 * sigma * sigma))
                         + log_bessel_i0((observation * model_evaluation) / (sigma * sigma));
             '''
