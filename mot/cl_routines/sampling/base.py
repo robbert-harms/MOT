@@ -10,9 +10,23 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class AbstractSampler(CLRoutine):
 
-    def __init__(self, cl_environments=None, load_balancer=None, **kwargs):
+    def __init__(self, nmr_samples, cl_environments=None, load_balancer=None, **kwargs):
+        """Abstract base class for sampling routines.
+
+        Args:
+            nmr_samples (int): The length of the (returned) chain per problem instance
+        """
         super(AbstractSampler, self).__init__(cl_environments=cl_environments, load_balancer=load_balancer, **kwargs)
+        self._nmr_samples = nmr_samples
         self._logger = logging.getLogger(__name__)
+
+        if self._nmr_samples < 1:
+            raise ValueError('The number of samples to draw can '
+                             'not be smaller than 1, {} given'.format(self._nmr_samples))
+
+    @property
+    def nmr_samples(self):
+        return self._nmr_samples
 
     def sample(self, model, init_params=None):
         """Sample the given model with the given codec using the given environments.

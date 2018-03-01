@@ -15,27 +15,23 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class MetropolisHastings(AbstractSampler):
 
-    def __init__(self, nmr_samples=None, burn_length=None,
-                 sample_intervals=None, use_adaptive_proposals=True, **kwargs):
+    def __init__(self, nmr_samples, burnin=None, sample_intervals=None, **kwargs):
         """An CL implementation of Metropolis Hastings.
 
         This implementation uses a random walk single component updating strategy for the sampling.
 
         Args:
-            nmr_samples (int): The length of the (returned) chain per voxel, defaults to 1
-            burn_length (int): The length of the burn in (per voxel), these are extra samples,
-                during burn-in we don't apply the thinning.
+            nmr_samples (int): The length of the (returned) chain per problem instance
+            burnin (int): The length of the burn in, these samples are discarded before we will sample and return the
+                desired number of samples. During burn-in we don't apply the thinning.
             sample_intervals (int): how many sample we wait before storing a new one.
                 This will draw extra samples such that the total number of samples generated is
-                ``chain_length * (sample_intervals + 1)`` and the number of samples stored is
-                ``chain_length``. If set to zero we store every sample after the burn in.
-            use_adaptive_proposals (boolean): if we use the adaptive proposals (set to True) or not (set to False).
+                ``nmr_samples * (sample_intervals + 1)`` and the number of samples stored is
+                ``nmr_samples``. If set to zero we store every sample after the burn in.
         """
-        super(MetropolisHastings, self).__init__(**kwargs)
-        self._nmr_samples = nmr_samples or 1000
-        self.burn_length = burn_length or 0
+        super(MetropolisHastings, self).__init__(nmr_samples, **kwargs)
+        self.burn_length = burnin or 0
         self.sample_intervals = sample_intervals or 0
-        self.use_adaptive_proposals = use_adaptive_proposals
 
         if self.burn_length is None:
             self.burn_length = 0
@@ -47,13 +43,6 @@ class MetropolisHastings(AbstractSampler):
             raise ValueError('The burn length can not be smaller than 0, {} given'.format(self.burn_length))
         if self.sample_intervals < 0:
             raise ValueError('The sampling interval can not be smaller than 0, {} given'.format(self.sample_intervals))
-        if self._nmr_samples < 1:
-            raise ValueError('The number of samples to draw can '
-                             'not be smaller than 1, {} given'.format(self._nmr_samples))
-
-    @property
-    def nmr_samples(self):
-        return self._nmr_samples
 
     def sample(self, model, init_params=None):
         """Sample the given model with Metropolis Hastings
@@ -91,7 +80,7 @@ class MetropolisHastings(AbstractSampler):
             workers = self._create_workers(lambda cl_environment: _MHWorker(
                 cl_environment, self.get_compile_flags_list(model.double_precision), model, current_chain_position,
                 _samples, _log_likelihoods, _log_priors, proposal_state, _mh_state, nmr_samples, in_burnin,
-                sample_interval, self.use_adaptive_proposals, mot_float_dtype))
+                sample_interval, mot_float_dtype))
             self.load_balancer.process(workers, model.get_nmr_problems())
             return _mh_state.with_nmr_samples_drawn(_mh_state.nmr_samples_drawn + nmr_samples * (sample_interval + 1))
 
@@ -130,11 +119,9 @@ class MetropolisHastings(AbstractSampler):
 
         sample_settings = dict(nmr_samples=self.nmr_samples,
                                burn_length=self.burn_length,
-                               sample_intervals=self.sample_intervals,
-                               use_adaptive_proposals=self.use_adaptive_proposals)
+                               sample_intervals=self.sample_intervals)
         self._logger.info('Sample settings: nmr_samples: {nmr_samples}, burn_length: {burn_length}, '
-                          'sample_intervals: {sample_intervals}, '
-                          'use_adaptive_proposals: {use_adaptive_proposals}. '.format(**sample_settings))
+                          'sample_intervals: {sample_intervals}. '.format(**sample_settings))
 
         samples_drawn = dict(samples_drawn=(self.burn_length + (self.sample_intervals + 1) * self.nmr_samples),
                              samples_returned=self.nmr_samples)
@@ -195,7 +182,7 @@ class _MHWorker(Worker):
 
     def __init__(self, cl_environment, compile_flags, model, current_chain_position, samples,
                  log_likelihoods, log_priors, proposal_state, mh_state, nmr_samples, in_burnin,
-                 sample_intervals, use_adaptive_proposals, mot_float_dtype):
+                 sample_intervals, mot_float_dtype):
         super(_MHWorker, self).__init__(cl_environment)
 
         self._model = model
@@ -217,7 +204,7 @@ class _MHWorker(Worker):
 
         kernel_builder = _MCMCKernelBuilder(
             compile_flags, self._mh_state_dict, cl_environment, model,
-            nmr_samples, not in_burnin, sample_intervals, use_adaptive_proposals, self._nmr_params, mot_float_dtype)
+            nmr_samples, not in_burnin, sample_intervals, self._nmr_params, mot_float_dtype)
 
         self._kernel = kernel_builder.build()
 
@@ -319,7 +306,7 @@ class _MHWorker(Worker):
 class _MCMCKernelBuilder(object):
 
     def __init__(self, compile_flags, mh_state_dict, cl_environment, model,
-                 nmr_samples, store_samples, sample_intervals, use_adaptive_proposals, nmr_params,
+                 nmr_samples, store_samples, sample_intervals, nmr_params,
                  mot_float_dtype):
         self._cl_context = cl_environment.context
         self._compile_flags = compile_flags
@@ -332,7 +319,6 @@ class _MCMCKernelBuilder(object):
         self._nmr_samples = nmr_samples
         self._store_samples = store_samples
         self._sample_intervals = sample_intervals
-        self._use_adaptive_proposals = use_adaptive_proposals
         self._update_parameter_variances = self._model.proposal_state_update_uses_variance()
         self._prior_func = self._model.get_log_prior_function(address_space_parameter_vector='local')
         self._proposal_func = self._model.get_proposal_function(address_space_proposal_state='global')
@@ -386,9 +372,7 @@ class _MCMCKernelBuilder(object):
         kernel_source += self._data_struct_manager.get_struct_definition()
         kernel_source += self._prior_func.get_cl_code()
         kernel_source += self._proposal_func.get_cl_code()
-
-        if self._use_adaptive_proposals:
-            kernel_source += self._proposal_state_update_func.get_cl_code()
+        kernel_source += self._proposal_state_update_func.get_cl_code()
 
         if not self._model.is_proposal_symmetric():
             kernel_source += self._proposal_logpdf_func.get_cl_code()
@@ -471,8 +455,7 @@ class _MCMCKernelBuilder(object):
                         ''' + (self._proposal_state_update_func.get_cl_function_name() +
                                '(proposal_state, sampling_counter, acceptance_counter' +
                                 (', parameter_variance' if self._update_parameter_variances else '')
-                                    + ');'
-                               if self._use_adaptive_proposals else '') + '''
+                                    + ');') + '''
                     }
                 }
             }

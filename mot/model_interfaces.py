@@ -211,14 +211,6 @@ class SampleModelInterface(OptimizeModelInterface):
     or to the output of a previous run to continue sampling.
     """
 
-    def get_proposal_state(self):
-        """Get for every problem instance the list of parameter values to use in the the adaptable proposal.
-
-        Returns:
-            ndarray: per problem instance the proposal parameter values that are adaptable.
-        """
-        raise NotImplementedError()
-
     def get_log_likelihood_per_observation_function(self):
         """Get the (complete) CL Log Likelihood function that evaluates the given instance under a noise model.
 
@@ -229,6 +221,46 @@ class SampleModelInterface(OptimizeModelInterface):
                 .. code-block:: c
 
                     double <fname>(mot_data_struct* data, const mot_float_type* const x, uint observation_index);
+        """
+        raise NotImplementedError()
+
+    def get_log_prior_function(self, address_space_parameter_vector='private'):
+        """Get the prior function that returns the prior information about the given parameters.
+
+        The prior function must be in log space.
+
+        Args:
+            address_space_parameter_vector (str): the address space to use for the parameter vector
+                by default this is set to ``private``.
+
+        Returns:
+            mot.utils.NamedCLFunction: A function with the signature:
+                .. code-block:: c
+
+                    mot_float_type <func_name>(
+                        mot_data_struct* data,
+                        <address_space_parameter_vector> const mot_float_type* const x
+                    );
+
+            Which is called by the sampling routine to calculate the posterior probability.
+        """
+        raise NotImplementedError()
+
+    def get_metropolis_hastings_state(self):
+        """Get the current state of the Metropolis Hastings sampler.
+
+        This can be used to continue execution of an MH sampling from a previous point in time.
+
+        Returns:
+            mot.cl_routines.sampling.metropolis_hastings.MHState: the current Metropolis Hastings state
+        """
+        raise NotImplementedError()
+
+    def get_proposal_state(self):
+        """Get for every problem instance the list of parameter values to use in the the adaptable proposal.
+
+        Returns:
+            ndarray: per problem instance the proposal parameter values that are adaptable.
         """
         raise NotImplementedError()
 
@@ -327,38 +359,6 @@ class SampleModelInterface(OptimizeModelInterface):
         Returns:
             boolean: if at least one parameter proposal state update function requires the parameter variance
                 return True, else return False.
-        """
-        raise NotImplementedError()
-
-    def get_log_prior_function(self, address_space_parameter_vector='private'):
-        """Get the prior function that returns the prior information about the given parameters.
-
-        The prior function must be in log space.
-
-        Args:
-            address_space_parameter_vector (str): the address space to use for the parameter vector
-                by default this is set to ``private``.
-
-        Returns:
-            mot.utils.NamedCLFunction: A function with the signature:
-                .. code-block:: c
-
-                    mot_float_type <func_name>(
-                        mot_data_struct* data,
-                        <address_space_parameter_vector> const mot_float_type* const x
-                    );
-
-            Which is called by the sampling routine to calculate the posterior probability.
-        """
-        raise NotImplementedError()
-
-    def get_metropolis_hastings_state(self):
-        """Get the current state of the Metropolis Hastings sampler.
-
-        This can be used to continue execution of an MH sampling from a previous point in time.
-
-        Returns:
-            mot.cl_routines.sampling.metropolis_hastings.MHState: the current Metropolis Hastings state
         """
         raise NotImplementedError()
 
