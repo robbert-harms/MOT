@@ -126,7 +126,7 @@ class SimpleOptimizationResult(OptimizationResults):
         self._model = model
         self._optimization_results = optimization_results
         self._return_codes = return_codes
-        self._error_measures = None
+        self._objective_values = None
 
     def get_optimization_result(self):
         return self._optimization_results
@@ -135,7 +135,10 @@ class SimpleOptimizationResult(OptimizationResults):
         return self._return_codes
 
     def get_objective_values(self):
-        return np.nan_to_num(ObjectiveFunctionCalculator().calculate(self._model, self._optimization_results))
+        if self._objective_values is None:
+            self._objective_values = np.nan_to_num(ObjectiveFunctionCalculator().calculate(
+                self._model, self._optimization_results))
+        return self._objective_values
 
 
 class AbstractParallelOptimizer(AbstractOptimizer):
@@ -349,16 +352,16 @@ class AbstractParallelOptimizerWorker(Worker):
         kernel_source += param_modifier.get_cl_code()
         kernel_source += '''
             double evaluate(mot_float_type* x, void* data_void){
-                
+
                 mot_data_struct* data = (mot_data_struct*)data_void;
-                
+
                 mot_float_type x_model[''' + str(self._model.get_nmr_estimable_parameters()) + '''];
                 for(uint i = 0; i < ''' + str(self._model.get_nmr_estimable_parameters()) + '''; i++){
                     x_model[i] = x[i];
                 }
-                
+
                 ''' + param_modifier.get_cl_function_name() + '''(data, x_model);
-                
+
                 double sum = 0;
                 for(uint i = 0; i < ''' + str(self._model.get_nmr_inst_per_problem()) + '''; i++){
                     sum += ''' + objective_function.get_cl_function_name() + '''(data, x_model, i);
