@@ -14,6 +14,7 @@ class Powell(AbstractParallelOptimizer):
     default_patience = 2
 
     def __init__(self, bracket_gold=None, glimit=None, reset_method=None, patience=None, optimizer_settings=None,
+                 patience_line_search=None,
                  **kwargs):
         """Use the Powell method to calculate the optimum.
 
@@ -23,6 +24,8 @@ class Powell(AbstractParallelOptimizer):
             bracket_gold (double): the default ratio by which successive intervals are magnified in Bracketing
             glimit (double): the maximum magnification allowed for a parabolic-fit step in Bracketing
             reset_method (str): one of 'EXTRAPOLATED_POINT' or 'RESET_TO_IDENTITY' lower case or upper case.
+            patience_line_search (int): the patience of the Brent line searching algorithm. Defaults to the
+                same patience as for the Powell algorithm itself.
         """
         patience = patience or self.default_patience
 
@@ -32,8 +35,10 @@ class Powell(AbstractParallelOptimizer):
         keyword_values['bracket_gold'] = bracket_gold
         keyword_values['glimit'] = glimit
         keyword_values['reset_method'] = reset_method
+        keyword_values['patience_line_search'] = patience_line_search
 
-        option_defaults = {'bracket_gold': 1.618034, 'glimit': 100.0, 'reset_method': 'EXTRAPOLATED_POINT'}
+        option_defaults = {'bracket_gold': 1.618034, 'glimit': 100.0, 'reset_method': 'EXTRAPOLATED_POINT',
+                           'patience_line_search': patience}
 
         def get_value(option_name):
             value = keyword_values.get(option_name)

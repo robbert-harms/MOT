@@ -18,9 +18,10 @@
 
 /* Used to set the maximum number of iterations to patience*(number_of_parameters+1). */
 #define PATIENCE %(PATIENCE)r
+#define PATIENCE_LINE_SEARCH %(PATIENCE_LINE_SEARCH)r
 #define POWELL_MAX_ITERATIONS (PATIENCE * (%(NMR_PARAMS)r+1))
 #define POWELL_FUNCTION_TOLERANCE 30*MOT_EPSILON
-#define BRENT_MAX_ITERATIONS (PATIENCE * (%(NMR_PARAMS)r+1))
+#define BRENT_MAX_ITERATIONS (PATIENCE_LINE_SEARCH * (%(NMR_PARAMS)r+1))
 #define BRENT_TOL 2*30*MOT_EPSILON
 #define BRACKET_GOLD 1.618034 /* the default ratio by which successive intervals are magnified in Bracketing */
 #define GLIMIT 100.0 /* the maximum magnification allowed for a parabolic-fit step in Bracketing */
