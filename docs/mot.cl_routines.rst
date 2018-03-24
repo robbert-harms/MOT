@@ -1,5 +1,5 @@
-mot\.cl\_routines package
-=========================
+mot.cl_routines package
+=======================
 
 Subpackages
 -----------
@@ -14,16 +14,16 @@ Subpackages
 Submodules
 ----------
 
-mot\.cl\_routines\.base module
-------------------------------
+mot.cl_routines.base module
+---------------------------
 
 .. automodule:: mot.cl_routines.base
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot\.cl\_routines\.generate\_random module
-------------------------------------------
+mot.cl_routines.generate_random module
+--------------------------------------
 
 .. automodule:: mot.cl_routines.generate_random
     :members:

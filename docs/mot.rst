@@ -13,72 +13,96 @@ Subpackages
 Submodules
 ----------
 
-mot\.cl\_data\_type module
---------------------------
+mot.cl_data_type module
+-----------------------
 
 .. automodule:: mot.cl_data_type
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot\.cl\_environments module
-----------------------------
+mot.cl_environments module
+--------------------------
 
 .. automodule:: mot.cl_environments
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot\.configuration module
--------------------------
+mot.cl_function module
+----------------------
+
+.. automodule:: mot.cl_function
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+mot.cl_parameter module
+-----------------------
+
+.. automodule:: mot.cl_parameter
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+mot.configuration module
+------------------------
 
 .. automodule:: mot.configuration
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot\.factory module
--------------------
+mot.factory module
+------------------
 
 .. automodule:: mot.factory
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot\.library\_functions module
-------------------------------
+mot.library_functions module
+----------------------------
 
 .. automodule:: mot.library_functions
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot\.load\_balance\_strategies module
--------------------------------------
+mot.load_balance_strategies module
+----------------------------------
 
 .. automodule:: mot.load_balance_strategies
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot\.mcmc\_diagnostics module
------------------------------
+mot.mcmc_diagnostics module
+---------------------------
 
 .. automodule:: mot.mcmc_diagnostics
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot\.model\_interfaces module
------------------------------
+mot.model_interfaces module
+---------------------------
 
 .. automodule:: mot.model_interfaces
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot\.utils module
------------------
+mot.statistics module
+---------------------
+
+.. automodule:: mot.statistics
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+mot.utils module
+----------------
 
 .. automodule:: mot.utils
     :members:

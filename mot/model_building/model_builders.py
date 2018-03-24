@@ -9,7 +9,7 @@ from mot.cl_function import SimpleCLFunction
 from mot.cl_parameter import SimpleCLFunctionParameter
 from mot.cl_routines.mapping.codec_runner import CodecRunner
 from mot.cl_routines.sampling.metropolis_hastings import DefaultMHState
-from mot.model_building.model_functions import Weight, ModelCLFunction
+from mot.model_building.model_functions import WeightType, ModelCLFunction
 from mot.model_building.parameters import CurrentObservationParam, StaticMapParameter, ProtocolParameter, FreeParameter
 from mot.model_building.parameter_functions.dependencies import SimpleAssignment, AbstractParameterDependency
 from mot.model_building.utils import ParameterCodec
@@ -1887,12 +1887,12 @@ class ModelFunctionsInformation(object):
         return isinstance(param, FreeParameter) and not self.is_fixed('{}.{}'.format(model.name, param.name))
 
     def get_weights(self):
-        """Get all the model functions/parameter tuples of the models that are a subclass of Weight
+        """Get all the model functions/parameter tuples of the models that are a subclass of WeightType
 
         Returns:
-            list: the list of compartment models that are a subclass of Weight as (model, parameter) tuples.
+            list: the list of compartment models that are a subclass of WeightType as (model, parameter) tuples.
         """
-        weight_models = [m for m in self._model_tree.get_compartment_models() if isinstance(m, Weight)]
+        weight_models = [m for m in self._model_tree.get_compartment_models() if isinstance(m, WeightType)]
         weights = []
         for m in weight_models:
             for p in m.get_free_parameters():
@@ -1903,7 +1903,7 @@ class ModelFunctionsInformation(object):
         """Get all the estimable weights.
 
         Returns:
-            list of tuples: the list of compartment models/parameter pairs for models that are a subclass of Weight
+            list of tuples: the list of compartment models/parameter pairs for models that are a subclass of WeightType
         """
         return [(m, p) for m, p in self.get_weights() if self.is_parameter_estimable(m, p)]
 

@@ -1,59 +1,59 @@
-mot\.cl\_routines\.optimizing package
-=====================================
+mot.cl_routines.optimizing package
+==================================
 
 Submodules
 ----------
 
-mot\.cl\_routines\.optimizing\.base module
-------------------------------------------
+mot.cl_routines.optimizing.base module
+--------------------------------------
 
 .. automodule:: mot.cl_routines.optimizing.base
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot\.cl\_routines\.optimizing\.levenberg\_marquardt module
-----------------------------------------------------------
+mot.cl_routines.optimizing.levenberg_marquardt module
+-----------------------------------------------------
 
 .. automodule:: mot.cl_routines.optimizing.levenberg_marquardt
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot\.cl\_routines\.optimizing\.multi\_step\_optimizer module
-------------------------------------------------------------
+mot.cl_routines.optimizing.multi_step_optimizer module
+------------------------------------------------------
 
 .. automodule:: mot.cl_routines.optimizing.multi_step_optimizer
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot\.cl\_routines\.optimizing\.nmsimplex module
------------------------------------------------
+mot.cl_routines.optimizing.nmsimplex module
+-------------------------------------------
 
 .. automodule:: mot.cl_routines.optimizing.nmsimplex
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot\.cl\_routines\.optimizing\.powell module
---------------------------------------------
+mot.cl_routines.optimizing.powell module
+----------------------------------------
 
 .. automodule:: mot.cl_routines.optimizing.powell
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot\.cl\_routines\.optimizing\.random\_restart module
------------------------------------------------------
+mot.cl_routines.optimizing.random_restart module
+------------------------------------------------
 
 .. automodule:: mot.cl_routines.optimizing.random_restart
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot\.cl\_routines\.optimizing\.sbplex module
---------------------------------------------
+mot.cl_routines.optimizing.sbplex module
+----------------------------------------
 
 .. automodule:: mot.cl_routines.optimizing.sbplex
     :members:

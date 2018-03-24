@@ -1,51 +1,51 @@
-mot\.model\_building\.parameter\_functions package
-==================================================
+mot.model_building.parameter_functions package
+==============================================
 
 Submodules
 ----------
 
-mot\.model\_building\.parameter\_functions\.dependencies module
----------------------------------------------------------------
+mot.model_building.parameter_functions.dependencies module
+----------------------------------------------------------
 
 .. automodule:: mot.model_building.parameter_functions.dependencies
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot\.model\_building\.parameter\_functions\.priors module
----------------------------------------------------------
+mot.model_building.parameter_functions.numdiff_info module
+----------------------------------------------------------
+
+.. automodule:: mot.model_building.parameter_functions.numdiff_info
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+mot.model_building.parameter_functions.priors module
+----------------------------------------------------
 
 .. automodule:: mot.model_building.parameter_functions.priors
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot\.model\_building\.parameter\_functions\.proposal\_updates module
---------------------------------------------------------------------
+mot.model_building.parameter_functions.proposal_updates module
+--------------------------------------------------------------
 
 .. automodule:: mot.model_building.parameter_functions.proposal_updates
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot\.model\_building\.parameter\_functions\.proposals module
-------------------------------------------------------------
+mot.model_building.parameter_functions.proposals module
+-------------------------------------------------------
 
 .. automodule:: mot.model_building.parameter_functions.proposals
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot\.model\_building\.parameter\_functions\.sample\_statistics module
----------------------------------------------------------------------
-
-.. automodule:: mot.model_building.parameter_functions.sample_statistics
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-mot\.model\_building\.parameter\_functions\.transformations module
-------------------------------------------------------------------
+mot.model_building.parameter_functions.transformations module
+-------------------------------------------------------------
 
 .. automodule:: mot.model_building.parameter_functions.transformations
     :members:

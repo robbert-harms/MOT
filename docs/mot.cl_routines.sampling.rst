@@ -1,19 +1,19 @@
-mot\.cl\_routines\.sampling package
-===================================
+mot.cl_routines.sampling package
+================================
 
 Submodules
 ----------
 
-mot\.cl\_routines\.sampling\.base module
-----------------------------------------
+mot.cl_routines.sampling.base module
+------------------------------------
 
 .. automodule:: mot.cl_routines.sampling.base
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot\.cl\_routines\.sampling\.metropolis\_hastings module
---------------------------------------------------------
+mot.cl_routines.sampling.metropolis_hastings module
+---------------------------------------------------
 
 .. automodule:: mot.cl_routines.sampling.metropolis_hastings
     :members:

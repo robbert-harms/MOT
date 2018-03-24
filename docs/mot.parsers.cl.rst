@@ -1,19 +1,19 @@
-mot\.parsers\.cl package
-========================
+mot.parsers.cl package
+======================
 
 Submodules
 ----------
 
-mot\.parsers\.cl\.CLDataType module
------------------------------------
+mot.parsers.cl.CLDataType module
+--------------------------------
 
 .. automodule:: mot.parsers.cl.CLDataType
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot\.parsers\.cl\.CLDataTypeParser module
------------------------------------------
+mot.parsers.cl.CLDataTypeParser module
+--------------------------------------
 
 .. automodule:: mot.parsers.cl.CLDataTypeParser
     :members:

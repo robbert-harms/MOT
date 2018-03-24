@@ -1,5 +1,5 @@
-mot\.model\_building package
-============================
+mot.model_building package
+==========================
 
 Subpackages
 -----------
@@ -11,72 +11,64 @@ Subpackages
 Submodules
 ----------
 
-mot\.model\_building\.evaluation\_models module
------------------------------------------------
-
-.. automodule:: mot.model_building.evaluation_models
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-mot\.model\_building\.input\_data module
-----------------------------------------
+mot.model_building.input_data module
+------------------------------------
 
 .. automodule:: mot.model_building.input_data
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot\.model\_building\.model\_builders module
---------------------------------------------
+mot.model_building.likelihood_functions module
+----------------------------------------------
+
+.. automodule:: mot.model_building.likelihood_functions
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+mot.model_building.model_builders module
+----------------------------------------
 
 .. automodule:: mot.model_building.model_builders
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot\.model\_building\.model\_function\_priors module
-----------------------------------------------------
-
-.. automodule:: mot.model_building.model_function_priors
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-mot\.model\_building\.model\_functions module
----------------------------------------------
+mot.model_building.model_functions module
+-----------------------------------------
 
 .. automodule:: mot.model_building.model_functions
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot\.model\_building\.parameters module
----------------------------------------
+mot.model_building.parameters module
+------------------------------------
 
 .. automodule:: mot.model_building.parameters
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot\.model\_building\.signal\_noise\_models module
---------------------------------------------------
+mot.model_building.signal_noise_models module
+---------------------------------------------
 
 .. automodule:: mot.model_building.signal_noise_models
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot\.model\_building\.trees module
-----------------------------------
+mot.model_building.trees module
+-------------------------------
 
 .. automodule:: mot.model_building.trees
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot\.model\_building\.utils module
-----------------------------------
+mot.model_building.utils module
+-------------------------------
 
 .. automodule:: mot.model_building.utils
     :members:
