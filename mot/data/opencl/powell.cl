@@ -12,8 +12,19 @@
 /**
    Uses the Powell's Quadratically Convergent Method of minimizing an objective function in a multidimensional space.
 
-   This function is implemented in OpenCL by Robbert Harms, using the original Powell 1964 paper and
+   This function is implemented in OpenCL by Robbert Harms, using the original Powell 1964 paper [1] and
    the Numerical Recipes chapter on Powell.
+
+   It features two reset methods, the one from Numerical Recipes and the one Identity reset from Brent.
+   The other Brent's reset method [2] could still be added, i.e. resetting to an orthogonal matrix found by singular
+   value decomposition.
+
+   References:
+
+   [1] Powell, M. J. D. (1964). "An efficient method for finding the minimum of a function of several variables
+        without calculating derivatives". Computer Journal. 7 (2): 155–162. doi:10.1093/comjnl/7.2.155.
+   [2] Brent, Richard P. (1973). "Section 7.3: Powell's algorithm". Algorithms for minimization without derivatives.
+        Englewood Cliffs, N.J.: Prentice-Hall. ISBN 0-486-41998-3.
 */
 
 /* Used to set the maximum number of iterations to patience*(number_of_parameters+1). */
