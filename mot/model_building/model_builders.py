@@ -1524,7 +1524,7 @@ class CompositeModelFunction(SimpleCLFunction):
             'double', cl_function_name,
             [p.get_renamed(external_name) for m, p, _, external_name in self._get_model_function_parameters()],
             self._get_model_function_body(),
-            dependency_list=self._models)
+            dependencies=self._models)
 
     def get_model_parameter_list(self):
         """Get the model and parameter tuples that constructed this composite model.
@@ -2120,7 +2120,7 @@ class _ModelFunctionPriorToCompositeModelPrior(SimpleCLFunction):
             model_function_prior.get_cl_function_name(),
             parameters,
             model_function_prior.get_cl_body(),
-            dependency_list=model_function_prior.get_dependencies(),
+            dependencies=model_function_prior.get_dependencies(),
             cl_extra=model_function_prior.get_cl_extra()
         )
 

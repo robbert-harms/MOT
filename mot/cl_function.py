@@ -141,7 +141,7 @@ class SimpleCLPrototype(CLPrototype):
 
 class SimpleCLFunction(CLFunction):
 
-    def __init__(self, return_type, cl_function_name, parameter_list, cl_body, dependency_list=(), cl_extra=None):
+    def __init__(self, return_type, cl_function_name, parameter_list, cl_body, dependencies=(), cl_extra=None):
         """A simple implementation of a CL function.
 
         Args:
@@ -151,13 +151,13 @@ class SimpleCLFunction(CLFunction):
                 :class:`mot.cl_parameter.CLFunctionParameter` or contains tuples with arguments that
                 can be used to construct a :class:`mot.cl_parameter.SimpleCLFunctionParameter`.
             cl_body (str): the body of the CL code for this function.
-            dependency_list (list or tuple of CLLibrary): The list of CL libraries this function depends on
+            dependencies (list or tuple of CLLibrary): The list of CL libraries this function depends on
             cl_extra (str): extra CL code for this function that does not warrant an own function
         """
         super(SimpleCLFunction, self).__init__()
         self._prototype = SimpleCLPrototype(return_type, cl_function_name, parameter_list)
         self._cl_body = cl_body
-        self._dependency_list = dependency_list
+        self._dependencies = dependencies
         self._cl_extra = cl_extra
 
     def get_return_type(self):
@@ -202,7 +202,7 @@ class SimpleCLFunction(CLFunction):
                                               return_inputs=return_inputs)
 
     def get_dependencies(self):
-        return self._dependency_list
+        return self._dependencies
 
     def _get_parameter_signatures(self):
         """Get the signature of the parameters for the CL function declaration.
@@ -222,7 +222,7 @@ class SimpleCLFunction(CLFunction):
             str: The CL code with the actual code.
         """
         code = ''
-        for d in self._dependency_list:
+        for d in self._dependencies:
             code += d.get_cl_code() + "\n"
         return code
 

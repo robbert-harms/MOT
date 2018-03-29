@@ -3,9 +3,9 @@ from mot.cl_data_type import SimpleCLDataType
 from mot.cl_function import CLFunction, SimpleCLFunction, CLPrototype, SimpleCLPrototype
 from mot.model_building.parameter_functions.numdiff_info import SimpleNumDiffInfo
 from mot.model_building.parameters import FreeParameter
-from mot.model_building.parameter_functions.priors import ARDGaussian, UniformWithinBoundsPrior, ARDBeta
+from mot.model_building.parameter_functions.priors import UniformWithinBoundsPrior
 from mot.model_building.parameter_functions.proposals import GaussianProposal
-from mot.model_building.parameter_functions.transformations import ClampTransform, CosSqrClampTransform
+from mot.model_building.parameter_functions.transformations import CosSqrClampTransform
 
 __author__ = 'Robbert Harms'
 __date__ = "2016-10-03"
@@ -143,7 +143,7 @@ class SimpleSampleModelCLPrototype(SimpleCLPrototype, SampleModelCLPrototype):
 
 class SimpleModelCLFunction(SampleModelCLFunction, SimpleCLFunction):
 
-    def __init__(self, return_type, name, cl_function_name, parameters, cl_body, dependency_list=(),
+    def __init__(self, return_type, name, cl_function_name, parameters, cl_body, dependencies=(),
                  model_function_priors=None, cl_extra=None):
         """This CL function is for all estimable models
 
@@ -153,12 +153,12 @@ class SimpleModelCLFunction(SampleModelCLFunction, SimpleCLFunction):
             cl_function_name (string): The name of the CL function
             parameters (list or tuple of CLFunctionParameter): The list of parameters required for this function
             cl_body (str): the cl body of this function
-            dependency_list (list or tuple of CLFunction): The list of CL libraries this function depends on
+            dependencies (list or tuple of CLFunction): The list of CL libraries this function depends on
             model_function_priors (list of mot.cl_function.CLFunction): list of priors concerning this whole model
                 function. The parameter names of the given functions must match those of this function.
         """
         super(SimpleModelCLFunction, self).__init__(return_type, cl_function_name, parameters,
-                                                    cl_body, dependency_list=dependency_list, cl_extra=cl_extra)
+                                                    cl_body, dependencies=dependencies, cl_extra=cl_extra)
 
         self._prototype = SimpleSampleModelCLPrototype(return_type, name, cl_function_name,
                                                        parameters, model_function_priors=model_function_priors)

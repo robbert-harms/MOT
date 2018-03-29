@@ -21,7 +21,7 @@ class SimpleCLLibrary(CLLibrary, SimpleCLFunction):
 class SimpleCLLibraryFromFile(SimpleCLLibrary):
 
     def __init__(self, return_type, cl_function_name, parameter_list, cl_code_file,
-                 var_replace_dict=None, dependency_list=()):
+                 var_replace_dict=None, dependencies=()):
         """Create a CL function for a library function.
 
         These functions are not meant to be optimized, but can be used a helper functions in models.
@@ -31,7 +31,7 @@ class SimpleCLLibraryFromFile(SimpleCLLibrary):
             cl_code_file (str): The location of the code file
             var_replace_dict (dict): In the cl_code file these replacements will be made
                 (using the % format function of Python)
-            dependency_list (list or tuple of CLLibrary): The list of cl libraries this function depends on
+            dependencies (list or tuple of CLLibrary): The list of cl libraries this function depends on
         """
         with open(os.path.abspath(cl_code_file), 'r') as f:
             code = f.read()
@@ -40,7 +40,7 @@ class SimpleCLLibraryFromFile(SimpleCLLibrary):
             code = code % var_replace_dict
 
         super(SimpleCLLibraryFromFile, self).__init__(return_type, cl_function_name, parameter_list, code,
-                                                      dependency_list=dependency_list)
+                                                      dependencies=dependencies)
         self._code = code
 
     def get_cl_code(self):
@@ -169,7 +169,7 @@ class LogBesseli0(SimpleCLLibrary):
                   return log(bessel_i0(x));
               }
               return x - log(2.0 * M_PI * x)/2.0;
-            ''', dependency_list=(Besseli0(),))
+            ''', dependencies=(Besseli0(),))
 
 
 class GammaCDF(SimpleCLLibraryFromFile):
@@ -193,7 +193,7 @@ class GammaCDF(SimpleCLLibraryFromFile):
              ('double', 'scale'),
              ('double', 'x')],
             'return gamma_p(shape, x/scale);',
-            dependency_list=(GammaP(),))
+            dependencies=(GammaP(),))
 
 
 class GammaP(SimpleCLLibraryFromFile):
@@ -267,7 +267,7 @@ class CerfDawson(SimpleCLLibraryFromFile):
         super(CerfDawson, self).__init__(
             'void', 'dawson', [],
             resource_filename('mot', 'data/opencl/cerf/dawson.cl'),
-            dependency_list=(CerfImWOfX(),))
+            dependencies=(CerfImWOfX(),))
 
 
 class CerfErfi(SimpleCLLibraryFromFile):
@@ -277,7 +277,7 @@ class CerfErfi(SimpleCLLibraryFromFile):
         super(CerfErfi, self).__init__(
             'void', 'erfi', [],
             resource_filename('mot', 'data/opencl/cerf/erfi.cl'),
-            dependency_list=(CerfImWOfX(),))
+            dependencies=(CerfImWOfX(),))
 
 
 class EuclidianNormFunction(SimpleCLLibraryFromFile):

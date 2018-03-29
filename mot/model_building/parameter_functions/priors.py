@@ -28,7 +28,7 @@ class ParameterPrior(CLFunction):
 
 class SimplePrior(ParameterPrior, SimpleCLFunction):
 
-    def __init__(self, prior_name, prior_body, extra_params=None, dependency_list=()):
+    def __init__(self, prior_name, prior_body, extra_params=None, dependencies=()):
         """A prior template function.
 
         This will prepend to the given extra parameters the obligatory parameters (value, lower_bound, upper_bound).
@@ -37,14 +37,14 @@ class SimplePrior(ParameterPrior, SimpleCLFunction):
             prior_name (str): the name of this prior function
             prior_body (str): the body of the prior
             extra_params (list): additional parameters for this prior
-            dependency_list (list or tuple): the list of dependency functions
+            dependencies (list or tuple): the list of dependency functions
         """
         extra_params = extra_params or []
         parameters = [('mot_float_type', 'value'),
                       ('mot_float_type', 'lower_bound'),
                       ('mot_float_type', 'upper_bound')] + extra_params
         super(SimplePrior, self).__init__('mot_float_type', prior_name, parameters, prior_body,
-                                          dependency_list=dependency_list)
+                                          dependencies=dependencies)
 
 
 class AlwaysOne(SimplePrior):
@@ -188,7 +188,7 @@ class AxialNormalPDF(SimplePrior):
                             - log(M_PI) );
             ''',
             extra_params,
-            dependency_list=(LogBesseli0(), LogCosh()))
+            dependencies=(LogBesseli0(), LogCosh()))
 
 
 class ARDBeta(SimplePrior):

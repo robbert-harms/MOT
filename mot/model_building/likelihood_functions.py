@@ -57,7 +57,7 @@ class LikelihoodFunction(object):
 
 class AbstractLikelihoodFunction(LikelihoodFunction):
 
-    def __init__(self, name, cl_function_name, parameter_list=None, noise_std_param_name=None, dependency_list=()):
+    def __init__(self, name, cl_function_name, parameter_list=None, noise_std_param_name=None, dependencies=()):
         """The likelihood model is the model under which you evaluate your model estimates against observations.
 
         Args:
@@ -67,7 +67,7 @@ class AbstractLikelihoodFunction(LikelihoodFunction):
                 If set to None we set it to a default of three parameters, the observation, the model evaluation and
                 the noise std.
             noise_std_param_name (str): the name of the noise sigma parameter
-            dependency_list (list or tuple): the list of function dependencies
+            dependencies (list or tuple): the list of function dependencies
         """
         self._name = name
         self._cl_function_name = cl_function_name
@@ -77,7 +77,7 @@ class AbstractLikelihoodFunction(LikelihoodFunction):
             FreeParameter('mot_float_type', 'sigma', True, 1, 0, 'INFINITY', parameter_transform=ClampTransform())
         ]
         self._noise_std_param_name = noise_std_param_name or 'sigma'
-        self._dependency_list = dependency_list or ()
+        self._dependencies = dependencies or ()
 
     @property
     def name(self):
@@ -89,7 +89,7 @@ class AbstractLikelihoodFunction(LikelihoodFunction):
     def get_log_likelihood_function(self, include_constant_terms=True):
         return SimpleModelCLFunction('double', self.name, self._cl_function_name, self._parameter_list,
                                      self._get_log_likelihood_body(include_constant_terms),
-                                     dependency_list=self._dependency_list)
+                                     dependencies=self._dependencies)
 
     def _get_log_likelihood_body(self, include_constant_terms):
         """Get the CL body for the log likelihood function.
@@ -188,7 +188,7 @@ class RicianLikelihoodFunction(AbstractLikelihoodFunction):
                         - (observation^2 + evaluation^2) / (2 * sigma^2)
                         + log(bessel_i0((observation * evaluation) / sigma^2))
         """
-        super(RicianLikelihoodFunction, self).__init__('RicianNoise', 'ricianNoise', dependency_list=(LogBesseli0(),))
+        super(RicianLikelihoodFunction, self).__init__('RicianNoise', 'ricianNoise', dependencies=(LogBesseli0(),))
 
     def _get_log_likelihood_body(self, include_constant_terms):
         if include_constant_terms:
