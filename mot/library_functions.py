@@ -172,7 +172,7 @@ class LogBesseli0(SimpleCLLibrary):
             ''', dependencies=(Besseli0(),))
 
 
-class GammaCDF(SimpleCLLibraryFromFile):
+class GammaCDF(SimpleCLLibrary):
 
     def __init__(self):
         """Calculate the Cumulative Distribution Function of the Gamma function.

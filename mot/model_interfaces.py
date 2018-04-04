@@ -38,7 +38,7 @@ class OptimizeModelInterface(object):
         raise NotImplementedError()
 
     def get_kernel_data(self):
-        """Return a list of data arrays we need to load into the kernel.
+        """Return a dictionary of input data objects we need to load into the kernel.
 
         Returns:
             dict[str: mot.utils.KernelInputData]: the list of data objects we need to load in the kernel

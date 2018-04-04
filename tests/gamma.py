@@ -31,7 +31,10 @@ class test_GammaFunctions(unittest.TestCase):
 
     def _calculate_cl(self, test_params):
         test_params = test_params.astype(np.float64)
-        return GammaCDF().evaluate([test_params[:, 0], test_params[:, 1], test_params[..., 2]])
+        return GammaCDF().evaluate({
+            'shape': test_params[:, 0],
+            'scale': test_params[:, 1],
+            'x': test_params[..., 2]})
 
     def _calculate_python(self, input_params):
         results = np.zeros(input_params.shape[0])

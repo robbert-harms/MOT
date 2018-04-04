@@ -66,6 +66,11 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
 
         return all_buffers, parameters_buffer, return_code_buffer
 
+    def _get_buffer_scalar_args(self):
+        scalar_args = super(LevenbergMarquardtWorker, self)._get_buffer_scalar_args()
+        scalar_args.insert(2, None)
+        return scalar_args
+
     def _get_kernel_source(self):
         """Overwrite the default kernel source generation.
 

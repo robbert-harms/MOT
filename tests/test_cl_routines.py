@@ -9,11 +9,7 @@ Tests for `mot` module.
 """
 
 import unittest
-
 import numpy as np
-
-import mot
-from mot import configuration
 from mot.cl_routines.optimizing.nmsimplex import NMSimplex
 from mot.cl_routines.optimizing.levenberg_marquardt import LevenbergMarquardt
 from mot.cl_routines.optimizing.powell import Powell
@@ -29,17 +25,6 @@ class CLRoutineTestCase(unittest.TestCase):
 
     def __init__(self, *args, **kwargs):
         super(CLRoutineTestCase, self).__init__(*args, **kwargs)
-        self._old_config_value = mot.configuration._config['compile_flags']['general']['-cl-single-precision-constant']
-
-    def setUp(self):
-        mot.configuration._config['compile_flags']['general'].update({
-            '-cl-single-precision-constant': False
-        })
-
-    def tearDown(self):
-        mot.configuration._config['compile_flags']['general'].update({
-            '-cl-single-precision-constant': self._old_config_value
-        })
 
 
 class TestRosenbrock(CLRoutineTestCase):
@@ -47,13 +32,18 @@ class TestRosenbrock(CLRoutineTestCase):
     def setUp(self):
         super(TestRosenbrock, self).setUp()
         self.model = Rosenbrock(5)
-        self.optimizers = (NMSimplex(), Powell(patience=10))
+        self.optimizers = (NMSimplex(), Powell(patience=5))
 
     def test_model(self):
         for optimizer in self.optimizers:
-            v = optimizer.minimize(self.model, self.model.get_initial_parameters()).get_optimization_result()[0]
-            for ind in range(self.model.get_nmr_inst_per_problem()):
-                self.assertAlmostEqual(float(v[ind]), 1.0, places=3)
+            output = optimizer.minimize(self.model, np.array([[3] * 5]))
+            v = output.get_optimization_result()
+            for ind in range(2):
+                self.assertAlmostEqual(v[0, ind], 1, places=4)
+
+        def get_initial_parameters(self):
+            params = np.ones((1, self.n)) * 3
+            return convert_data_to_dtype(params, 'double')
 
 
 class TestLSQNonLinExample(CLRoutineTestCase):
@@ -61,17 +51,14 @@ class TestLSQNonLinExample(CLRoutineTestCase):
     def setUp(self):
         super(TestLSQNonLinExample, self).setUp()
         self.model = MatlabLSQNonlinExample()
-        self.optimizers = (LevenbergMarquardt(),)
-        self.residual_calc = ResidualCalculator()
+        self.optimizers = (LevenbergMarquardt(), Powell(patience_line_search=5), NMSimplex())
 
     def test_model(self):
         for optimizer in self.optimizers:
-            v = optimizer.minimize(self.model).get_optimization_result()
-            res = self.residual_calc.calculate(self.model, v)
-            s = 0
-            for i in range(res.shape[1]):
-                s += res[0, i]**2
-            self.assertAlmostEqual(s, 124.3622, places=4)
+            output = optimizer.minimize(self.model, np.array([[0.3, 0.4]]))
+            v = output.get_optimization_result()
+            for ind in range(2):
+                self.assertAlmostEqual(v[0, ind], 0.2578, places=4)
 
 
 class TestFilters(CLRoutineTestCase):
@@ -116,7 +103,6 @@ class TestFilters(CLRoutineTestCase):
         np.testing.assert_almost_equal(s2, expected)
 
 
-
 class Rosenbrock(OptimizeModelInterface):
 
     def __init__(self, n=5):
@@ -132,10 +118,16 @@ class Rosenbrock(OptimizeModelInterface):
         return 'rosenbrock'
 
     def get_kernel_data(self):
-        return []
+        return {}
 
     def get_nmr_problems(self):
         return 1
+
+    def get_nmr_inst_per_problem(self):
+        return self.n - 1
+
+    def get_nmr_estimable_parameters(self):
+        return self.n
 
     def get_pre_eval_parameter_modifier(self):
         func_name = '_modifyParameters'
@@ -149,43 +141,24 @@ class Rosenbrock(OptimizeModelInterface):
         fname = 'evaluateModel'
         func = '''
             double ''' + fname + '''(void* data, const double* const x, uint observation_index){
-                double sum = 0;
-                for(uint i = 0; i < ''' + str(self.n) + ''' - 1; i++){
-                    sum += 100 * pown((x[i + 1] - pown(x[i], 2)), 2) + pown((x[i] - 1), 2);
-                }
-                return -sum;
-            }
-        '''
-        return SimpleNamedCLFunction(func, fname)
-
-    def _get_observation_return_function(self):
-        fname = 'getObservation'
-        func = '''
-            double ''' + fname + '''(void* data, const uint observation_index){
-                return 0;
+                uint i = observation_index;
+                return 100 * pown(x[i + 1] - pown(x[i], 2), 2) + pown(1 - x[i], 2);
             }
         '''
         return SimpleNamedCLFunction(func, fname)
 
     def get_objective_per_observation_function(self):
         eval_func = self.get_model_eval_function()
-        obs_func = self._get_observation_return_function()
 
         func = eval_func.get_cl_code()
-        func += obs_func.get_cl_code()
 
         func_name = "getObjectiveInstanceValue"
         func += '''
             mot_float_type ''' + func_name + '''(void* data, const mot_float_type* const x, uint observation_index){
-                return ''' + obs_func.get_cl_function_name() + '''(data, observation_index) -
-                            ''' + eval_func.get_cl_function_name() + '''(data, x, observation_index);
+                return ''' + eval_func.get_cl_function_name() + '''(data, x, observation_index);
             }
         '''
         return SimpleNamedCLFunction(func, func_name)
-
-    def get_initial_parameters(self):
-        params = np.ones((1, self.n)) * 3
-        return convert_data_to_dtype(params, 'double')
 
     def get_lower_bounds(self):
         return [-np.inf] * self.n
@@ -193,17 +166,9 @@ class Rosenbrock(OptimizeModelInterface):
     def get_upper_bounds(self):
         return [np.inf] * self.n
 
-    def get_free_param_names(self):
-        return list(map(str, range(self.n)))
-
-    def get_nmr_inst_per_problem(self):
-        return 1
-
-    def get_nmr_estimable_parameters(self):
-        return self.n
-
     def finalize_optimized_parameters(self, parameters):
         return parameters
+
 
 class MatlabLSQNonlinExample(OptimizeModelInterface):
 
@@ -224,10 +189,16 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
         return 'matlab_lsqnonlin_example'
 
     def get_kernel_data(self):
-        return []
+        return {}
 
     def get_nmr_problems(self):
         return 1
+
+    def get_nmr_inst_per_problem(self):
+        return 10
+
+    def get_nmr_estimable_parameters(self):
+        return 2
 
     def get_pre_eval_parameter_modifier(self):
         func_name = '_modifyParameters'
@@ -241,40 +212,23 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
         fname = 'evaluateModel'
         func = '''
             double ''' + fname + '''(void* data, const double* const x, uint k){
-                return -(2 + 2 * (k+1) - exp((k+1) * x[0]) - exp((k+1) * x[1]));
-            }
-        '''
-        return SimpleNamedCLFunction(func, fname)
-
-    def _get_observation_return_function(self):
-        fname = 'getObservation'
-        func = '''
-            double ''' + fname + '''(void* data, uint observation_index){
-                return 0;
+                return pown(2 + 2 * (k+1) - exp((k+1) * x[0]) - exp((k+1) * x[1]), 2);
             }
         '''
         return SimpleNamedCLFunction(func, fname)
 
     def get_objective_per_observation_function(self):
         eval_func = self.get_model_eval_function()
-        obs_func = self._get_observation_return_function()
-
         func = eval_func.get_cl_code()
-        func += obs_func.get_cl_code()
 
         func_name = "getObjectiveInstanceValue"
 
         func += '''
             mot_float_type ''' + func_name + '''(void* data, const mot_float_type* const x, uint observation_index){
-                return ''' + obs_func.get_cl_function_name() + '''(data, observation_index) -
-                            ''' + eval_func.get_cl_function_name() + '''(data, x, observation_index);
+                return ''' + eval_func.get_cl_function_name() + '''(data, x, observation_index);
             }
         '''
         return SimpleNamedCLFunction(func, func_name)
-
-    def get_initial_parameters(self):
-        params = np.array([[0.3, 0.4]])
-        return convert_data_to_dtype(params, 'double')
 
     def get_lower_bounds(self):
         return [0, 0]
@@ -282,17 +236,9 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
     def get_upper_bounds(self):
         return [np.inf] * 2
 
-    def get_free_param_names(self):
-        return ['0', '1']
-
-    def get_nmr_inst_per_problem(self):
-        return 10
-
-    def get_nmr_estimable_parameters(self):
-        return 2
-
     def finalize_optimized_parameters(self, parameters):
         return parameters
+
 
 if __name__ == '__main__':
     unittest.main()

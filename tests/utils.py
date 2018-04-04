@@ -3,7 +3,6 @@ from textwrap import dedent
 
 import numpy as np
 import pyopencl as cl
-from numpy.testing import assert_array_equal
 
 from mot.utils import device_type_from_string, device_supports_double, get_float_type_def, is_scalar, \
     all_elements_equal, get_single_value, topological_sort

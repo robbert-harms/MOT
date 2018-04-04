@@ -223,16 +223,18 @@ class AbstractParallelOptimizerWorker(Worker):
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
 
-        scalar_args = [None, None]
-        scalar_args.extend(self._data_struct_manager.get_scalar_arg_dtypes())
-
         kernel_func = self._kernel.minimize
-        kernel_func.set_scalar_arg_dtypes(scalar_args)
+        kernel_func.set_scalar_arg_dtypes(self._get_buffer_scalar_args())
 
         kernel_func(self._cl_queue, (nmr_problems, ), None, *self._all_buffers,
                     global_offset=(range_start,))
         self._enqueue_readout(self._params_buffer, self._starting_points, range_start, range_end)
         self._enqueue_readout(self._return_code_buffer, self._return_codes, range_start, range_end)
+
+    def _get_buffer_scalar_args(self):
+        scalar_args = [None, None]
+        scalar_args.extend(self._data_struct_manager.get_scalar_arg_dtypes())
+        return scalar_args
 
     def _create_buffers(self):
         all_buffers = []
