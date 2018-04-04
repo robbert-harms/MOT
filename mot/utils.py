@@ -839,9 +839,6 @@ class KernelInputArray(KernelInputData):
                 self._data = self._backup_data_reference
                 self._backup_data_reference = None
 
-            if np.dtype(mot_float_dtype) == self._data.dtype:
-                return
-
             new_data = convert_data_to_dtype(self._data, self._ctype,
                                              mot_float_type=dtype_to_ctype(mot_float_dtype))
             new_data = np.require(new_data, requirements=self._requirements)
