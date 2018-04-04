@@ -126,15 +126,6 @@ class OptimizeModelInterface(object):
         """
         raise NotImplementedError()
 
-    def get_initial_parameters(self):
-        """Get a two dimensional matrix with the initial parameters (starting points) for every voxel.
-
-        Returns:
-            ndarray: A two dimensional matrix with on the first axis the problem instances and on the second
-                the parameter values per problem instance
-        """
-        raise NotImplementedError()
-
     def get_lower_bounds(self):
         """Get for each estimable parameter the lower bounds.
 
@@ -171,45 +162,7 @@ class OptimizeModelInterface(object):
 
 
 class SampleModelInterface(OptimizeModelInterface):
-    """Extends the OptimizeModelInterface with information for sampling purposes.
-
-    This specific interface is tied to sampling with the Metropolis Hastings Random Walk sampler as
-    implement in :class:`mot.cl_routines.sampling.metropolis_hastings.MetropolisHastings`.
-
-    To be able to sample a model we (in principle) need to have:
-
-    * a log likelihood function;
-    * a proposal function;
-    * and a prior function
-
-
-    Proposal functions can be symmetric (if it holds that ``q(x|x') == q(x'|x)``) or
-    non symmetric (i.e. ``q(x|x') != q(x'|x)``). In the case of non-symmetric proposals we need to
-    have a function to get the probability log likelihood of the proposal.
-    This indicates the need for two more pieces of information:
-
-    * test if the proposal is symmetric
-    * proposal log PDF function
-
-
-    A trick in sampling is to have auto-adapting proposals. These proposals commonly have a distribution with a
-    standard deviation that varies in time. The idea is that if the distribution is too tight (low std) only a few
-    of the proposed samples are accepted and we need to broaden the distribution (increase the std). On the other
-    hand, if the std is too high the jumps might not get accepted. This leads us to the following
-    additional functionality:
-
-    * proposal state update function
-
-
-    Since OpenCL < 2.1 does not allow state variables in functions and also does not support classes, we need to find
-    a way to store the state of the proposal distribution inside the kernel function. For that, each proposal
-    CL function has as additional parameter the ``proposal_state``. The initial state can be obtained from
-    this class and needs to be handed to the proposal functions in the kernels.
-
-    Finally, this interface requires to you specify a :class:`mot.cl_routines.sampling.metropolis_hastings.MHState`
-    that specifies the current state of the sampler. This can be set to a default state when starting sampling
-    or to the output of a previous run to continue sampling.
-    """
+    """Extends the OptimizeModelInterface with information for sampling purposes."""
 
     def get_log_likelihood_per_observation_function(self):
         """Get the (complete) CL Log Likelihood function that evaluates the given instance under a noise model.
@@ -220,7 +173,9 @@ class SampleModelInterface(OptimizeModelInterface):
             mot.utils.NamedCLFunction: A function of the kind:
                 .. code-block:: c
 
-                    double <fname>(mot_data_struct* data, const mot_float_type* const x, uint observation_index);
+                    double <fname>(mot_data_struct* data,
+                                   const mot_float_type* const x,
+                                   uint observation_index);
         """
         raise NotImplementedError()
 
@@ -242,123 +197,31 @@ class SampleModelInterface(OptimizeModelInterface):
                         <address_space_parameter_vector> const mot_float_type* const x
                     );
 
-            Which is called by the sampling routine to calculate the posterior probability.
+            Which is called by the sampling routine to calculate the prior probability.
         """
         raise NotImplementedError()
 
-    def get_metropolis_hastings_state(self):
-        """Get the current state of the Metropolis Hastings sampler.
+    def get_finalize_proposal_function(self, address_space_parameter_vector='private'):
+        """Get a CL function that is called for every new proposal, in order to finalize it.
 
-        This can be used to continue execution of an MH sampling from a previous point in time.
+        This allows the model to change a proposal before computing the prior or likelihood probabilities.
 
-        Returns:
-            mot.cl_routines.sampling.metropolis_hastings.MHState: the current Metropolis Hastings state
-        """
-        raise NotImplementedError()
-
-    def get_proposal_state(self):
-        """Get for every problem instance the list of parameter values to use in the the adaptable proposal.
-
-        Returns:
-            ndarray: per problem instance the proposal parameter values that are adaptable.
-        """
-        raise NotImplementedError()
-
-    def is_proposal_symmetric(self):
-        """Check if the entire proposal distribution is symmetric: ``q(x|x') == q(x'|x)``.
-
-        Returns:
-            boolean: True if the proposal distribution is symmetric, false otherwise.
-        """
-        raise NotImplementedError()
-
-    def get_proposal_logpdf(self, address_space_proposal_state='private'):
-        """Get the probability density function of the proposal in log space (as a CL string).
-
-        This density function is used if the proposal is not symmetric.
-
-        Args:
-            address_space_proposal_state (str): the CL address space of the proposal state vector.
-                Defaults to ``private``.
+        As an example, suppose you are sampling a polar coordinate :math:`\theta` defined on
+        :math:`[0, 2\pi]` with a random walk Metropolis proposal distribution. This distribution might propose positions
+        outside of the range of :math:`\theta`. Of course the model function could deal with that by taking the modulus
+        of the input, but then you have to post-process the chain with the same transformation. Instead, this function
+        allows changing the proposal before it is put into the model and before it is stored.
 
         Returns:
             mot.utils.NamedCLFunction: A function with the signature:
-
-                .. code-block:: c
-
-                    double <func_name>(uint param_ind, mot_float_type proposal,
-                                       mot_float_type current,
-                                       <address_space_proposal_state> mot_float_type* const proposal_state);
-
-
-            Where ``param_ind`` is the index of the parameter we would like to get the proposal from,
-            ``current`` is the current value of that parameter and ``proposal`` the proposal value of the parameter.
-            The final argument ``proposal_state`` are the current settings of the proposal function.
-
-            It should return for the requested parameter a value ``q(proposal | current)``, the log Probability
-            Density Function (log PDF) of the proposal given the current value.
-        """
-        raise NotImplementedError()
-
-    def get_proposal_function(self, address_space_proposal_state='private'):
-        """Get a proposal function that returns proposals for a requested parameter.
-
-        Args:
-            address_space_proposal_state (str): the CL address space of the proposal state vector.
-                Defaults to ``private``.
-
-        Returns:
-            mot.utils.NamedCLFunction: A function with the signature:
-
                 .. code-block:: c
 
                     mot_float_type <func_name>(
-                        uint param_ind,
-                        mot_float_type current,
-                        void* rng_data,
-                        <address_space_proposal_state> mot_float_type* const proposal_state);
+                        mot_data_struct* data,
+                        <address_space_parameter_vector> mot_float_type* x
+                    );
 
-
-            Where ``param_ind`` is the index of the parameter for which we want the proposal and
-            ``current`` is the current value of that parameter. The argument ``proposal_state`` is the
-            state of the proposal distribution. One can obtain random numbers with:
-            .. code-block:: c
-
-                float randomnr = frand(rng_data);
-        """
-        raise NotImplementedError()
-
-    def get_proposal_state_update_function(self, address_space='private'):
-        """Get the function to update the proposal parameters
-
-        Args:
-            address_space (str): the address space of (all) the given arguments, defaults to ``private``
-
-        Returns:
-            mot.utils.NamedCLFunction: A function with the signature:
-                .. code-block:: c
-
-                    void <func_name>(<address_space> mot_float_type* const proposal_state,
-                                     <address_space> ulong* const sampling_counter,
-                                     <address_space> ulong* const acceptance_counter);
-
-                The ``proposal_state`` holds the current value of all the adaptable proposal parameters and is
-                of length equal to the number of adaptable parameters. The ``sampling_counter`` holds the number of
-                samples drawn since last update (per parameter) and ``acceptance_counter`` holds the number of samples
-                that where accepted since the last update. Both are of length equal to the total number of parameters
-                in the model (!). The implementing function is free to overwrite the values in each array.
-        """
-        raise NotImplementedError()
-
-    def proposal_state_update_uses_variance(self):
-        """Check if the proposal state update function requires the variance of each of the parameters.
-
-        If none of the proposal update functions require the parameter variance then we can save memory in the
-        kernel by not calculating them.
-
-        Returns:
-            boolean: if at least one parameter proposal state update function requires the parameter variance
-                return True, else return False.
+            Which is called by the sampling routine to finalize the proposal.
         """
         raise NotImplementedError()
 

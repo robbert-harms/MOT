@@ -105,7 +105,7 @@ class SBPlex(AbstractParallelOptimizer):
 
         super(SBPlex, self).__init__(patience=patience, optimizer_settings=optimizer_settings, **kwargs)
 
-    def minimize(self, model, init_params=None):
+    def minimize(self, model, starting_positions):
         nmr_params = model.get_nmr_estimable_parameters()
 
         if self._optimizer_settings.get('adaptive_scales', True):
@@ -122,7 +122,7 @@ class SBPlex(AbstractParallelOptimizer):
         if self._optimizer_settings.get('max_subspace_length', 'auto') == 'auto':
             self._optimizer_settings.update({'max_subspace_length': min(5, nmr_params)})
 
-        return super(SBPlex, self).minimize(model, init_params=init_params)
+        return super(SBPlex, self).minimize(model, starting_positions)
 
     def _get_worker_generator(self, *args):
         return lambda cl_environment: SBPlexWorker(cl_environment, *args)

@@ -4,6 +4,14 @@ mot.cl_routines.sampling package
 Submodules
 ----------
 
+mot.cl_routines.sampling.amwg module
+------------------------------------
+
+.. automodule:: mot.cl_routines.sampling.amwg
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 mot.cl_routines.sampling.base module
 ------------------------------------
 
@@ -12,10 +20,18 @@ mot.cl_routines.sampling.base module
     :undoc-members:
     :show-inheritance:
 
-mot.cl_routines.sampling.metropolis_hastings module
----------------------------------------------------
+mot.cl_routines.sampling.old_mcmc module
+----------------------------------------
 
-.. automodule:: mot.cl_routines.sampling.metropolis_hastings
+.. automodule:: mot.cl_routines.sampling.old_mcmc
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+mot.cl_routines.sampling.scam module
+------------------------------------
+
+.. automodule:: mot.cl_routines.sampling.scam
     :members:
     :undoc-members:
     :show-inheritance:

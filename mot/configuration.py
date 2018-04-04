@@ -15,7 +15,6 @@ using :py:func:`config_context`. Example:
 from contextlib import contextmanager
 from copy import copy
 
-from mot.model_building.parameter_functions.proposal_updates import AcceptanceRateScaling
 from .cl_environments import CLEnvironmentFactory
 from .load_balance_strategies import PreferGPU
 
@@ -47,10 +46,7 @@ _config = {
         # The flags to disable when running in double mode
         'disable_in_double_precision': ['-cl-single-precision-constant']
     },
-    'ignore_kernel_compile_warnings': True,
-
-    # The default proposal update function to use during sampling
-    'default_proposal_update': AcceptanceRateScaling()
+    'ignore_kernel_compile_warnings': True
 }
 
 
@@ -133,16 +129,6 @@ def get_compile_flags_to_disable_in_double_precision():
         boolean: the list of flags we want to disable when running in double mode
     """
     return copy(_config['compile_flags']['disable_in_double_precision'])
-
-
-def get_default_proposal_update():
-    """Get the default proposal update function to use in sampling.
-
-    Returns:
-        mot.model_building.parameter_functions.proposal_updates.ProposalUpdate: the proposal update function
-            to use by default if no specific one is provided.
-    """
-    return _config['default_proposal_update']
 
 
 def set_default_proposal_update(proposal_update):

@@ -161,8 +161,8 @@ class RandomRestart(AbstractOptimizer):
         self._optimizer = optimizer
         self._starting_point_generator = starting_point_generator
 
-    def minimize(self, model, init_params=None):
-        opt_output = self._optimizer.minimize(model, init_params)
+    def minimize(self, model, starting_positions):
+        opt_output = self._optimizer.minimize(model, starting_positions)
         objective_value = opt_output.get_objective_values()
         results = opt_output.get_optimization_result()
         return_codes = opt_output.get_return_codes()

@@ -32,8 +32,8 @@ class GaussianFit(CLRoutine):
         """
         all_kernel_data = {
             'samples': KernelInputArray(samples, ctype='mot_float_type'),
-            'means': KernelInputAllocatedOutput(samples.shape[0], 'mot_float_type', is_readable=False),
-            'deviations': KernelInputAllocatedOutput(samples.shape[0], 'mot_float_type', is_readable=False),
+            'means': KernelInputAllocatedOutput(samples.shape[0], 'mot_float_type'),
+            'deviations': KernelInputAllocatedOutput(samples.shape[0], 'mot_float_type'),
             'nmr_samples': KernelInputScalar(samples.shape[1]),
             'ddof': KernelInputScalar(ddof)
         }

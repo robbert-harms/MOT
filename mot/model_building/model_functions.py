@@ -1,10 +1,8 @@
-import numpy as np
 from mot.cl_data_type import SimpleCLDataType
 from mot.cl_function import CLFunction, SimpleCLFunction, CLPrototype, SimpleCLPrototype
 from mot.model_building.parameter_functions.numdiff_info import SimpleNumDiffInfo
 from mot.model_building.parameters import FreeParameter
 from mot.model_building.parameter_functions.priors import UniformWithinBoundsPrior
-from mot.model_building.parameter_functions.proposals import GaussianProposal
 from mot.model_building.parameter_functions.transformations import CosSqrClampTransform
 
 __author__ = 'Robbert Harms'
@@ -201,7 +199,7 @@ class SimpleWeight(WeightType):
             upper_bound (number or ndarray): The initial upper bound for the single free parameter of this function.
         """
         parameter_settings = dict(parameter_transform=CosSqrClampTransform(),
-                                  sampling_proposal=GaussianProposal(0.01),
+                                  sampling_proposal_std=0.01,
                                   sampling_prior=UniformWithinBoundsPrior(),
                                   numdiff_info=SimpleNumDiffInfo(scale_factor=10)
                                   )

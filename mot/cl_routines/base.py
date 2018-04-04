@@ -11,7 +11,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 class CLRoutine(object):
 
     def __init__(self, cl_environments=None, load_balancer=None, compile_flags=None, **kwargs):
-        """Base class for CL routines. Im
+        """Base class for CL routines.
 
         Args:
             cl_environments (list of CLEnvironment): The list of CL environments using by this routine.

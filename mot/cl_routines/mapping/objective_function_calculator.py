@@ -28,7 +28,7 @@ class ObjectiveFunctionCalculator(CLRoutine):
         all_kernel_data = dict(model.get_kernel_data())
         all_kernel_data.update({
             'parameters': KernelInputArray(parameters),
-            'objective_values': KernelInputAllocatedOutput((shape[0],), 'mot_float_type', is_readable=False),
+            'objective_values': KernelInputAllocatedOutput((shape[0],), 'mot_float_type'),
             'local_reduction_lls': KernelInputLocalMemory('double')
         })
 

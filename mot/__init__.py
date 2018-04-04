@@ -1,7 +1,6 @@
 import logging
 from .__version__ import VERSION, VERSION_STATUS, __version__
 
-from mot.cl_routines.sampling.metropolis_hastings import MetropolisHastings
 from mot.cl_routines.optimizing.levenberg_marquardt import LevenbergMarquardt
 from mot.cl_routines.optimizing.powell import Powell
 from mot.cl_routines.optimizing.nmsimplex import NMSimplex

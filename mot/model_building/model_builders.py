@@ -8,14 +8,13 @@ from mot.cl_data_type import SimpleCLDataType
 from mot.cl_function import SimpleCLFunction
 from mot.cl_parameter import SimpleCLFunctionParameter
 from mot.cl_routines.mapping.codec_runner import CodecRunner
-from mot.cl_routines.sampling.metropolis_hastings import DefaultMHState
 from mot.model_building.model_functions import WeightType, ModelCLFunction
 from mot.model_building.parameters import CurrentObservationParam, StaticMapParameter, ProtocolParameter, FreeParameter
 from mot.model_building.parameter_functions.dependencies import SimpleAssignment, AbstractParameterDependency
 from mot.model_building.utils import ParameterCodec
 from mot.model_interfaces import OptimizeModelInterface, SampleModelInterface, NumericalDerivativeInterface
 from mot.utils import is_scalar, all_elements_equal, get_single_value, SimpleNamedCLFunction, convert_data_to_dtype, \
-    KernelInputArray, get_class_that_defined_method, KernelInputScalar
+    KernelInputArray, get_class_that_defined_method
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-03-14"
@@ -164,9 +163,6 @@ class OptimizeModelBuilder(ModelBuilder):
                                    self._get_numdiff_use_lower_bounds(),
                                    self._get_numdiff_use_upper_bounds(),
                                    self._get_numdiff_param_transform())
-
-    def build_with_codec(self, problems_to_analyze):
-        return ParameterTransformedModel(self.build(problems_to_analyze), self.get_parameter_codec())
 
     def get_parameter_codec(self):
         """Get a parameter codec that can be used to transform the parameters to and from optimization and model space.
@@ -1133,15 +1129,9 @@ class SampleModelBuilder(OptimizeModelBuilder):
         """
         simple_optimize_model = super(SampleModelBuilder, self).build(problems_to_analyze)
         return SimpleSampleModel(simple_optimize_model,
-                                 self._get_proposal_state(problems_to_analyze),
                                  self._get_log_likelihood_per_observation_function(problems_to_analyze),
-                                 self._is_proposal_symmetric(),
                                  self._get_log_prior_function_builder(),
-                                 self._get_metropolis_hastings_state(problems_to_analyze),
-                                 self._proposal_state_update_uses_variance(),
-                                 self._get_proposal_logpdf_builder(),
-                                 self._get_proposal_function_builder(),
-                                 self._get_proposal_state_update_function_builder())
+                                 self._get_finalize_proposal_function_builder())
 
     def _get_log_prior_function_builder(self):
         def get_preliminary():
@@ -1230,226 +1220,6 @@ class SampleModelBuilder(OptimizeModelBuilder):
             return SimpleNamedCLFunction(prior, func_name)
         return builder
 
-    def _get_proposal_state(self, problems_to_analyze):
-        np_dtype = np.float32
-        if self.double_precision:
-            np_dtype = np.float64
-
-        proposal_state = []
-        for m, p in self._model_functions_info.get_estimable_parameters_list():
-            for param in p.sampling_proposal.get_parameters():
-                if param.adaptable:
-                    value = param.default_value
-
-                    if is_scalar(value):
-                        if self._get_nmr_problems(problems_to_analyze) == 0:
-                            proposal_state.append(np.full((1, 1), value, dtype=np_dtype))
-                        else:
-                            proposal_state.append(np.full((self._get_nmr_problems(problems_to_analyze), 1),
-                                                          value, dtype=np_dtype))
-                    else:
-                        if len(value.shape) < 2:
-                            value = np.transpose(np.asarray([value]))
-                        elif value.shape[1] > value.shape[0]:
-                            value = np.transpose(value)
-                        else:
-                            value = value
-
-                        if problems_to_analyze is None:
-                            proposal_state.append(value)
-                        else:
-                            proposal_state.append(value[problems_to_analyze, ...])
-
-        proposal_state_matrix = np.concatenate([np.transpose(np.array([s]))
-                                                if len(s.shape) < 2 else s for s in proposal_state], axis=1)
-        return proposal_state_matrix
-
-    def _is_proposal_symmetric(self):
-        return all(p.sampling_proposal.is_symmetric() for m, p in
-                   self._model_functions_info.get_estimable_parameters_list())
-
-    def _get_proposal_logpdf_builder(self):
-        def get_preliminary():
-            cl_str = ''
-            for _, p in self._model_functions_info.get_estimable_parameters_list():
-                cl_str += p.sampling_proposal.get_proposal_logpdf_function()
-            return cl_str
-
-        def get_body():
-            cl_str = 'switch(param_ind){'
-            adaptable_parameter_count = 0
-            for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
-                cl_str += 'case ' + str(i) + ':'
-
-                param_proposal = p.sampling_proposal
-                logpdf_call = 'return ' + param_proposal.get_proposal_logpdf_function_name() + '(proposal, current'
-
-                for param in param_proposal.get_parameters():
-                    if param.adaptable:
-                        logpdf_call += ', proposal_state[' + str(adaptable_parameter_count) + ']'
-                        adaptable_parameter_count += 1
-                    else:
-                        logpdf_call += ', ' + str(param.default_value)
-
-                logpdf_call += ');'
-                cl_str += logpdf_call + "\n"
-            cl_str += '} return 0;'
-            return cl_str
-
-        preliminary = get_preliminary()
-        body = get_body()
-
-        def builder(address_space_proposal_state):
-            func_name = 'getProposalLogPDF'
-            return_str = '''
-                {preliminary}
-
-                double {func_name}(
-                    uint param_ind,
-                    mot_float_type proposal,
-                    mot_float_type current,
-                    {address_space_proposal_state} mot_float_type* const proposal_state){{
-
-                    {body}
-                }}
-            '''.format(func_name=func_name, address_space_proposal_state=address_space_proposal_state,
-                       body=body, preliminary=preliminary)
-            return SimpleNamedCLFunction(return_str, func_name)
-        return builder
-
-    def _get_proposal_function_builder(self):
-        def get_preliminary():
-            cl_str = ''
-            for _, p in self._model_functions_info.get_estimable_parameters_list():
-                cl_str += p.sampling_proposal.get_proposal_function()
-            return cl_str
-
-        def get_body():
-            cl_str = 'switch(param_ind){'
-            adaptable_parameter_count = 0
-            for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
-                cl_str += 'case ' + str(i) + ':' + "\n\t\t\t"
-
-                param_proposal = p.sampling_proposal
-                proposal_call = 'return ' + param_proposal.get_proposal_function_name() + '(current, rng_data'
-
-                for param in param_proposal.get_parameters():
-                    if param.adaptable:
-                        proposal_call += ', proposal_state[' + str(adaptable_parameter_count) + ']'
-                        adaptable_parameter_count += 1
-                    else:
-                        proposal_call += ', ' + str(param.default_value)
-
-                proposal_call += ');'
-                cl_str += proposal_call + "\n"
-
-            cl_str += '}\n return 0;'
-            return cl_str
-
-        preliminary = get_preliminary()
-        body = get_body()
-
-        def builder(address_space_proposal_state):
-            func_name = 'getProposal'
-            return_str = '''
-                {preliminary}
-
-                mot_float_type {func_name}(
-                    uint param_ind,
-                    mot_float_type current,
-                    void* rng_data,
-                    {address_space_proposal_state} mot_float_type* const proposal_state){{
-
-                    {body}
-                }}
-            '''.format(func_name=func_name, address_space_proposal_state=address_space_proposal_state,
-                       body=body, preliminary=preliminary)
-            return SimpleNamedCLFunction(return_str, func_name)
-
-        return builder
-
-    def _get_proposal_state_update_function_builder(self):
-        def get_body():
-            cl_str = ''
-            adaptable_parameter_count = 0
-            for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
-                param_proposal = p.sampling_proposal
-                proposal_update_function = param_proposal.get_proposal_update_function()
-
-                state_params = []
-
-                for param in param_proposal.get_parameters():
-                    if param.adaptable:
-                        state_params.append('proposal_state + {}'.format(adaptable_parameter_count))
-                        adaptable_parameter_count += 1
-
-                if state_params:
-                    if proposal_update_function.uses_jump_counters():
-                        state_params.extend(['sampling_counter + {}'.format(i),
-                                             'acceptance_counter + {}'.format(i)])
-
-                    if proposal_update_function.uses_parameter_variance():
-                        state_params.append('parameter_variance[{}]'.format(i))
-
-                    cl_str += '''
-                        // {param_name}
-                        {update_func_name}({params});
-                    '''.format(
-                        update_func_name=proposal_update_function.get_function_name(param_proposal.get_parameters()),
-                        params=', '.join(state_params), param_name='{}.{}'.format(m.name, p.name))
-            return cl_str
-
-        body = get_body()
-
-        def builder(address_space):
-            def get_preliminary():
-                cl_str = ''
-                for _, p in self._model_functions_info.get_estimable_parameters_list():
-                    if p.sampling_proposal.is_adaptable():
-                        cl_str += p.sampling_proposal.get_proposal_update_function().get_update_function(
-                            p.sampling_proposal.get_parameters(), address_space=address_space)
-                return cl_str
-
-            preliminary = get_preliminary()
-
-            func_name = 'updateProposalState'
-            return_str = ''
-            if self._proposal_state_update_uses_variance():
-                return_str += '''
-                    {preliminary}
-
-                    void {func_name}({address_space} mot_float_type* const proposal_state,
-                                     {address_space} ulong* const sampling_counter,
-                                     {address_space} ulong* const acceptance_counter,
-                                     {address_space} mot_float_type* const parameter_variance){{
-                        {body}
-                    }}
-                '''.format(func_name=func_name, address_space=address_space, body=body, preliminary=preliminary)
-            else:
-                return_str += '''
-                    {preliminary}
-
-                    void {func_name}({address_space} mot_float_type* const proposal_state,
-                                     {address_space} ulong* const sampling_counter,
-                                     {address_space} ulong* const acceptance_counter){{
-                        {body}
-                    }}
-                '''.format(func_name=func_name, address_space=address_space, body=body, preliminary=preliminary)
-
-            return SimpleNamedCLFunction(return_str, func_name)
-
-        return builder
-
-    def _proposal_state_update_uses_variance(self):
-        for i, (m, p) in enumerate(self._model_functions_info.get_estimable_parameters_list()):
-            param_proposal = p.sampling_proposal
-            proposal_update_function = param_proposal.get_proposal_update_function()
-
-            if any(param.adaptable for param in param_proposal.get_parameters()):
-                if proposal_update_function.uses_parameter_variance():
-                    return True
-        return False
-
     def _get_log_likelihood_per_observation_function(self, problems_to_analyze):
         eval_function_info = self._get_model_eval_function(problems_to_analyze)
         eval_function_signature = self._likelihood_function.get_log_likelihood_function()
@@ -1481,10 +1251,6 @@ class SampleModelBuilder(OptimizeModelBuilder):
        '''
         return SimpleNamedCLFunction(func, func_name)
 
-    def _get_metropolis_hastings_state(self, problems_to_analyze):
-        return DefaultMHState(self._get_nmr_problems(problems_to_analyze),
-                              self.get_nmr_estimable_parameters(), self.double_precision)
-
     def _get_weight_prior(self):
         """Get the prior limiting the weights between 0 and 1"""
         weights = []
@@ -1496,6 +1262,22 @@ class SampleModelBuilder(OptimizeModelBuilder):
                 'mot_float_type', 'prior_estimable_weights_sum_to_one',
                 weights, 'return (' + ' + '.join(el[1].replace('.', '_') for el in weights) + ') <= 1;')
         return None
+
+    def _get_finalize_proposal_function_builder(self):
+        """Get the building function used to finalize the proposal"""
+        def builder(address_space_parameter_vector):
+            func_name = 'finalizeProposal'
+            prior = '''
+                {preliminary}
+                
+                mot_float_type {func_name}(mot_data_struct* data,
+                                           {address_space_parameter_vector} mot_float_type* x){{
+                    {body}
+                }}
+                '''.format(func_name=func_name, address_space_parameter_vector=address_space_parameter_vector,
+                           preliminary='', body='')
+            return SimpleNamedCLFunction(prior, func_name)
+        return builder
 
 
 class CompositeModelFunction(SimpleCLFunction):
@@ -2079,9 +1861,6 @@ class ParameterTransformedModel(OptimizeModelInterface):
     def get_objective_per_observation_function(self):
         return self._model.get_objective_per_observation_function()
 
-    def get_initial_parameters(self):
-        return self.encode_parameters(self._model.get_initial_parameters())
-
     def get_lower_bounds(self):
         # todo add codec transform here
         return self._model.get_lower_bounds()
@@ -2218,20 +1997,12 @@ class SimpleOptimizeModel(NumericalDerivativeInterface):
 
 class SimpleSampleModel(SampleModelInterface):
 
-    def __init__(self, wrapped_optimize_model, proposal_state, ll_per_obs_func,
-                 is_proposal_symmetric, log_prior_function_builder, metropolis_hastings_state,
-                 proposal_state_update_uses_variance, proposal_logpdf_builder, proposal_function_builder,
-                 proposal_state_update_function_builder):
+    def __init__(self, wrapped_optimize_model, ll_per_obs_func, log_prior_function_builder,
+                 finalize_proposal_function_builder):
         self._wrapped_optimize_model = wrapped_optimize_model
-        self._proposal_state = proposal_state
         self._ll_per_obs_func = ll_per_obs_func
-        self._is_proposal_symmetric = is_proposal_symmetric
         self._log_prior_function_builder = log_prior_function_builder
-        self._metropolis_hastings_state = metropolis_hastings_state
-        self._proposal_state_update_uses_variance = proposal_state_update_uses_variance
-        self._proposal_logpdf_builder = proposal_logpdf_builder
-        self._proposal_function_builder = proposal_function_builder
-        self._proposal_state_update_function_builder = proposal_state_update_function_builder
+        self._finalize_proposal_function_builder = finalize_proposal_function_builder
 
     def __getattribute__(self, item):
         try:
@@ -2254,32 +2025,11 @@ class SimpleSampleModel(SampleModelInterface):
     def double_precision(self):
         return self._wrapped_optimize_model.double_precision
 
-    def get_kernel_data(self):
-        return self._wrapped_optimize_model.get_kernel_data()
-
-    def get_proposal_state(self):
-        return self._proposal_state
-
     def get_log_likelihood_per_observation_function(self):
         return self._ll_per_obs_func
-
-    def is_proposal_symmetric(self):
-        return self._is_proposal_symmetric
-
-    def get_proposal_logpdf(self, address_space_proposal_state='private'):
-        return self._proposal_logpdf_builder(address_space_proposal_state)
-
-    def get_proposal_function(self, address_space_proposal_state='private'):
-        return self._proposal_function_builder(address_space_proposal_state)
-
-    def get_proposal_state_update_function(self, address_space='private'):
-        return self._proposal_state_update_function_builder(address_space)
-
-    def proposal_state_update_uses_variance(self):
-        return self._proposal_state_update_uses_variance
 
     def get_log_prior_function(self, address_space_parameter_vector='private'):
         return self._log_prior_function_builder(address_space_parameter_vector)
 
-    def get_metropolis_hastings_state(self):
-        return self._metropolis_hastings_state
+    def get_finalize_proposal_function(self, address_space_parameter_vector='private'):
+        return self._finalize_proposal_function_builder(address_space_parameter_vector)

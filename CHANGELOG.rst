@@ -202,15 +202,10 @@ Added
 
 Other
 -----
-- Main highlights of this new version:
-  - The model builder now actually follows the builder pattern,
-    as such model.build() needs to be called before the model and
-    the result needs to be passed to the optimization routines.
-  - Adds Gamma related library functions
-  - Removed the objective function and LL function and replaced it with
-    objective_per_observation and LL_per_observation.
-  - Introduced get_pre_eval_parameter_modifier in the model interface
-    for obvious speed gains.
+- The model builder now actually follows the builder pattern, as such model.build() needs to be called before the model and the result needs to be passed to the optimization routines.
+- Adds Gamma related library functions
+- Removed the objective function and LL function and replaced it with objective_per_observation and LL_per_observation.
+- Introduced get_pre_eval_parameter_modifier in the model interface for obvious speed gains.
 - Undid previous commit, it was not needed.
 - Small update to allow the model to signal for bounds.
 - Some updates to work with static maps in the model simulation function.

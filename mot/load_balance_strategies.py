@@ -7,7 +7,7 @@ a list of :class:`~mot.cl_environments.CLEnvironment` and a :class:`LoadBalanceS
 The :class:`~mot.cl_environments.CLEnvironment` encapsulate all information needed to run computations on its
 contained device. The :class:`LoadBalanceStrategy` chooses which environments (i.e. devices) to use for
 the computations and how to use them. The load balancing itself is done by appointing subsets of
-problems (voxels) to specific devices.
+problems to specific devices.
 """
 import logging
 import math

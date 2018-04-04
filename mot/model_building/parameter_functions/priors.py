@@ -1,7 +1,7 @@
 import numpy as np
 from mot.cl_data_type import SimpleCLDataType
 from mot.cl_function import CLFunction, SimpleCLFunction
-from mot.model_building.parameter_functions.proposals import GaussianProposal
+
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-06-19"
@@ -209,7 +209,7 @@ class ARDBeta(SimplePrior):
         from mot.model_building.parameters import FreeParameter
         extra_params = [FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'beta', False, 1, 1e-4, 1000,
                                       sampling_prior=ReciprocalPrior(),
-                                      sampling_proposal=GaussianProposal(0.01))]
+                                      sampling_proposal_std=0.01)]
 
         body = '''
             if(value < 0 || value > 1){
@@ -231,7 +231,7 @@ class ARDGaussian(SimplePrior):
         from mot.model_building.parameters import FreeParameter
         extra_params = [FreeParameter(SimpleCLDataType.from_string('mot_float_type'), 'alpha', False, 8, 1e-5, 1e4,
                                       sampling_prior=UniformWithinBoundsPrior(),
-                                      sampling_proposal=GaussianProposal(20))]
+                                      sampling_proposal_std=20)]
 
         body = '''
             if(value < 0 || value > 1){

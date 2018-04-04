@@ -33,7 +33,7 @@ return_code_labels = {
 
 class AbstractOptimizer(CLRoutine):
 
-    def __init__(self, cl_environments=None, load_balancer=None, patience=1, optimizer_settings=None, **kwargs):
+    def __init__(self, patience=1, optimizer_settings=None, **kwargs):
         """Create a new optimizer that will minimize the given model using the given environments.
 
         If the environment is None, a suitable default environment is created.
@@ -46,6 +46,8 @@ class AbstractOptimizer(CLRoutine):
             optimizer_options (dict): extra options one can set for the optimization routine. These are routine
                 dependent.
         """
+        super(AbstractOptimizer, self).__init__(**kwargs)
+
         self._optimizer_settings = optimizer_settings or {}
         if not isinstance(self._optimizer_settings, dict):
             raise ValueError('The given optimizer settings is not a dictionary.')
@@ -55,8 +57,6 @@ class AbstractOptimizer(CLRoutine):
         if 'patience' in self._optimizer_settings:
             self.patience = self._optimizer_settings['patience']
         self._optimizer_settings['patience'] = self.patience
-
-        super(AbstractOptimizer, self).__init__(cl_environments, load_balancer, **kwargs)
 
     @property
     def optimizer_settings(self):
@@ -70,14 +70,13 @@ class AbstractOptimizer(CLRoutine):
         """
         return self._optimizer_settings
 
-    def minimize(self, model, init_params=None):
+    def minimize(self, model, starting_positions):
         """Minimize the given model using the given environments.
 
         Args:
             model (AbstractModel): The model to minimize, instance of AbstractModel
-            init_params (ndarray): A starting point for every problem in the model, if not set we take
-                the default from the model itself. If given, it should be an matrix of shape (d, p) with d problems and
-                p parameter starting points.
+            starting_points (ndarray): The starting starting_positions for every problem in the model, it should be
+                an matrix of shape (d, p) with d problems and p parameter.
 
         Returns:
             OptimizationResults: the container with the optimization results
@@ -152,7 +151,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         super(AbstractParallelOptimizer, self).__init__(**kwargs)
         self._logger = logging.getLogger(__name__)
 
-    def minimize(self, model, init_params=None):
+    def minimize(self, model, starting_positions):
         self._logger.info('Entered optimization routine.')
         self._logger.info('Using MOT version {}'.format(__version__))
         self._logger.info('We will use a {} precision float type for the calculations.'.format(
@@ -170,10 +169,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         if model.double_precision:
             mot_float_dtype = np.float64
 
-        if init_params is None:
-            init_params = model.get_initial_parameters()
-
-        parameters = np.require(init_params, mot_float_dtype,
+        parameters = np.require(starting_positions, mot_float_dtype,
                                 requirements=['C', 'A', 'O', 'W'])
 
         nmr_params = parameters.shape[1]
@@ -323,7 +319,7 @@ class AbstractParallelOptimizerWorker(Worker):
         return call_args
 
     def _get_optimizer_cl_code(self):
-        """Get the optimization CL code that is called during optimization for each voxel.
+        """Get the optimization CL code that is called during optimization for each problem.
 
         This is normally called by the default implementation of _get_ll_calculating_kernel().
 
@@ -383,7 +379,7 @@ class AbstractParallelOptimizerWorker(Worker):
     def _get_optimizer_call_name(self):
         """Get the call name of the optimization routine.
 
-        This name is the name of the function called by the kernel to optimize a single voxel.
+        This name is the name of the function called by the kernel to optimize a single problem.
 
         Returns:
             str: The function name of the optimization function.

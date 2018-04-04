@@ -51,7 +51,7 @@ class TestRosenbrock(CLRoutineTestCase):
 
     def test_model(self):
         for optimizer in self.optimizers:
-            v = optimizer.minimize(self.model).get_optimization_result()[0]
+            v = optimizer.minimize(self.model, self.model.get_initial_parameters()).get_optimization_result()[0]
             for ind in range(self.model.get_nmr_inst_per_problem()):
                 self.assertAlmostEqual(float(v[ind]), 1.0, places=3)
 

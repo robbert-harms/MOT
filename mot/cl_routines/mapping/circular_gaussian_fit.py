@@ -24,8 +24,8 @@ class CircularGaussianFit(CLRoutine):
             tuple: mean and std arrays
         """
         all_kernel_data = {'samples': KernelInputArray(samples, 'mot_float_type'),
-                           'means': KernelInputAllocatedOutput(samples.shape[0], 'mot_float_type', is_readable=False),
-                           'stds': KernelInputAllocatedOutput(samples.shape[0], 'mot_float_type', is_readable=False),
+                           'means': KernelInputAllocatedOutput(samples.shape[0], 'mot_float_type'),
+                           'stds': KernelInputAllocatedOutput(samples.shape[0], 'mot_float_type'),
                            'nmr_samples': KernelInputScalar(samples.shape[1]),
                            'low': KernelInputScalar(low),
                            'high': KernelInputScalar(high),

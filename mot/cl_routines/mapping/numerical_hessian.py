@@ -150,9 +150,9 @@ class NumericalHessian(CLRoutine):
         kernel_data = {
             'derivatives': KernelInputArray(derivatives, 'double', offset_str='{problem_id} * ' + str(nmr_steps)),
             'richardson_extrapolations': KernelInputAllocatedOutput(
-                (nmr_problems * nmr_derivatives, nmr_convolutions_needed), 'double'),
+                (nmr_problems * nmr_derivatives, nmr_convolutions_needed), 'double', is_readable=True),
             'errors': KernelInputAllocatedOutput(
-                (nmr_problems * nmr_derivatives, final_nmr_convolutions), 'double'),
+                (nmr_problems * nmr_derivatives, final_nmr_convolutions), 'double', is_readable=True),
         }
 
         runner = RunProcedure(**self.get_cl_routine_kwargs())
@@ -174,8 +174,9 @@ class NumericalHessian(CLRoutine):
         kernel_data = {
             'derivatives': KernelInputArray(derivatives, 'double', offset_str='{problem_id} * ' + str(nmr_steps)),
             'extrapolations': KernelInputAllocatedOutput((nmr_problems * nmr_derivatives, nmr_extrapolations),
-                                                         'double'),
-            'errors': KernelInputAllocatedOutput((nmr_problems * nmr_derivatives, nmr_extrapolations), 'double'),
+                                                         'double', is_readable=True),
+            'errors': KernelInputAllocatedOutput((nmr_problems * nmr_derivatives, nmr_extrapolations), 'double',
+                                                 is_readable=True),
         }
 
         runner = RunProcedure(**self.get_cl_routine_kwargs())

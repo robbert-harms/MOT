@@ -785,7 +785,7 @@ class KernelInputLocalMemory(KernelInputData):
 
 class KernelInputArray(KernelInputData):
 
-    def __init__(self, data, ctype=None, offset_str=None, is_writable=False, is_readable=True):
+    def __init__(self, data, ctype=None, offset_str=None, is_writable=False, is_readable=True, ensure_zero_copy=False):
         """Loads the given array as a buffer into the kernel.
 
         By default, this will try to offset the data in the kernel by the stride of the first dimension multiplied
@@ -793,9 +793,11 @@ class KernelInputArray(KernelInputData):
         by ``{problem_id} * m``.
 
         This class will adapt the data to match the ctype (if necessary) and it might copy the data as a consecutive
-        array for direct memory access by the CL environment. Depending on the transformations, these values might
-        or might not write to the same array as was provided. In short, do not trust your reference to the input data
-        and always use :meth:`get_data` for retreiving return values.
+        array for direct memory access by the CL environment. Depending on those transformations, a copy of the original
+        array may be made. If ``is_writable`` is then set, the return values might then be written to a different
+        array. To get the output data after kernel execution, use the method :meth:`get_data`. Alternatively, set
+        ``ensure_zero_copy`` to True, this ensures that the return values are written to the same reference. This will
+        raise a ValueError though if the data has to be copied to be used in the kernel.
 
         Args:
             data (ndarray): the data to load in the kernel
@@ -805,6 +807,9 @@ class KernelInputArray(KernelInputData):
                 for no offset.
             is_writable (boolean): if the data must be loaded writable or not, defaults to False
             is_readable (boolean): if this data must be made readable
+            ensure_zero_copy (boolean): only used if ``is_writable`` is set to True. If set, we guarantee that the
+                return values are written to the same input array. This allows the user of this class to user their
+                reference to the underlying data, relieving the user of having to use :meth:`get_data`.
         """
         self._requirements = ['C', 'A', 'O']
         if is_writable:
@@ -814,25 +819,39 @@ class KernelInputArray(KernelInputData):
         if ctype and not ctype.startswith('mot_float_type'):
             self._data = convert_data_to_dtype(self._data, ctype)
 
+        if is_writable and ensure_zero_copy and self._data is not data:
+            raise ValueError('Zero copy was set but we had to make '
+                             'a copy to guarantee the "CAOW" requirements and the ctype requirements.')
+
         self._offset_str = offset_str
         self._is_writable = is_writable
         self._is_readable = is_readable
         self._ctype = ctype or dtype_to_ctype(data.dtype)
         self._mot_float_dtype = None
-        self._backup_original_data = None
+        self._backup_data_reference = None
+        self._ensure_zero_copy = ensure_zero_copy
 
     def set_mot_float_dtype(self, mot_float_dtype):
         self._mot_float_dtype = mot_float_dtype
 
         if self._ctype.startswith('mot_float_type'):
-            if self._backup_original_data is None:
-                self._backup_original_data = np.copy(self._data)
-            else:
-                self._data = np.copy(self._backup_original_data)
+            if self._backup_data_reference is not None:
+                self._data = self._backup_data_reference
+                self._backup_data_reference = None
 
-            self._data = convert_data_to_dtype(self._data, self._ctype,
-                                               mot_float_type=dtype_to_ctype(mot_float_dtype))
-            self._data = np.require(self._data, requirements=self._requirements)
+            if np.dtype(mot_float_dtype) == self._data.dtype:
+                return
+
+            new_data = convert_data_to_dtype(self._data, self._ctype,
+                                             mot_float_type=dtype_to_ctype(mot_float_dtype))
+            new_data = np.require(new_data, requirements=self._requirements)
+
+            if new_data is not self._data:
+                self._backup_data_reference = self._data
+                self._data = new_data
+
+                if self._is_writable and self._ensure_zero_copy:
+                    raise ValueError('We had to make a copy of the data while zero copy was set to True.')
 
     def _get_offset_str(self, problem_id_substitute):
         if self._offset_str is None:
@@ -910,10 +929,11 @@ class KernelInputArray(KernelInputData):
 
 class KernelInputAllocatedOutput(KernelInputData):
 
-    def __init__(self, shape, ctype, offset_str=None, is_writable=True, is_readable=True):
+    def __init__(self, shape, ctype, offset_str=None, is_writable=True, is_readable=False):
         """Allocate an output buffer of the given shape.
 
-        This is highly similar to :class:`~mot.utils.KernelInputArray` although it is writable by default.
+        This is similar to :class:`~mot.utils.KernelInputArray` although these objects are not readable but only
+        writable by default.
 
         This is meant to quickly allocate a buffer large enough to hold the data requested. After running an OpenCL
         kernel you can get the written data using the method :meth:`get_data`.
@@ -923,7 +943,7 @@ class KernelInputAllocatedOutput(KernelInputData):
             offset_str (str): the offset definition, can use ``{problem_id}`` for multiplication purposes. Set to 0
                 for no offset.
             is_writable (boolean): if the data must be loaded writable or not, defaults to True
-            is_readable (boolean): if this data must be made readable, defaults to True
+            is_readable (boolean): if this data must be made readable, defaults to False
         """
         self._requirements = ['C', 'A', 'O']
         if is_writable:

@@ -2,7 +2,6 @@ from mot.cl_data_type import SimpleCLDataType
 from mot.cl_parameter import SimpleCLFunctionParameter
 from mot.model_building.parameter_functions.numdiff_info import SimpleNumDiffInfo
 from mot.model_building.parameter_functions.priors import UniformWithinBoundsPrior
-from mot.model_building.parameter_functions.proposals import GaussianProposal
 from mot.model_building.parameter_functions.transformations import IdentityTransform
 
 __author__ = 'Robbert Harms'
@@ -80,21 +79,21 @@ class ProtocolParameter(InputDataParameter):
 class FreeParameter(SimpleCLFunctionParameter):
 
     def __init__(self, data_type, name, fixed, value, lower_bound, upper_bound,
-                 parameter_transform=None, sampling_proposal=None,
+                 parameter_transform=None, sampling_proposal_std=None,
                  sampling_prior=None, numdiff_info=None):
         """This are the kind of parameters that are generally meant to be optimized.
 
-        These parameters may optionally be fixed to a value or list of values for all voxels.
+        These parameters may optionally be fixed to a value or list of values for all problems.
 
         Args:
             data_type (str or mot.cl_data_type.SimpleCLDataType): the data type expected by this parameter
             name (str): The name of this parameter
             fixed (boolean): If this parameter is fixed to the value given
-            value (double or ndarray): A single value for all voxels or a list of values for each voxel
+            value (double or ndarray): A single value for all problems or a list of values for each problem.
             lower_bound (double): The lower bound of this parameter
             upper_bound (double): The upper bound of this parameter
             parameter_transform (AbstractTransformation): The parameter transformation function
-            sampling_proposal (ParameterProposal): The proposal function for use in model sampling
+            sampling_proposal_std (float): The proposal standard deviation, used in some MCMC sampling routines
             sampling_prior (ParameterPrior): The prior function for use in model sampling
             numdiff_info (mot.model_building.parameter_functions.numdiff_info.NumDiffInfo): the information
                 for taking the numerical derivative with respect to this parameter.
@@ -106,7 +105,7 @@ class FreeParameter(SimpleCLFunctionParameter):
         self._fixed = fixed
 
         self._parameter_transform = parameter_transform or IdentityTransform()
-        self._sampling_proposal = sampling_proposal or GaussianProposal(1.0)
+        self._sampling_proposal_std = sampling_proposal_std or 1
         self._sampling_prior = sampling_prior or UniformWithinBoundsPrior()
         self._numdiff_info = numdiff_info or SimpleNumDiffInfo()
 
@@ -131,8 +130,8 @@ class FreeParameter(SimpleCLFunctionParameter):
         return self._parameter_transform
 
     @property
-    def sampling_proposal(self):
-        return self._sampling_proposal
+    def sampling_proposal_std(self):
+        return self._sampling_proposal_std
 
     @property
     def sampling_prior(self):

@@ -1,4 +1,3 @@
-import numpy as np
 from mot.cl_routines.mapping.run_procedure import RunProcedure
 from ...utils import KernelInputArray, KernelInputScalar, SimpleNamedCLFunction, KernelInputLocalMemory, \
     KernelInputAllocatedOutput
@@ -39,15 +38,14 @@ class LogLikelihoodCalculator(CLRoutine):
         shape = parameters.shape
         if len(shape) > 2:
             all_kernel_data.update({
-                'log_likelihoods': KernelInputAllocatedOutput((shape[0], shape[2]), 'mot_float_type',
-                                                              is_readable=False),
+                'log_likelihoods': KernelInputAllocatedOutput((shape[0], shape[2]), 'mot_float_type'),
                 'nmr_params': KernelInputScalar(parameters.shape[1]),
                 'nmr_samples': KernelInputScalar(parameters.shape[2]),
                 'local_reduction_lls': KernelInputLocalMemory('double')
             })
         else:
             all_kernel_data.update({
-                'log_likelihoods': KernelInputAllocatedOutput((shape[0],), 'mot_float_type', is_readable=False),
+                'log_likelihoods': KernelInputAllocatedOutput((shape[0],), 'mot_float_type'),
                 'local_reduction_lls': KernelInputLocalMemory('double')
             })
 

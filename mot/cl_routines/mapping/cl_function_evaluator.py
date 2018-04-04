@@ -45,8 +45,7 @@ class CLFunctionEvaluator(CLRoutine):
         kernel_items = self._wrap_input_data(cl_function, input_data, double_precision)
 
         if cl_function.get_return_type() != 'void':
-            kernel_items['_results'] = KernelInputAllocatedOutput((nmr_data_points,), cl_function.get_return_type(),
-                                                                  is_readable=False)
+            kernel_items['_results'] = KernelInputAllocatedOutput((nmr_data_points,), cl_function.get_return_type())
 
         runner = RunProcedure(**self.get_cl_routine_kwargs())
         runner.run_procedure(self._wrap_cl_function(cl_function, kernel_items),
