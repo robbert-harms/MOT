@@ -20,14 +20,6 @@ mot.cl_routines.sampling.base module
     :undoc-members:
     :show-inheritance:
 
-mot.cl_routines.sampling.old_mcmc module
-----------------------------------------
-
-.. automodule:: mot.cl_routines.sampling.old_mcmc
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
 mot.cl_routines.sampling.scam module
 ------------------------------------
 

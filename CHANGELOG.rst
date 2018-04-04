@@ -2,6 +2,29 @@
 Changelog
 *********
 
+v0.4 (2018-04-04)
+=================
+This release provides a cleaner interface to the optimization and sampling routines.
+Furthermore, it improved the decoupling between the models and the MCMC samplers allowing to, in the future, add
+more MCMC samplers.
+
+Added
+-----
+- Adds additional patience parameter for the line search in the Powell algorithm.
+
+Changed
+-------
+- Completely restructured the MCMC sampling routines by decoupling the proposal distributions from the model functions.
+- Removed some weight models from the model builder and moved those to MDT.
+- Removed the 'get_initial_data' method from the model interface.
+
+Other
+-----
+- Renamed dependency_list to dependencies in the models and library functions.
+- Renamed parameter_list to parameters in the model functions.
+- Small caching and object initialization updates.
+
+
 v0.3.12 (2018-02-22)
 ====================
 
