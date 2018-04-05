@@ -358,7 +358,7 @@ class AbstractSampler(CLRoutine):
 
 class AbstractRWMSampler(AbstractSampler):
 
-    def __init__(self, model, starting_positions, proposal_stds, **kwargs):
+    def __init__(self, model, starting_positions, proposal_stds, use_random_scan=False, **kwargs):
         """An abstract basis for Random Walk Metropolis (RWM) samplers.
 
         Random Walk Metropolis (RWM) samplers require for every parameter and every modeling instance an proposal
@@ -369,9 +369,13 @@ class AbstractRWMSampler(AbstractSampler):
             starting_positions (ndarray): the starting positions for the sampler. Should be a two dimensional matrix
                 with for every modeling instance (first dimension) and every parameter (second dimension) a value.
             proposal_stds (ndarray): for every parameter and every modeling instance an initial proposal std.
+            use_random_scan (boolean): if we iterate over the parameters in a random order or in a linear order
+                at every sample iteration. By default we apply a system scan starting from the first dimension to the
+                last. With a random scan we randomize the indices every iteration.
         """
         super(AbstractRWMSampler, self).__init__(model, starting_positions, **kwargs)
         self._proposal_stds = np.require(np.copy(proposal_stds), requirements='CAOW', dtype=self._mot_float_dtype)
+        self._use_random_scan = use_random_scan
 
     def _get_kernel_data(self, nmr_samples, thinning, return_output):
         kernel_data = super(AbstractRWMSampler, self)._get_kernel_data(nmr_samples, thinning, return_output)
@@ -419,6 +423,22 @@ class AbstractRWMSampler(AbstractSampler):
         kernel_source = self._get_proposal_update_function(nmr_samples, thinning, return_output)
         kernel_source += self._at_acceptance_callback_c_func()
         kernel_source += proposal_finalize_func.get_cl_code()
+
+        if self._use_random_scan:
+            kernel_source += '''
+                void _shuffle(uint* array, uint n, void* rng_data){
+                    if(n > 1){
+                        for(uint i = 0; i < n - 1; i++){
+                          uint j = (uint)(frand(rng_data) * (n - i) + i); 
+                          
+                          uint tmp = array[j];
+                          array[j] = array[i];
+                          array[i] = tmp;
+                        }
+                    }
+                }
+            '''
+
         kernel_source += '''
             void _advanceSampler(
                     mot_data_struct* data,
@@ -440,8 +460,19 @@ class AbstractRWMSampler(AbstractSampler):
                         new_position[k] = current_position[k];
                     }
                 }
-
-                for(uint k = 0; k < ''' + str(self._nmr_params) + '''; k++){
+                barrier(CLK_LOCAL_MEM_FENCE);     
+        '''
+        if self._use_random_scan:
+            kernel_source += '''
+                uint indices[] = {''' + ', '.join(map(str, range(self._nmr_params))) + '''};
+                _shuffle(indices, ''' + str(self._nmr_params) + ''', rng_data);
+                
+                for(uint ind = 0; ind < ''' + str(self._nmr_params) + '''; ind++){
+                    uint k = indices[ind];    
+            '''
+        else:
+            kernel_source += 'for(uint k = 0; k < ' + str(self._nmr_params) + '; k++){'
+        kernel_source += '''
                     if(is_first_work_item){
                         new_position[k] += frandn(rng_data) * data->_proposal_stds[k];
                         ''' + proposal_finalize_func.get_cl_function_name() + '''(data, new_position);
@@ -471,13 +502,14 @@ class AbstractRWMSampler(AbstractSampler):
                         }
                     }
                 }
+                
                 if(is_first_work_item){
                     for(uint k = 0; k < ''' + str(self._nmr_params) + '''; k++){
                         current_position[k] = new_position[k];
-                    }
-                    
+                    }    
                     _updateProposalState(data, current_iteration, current_position);
                 }
+                barrier(CLK_LOCAL_MEM_FENCE);
             }
         '''
         return kernel_source
