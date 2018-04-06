@@ -137,25 +137,12 @@ class Rosenbrock(OptimizeModelInterface):
         '''
         return SimpleNamedCLFunction(func, func_name)
 
-    def get_model_eval_function(self):
-        fname = 'evaluateModel'
+    def get_objective_per_observation_function(self):
+        func_name = 'getObjectiveInstanceValue'
         func = '''
-            double ''' + fname + '''(void* data, const double* const x, uint observation_index){
+            mot_float_type ''' + func_name + '''(void* data, const mot_float_type* const x, uint observation_index){
                 uint i = observation_index;
                 return 100 * pown(x[i + 1] - pown(x[i], 2), 2) + pown(1 - x[i], 2);
-            }
-        '''
-        return SimpleNamedCLFunction(func, fname)
-
-    def get_objective_per_observation_function(self):
-        eval_func = self.get_model_eval_function()
-
-        func = eval_func.get_cl_code()
-
-        func_name = "getObjectiveInstanceValue"
-        func += '''
-            mot_float_type ''' + func_name + '''(void* data, const mot_float_type* const x, uint observation_index){
-                return ''' + eval_func.get_cl_function_name() + '''(data, x, observation_index);
             }
         '''
         return SimpleNamedCLFunction(func, func_name)
@@ -208,24 +195,12 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
         '''
         return SimpleNamedCLFunction(func, func_name)
 
-    def get_model_eval_function(self):
-        fname = 'evaluateModel'
-        func = '''
-            double ''' + fname + '''(void* data, const double* const x, uint k){
-                return pown(2 + 2 * (k+1) - exp((k+1) * x[0]) - exp((k+1) * x[1]), 2);
-            }
-        '''
-        return SimpleNamedCLFunction(func, fname)
-
     def get_objective_per_observation_function(self):
-        eval_func = self.get_model_eval_function()
-        func = eval_func.get_cl_code()
-
         func_name = "getObjectiveInstanceValue"
-
-        func += '''
+        func = '''
             mot_float_type ''' + func_name + '''(void* data, const mot_float_type* const x, uint observation_index){
-                return ''' + eval_func.get_cl_function_name() + '''(data, x, observation_index);
+                uint k = observation_index;
+                return pown(2 + 2 * (k+1) - exp((k+1) * x[0]) - exp((k+1) * x[1]), 2);
             }
         '''
         return SimpleNamedCLFunction(func, func_name)

@@ -153,7 +153,6 @@ class OptimizeModelBuilder(ModelBuilder):
                                    self.get_nmr_estimable_parameters(),
                                    self._get_initial_parameters(problems_to_analyze),
                                    self._get_pre_eval_parameter_modifier(),
-                                   self._get_model_eval_function(problems_to_analyze),
                                    self._get_objective_per_observation_function(problems_to_analyze),
                                    self.get_lower_bounds(),
                                    self.get_upper_bounds(),
@@ -472,46 +471,6 @@ class OptimizeModelBuilder(ModelBuilder):
         '''
         return SimpleNamedCLFunction(func, func_name)
 
-    def _get_model_eval_function(self, problems_to_analyze):
-        composite_model_function = self.get_composite_model_function()
-
-        def get_preliminary():
-            cl_preliminary = ''
-            cl_preliminary += composite_model_function.get_cl_code()
-            pre_model_function = self._get_pre_model_expression_eval_function(problems_to_analyze)
-            if pre_model_function:
-                cl_preliminary += pre_model_function
-            return cl_preliminary
-
-        def get_function_body():
-            param_listing = self._get_parameters_listing(
-                exclude_list=['{}.{}'.format(m.name, p.name).replace('.', '_') for (m, p) in
-                              self._model_functions_info.get_non_model_eval_param_listing()])
-
-            body = ''
-            body += dedent(param_listing.replace('\t', ' '*4))
-            body += self._get_pre_model_expression_eval_code(problems_to_analyze) or ''
-            body += '\n'
-            body += 'return ' + self._get_composite_model_function_signature(composite_model_function,
-                                                                             problems_to_analyze) + ';'
-            return body
-
-        function_name = '_evaluateModel'
-
-        cl_function = '''
-            double {function_name}(
-                    mot_data_struct* data,
-                    const mot_float_type* const x,
-                    uint observation_index){{
-
-                {body}
-            }}
-        '''.format(function_name=function_name, body=indent(get_function_body(), ' '*4*4)[4*4:])
-        cl_function = dedent(cl_function.replace('\t', ' '*4))
-
-        return_str = get_preliminary() + cl_function
-        return SimpleNamedCLFunction(return_str, function_name)
-
     def _get_objective_per_observation_function(self, problems_to_analyze):
         eval_function_info = self._get_model_eval_function(problems_to_analyze)
         eval_model_func = self._likelihood_function.get_log_likelihood_function(include_constant_terms=False)
@@ -539,6 +498,58 @@ class OptimizeModelBuilder(ModelBuilder):
             }
         '''
         return SimpleNamedCLFunction(func, func_name)
+
+    def _get_model_eval_function(self, problems_to_analyze):
+        """Get the evaluation function that evaluates the model at the given parameters.
+
+        The returned function should not do any error calculations,
+        it should merely return the result of evaluating the model for the given parameters.
+
+        Returns:
+            mot.utils.NamedCLFunction: a named CL function with the following signature:
+
+                .. code-block:: c
+
+                    double <func_name>(mot_data_struct* data, const mot_float_type* const x, uint observation_index);
+        """
+        composite_model_function = self.get_composite_model_function()
+
+        def get_preliminary():
+            cl_preliminary = ''
+            cl_preliminary += composite_model_function.get_cl_code()
+            pre_model_function = self._get_pre_model_expression_eval_function(problems_to_analyze)
+            if pre_model_function:
+                cl_preliminary += pre_model_function
+            return cl_preliminary
+
+        def get_function_body():
+            param_listing = self._get_parameters_listing(
+                exclude_list=['{}.{}'.format(m.name, p.name).replace('.', '_') for (m, p) in
+                              self._model_functions_info.get_non_model_eval_param_listing()])
+
+            body = ''
+            body += dedent(param_listing.replace('\t', ' ' * 4))
+            body += self._get_pre_model_expression_eval_code(problems_to_analyze) or ''
+            body += '\n'
+            body += 'return ' + self._get_composite_model_function_signature(composite_model_function,
+                                                                             problems_to_analyze) + ';'
+            return body
+
+        function_name = '_evaluateModel'
+
+        cl_function = '''
+            double {function_name}(
+                    mot_data_struct* data,
+                    const mot_float_type* const x,
+                    uint observation_index){{
+
+                {body}
+            }}
+        '''.format(function_name=function_name, body=indent(get_function_body(), ' ' * 4 * 4)[4 * 4:])
+        cl_function = dedent(cl_function.replace('\t', ' ' * 4))
+
+        return_str = get_preliminary() + cl_function
+        return SimpleNamedCLFunction(return_str, function_name)
 
     def _get_parameter_transformations(self):
         dec_func_list = []
@@ -1855,9 +1866,6 @@ class ParameterTransformedModel(OptimizeModelInterface):
         '''
         return SimpleNamedCLFunction(code, new_fname)
 
-    def get_model_eval_function(self):
-        return self._model.get_model_eval_function()
-
     def get_objective_per_observation_function(self):
         return self._model.get_objective_per_observation_function()
 
@@ -1911,7 +1919,7 @@ class SimpleOptimizeModel(NumericalDerivativeInterface):
 
     def __init__(self, used_problem_indices,
                  name, double_precision, kernel_data_info, nmr_problems, nmr_inst_per_problem,
-                 nmr_estimable_parameters, initial_parameters, pre_eval_parameter_modifier, eval_function,
+                 nmr_estimable_parameters, initial_parameters, pre_eval_parameter_modifier,
                  objective_per_observation_function, lower_bounds, upper_bounds, numdiff_step,
                  numdiff_scaling_factors, numdiff_use_bounds, numdiff_use_lower_bounds,
                  numdiff_use_upper_bounds, numdiff_param_transform):
@@ -1924,7 +1932,6 @@ class SimpleOptimizeModel(NumericalDerivativeInterface):
         self._nmr_estimable_parameters = nmr_estimable_parameters
         self._initial_parameters = initial_parameters
         self._pre_eval_parameter_modifier = pre_eval_parameter_modifier
-        self._eval_function = eval_function
         self._objective_per_observation_function = objective_per_observation_function
         self._lower_bounds = lower_bounds
         self._upper_bounds = upper_bounds
@@ -1957,9 +1964,6 @@ class SimpleOptimizeModel(NumericalDerivativeInterface):
 
     def get_pre_eval_parameter_modifier(self):
         return self._pre_eval_parameter_modifier
-
-    def get_model_eval_function(self):
-        return self._eval_function
 
     def get_objective_per_observation_function(self):
         return self._objective_per_observation_function

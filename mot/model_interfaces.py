@@ -84,7 +84,6 @@ class OptimizeModelInterface(object):
         * :meth:`~get_model_eval_function`
         * :meth:`~get_objective_per_observation_function`
 
-
         Returns:
             mot.utils.NamedCLFunction: a named CL function with the following signature:
 
@@ -93,21 +92,6 @@ class OptimizeModelInterface(object):
                     void <func_name>(mot_data_struct* data, mot_float_type* x);
 
                 Changes may happen in place in the ``x`` parameter.
-        """
-        raise NotImplementedError()
-
-    def get_model_eval_function(self):
-        """Get the evaluation function that evaluates the model at the given parameters.
-
-        The returned function should not do any error calculations,
-        it should merely return the result of evaluating the model for the given parameters.
-
-        Returns:
-            mot.utils.NamedCLFunction: a named CL function with the following signature:
-
-                .. code-block:: c
-
-                    double <func_name>(mot_data_struct* data, const mot_float_type* const x, uint observation_index);
         """
         raise NotImplementedError()
 
