@@ -50,6 +50,7 @@ class Rosenbrock(SampleModelInterface):
         return self.nmr_params
 
     def get_objective_per_observation_function(self):
+        """Used in Maximum Likelihood Estimation."""
         func_name = 'getObjectiveInstanceValue'
         func = '''
             mot_float_type ''' + func_name + '''(void* data, const mot_float_type* const x, uint observation_index){
@@ -66,7 +67,7 @@ class Rosenbrock(SampleModelInterface):
         return [np.inf] * self.nmr_params
 
     def get_log_likelihood_per_observation_function(self):
-        """Needed for sampling"""
+        """Used in Bayesian sampling."""
         fname = 'logLikelihood'
         func = '''
             double ''' + fname + '''(mot_data_struct* data, const mot_float_type* const x, uint observation_index){
@@ -77,7 +78,7 @@ class Rosenbrock(SampleModelInterface):
         return SimpleNamedCLFunction(func, fname)
 
     def get_log_prior_function(self, address_space_parameter_vector='private'):
-        """Needed for sampling"""
+        """Used in Bayesian sampling."""
         fname = 'logPrior'
         func = '''
             double ''' + fname + '''(mot_data_struct* data,
@@ -95,7 +96,7 @@ class Rosenbrock(SampleModelInterface):
 
 
 if __name__ == '__main__':
-    # How many Rosenbrock dimensions we want
+    # How many Rosenbrock dimensions/parameters we want to fit and sample
     nmr_params = 2
 
     # How many times we want to solve the Rosenbrock function
