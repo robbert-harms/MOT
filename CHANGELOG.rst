@@ -2,6 +2,20 @@
 Changelog
 *********
 
+v0.4.1 (2018-04-09)
+===================
+
+Added
+-----
+- Adds random scan to the Random Walk Metropolis algorithms.
+
+Other
+-----
+- Renamed 'get_nmr_estimable_parameters' to 'get_nmr_parameters'
+- Moved the model building modules to MDT.
+- Removed the eval function from the model interface.
+
+
 v0.4 (2018-04-04)
 =================
 This release provides a cleaner interface to the optimization and sampling routines.
