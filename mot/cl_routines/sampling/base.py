@@ -44,7 +44,7 @@ class AbstractSampler(CLRoutine):
         if self._starting_positions.shape[0] != model.get_nmr_problems():
             raise ValueError('The number of problems in the model does not match the number of starting points given.')
 
-        if self._starting_positions.shape[1] != model.get_nmr_estimable_parameters():
+        if self._starting_positions.shape[1] != model.get_nmr_parameters():
             raise ValueError('The number of parameters in the model does not match the number of '
                              'starting points given.')
 

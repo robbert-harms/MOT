@@ -28,7 +28,7 @@ class NMSimplex(AbstractParallelOptimizer):
 
                 .. code-block:: python
 
-                    n = model.get_nmr_estimable_parameters()
+                    n = model.get_nmr_parameters()
 
                     alpha = 1
                     beta  = 0.75 - 1.0 / (2 * n)
@@ -83,7 +83,7 @@ class NMSimplex(AbstractParallelOptimizer):
 
     def minimize(self, model, starting_positions):
         if self._optimizer_settings.get('adaptive_scales', True):
-            nmr_params = model.get_nmr_estimable_parameters()
+            nmr_params = model.get_nmr_parameters()
             self._optimizer_settings.update(
                 {'alpha': 1,
                  'beta': 0.75 - 1.0 / (2 * nmr_params),

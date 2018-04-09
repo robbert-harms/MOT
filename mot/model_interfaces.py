@@ -43,7 +43,7 @@ class OptimizeModelInterface(object):
         """
         raise NotImplementedError()
 
-    def get_nmr_estimable_parameters(self):
+    def get_nmr_parameters(self):
         """Get the number of estimable parameters.
 
         Returns:

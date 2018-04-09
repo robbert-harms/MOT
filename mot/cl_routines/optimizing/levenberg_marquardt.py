@@ -138,8 +138,8 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
             void evaluate(mot_float_type* x, void* data_void, mot_float_type* result){
                 mot_data_struct* data = (mot_data_struct*)data_void;
                 
-                mot_float_type x_model[''' + str(self._model.get_nmr_estimable_parameters()) + '''];
-                for(uint i = 0; i < ''' + str(self._model.get_nmr_estimable_parameters()) + '''; i++){
+                mot_float_type x_model[''' + str(self._model.get_nmr_parameters()) + '''];
+                for(uint i = 0; i < ''' + str(self._model.get_nmr_parameters()) + '''; i++){
                     x_model[i] = x[i];
                 }
                 ''' + param_modifier.get_cl_function_name() + '''(data, x_model);

@@ -2,7 +2,7 @@ import inspect
 import logging
 from contextlib import contextmanager
 from functools import reduce
-
+import hashlib
 import multiprocessing
 import numpy as np
 import pyopencl as cl
@@ -17,6 +17,32 @@ __date__ = "2014-05-13"
 __license__ = "LGPL v3"
 __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
+
+
+def add_include_guards(cl_str, guard_name=None):
+    """Add include guards to the given string.
+
+    If you are including the same body of CL code multiple times in a Kernel, it is important to add include
+    guards (https://en.wikipedia.org/wiki/Include_guard) around them to prevent the kernel from registering the function
+    twice.
+
+    Args:
+        cl_str (str): the piece of CL code as a string to which we add the include guards
+        guard_name (str): the name of the C pre-processor guard. If not given we use the MD5 hash of the
+            given cl string.
+
+    Returns:
+        str: the same string but then with include guards around them.
+    """
+    if not guard_name:
+        guard_name = 'GUARD_' + hashlib.md5(cl_str.encode('utf-8')).hexdigest()
+
+    return '''
+        # ifndef {guard_name}
+        # define {guard_name}
+        {func_str}
+        # endif // {guard_name}
+    '''.format(func_str=cl_str, guard_name=guard_name)
 
 
 def dtype_to_ctype(dtype):

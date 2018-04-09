@@ -46,7 +46,7 @@ class SBPlex(AbstractParallelOptimizer):
 
                 .. code-block:: python
 
-                    n = model.get_nmr_estimable_parameters()
+                    n = model.get_nmr_parameters()
 
                     alpha = 1
                     beta  = 0.75 - 1.0 / (2 * n)
@@ -106,7 +106,7 @@ class SBPlex(AbstractParallelOptimizer):
         super(SBPlex, self).__init__(patience=patience, optimizer_settings=optimizer_settings, **kwargs)
 
     def minimize(self, model, starting_positions):
-        nmr_params = model.get_nmr_estimable_parameters()
+        nmr_params = model.get_nmr_parameters()
 
         if self._optimizer_settings.get('adaptive_scales', True):
             self._optimizer_settings.update(

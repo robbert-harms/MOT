@@ -165,19 +165,19 @@ class AbstractParallelOptimizer(AbstractOptimizer):
 
         self._logger.info('Starting optimization preliminaries')
 
-        parameters = np.require(starting_positions, self._mot_float_dtype, requirements=['C', 'A', 'O', 'W'])
+        if len(starting_positions.shape) < 2:
+            starting_positions = starting_positions[..., None]
 
-        if len(parameters.shape) < 2:
-            parameters = parameters[..., None]
+        parameters = np.require(starting_positions, self._mot_float_dtype, requirements=['C', 'A', 'O', 'W'])
 
         if parameters.shape[0] != model.get_nmr_problems():
             raise ValueError('The number of problems in the model does not match the number of starting points given.')
 
-        if parameters.shape[1] != model.get_nmr_estimable_parameters():
+        if parameters.shape[1] != model.get_nmr_parameters():
             raise ValueError('The number of parameters in the model does not match the number of '
                              'starting points given.')
 
-        nmr_params = model.get_nmr_estimable_parameters()
+        nmr_params = model.get_nmr_parameters()
         return_codes = np.zeros((model.get_nmr_problems(),), dtype=np.int8, order='C')
 
         self._logger.info('Finished optimization preliminaries')
@@ -357,8 +357,8 @@ class AbstractParallelOptimizerWorker(Worker):
 
                 mot_data_struct* data = (mot_data_struct*)data_void;
 
-                mot_float_type x_model[''' + str(self._model.get_nmr_estimable_parameters()) + '''];
-                for(uint i = 0; i < ''' + str(self._model.get_nmr_estimable_parameters()) + '''; i++){
+                mot_float_type x_model[''' + str(self._model.get_nmr_parameters()) + '''];
+                for(uint i = 0; i < ''' + str(self._model.get_nmr_parameters()) + '''; i++){
                     x_model[i] = x[i];
                 }
 

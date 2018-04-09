@@ -123,7 +123,7 @@ class Rosenbrock(OptimizeModelInterface):
     def get_nmr_inst_per_problem(self):
         return self.n - 1
 
-    def get_nmr_estimable_parameters(self):
+    def get_nmr_parameters(self):
         return self.n
 
     def get_pre_eval_parameter_modifier(self):
@@ -178,7 +178,7 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
     def get_nmr_inst_per_problem(self):
         return 10
 
-    def get_nmr_estimable_parameters(self):
+    def get_nmr_parameters(self):
         return 2
 
     def get_pre_eval_parameter_modifier(self):

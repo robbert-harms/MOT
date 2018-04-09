@@ -46,14 +46,15 @@ class Rosenbrock(SampleModelInterface):
     def get_nmr_inst_per_problem(self):
         return self.nmr_params
 
-    def get_nmr_estimable_parameters(self):
+    def get_nmr_parameters(self):
         return self.nmr_params
 
     def get_objective_per_observation_function(self):
         """Used in Maximum Likelihood Estimation."""
-        func_name = 'getObjectiveInstanceValue'
+        func_name = 'rosenbrock_neglogLikelihood'
         func = '''
-            mot_float_type ''' + func_name + '''(void* data, const mot_float_type* const x, uint observation_index){
+            mot_float_type ''' + func_name + '''(mot_data_struct* data, const mot_float_type* const x, 
+                                                 uint observation_index){
                 uint i = observation_index;
                 return 100 * pown(x[i + 1] - pown(x[i], 2), 2) + pown(1 - x[i], 2);
             }
@@ -68,9 +69,10 @@ class Rosenbrock(SampleModelInterface):
 
     def get_log_likelihood_per_observation_function(self):
         """Used in Bayesian sampling."""
-        fname = 'logLikelihood'
+        fname = 'rosenbrock_logLikelihood'
         func = '''
-            double ''' + fname + '''(mot_data_struct* data, const mot_float_type* const x, uint observation_index){
+            double ''' + fname + '''(mot_data_struct* data, const mot_float_type* const x, 
+                                     uint observation_index){
                 uint i = observation_index;
                 return -(100 * pown(x[i + 1] - pown(x[i], 2), 2) + pown(1 - x[i], 2));
             }
@@ -79,7 +81,7 @@ class Rosenbrock(SampleModelInterface):
 
     def get_log_prior_function(self, address_space_parameter_vector='private'):
         """Used in Bayesian sampling."""
-        fname = 'logPrior'
+        fname = 'rosenbrock_logPrior'
         func = '''
             double ''' + fname + '''(mot_data_struct* data,
                     ''' + str(address_space_parameter_vector) + ''' const mot_float_type* const x){
@@ -134,6 +136,6 @@ if __name__ == '__main__':
     samples = sampling_output.get_samples()
 
     # Scatter plot of the first two dimensions, for the first 5 problems
-    for problem_instance in range(max(nmr_problems, 5)):
+    for problem_instance in range(min(nmr_problems, 5)):
         plt.scatter(samples[problem_instance, 0], samples[problem_instance, 1])
         plt.show()
