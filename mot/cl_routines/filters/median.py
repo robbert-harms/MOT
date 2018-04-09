@@ -12,8 +12,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 class MedianFilter(AbstractFilter):
 
     def _get_worker_generator(self, *args):
-        return lambda cl_environment: _MedianFilterWorker(
-            cl_environment, self.get_compile_flags_list(double_precision=True), *args)
+        return lambda cl_environment: _MedianFilterWorker(cl_environment, self.get_compile_flags_list(), *args)
 
 
 class _MedianFilterWorker(AbstractFilterWorker):

@@ -15,7 +15,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class AbstractFilter(CLRoutine):
 
-    def __init__(self, size, cl_environments=None, load_balancer=None):
+    def __init__(self, size, double_precision=True, **kwargs):
         """Initialize the filter routine.
 
         Args:
@@ -32,11 +32,11 @@ class AbstractFilter(CLRoutine):
                 Either way this value is the distance to the left and to the right of each value.
                 That means that the total kernel size is the product of 1 + 2*s for each size s of each dimension.
         """
-        super(AbstractFilter, self).__init__(cl_environments=cl_environments, load_balancer=load_balancer)
+        super(AbstractFilter, self).__init__(double_precision=double_precision, **kwargs)
         self.size = size
         self._logger = logging.getLogger(__name__)
 
-    def filter(self, value, mask=None, double_precision=False, nmr_of_times=1):
+    def filter(self, value, mask=None, nmr_of_times=1):
         """Filter the given volumes in the given dictionary.
 
         If a dict is given as a value the filtering is applied to every value in the dictionary. This can be spread
@@ -48,7 +48,6 @@ class AbstractFilter(CLRoutine):
             mask (array like): A single array of the same dimension as the input value. This can be used to
                 mask values from being used by the filtering routines. They are not used for filtering other values
                 and are not filtered themselves.
-            double_precision (boolean): if we will use double or float
             nmr_of_times (int): how many times we would like to repeat the filtering (per input volume).
 
         Returns:
@@ -60,33 +59,29 @@ class AbstractFilter(CLRoutine):
         if nmr_of_times == 1:
             self._logger.info('Applying filtering with filter {0}'.format(self.__class__.__name__))
             if isinstance(value, dict):
-                return self._filter(value, mask, double_precision)
+                return self._filter(value, mask)
             else:
-                return self._filter({'value': value}, mask, double_precision)['value']
+                return self._filter({'value': value}, mask)['value']
         else:
-            filtered = self.filter(value, mask, double_precision, 1)
-            return self.filter(filtered, mask, double_precision, nmr_of_times - 1)
+            filtered = self.filter(value, mask, 1)
+            return self.filter(filtered, mask, nmr_of_times - 1)
 
-    def _filter(self, volumes_dict, mask, double_precision):
+    def _filter(self, volumes_dict, mask):
         results_dict = {}
-
-        np_dtype = np.float32
-        if double_precision:
-            np_dtype = np.float64
 
         for key, value in volumes_dict.items():
             if len(value.shape) > 3 and value.shape[3] > 1:
                 raise ValueError('The given volume {} is a 4d volume with a 4th dimension >1. We can not use this.')
 
-            volumes_dict[key] = value.astype(dtype=np_dtype, copy=False, order='C')
-            results_dict[key] = np.zeros_like(volumes_dict[key], dtype=np_dtype, order='C')
+            volumes_dict[key] = value.astype(dtype=self._mot_float_dtype, copy=False, order='C')
+            results_dict[key] = np.zeros_like(volumes_dict[key], dtype=self._mot_float_dtype, order='C')
 
         if mask is not None:
             mask = mask.astype(np.int8, order='C', copy=True)
 
         volumes_list = list(volumes_dict.items())
         workers = self._create_workers(self._get_worker_generator(self, results_dict, volumes_list, mask,
-                                                                  double_precision))
+                                                                  self._double_precision))
         self._load_balancer.process(workers, len(volumes_list))
 
         return results_dict
@@ -99,7 +94,7 @@ class AbstractFilter(CLRoutine):
         Returns:
             the python callback for generating the worker
         """
-        return lambda cl_environment: AbstractFilterWorker(cl_environment, self.get_compile_flags_list(args[-1]), *args)
+        return lambda cl_environment: AbstractFilterWorker(cl_environment, self.get_compile_flags_list(), *args)
 
 
 class AbstractFilterWorker(Worker):

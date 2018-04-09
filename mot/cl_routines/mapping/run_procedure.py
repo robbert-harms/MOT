@@ -17,8 +17,7 @@ class RunProcedure(CLRoutine):
         """This class can run any arbitrary given CL procedure on the given set of data."""
         super(RunProcedure, self).__init__(**kwargs)
 
-    def run_procedure(self, cl_function, kernel_data, nmr_instances, double_precision=False,
-                      use_local_reduction=False):
+    def run_procedure(self, cl_function, kernel_data, nmr_instances, use_local_reduction=False):
         """Run the given function/procedure on the given set of data.
 
         This class will wrap the given CL function in a kernel call and execute that that for every data instance using
@@ -30,14 +29,13 @@ class RunProcedure(CLRoutine):
             kernel_data (dict[str: mot.utils.KernelInputData]): the data to use as input to the function
                 all the data will be wrapped in a single ``mot_data_struct``.
             nmr_instances (int): the number of parallel threads to run (used as ``global_size``)
-            double_precision (boolean): if we want to run in double precision. Defaults to True.
             use_local_reduction (boolean): set this to True if you want to use local memory reduction in
                  your CL procedure. If this is set to True we will multiply the global size (given by the nmr_instances)
                  by the work group sizes.
         """
         workers = self._create_workers(lambda cl_environment: _ProcedureWorker(
-            cl_environment, self.get_compile_flags_list(True),
-            cl_function, kernel_data, double_precision, use_local_reduction))
+            cl_environment, self.get_compile_flags_list(),
+            cl_function, kernel_data, self._double_precision, use_local_reduction))
         self.load_balancer.process(workers, nmr_instances)
 
 

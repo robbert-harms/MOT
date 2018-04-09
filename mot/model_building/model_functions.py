@@ -1,5 +1,5 @@
 from mot.cl_data_type import SimpleCLDataType
-from mot.cl_function import CLFunction, SimpleCLFunction, CLPrototype, SimpleCLPrototype
+from mot.cl_function import CLFunction, SimpleCLFunction
 from mot.model_building.parameter_functions.numdiff_info import SimpleNumDiffInfo
 from mot.model_building.parameters import FreeParameter
 from mot.model_building.parameter_functions.priors import UniformWithinBoundsPrior
@@ -11,8 +11,11 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class ModelCLPrototype(CLPrototype):
+class ModelCLFunction(CLFunction):
+    """Interface for a basic model function just for optimization purposes.
 
+    If you need to sample the model, use the extended version of this interface :class:`SampleModelCLFunction`.
+    """
     @property
     def name(self):
         """Get the name of this model function.
@@ -31,7 +34,11 @@ class ModelCLPrototype(CLPrototype):
         raise NotImplementedError()
 
 
-class SampleModelCLPrototype(ModelCLPrototype):
+class SampleModelCLFunction(ModelCLFunction):
+    """Extended version of a model function for use in sampling.
+
+    This adds functions to retrieve priors about this function.
+    """
 
     def get_prior_parameters(self, parameter):
         """Get the prior parameters of the given parameter.
@@ -54,23 +61,10 @@ class SampleModelCLPrototype(ModelCLPrototype):
         raise NotImplementedError()
 
 
-class ModelCLFunction(CLFunction, ModelCLPrototype):
-    """Interface for a basic model function just for optimization purposes.
+class SimpleModelCLFunction(SampleModelCLFunction, SimpleCLFunction):
 
-    If you need to sample the model, use the extended version of this interface :class:`SampleModelCLFunction`.
-    """
-
-
-class SampleModelCLFunction(ModelCLFunction, SampleModelCLPrototype):
-    """Extended version of a model function for use in sampling.
-
-    This adds functions to retrieve priors about this function.
-    """
-
-
-class SimpleSampleModelCLPrototype(SimpleCLPrototype, SampleModelCLPrototype):
-
-    def __init__(self, return_type, name, cl_function_name, parameters, model_function_priors=None):
+    def __init__(self, return_type, name, cl_function_name, parameters, cl_body, dependencies=(),
+                 model_function_priors=None, cl_extra=None):
         """This CL function is for all estimable models
 
         Args:
@@ -78,10 +72,14 @@ class SimpleSampleModelCLPrototype(SimpleCLPrototype, SampleModelCLPrototype):
             name (str): The name of the model
             cl_function_name (string): The name of the CL function
             parameters (list or tuple of CLFunctionParameter): The list of parameters required for this function
+            cl_body (str): the cl body of this function
+            dependencies (list or tuple of CLFunction): The list of CL libraries this function depends on
             model_function_priors (list of mot.cl_function.CLFunction): list of priors concerning this whole model
                 function. The parameter names of the given functions must match those of this function.
         """
-        super(SimpleSampleModelCLPrototype, self).__init__(return_type, cl_function_name, parameters)
+        super(SimpleModelCLFunction, self).__init__(return_type, cl_function_name, parameters,
+                                                    cl_body, dependencies=dependencies, cl_extra=cl_extra)
+
         self._name = name
         self._model_function_priors = model_function_priors or []
         if isinstance(self._model_function_priors, CLFunction):
@@ -137,42 +135,6 @@ class SimpleSampleModelCLPrototype(SimpleCLPrototype, SampleModelCLPrototype):
             return return_params
 
         return get_prior_parameters([parameter])
-
-
-class SimpleModelCLFunction(SampleModelCLFunction, SimpleCLFunction):
-
-    def __init__(self, return_type, name, cl_function_name, parameters, cl_body, dependencies=(),
-                 model_function_priors=None, cl_extra=None):
-        """This CL function is for all estimable models
-
-        Args:
-            return_type (str): the CL return type of the function
-            name (str): The name of the model
-            cl_function_name (string): The name of the CL function
-            parameters (list or tuple of CLFunctionParameter): The list of parameters required for this function
-            cl_body (str): the cl body of this function
-            dependencies (list or tuple of CLFunction): The list of CL libraries this function depends on
-            model_function_priors (list of mot.cl_function.CLFunction): list of priors concerning this whole model
-                function. The parameter names of the given functions must match those of this function.
-        """
-        super(SimpleModelCLFunction, self).__init__(return_type, cl_function_name, parameters,
-                                                    cl_body, dependencies=dependencies, cl_extra=cl_extra)
-
-        self._prototype = SimpleSampleModelCLPrototype(return_type, name, cl_function_name,
-                                                       parameters, model_function_priors=model_function_priors)
-
-    @property
-    def name(self):
-        return self._prototype.name
-
-    def get_model_function_priors(self):
-        return self._prototype.get_model_function_priors()
-
-    def get_free_parameters(self):
-        return self._prototype.get_free_parameters()
-
-    def get_prior_parameters(self, parameter):
-        return self._prototype.get_prior_parameters(parameter)
 
 
 class WeightType(SimpleModelCLFunction):

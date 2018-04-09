@@ -1,5 +1,6 @@
 from mot import configuration
 from mot.configuration import get_compile_flags_to_disable_in_double_precision
+import numpy as np
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-04-26"
@@ -10,7 +11,8 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class CLRoutine(object):
 
-    def __init__(self, cl_environments=None, load_balancer=None, compile_flags=None, **kwargs):
+    def __init__(self, cl_environments=None, load_balancer=None, compile_flags=None,
+                 double_precision=False, **kwargs):
         """Base class for CL routines.
 
         Args:
@@ -20,10 +22,17 @@ class CLRoutine(object):
                 If None is given we use the defaults in the current configuration.
             compile_flags (dict): the list of compile flags to use during model fitting. As values use the
                 flag name, as keys a boolean flag indicating if that one is active.
+            double_precision (boolean): if we apply the computations in double precision or in single float precision.
+                By default we go for single float precision.
         """
         self._cl_environments = cl_environments
         self._load_balancer = load_balancer
         self.compile_flags = compile_flags
+
+        self._double_precision = double_precision
+        self._mot_float_dtype = np.float32
+        if self._double_precision:
+            self._mot_float_dtype = np.float64
 
         if self._cl_environments is None:
             self._cl_environments = configuration.get_cl_environments()
@@ -43,7 +52,8 @@ class CLRoutine(object):
         """
         return dict(cl_environments=self.cl_environments,
                     load_balancer=self.load_balancer,
-                    compile_flags=self.compile_flags)
+                    compile_flags=self.compile_flags,
+                    double_precision=self.double_precision)
 
     def set_compile_flag(self, compile_flag, enable):
         """Enable or disable the given compile flag.
@@ -54,20 +64,15 @@ class CLRoutine(object):
         """
         self.compile_flags.update({compile_flag: enable})
 
-    def get_compile_flags_list(self, double_precision=True):
-        """Get a list of the enabled compile flags.
-
-        Args:
-            double_precision (boolean): if this is set to True we remove some of the Flags that are only applicable
-                when running in float mode. More specifically, this will set cl-single-precision-constant to False.
-                Set this to False to disable this behaviour and use the flags as specified in the config.
+    def get_compile_flags_list(self):
+        """Get a list of the enabled and applicable compile flags.
 
         Returns:
             list: the list of enabled compile flags.
         """
         elements = [flag for flag, enabled in self.compile_flags.items() if enabled]
 
-        if double_precision:
+        if self._double_precision:
             elements_to_remove = get_compile_flags_to_disable_in_double_precision()
             elements = list(filter(lambda e: e not in elements_to_remove, elements))
 
@@ -89,6 +94,17 @@ class CLRoutine(object):
     @load_balancer.setter
     def load_balancer(self, load_balancer):
         self._load_balancer = load_balancer
+
+    @property
+    def double_precision(self):
+        return self._double_precision
+
+    @double_precision.setter
+    def double_precision(self, double_precision):
+        self._double_precision = double_precision
+        self._mot_float_dtype = np.float32
+        if self._double_precision:
+            self._mot_float_dtype = np.float64
 
     def _create_workers(self, worker_generating_cb):
         """Create workers for all the CL environments in current use.

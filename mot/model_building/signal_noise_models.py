@@ -1,4 +1,4 @@
-from mot.cl_parameter import SimpleCLFunctionParameter
+from mot.cl_function import SimpleCLFunctionParameter
 from mot.model_building.parameters import FreeParameter
 from mot.model_building.model_functions import SimpleModelCLFunction
 from mot.model_building.parameter_functions.transformations import CosSqrClampTransform

@@ -2,6 +2,7 @@ from mot.cl_routines.optimizing.multi_step_optimizer import MultiStepOptimizer
 from mot.cl_routines.optimizing.random_restart import RandomRestart
 from mot.cl_routines.optimizing.sbplex import SBPlex
 from mot.cl_routines.sampling.amwg import AdaptiveMetropolisWithinGibbs
+from mot.cl_routines.sampling.scam import SingleComponentAdaptiveMetropolis
 from .cl_routines.optimizing.levenberg_marquardt import LevenbergMarquardt
 from .cl_routines.filters.gaussian import GaussianFilter
 from .cl_routines.filters.mean import MeanFilter
@@ -18,7 +19,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
 optimizers = [LevenbergMarquardt, Powell, NMSimplex, SBPlex, MultiStepOptimizer, RandomRestart]
-samplers = [AdaptiveMetropolisWithinGibbs]
+samplers = [AdaptiveMetropolisWithinGibbs, SingleComponentAdaptiveMetropolis]
 filters = [GaussianFilter, MeanFilter, MedianFilter]
 load_balance_strategies = [EvenDistribution, RuntimeLoadBalancing, PreferGPU, PreferCPU, PreferSpecificEnvironment]
 

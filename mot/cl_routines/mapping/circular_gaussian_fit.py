@@ -32,8 +32,7 @@ class CircularGaussianFit(CLRoutine):
                            }
 
         runner = RunProcedure(**self.get_cl_routine_kwargs())
-        runner.run_procedure(self._get_wrapped_function(), all_kernel_data, samples.shape[0],
-                             double_precision=(samples.dtype == np.float64))
+        runner.run_procedure(self._get_wrapped_function(), all_kernel_data, samples.shape[0])
 
         return all_kernel_data['means'].get_data(), all_kernel_data['stds'].get_data()
 

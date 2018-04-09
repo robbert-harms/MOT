@@ -39,7 +39,7 @@ class TestRosenbrock(CLRoutineTestCase):
             output = optimizer.minimize(self.model, np.array([[3] * 5]))
             v = output.get_optimization_result()
             for ind in range(2):
-                self.assertAlmostEqual(v[0, ind], 1, places=4)
+                self.assertAlmostEqual(v[0, ind], 1, places=3)
 
         def get_initial_parameters(self):
             params = np.ones((1, self.n)) * 3
@@ -58,7 +58,7 @@ class TestLSQNonLinExample(CLRoutineTestCase):
             output = optimizer.minimize(self.model, np.array([[0.3, 0.4]]))
             v = output.get_optimization_result()
             for ind in range(2):
-                self.assertAlmostEqual(v[0, ind], 0.2578, places=4)
+                self.assertAlmostEqual(v[0, ind], 0.2578, places=3)
 
 
 class TestFilters(CLRoutineTestCase):
@@ -109,9 +109,6 @@ class Rosenbrock(OptimizeModelInterface):
         """When optimized the parameters should all be equal to 1."""
         super(OptimizeModelInterface, self).__init__()
         self.n = n
-
-    def double_precision(self):
-        return True
 
     @property
     def name(self):
@@ -167,9 +164,6 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
 
         """
         super(OptimizeModelInterface, self).__init__()
-
-    def double_precision(self):
-        return True
 
     @property
     def name(self):

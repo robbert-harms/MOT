@@ -93,7 +93,7 @@ class NMSimplex(AbstractParallelOptimizer):
         return super(NMSimplex, self).minimize(model, starting_positions)
 
     def _get_worker_generator(self, *args):
-        return lambda cl_environment: NMSimplexWorker(cl_environment, *args)
+        return lambda cl_environment: NMSimplexWorker(cl_environment, self._double_precision, *args)
 
 
 class NMSimplexWorker(AbstractParallelOptimizerWorker):

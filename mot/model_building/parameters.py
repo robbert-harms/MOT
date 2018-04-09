@@ -1,5 +1,5 @@
 from mot.cl_data_type import SimpleCLDataType
-from mot.cl_parameter import SimpleCLFunctionParameter
+from mot.cl_function import SimpleCLFunctionParameter
 from mot.model_building.parameter_functions.numdiff_info import SimpleNumDiffInfo
 from mot.model_building.parameter_functions.priors import UniformWithinBoundsPrior
 from mot.model_building.parameter_functions.transformations import IdentityTransform

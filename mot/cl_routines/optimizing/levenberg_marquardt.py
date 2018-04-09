@@ -45,7 +45,7 @@ class LevenbergMarquardt(AbstractParallelOptimizer):
         super(LevenbergMarquardt, self).__init__(patience=patience, optimizer_settings=optimizer_settings, **kwargs)
 
     def _get_worker_generator(self, *args):
-        return lambda cl_environment: LevenbergMarquardtWorker(cl_environment, *args)
+        return lambda cl_environment: LevenbergMarquardtWorker(cl_environment, self._double_precision, *args)
 
 
 class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):

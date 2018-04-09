@@ -12,19 +12,14 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class CalculateDependentParameters(CLRoutine):
 
-    def __init__(self, double_precision=False, **kwargs):
+    def __init__(self, **kwargs):
         """CL code for calculating the dependent parameters.
 
         Some of the models may contain parameter dependencies. We would like to return the maps for these parameters
         as well as all the other maps. Since the dependencies are specified in CL, we have to recourse to CL to
         calculate these maps.
-
-        Args:
-            double_precision (boolean): if we will use the double (True) or single floating (False) type
-                for the calculations
         """
         super(CalculateDependentParameters, self).__init__(**kwargs)
-        self._double_precision = double_precision
 
     def calculate(self, kernel_data, estimated_parameters_list, parameters_listing, dependent_parameter_names):
         """Calculate the dependent parameters
@@ -51,8 +46,7 @@ class CalculateDependentParameters(CLRoutine):
             (estimated_parameters_list[0].shape[0], len(dependent_parameter_names)), 'mot_float_type')
 
         runner = RunProcedure(**self.get_cl_routine_kwargs())
-        runner.run_procedure(cl_named_func, all_kernel_data, estimated_parameters_list[0].shape[0],
-                             double_precision=self._double_precision)
+        runner.run_procedure(cl_named_func, all_kernel_data, estimated_parameters_list[0].shape[0])
 
         return all_kernel_data['_results'].get_data()
 

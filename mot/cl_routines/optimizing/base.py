@@ -74,7 +74,7 @@ class AbstractOptimizer(CLRoutine):
         """Minimize the given model using the given environments.
 
         Args:
-            model (AbstractModel): The model to minimize, instance of AbstractModel
+            model (mot.model_interfaces.OptimizeModelInterface): The model to minimize
             starting_points (ndarray): The starting starting_positions for every problem in the model, it should be
                 an matrix of shape (d, p) with d problems and p parameter.
 
@@ -155,31 +155,35 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         self._logger.info('Entered optimization routine.')
         self._logger.info('Using MOT version {}'.format(__version__))
         self._logger.info('We will use a {} precision float type for the calculations.'.format(
-            'double' if model.double_precision else 'single'))
+            'double' if self._double_precision else 'single'))
         for env in self.load_balancer.get_used_cl_environments(self.cl_environments):
             self._logger.info('Using device \'{}\'.'.format(str(env)))
-        self._logger.info('Using compile flags: {}'.format(self.get_compile_flags_list(model.double_precision)))
+        self._logger.info('Using compile flags: {}'.format(self.get_compile_flags_list()))
         self._logger.info('We will use the optimizer {} '
                           'with optimizer settings {}'.format(self.__class__.__name__,
                                                               self._optimizer_settings))
 
         self._logger.info('Starting optimization preliminaries')
 
-        mot_float_dtype = np.float32
-        if model.double_precision:
-            mot_float_dtype = np.float64
+        parameters = np.require(starting_positions, self._mot_float_dtype, requirements=['C', 'A', 'O', 'W'])
 
-        parameters = np.require(starting_positions, mot_float_dtype,
-                                requirements=['C', 'A', 'O', 'W'])
+        if len(parameters.shape) < 2:
+            parameters = parameters[..., None]
 
-        nmr_params = parameters.shape[1]
+        if parameters.shape[0] != model.get_nmr_problems():
+            raise ValueError('The number of problems in the model does not match the number of starting points given.')
 
-        return_codes = np.zeros((parameters.shape[0],), dtype=np.int8, order='C')
+        if parameters.shape[1] != model.get_nmr_estimable_parameters():
+            raise ValueError('The number of parameters in the model does not match the number of '
+                             'starting points given.')
+
+        nmr_params = model.get_nmr_estimable_parameters()
+        return_codes = np.zeros((model.get_nmr_problems(),), dtype=np.int8, order='C')
 
         self._logger.info('Finished optimization preliminaries')
         self._logger.info('Starting optimization')
         workers = self._create_workers(self._get_worker_generator(self, model, parameters,
-                                                                  nmr_params, return_codes, mot_float_dtype,
+                                                                  nmr_params, return_codes, self._mot_float_dtype,
                                                                   self._optimizer_settings, ))
         self.load_balancer.process(workers, model.get_nmr_problems())
         self._logger.info('Finished optimization')
@@ -195,12 +199,12 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         Returns:
             the python callback for generating the worker
         """
-        return lambda cl_environment: AbstractParallelOptimizerWorker(cl_environment, *args)
+        return lambda cl_environment: AbstractParallelOptimizerWorker(cl_environment, self._double_precision, *args)
 
 
 class AbstractParallelOptimizerWorker(Worker):
 
-    def __init__(self, cl_environment, parent_optimizer, model, starting_points,
+    def __init__(self, cl_environment, double_precision, parent_optimizer, model, starting_points,
                  nmr_params, return_codes, mot_float_dtype, optimizer_settings=None):
         super(AbstractParallelOptimizerWorker, self).__init__(cl_environment)
 
@@ -211,7 +215,7 @@ class AbstractParallelOptimizerWorker(Worker):
         self._model = model
         self._data_info = self._model.get_kernel_data()
         self._data_struct_manager = KernelInputDataManager(self._data_info, mot_float_dtype)
-        self._double_precision = model.double_precision
+        self._double_precision = double_precision
         self._nmr_params = nmr_params
 
         self._return_codes = return_codes

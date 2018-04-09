@@ -50,14 +50,11 @@ class SingleComponentAdaptiveMetropolis(AbstractRWMSampler):
         self._scaling_factor = scaling_factor
         self._epsilon = epsilon
 
-        mot_float_dtype = np.float32
-        if model.double_precision:
-            mot_float_dtype = np.float64
-
-        self._parameter_means = np.zeros((self._nmr_problems, self._nmr_params), dtype=mot_float_dtype, order='C')
-        self._parameter_variances = np.zeros((self._nmr_problems, self._nmr_params), dtype=mot_float_dtype, order='C')
+        self._parameter_means = np.zeros((self._nmr_problems, self._nmr_params), dtype=self._mot_float_dtype, order='C')
+        self._parameter_variances = np.zeros((self._nmr_problems, self._nmr_params),
+                                             dtype=self._mot_float_dtype, order='C')
         self._parameter_variance_update_m2s = np.zeros((self._nmr_problems, self._nmr_params),
-                                                       dtype=mot_float_dtype, order='C')
+                                                       dtype=self._mot_float_dtype, order='C')
 
     def _get_kernel_data(self, nmr_samples, thinning, return_output):
         kernel_data = super(SingleComponentAdaptiveMetropolis, self)._get_kernel_data(nmr_samples, thinning, return_output)

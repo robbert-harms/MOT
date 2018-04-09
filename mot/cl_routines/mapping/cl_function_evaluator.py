@@ -20,7 +20,7 @@ class CLFunctionEvaluator(CLRoutine):
         """
         super(CLFunctionEvaluator, self).__init__(**kwargs)
 
-    def evaluate(self, cl_function, input_data, double_precision=False, return_inputs=False):
+    def evaluate(self, cl_function, input_data, return_inputs=False):
         """Evaluate the given CL function at the given data points.
 
         This function will convert possible dots in the parameter name to underscores for in the CL kernel.
@@ -31,7 +31,6 @@ class CLFunctionEvaluator(CLRoutine):
                 :class:`mot.utils.KernelInputData` object. Each of these input datasets must either be a scalar or be
                 of equal length in the first dimension. The user can either input raw ndarrays or input
                 KernelInputData objects. If an ndarray is given we will load it read/write by default.
-            double_precision (boolean): if the function should be evaluated in double precision or not
             return_inputs (boolean): if we are interested in the values of the input arrays after evaluation.
 
         Returns:
@@ -42,14 +41,13 @@ class CLFunctionEvaluator(CLRoutine):
         """
         nmr_data_points = self._get_minimum_data_length(input_data)
 
-        kernel_items = self._wrap_input_data(cl_function, input_data, double_precision)
+        kernel_items = self._wrap_input_data(cl_function, input_data)
 
         if cl_function.get_return_type() != 'void':
             kernel_items['_results'] = KernelInputAllocatedOutput((nmr_data_points,), cl_function.get_return_type())
 
         runner = RunProcedure(**self.get_cl_routine_kwargs())
-        runner.run_procedure(self._wrap_cl_function(cl_function, kernel_items),
-                             kernel_items, nmr_data_points, double_precision=double_precision)
+        runner.run_procedure(self._wrap_cl_function(cl_function, kernel_items), kernel_items, nmr_data_points)
 
         if cl_function.get_return_type() != 'void':
             return_value = kernel_items['_results'].get_data()
@@ -61,7 +59,7 @@ class CLFunctionEvaluator(CLRoutine):
             return return_value, {key: value.get_data() for key, value in kernel_items.items()}
         return return_value
 
-    def _wrap_input_data(self, cl_function, input_data, double_precision):
+    def _wrap_input_data(self, cl_function, input_data):
         min_data_length = self._get_minimum_data_length(input_data)
 
         kernel_items = {}

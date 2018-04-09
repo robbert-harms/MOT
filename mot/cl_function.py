@@ -1,6 +1,7 @@
+from copy import copy
+import six
+from mot.cl_data_type import SimpleCLDataType
 from textwrap import dedent, indent
-
-from mot.cl_parameter import CLFunctionParameter, SimpleCLFunctionParameter
 from mot.cl_routines.mapping.cl_function_evaluator import CLFunctionEvaluator
 
 __author__ = 'Robbert Harms'
@@ -10,8 +11,8 @@ __email__ = 'robbert.harms@maastrichtuniversity.nl'
 __licence__ = 'LGPL v3'
 
 
-class CLPrototype(object):
-    """Prototype for a basic CL function."""
+class CLFunction(object):
+    """Interface for a basic CL function."""
 
     def get_return_type(self):
         """Get the type (in CL naming) of the returned value from this function.
@@ -36,10 +37,6 @@ class CLPrototype(object):
             list of CLFunctionParameter: list of the parameters in this model in the same order as in the CL function"""
         raise NotImplementedError()
 
-
-class CLFunction(CLPrototype):
-    """Interface for a basic CL function."""
-
     def get_cl_code(self):
         """Get the function code for this function and all its dependencies, with include guards.
 
@@ -49,7 +46,7 @@ class CLFunction(CLPrototype):
         raise NotImplementedError()
 
     def get_cl_body(self):
-        """Get the CL code of the body of this function.
+        """Get the CL code for the body of this function.
 
         Returns:
             str: the CL code of this function body
@@ -57,7 +54,7 @@ class CLFunction(CLPrototype):
         raise NotImplementedError()
 
     def get_cl_extra(self):
-        """Get the extra CL code outside the function body.
+        """Get the extra CL code outside the function's body.
 
         Returns:
             str or None: the CL code outside the function body, can be None
@@ -94,51 +91,6 @@ class CLFunction(CLPrototype):
         raise NotImplementedError()
 
 
-class SimpleCLPrototype(CLPrototype):
-
-    def __init__(self, return_type, cl_function_name, parameter_list):
-        """A simple implementation of a CL header.
-
-        Args:
-            return_type (str): the CL return type of the function
-            cl_function_name (string): The name of the CL function
-            parameter_list (list or tuple): This either contains instances of
-                :class:`mot.cl_parameter.CLFunctionParameter` or contains tuples with arguments that
-                can be used to construct a :class:`mot.cl_parameter.SimpleCLFunctionParameter`.
-        """
-        super(SimpleCLPrototype, self).__init__()
-        self._return_type = return_type
-        self._function_name = cl_function_name
-        self._parameter_list = self._resolve_parameters(parameter_list)
-
-    def get_cl_function_name(self):
-        return self._function_name
-
-    def get_return_type(self):
-        return self._return_type
-
-    def get_parameters(self):
-        return self._parameter_list
-
-    def _resolve_parameters(self, parameter_list):
-        params = []
-        for param in parameter_list:
-            if isinstance(param, CLFunctionParameter):
-                params.append(param)
-            else:
-                params.append(SimpleCLFunctionParameter(*param))
-        return params
-
-    def __hash__(self):
-        return hash(self.__repr__())
-
-    def __eq__(self, other):
-        return type(self) == type(other)
-
-    def __ne__(self, other):
-        return type(self) != type(other)
-
-
 class SimpleCLFunction(CLFunction):
 
     def __init__(self, return_type, cl_function_name, parameter_list, cl_body, dependencies=(), cl_extra=None):
@@ -155,27 +107,29 @@ class SimpleCLFunction(CLFunction):
             cl_extra (str): extra CL code for this function that does not warrant an own function
         """
         super(SimpleCLFunction, self).__init__()
-        self._prototype = SimpleCLPrototype(return_type, cl_function_name, parameter_list)
+        self._return_type = return_type
+        self._function_name = cl_function_name
+        self._parameter_list = self._resolve_parameters(parameter_list)
         self._cl_body = cl_body
         self._dependencies = dependencies
         self._cl_extra = cl_extra
 
-    def get_return_type(self):
-        return self._prototype.get_return_type()
-
     def get_cl_function_name(self):
-        return self._prototype.get_cl_function_name()
+        return self._function_name
+
+    def get_return_type(self):
+        return self._return_type
 
     def get_parameters(self):
-        return self._prototype.get_parameters()
+        return self._parameter_list
 
     def get_cl_code(self):
         cl_code = dedent('''
             {return_type} {cl_function_name}({parameters}){{
             {body}
             }}
-        '''.format(return_type=self._prototype.get_return_type(),
-                   cl_function_name=self._prototype.get_cl_function_name(),
+        '''.format(return_type=self.get_return_type(),
+                   cl_function_name=self.get_cl_function_name(),
                    parameters=', '.join(self._get_parameter_signatures()),
                    body=indent(dedent(self._cl_body), ' '*4*4)))
 
@@ -198,8 +152,8 @@ class SimpleCLFunction(CLFunction):
         return self._cl_extra
 
     def evaluate(self, inputs, double_precision=False, return_inputs=False):
-        return CLFunctionEvaluator().evaluate(self, inputs, double_precision=double_precision,
-                                              return_inputs=return_inputs)
+        return CLFunctionEvaluator(double_precision=double_precision).evaluate(
+            self, inputs, return_inputs=return_inputs)
 
     def get_dependencies(self):
         return self._dependencies
@@ -213,7 +167,7 @@ class SimpleCLFunction(CLFunction):
             list: the signatures of the parameters for the use in the CL code.
         """
         return ['{} {}'.format(p.data_type.get_declaration(), p.name.replace('.', '_'))
-                for p in self._prototype.get_parameters()]
+                for p in self.get_parameters()]
 
     def _get_cl_dependency_code(self):
         """Get the CL code for all the CL code for all the dependencies.
@@ -226,6 +180,15 @@ class SimpleCLFunction(CLFunction):
             code += d.get_cl_code() + "\n"
         return code
 
+    def _resolve_parameters(self, parameter_list):
+        params = []
+        for param in parameter_list:
+            if isinstance(param, CLFunctionParameter):
+                params.append(param)
+            else:
+                params.append(SimpleCLFunctionParameter(*param))
+        return params
+
     def __hash__(self):
         return hash(self.__repr__())
 
@@ -234,3 +197,73 @@ class SimpleCLFunction(CLFunction):
 
     def __ne__(self, other):
         return type(self) != type(other)
+
+
+class CLFunctionParameter(object):
+
+    @property
+    def data_type(self):
+        """Get the CL data type of this parameter
+
+        Returns:
+            mot.cl_data_type.SimpleCLDataType: The CL data type.
+        """
+        raise NotImplementedError()
+
+    @property
+    def is_cl_vector_type(self):
+        """Parse the data_type to see if this parameter holds a vector type (in CL)
+
+        Returns:
+            bool: True if the type of this function parameter is a CL vector type.
+
+            CL vector types are recognized by an integer after the data type. For example: double4 is a
+            CL vector type with 4 doubles.
+        """
+        raise NotImplementedError()
+
+    def get_renamed(self, name):
+        """Get a copy of the current parameter but then with a new name.
+
+        Args:
+            name (str): the new name for this parameter
+
+        Returns:
+            cls: a copy of the current type but with a new name
+        """
+        raise NotImplementedError()
+
+
+class SimpleCLFunctionParameter(CLFunctionParameter):
+
+    def __init__(self, data_type, name):
+        """Creates a new function parameter for the CL functions.
+
+        Args:
+            data_type (mot.cl_data_type.SimpleCLDataType or str): the data type expected by this parameter
+                If a string is given we will use ``SimpleCLDataType.from_string`` for translating the data_type.
+            name (str): The name of this parameter
+
+        Attributes:
+            name (str): The name of this parameter
+        """
+        if isinstance(data_type, six.string_types):
+            self._data_type = SimpleCLDataType.from_string(data_type)
+        else:
+            self._data_type = data_type
+
+        self.name = name
+
+    @property
+    def data_type(self):
+        return self._data_type
+
+    @property
+    def is_cl_vector_type(self):
+        return self._data_type.is_vector_type
+
+    def get_renamed(self, name):
+        new_param = copy(self)
+        new_param.name = name
+        return new_param
+

@@ -21,7 +21,7 @@ class CodecRunner(CLRoutine):
         super(CodecRunner, self).__init__(**kwargs)
         self._logger = logging.getLogger(__name__)
 
-    def decode(self, parameters, kernel_data, codec, double_precision=False):
+    def decode(self, parameters, kernel_data, codec):
         """Decode the given parameters using the given model.
 
         This transforms the data from optimization space to model space.
@@ -30,15 +30,14 @@ class CodecRunner(CLRoutine):
             parameters (ndarray): The parameters to transform
             kernel_data (dict[str: mot.utils.KernelInputData]): the additional data to load
             codec (mot.model_building.utils.ParameterCodec): the parameter codec to use
-            double_precision (boolean): if we are running in double precision or not
 
         Returns:
             ndarray: The array with the transformed parameters.
         """
         return self._transform_parameters(codec.get_parameter_decode_function('decodeParameters'),
-                                          'decodeParameters', parameters, kernel_data, double_precision)
+                                          'decodeParameters', parameters, kernel_data)
 
-    def encode(self, parameters, kernel_data, codec, double_precision=False):
+    def encode(self, parameters, kernel_data, codec):
         """Encode the given parameters using the given model.
 
         This transforms the data from model space to optimization space.
@@ -47,15 +46,14 @@ class CodecRunner(CLRoutine):
             parameters (ndarray): The parameters to transform
             kernel_data (dict[str: mot.utils.KernelInputData]): the additional data to load
             codec (mot.model_building.utils.ParameterCodec): the parameter codec to use
-            double_precision (boolean): if we are running in double precision or not
 
         Returns:
             ndarray: The array with the transformed parameters.
         """
         return self._transform_parameters(codec.get_parameter_encode_function('encodeParameters'),
-                                          'encodeParameters', parameters, kernel_data, double_precision)
+                                          'encodeParameters', parameters, kernel_data)
 
-    def encode_decode(self, parameters, kernel_data, codec, double_precision=False):
+    def encode_decode(self, parameters, kernel_data, codec):
         """First apply an encoding operation and then apply a decoding operation again.
 
         This can be used to enforce boundary conditions in the parameters.
@@ -64,7 +62,6 @@ class CodecRunner(CLRoutine):
             parameters (ndarray): The parameters to transform
             kernel_data (dict[str: mot.utils.KernelInputData]): the additional data to load
             codec (mot.model_building.utils.ParameterCodec): the parameter codec to use
-            double_precision (boolean): if we are running in double precision or not
 
         Returns:
             ndarray: The array with the transformed parameters.
@@ -79,16 +76,16 @@ class CodecRunner(CLRoutine):
                 decodeParameters(data, x);
             }
         '''
-        return self._transform_parameters(func, func_name, parameters, kernel_data, double_precision)
+        return self._transform_parameters(func, func_name, parameters, kernel_data)
 
-    def _transform_parameters(self, cl_func, cl_func_name, parameters, kernel_data, double_precision):
+    def _transform_parameters(self, cl_func, cl_func_name, parameters, kernel_data):
         cl_named_func = self._get_codec_function_wrapper(cl_func, cl_func_name, parameters.shape[1])
 
         all_kernel_data = dict(kernel_data)
         all_kernel_data['x'] = KernelInputArray(parameters, ctype='mot_float_type', is_writable=True)
 
         runner = RunProcedure(**self.get_cl_routine_kwargs())
-        runner.run_procedure(cl_named_func, all_kernel_data, parameters.shape[0], double_precision=double_precision)
+        runner.run_procedure(cl_named_func, all_kernel_data, parameters.shape[0])
         return all_kernel_data['x'].get_data()
 
     def _get_codec_function_wrapper(self, cl_func, cl_func_name, nmr_params):

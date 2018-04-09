@@ -125,7 +125,7 @@ class SBPlex(AbstractParallelOptimizer):
         return super(SBPlex, self).minimize(model, starting_positions)
 
     def _get_worker_generator(self, *args):
-        return lambda cl_environment: SBPlexWorker(cl_environment, *args)
+        return lambda cl_environment: SBPlexWorker(cl_environment, self._double_precision, *args)
 
 
 class SBPlexWorker(AbstractParallelOptimizerWorker):

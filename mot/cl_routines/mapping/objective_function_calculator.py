@@ -1,4 +1,3 @@
-import numpy as np
 from mot.cl_routines.mapping.run_procedure import RunProcedure
 from ...utils import KernelInputArray, SimpleNamedCLFunction, KernelInputLocalMemory, KernelInputAllocatedOutput
 from ...cl_routines.base import CLRoutine
@@ -34,7 +33,7 @@ class ObjectiveFunctionCalculator(CLRoutine):
 
         runner = RunProcedure(**self.get_cl_routine_kwargs())
         runner.run_procedure(self._get_wrapped_function(model, parameters), all_kernel_data, parameters.shape[0],
-                             double_precision=model.double_precision, use_local_reduction=True)
+                             use_local_reduction=True)
 
         return all_kernel_data['objective_values'].get_data()
 

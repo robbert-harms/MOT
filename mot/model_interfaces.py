@@ -1,11 +1,10 @@
-"""The interfaces needed for models.
+"""The model interfaces.
 
-Since a lot of information about a model is needed to be able to optimize or sample it, we encapsulate all that
-information in an interface. Only objects that successful implement the interfaces in this module can be optimized or
-sampled using one of the optimization or sampling routines in MOT.
-
-These interfaces expose data and modeling code. The data is represented as numpy arrays and the CL code as strings.
+This encapsulates all the information we need about models to be able to optimize or sample them using the routines
+in MOT. These interfaces expose data and modeling code. The data is represented as :class:`mot.utils.KernelInputData`
+instances and the CL code as strings.
 """
+from mot.utils import SimpleNamedCLFunction
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-03-14"
@@ -15,27 +14,6 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
 class OptimizeModelInterface(object):
-
-    @property
-    def name(self):
-        """Get the name of this model. This should be overwritten by the implementing model.
-
-        Returns:
-            str: A string with the name of this model.
-        """
-        raise NotImplementedError()
-
-    @property
-    def double_precision(self):
-        """Flag to signal if we should use the double float type during calculations.
-
-        By default we ask the cl routines to use the single precision float type, you can overwrite this with
-        your own flags.
-
-        Returns:
-            boolean: if we would like to use double precision floating point during the calculations
-        """
-        raise NotImplementedError()
 
     def get_kernel_data(self):
         """Return a dictionary of input data objects we need to load into the kernel.
@@ -93,7 +71,9 @@ class OptimizeModelInterface(object):
 
                 Changes may happen in place in the ``x`` parameter.
         """
-        raise NotImplementedError()
+        func_name = 'preEvalParameterModifier'
+        func = 'void ' + func_name + '(void* data, mot_float_type* x){}'
+        return SimpleNamedCLFunction(func, func_name)
 
     def get_objective_per_observation_function(self):
         """Get the objective function that returns the objective value at a measurement instance.
@@ -142,7 +122,7 @@ class OptimizeModelInterface(object):
             ndarray: the updated parameters. While changes may be done in place, one must return the parameters
                 one would like to use.
         """
-        raise NotImplementedError()
+        return parameters
 
 
 class SampleModelInterface(OptimizeModelInterface):
@@ -207,7 +187,13 @@ class SampleModelInterface(OptimizeModelInterface):
 
             Which is called by the sampling routine to finalize the proposal.
         """
-        raise NotImplementedError()
+        fname = 'finalizeProposal'
+        func = '''
+            double ''' + fname + '''(mot_data_struct* data,
+                ''' + str(address_space_parameter_vector) + ''' const mot_float_type* const x){
+            }
+        '''
+        return SimpleNamedCLFunction(func, fname)
 
 
 class NumericalDerivativeInterface(OptimizeModelInterface):

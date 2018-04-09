@@ -15,7 +15,7 @@ __licence__ = 'LGPL v3'
 
 class NumericalHessian(CLRoutine):
 
-    def calculate(self, model, parameters, double_precision=False, step_ratio=2, nmr_steps=15, step_offset=None):
+    def calculate(self, model, parameters, step_ratio=2, nmr_steps=15, step_offset=None):
         """Calculate and return the Hessian of the given function at the given parameters.
 
         This calculates the Hessian using central difference (using a 2nd order Taylor expansion) with a Richardson
@@ -47,7 +47,6 @@ class NumericalHessian(CLRoutine):
                 derivative.
             parameters (ndarray): The parameters at which to evaluate the gradient. A (d, p) matrix with d problems,
                 p parameters and n samples.
-            double_precision (boolean): if we want to calculate everything in double precision
             step_ratio (float): the ratio at which the steps diminish.
             nmr_steps (int): the number of steps we will generate. We will calculate the derivative for each of these
                 step sizes and extrapolate the best step size from among them. The minimum number of steps is 2.
@@ -67,18 +66,18 @@ class NumericalHessian(CLRoutine):
             return self._results_vector_to_matrix(derivatives, nmr_params) \
                    * np.outer(parameter_scalings, parameter_scalings)
 
-        derivatives = self._compute_derivatives(model, parameters, double_precision, step_ratio, step_offset, nmr_steps)
+        derivatives = self._compute_derivatives(model, parameters, step_ratio, step_offset, nmr_steps)
 
         if nmr_steps == 1:
             return finalize_derivatives(derivatives[..., 0])
 
-        derivatives, errors = self._richardson_extrapolation(derivatives, step_ratio, double_precision)
+        derivatives, errors = self._richardson_extrapolation(derivatives, step_ratio)
 
         if nmr_steps <= 3:
             return finalize_derivatives(derivatives[..., 0])
 
         if derivatives.shape[2] > 2:
-            derivatives, errors = self._wynn_extrapolate(derivatives, double_precision)
+            derivatives, errors = self._wynn_extrapolate(derivatives)
 
         if derivatives.shape[2] == 1:
             return finalize_derivatives(derivatives[..., 0])
@@ -86,7 +85,7 @@ class NumericalHessian(CLRoutine):
         derivatives, errors = self._median_outlier_extrapolation(derivatives, errors)
         return finalize_derivatives(derivatives)
 
-    def _compute_derivatives(self, model, parameters, double_precision, step_ratio, step_offset, nmr_steps):
+    def _compute_derivatives(self, model, parameters, step_ratio, step_offset, nmr_steps):
         """Compute the lower triangular elements of the Hessian using the central difference method.
 
         This will compute the elements of the Hessian multiple times with decreasing step sizes.
@@ -95,7 +94,6 @@ class NumericalHessian(CLRoutine):
             model: the log likelihood model we are trying to differentiate
             parameters (ndarray): a (n, p) matrix with for for every problem n, p parameters. These are the points
                 at which we want to calculate the derivative
-            double_precision (boolean): if we are calculating in double precision or not
             step_ratio (float): the ratio at which the steps exponentially diminish
             step_offset (int): ignore the first few step sizes by this offset
             nmr_steps (int): the number of steps to compute and return (after the step offset)
@@ -120,12 +118,11 @@ class NumericalHessian(CLRoutine):
 
         runner = RunProcedure(**self.get_cl_routine_kwargs())
         runner.run_procedure(self._derivation_kernel(model, nmr_params, nmr_steps, step_ratio),
-                             all_kernel_data, parameters.shape[0], double_precision=double_precision,
-                             use_local_reduction=True)
+                             all_kernel_data, parameters.shape[0], use_local_reduction=True)
 
         return all_kernel_data['step_evaluates'].get_data()
 
-    def _richardson_extrapolation(self, derivatives, step_ratio, double_precision):
+    def _richardson_extrapolation(self, derivatives, step_ratio):
         """Apply the Richardson extrapolation to the derivatives computed with different steps.
 
         Having for every problem instance and every Hessian element multiple derivatives computed with decreasing steps,
@@ -140,7 +137,6 @@ class NumericalHessian(CLRoutine):
         Args:
             derivatives (ndarray): (n, p, s), a matrix with for n problems and p parameters, s step sizes.
             step_ratio (ndarray): the diminishing ratio of the steps used to compute the derivatives.
-            double_precision (bool): if we are computing in double or not.
         """
         nmr_problems, nmr_derivatives, nmr_steps = derivatives.shape
         richardson_coefficients = self._get_richardson_coefficients(step_ratio, min(nmr_steps, 3) - 1)
@@ -157,8 +153,7 @@ class NumericalHessian(CLRoutine):
 
         runner = RunProcedure(**self.get_cl_routine_kwargs())
         runner.run_procedure(self._richardson_error_kernel(nmr_steps, nmr_convolutions_needed, richardson_coefficients),
-                             kernel_data, nmr_problems * nmr_derivatives, double_precision=double_precision,
-                             use_local_reduction=False)
+                             kernel_data, nmr_problems * nmr_derivatives,  use_local_reduction=False)
 
         richardson_extrapolations = np.reshape(kernel_data['richardson_extrapolations'].get_data(),
                                                (nmr_problems, nmr_derivatives, nmr_convolutions_needed))
@@ -167,7 +162,7 @@ class NumericalHessian(CLRoutine):
 
         return richardson_extrapolations[..., :final_nmr_convolutions], errors
 
-    def _wynn_extrapolate(self, derivatives, double_precision):
+    def _wynn_extrapolate(self, derivatives):
         nmr_problems, nmr_derivatives, nmr_steps = derivatives.shape
         nmr_extrapolations = nmr_steps - 2
 
@@ -181,8 +176,7 @@ class NumericalHessian(CLRoutine):
 
         runner = RunProcedure(**self.get_cl_routine_kwargs())
         runner.run_procedure(self._wynn_extrapolation_kernel(nmr_steps),
-                             kernel_data, nmr_problems * nmr_derivatives, double_precision=double_precision,
-                             use_local_reduction=False)
+                             kernel_data, nmr_problems * nmr_derivatives, use_local_reduction=False)
 
         extrapolations = np.reshape(kernel_data['extrapolations'].get_data(),
                                     (nmr_problems, nmr_derivatives, nmr_extrapolations))

@@ -6,7 +6,7 @@ import copy
 from six import string_types
 from mot.cl_data_type import SimpleCLDataType
 from mot.cl_function import SimpleCLFunction
-from mot.cl_parameter import SimpleCLFunctionParameter
+from mot.cl_function import SimpleCLFunctionParameter
 from mot.cl_routines.mapping.codec_runner import CodecRunner
 from mot.model_building.model_functions import WeightType, ModelCLFunction
 from mot.model_building.parameters import CurrentObservationParam, StaticMapParameter, ProtocolParameter, FreeParameter
@@ -43,22 +43,6 @@ class ModelBuilder(object):
         """
         raise NotImplementedError()
 
-    def build_with_codec(self, problems_to_analyze):
-        """Construct the model and decorate it with ``ParameterTransformedModel`` using a parameter codec
-
-        This will build the model such that it uses the parameter codec which transforms the parameters
-        to and from optimization and model space. This can be used to enforce boundary conditions for the optimization
-        routine and present the optimization routine with a smoother set of parameters.
-
-        This is typically only used during optimization and not during sampling since during sampling we already
-        have priors for the boundary conditions and second, we want to sample the parameters directly to get the
-        correct parameter density.
-
-        Returns:
-            OptimizeModelInterface: the optimization model decorated with a codec transformation
-        """
-        raise NotImplementedError()
-
 
 class OptimizeModelBuilder(ModelBuilder):
 
@@ -86,8 +70,6 @@ class OptimizeModelBuilder(ModelBuilder):
 
         self._enforce_weights_sum_to_one = enforce_weights_sum_to_one
 
-        self._double_precision = False
-
         self._model_functions_info = self._init_model_information_container(
             model_tree, likelihood_function, signal_noise_model)
 
@@ -102,6 +84,10 @@ class OptimizeModelBuilder(ModelBuilder):
             self.set_input_data(input_data)
 
         self._set_default_dependencies()
+
+    @property
+    def name(self):
+        return self._name
 
     def _init_model_information_container(self, model_tree, likelihood_function, signal_noise_model):
         """Get the model information container object.
@@ -146,7 +132,6 @@ class OptimizeModelBuilder(ModelBuilder):
 
         return SimpleOptimizeModel(problems_to_analyze,
                                    self.name,
-                                   self.double_precision,
                                    self._get_kernel_data(problems_to_analyze),
                                    self._get_nmr_problems(problems_to_analyze),
                                    self.get_nmr_inst_per_problem(),
@@ -203,25 +188,6 @@ class OptimizeModelBuilder(ModelBuilder):
                     }
                 '''
         return Codec()
-
-    @property
-    def name(self):
-        """See super class OptimizeModelInterface for details"""
-        return self._name
-
-    @property
-    def double_precision(self):
-        """See super class OptimizeModelInterface for details"""
-        return self._double_precision
-
-    @double_precision.setter
-    def double_precision(self, value):
-        """Set the value for double_precision.
-
-        Args:
-            value (boolean): if we would like to do the computations in double of single floating point type.
-        """
-        self._double_precision = value
 
     def fix(self, model_param_name, value):
         """Fix the given model.param to the given value.
@@ -431,8 +397,6 @@ class OptimizeModelBuilder(ModelBuilder):
 
     def _get_initial_parameters(self, problems_to_analyze):
         np_dtype = np.float32
-        if self.double_precision:
-            np_dtype = np.float64
 
         starting_points = []
         for m, p in self._model_functions_info.get_estimable_parameters_list():
@@ -461,7 +425,7 @@ class OptimizeModelBuilder(ModelBuilder):
         starting_points = np.concatenate([np.transpose(np.array([s]))
                                           if len(s.shape) < 2 else s for s in starting_points], axis=1)
 
-        return convert_data_to_dtype(starting_points, 'mot_float_type', self._get_mot_float_type())
+        return convert_data_to_dtype(starting_points, 'mot_float_type', SimpleCLDataType.from_string('float'))
 
     def _get_pre_eval_parameter_modifier(self):
         func_name = '_modifyParameters'
@@ -1065,12 +1029,6 @@ class OptimizeModelBuilder(ModelBuilder):
             names = ['{}.{}'.format(m.name, p.name) for (m, p) in self._model_functions_info.get_weights()]
             if len(names) > 1:
                 self.fix(names[0], SimpleAssignment('max((double)1 - ({}), (double)0)'.format(' + '.join(names[1:]))))
-
-    def _get_mot_float_type(self):
-        """Get the data type for the mot_float_type"""
-        if self.double_precision:
-            return SimpleCLDataType.from_string('double')
-        return SimpleCLDataType.from_string('float')
 
     def _get_weight_sum_to_one_transformation(self):
         """Returns a snippet of CL for the encode and decode functions to force the sum of the weights to 1"""
@@ -1819,8 +1777,7 @@ class ParameterTransformedModel(OptimizeModelInterface):
             parameters (ndarray): the parameters to transform back to model space
         """
         space_transformer = CodecRunner()
-        return space_transformer.decode(parameters, self.get_kernel_data(),
-                                        self._parameter_codec, self.double_precision)
+        return space_transformer.decode(parameters, self.get_kernel_data(), self._parameter_codec)
 
     def encode_parameters(self, parameters):
         """Decode the given parameters into optimization space
@@ -1829,16 +1786,11 @@ class ParameterTransformedModel(OptimizeModelInterface):
             parameters (ndarray): the parameters to transform into optimization space
         """
         space_transformer = CodecRunner()
-        return space_transformer.encode(parameters, self.get_kernel_data(),
-                                        self._parameter_codec, self.double_precision)
+        return space_transformer.encode(parameters, self.get_kernel_data(), self._parameter_codec)
 
     @property
     def name(self):
         return self._model.name
-
-    @property
-    def double_precision(self):
-        return self._model.double_precision
 
     def get_kernel_data(self):
         return self._model.get_kernel_data()
@@ -1918,14 +1870,13 @@ class _ModelFunctionPriorToCompositeModelPrior(SimpleCLFunction):
 class SimpleOptimizeModel(NumericalDerivativeInterface):
 
     def __init__(self, used_problem_indices,
-                 name, double_precision, kernel_data_info, nmr_problems, nmr_inst_per_problem,
+                 name, kernel_data_info, nmr_problems, nmr_inst_per_problem,
                  nmr_estimable_parameters, initial_parameters, pre_eval_parameter_modifier,
                  objective_per_observation_function, lower_bounds, upper_bounds, numdiff_step,
                  numdiff_scaling_factors, numdiff_use_bounds, numdiff_use_lower_bounds,
                  numdiff_use_upper_bounds, numdiff_param_transform):
         self.used_problem_indices = used_problem_indices
-        self._name = name
-        self._double_precision = double_precision
+        self.name = name
         self._kernel_data_info = kernel_data_info
         self._nmr_problems = nmr_problems
         self._nmr_inst_per_problem = nmr_inst_per_problem
@@ -1941,14 +1892,6 @@ class SimpleOptimizeModel(NumericalDerivativeInterface):
         self._numdiff_use_lower_bounds = numdiff_use_lower_bounds
         self._numdiff_use_upper_bounds = numdiff_use_upper_bounds
         self._numdiff_param_transform = numdiff_param_transform
-
-    @property
-    def name(self):
-        return self._name
-
-    @property
-    def double_precision(self):
-        return self._double_precision
 
     def get_kernel_data(self):
         return self._kernel_data_info
@@ -2020,14 +1963,6 @@ class SimpleSampleModel(SampleModelInterface):
             return getattr(super(SimpleSampleModel, self).__getattribute__('_wrapped_optimize_model'), item)
         except AttributeError:
             return getattr(super(SimpleSampleModel, self).__getattribute__('_wrapped_optimize_model'), item)
-
-    @property
-    def name(self):
-        return self._wrapped_optimize_model.name
-
-    @property
-    def double_precision(self):
-        return self._wrapped_optimize_model.double_precision
 
     def get_log_likelihood_per_observation_function(self):
         return self._ll_per_obs_func
