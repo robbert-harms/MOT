@@ -1,5 +1,6 @@
 from mot.cl_routines.mapping.run_procedure import RunProcedure
-from ...utils import SimpleNamedCLFunction, KernelInputArray, KernelInputAllocatedOutput
+from ...utils import NameFunctionTuple
+from mot.kernel_input_data import KernelInputArray, KernelInputAllocatedOutput
 from ...cl_routines.base import CLRoutine
 import numpy as np
 
@@ -66,4 +67,4 @@ class CalculateDependentParameters(CLRoutine):
                 ''' + parameter_write_out + '''
             }
         '''
-        return SimpleNamedCLFunction(func, 'transform')
+        return NameFunctionTuple('transform', func)

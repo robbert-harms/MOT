@@ -1,5 +1,6 @@
 from mot.cl_routines.mapping.run_procedure import RunProcedure
-from ...utils import SimpleNamedCLFunction, KernelInputArray, KernelInputScalar, KernelInputAllocatedOutput
+from ...utils import NameFunctionTuple
+from mot.kernel_input_data import KernelInputScalar, KernelInputArray, KernelInputAllocatedOutput
 from ...cl_routines.base import CLRoutine
 import numpy as np
 
@@ -66,4 +67,4 @@ class CircularGaussianFit(CLRoutine):
                 *(data->stds) = ((data->high - data->low)/2.0/M_PI) * sqrt(-2*log(R));
             }            
         '''
-        return SimpleNamedCLFunction(func, 'compute')
+        return NameFunctionTuple('compute', func)

@@ -16,7 +16,7 @@ from mot.cl_routines.optimizing.powell import Powell
 from mot.cl_routines.filters.gaussian import GaussianFilter
 from mot.cl_routines.filters.mean import MeanFilter
 from mot.cl_routines.filters.median import MedianFilter
-from mot.utils import SimpleNamedCLFunction, convert_data_to_dtype
+from mot.utils import NameFunctionTuple, convert_data_to_dtype
 
 from mot.model_interfaces import OptimizeModelInterface
 
@@ -132,7 +132,7 @@ class Rosenbrock(OptimizeModelInterface):
             void ''' + func_name + '''(void* data, mot_float_type* x){
             }
         '''
-        return SimpleNamedCLFunction(func, func_name)
+        return NameFunctionTuple(func_name, func)
 
     def get_objective_per_observation_function(self):
         func_name = 'getObjectiveInstanceValue'
@@ -142,7 +142,7 @@ class Rosenbrock(OptimizeModelInterface):
                 return 100 * pown(x[i + 1] - pown(x[i], 2), 2) + pown(1 - x[i], 2);
             }
         '''
-        return SimpleNamedCLFunction(func, func_name)
+        return NameFunctionTuple(func_name, func)
 
     def get_lower_bounds(self):
         return [-np.inf] * self.n
@@ -187,7 +187,7 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
             void ''' + func_name + '''(void* data, mot_float_type* x){
             }
         '''
-        return SimpleNamedCLFunction(func, func_name)
+        return NameFunctionTuple(func_name, func)
 
     def get_objective_per_observation_function(self):
         func_name = "getObjectiveInstanceValue"
@@ -197,7 +197,7 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
                 return pown(2 + 2 * (k+1) - exp((k+1) * x[0]) - exp((k+1) * x[1]), 2);
             }
         '''
-        return SimpleNamedCLFunction(func, func_name)
+        return NameFunctionTuple(func_name, func)
 
     def get_lower_bounds(self):
         return [0, 0]

@@ -4,7 +4,7 @@ This encapsulates all the information we need about models to be able to optimiz
 in MOT. These interfaces expose data and modeling code. The data is represented as :class:`mot.utils.KernelInputData`
 instances and the CL code as strings.
 """
-from mot.utils import SimpleNamedCLFunction
+from mot.utils import NameFunctionTuple
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-03-14"
@@ -13,7 +13,7 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class OptimizeModelInterface(object):
+class ModelBasicInfoInterface(object):
 
     def get_kernel_data(self):
         """Return a dictionary of input data objects we need to load into the kernel.
@@ -51,6 +51,9 @@ class OptimizeModelInterface(object):
         """
         raise NotImplementedError()
 
+
+class OptimizeModelInterface(ModelBasicInfoInterface):
+
     def get_pre_eval_parameter_modifier(self):
         """Return code that needs to be run prior to model evaluation or objective function calculation.
 
@@ -63,7 +66,7 @@ class OptimizeModelInterface(object):
         * :meth:`~get_objective_per_observation_function`
 
         Returns:
-            mot.utils.NamedCLFunction: a named CL function with the following signature:
+            mot.utils.NameFunctionTuple: a named CL function with the following signature:
 
                 .. code-block:: c
 
@@ -73,7 +76,7 @@ class OptimizeModelInterface(object):
         """
         func_name = 'preEvalParameterModifier'
         func = 'void ' + func_name + '(void* data, mot_float_type* x){}'
-        return SimpleNamedCLFunction(func, func_name)
+        return NameFunctionTuple(func_name, func)
 
     def get_objective_per_observation_function(self):
         """Get the objective function that returns the objective value at a measurement instance.
@@ -82,7 +85,7 @@ class OptimizeModelInterface(object):
         complete objective value.
 
         Returns:
-            mot.utils.NamedCLFunction: A CL function with signature:
+            mot.utils.NameFunctionTuple: A CL function with signature:
 
                 .. code-block:: c
 
@@ -125,8 +128,7 @@ class OptimizeModelInterface(object):
         return parameters
 
 
-class SampleModelInterface(OptimizeModelInterface):
-    """Extends the OptimizeModelInterface with information for sampling purposes."""
+class SampleModelInterface(ModelBasicInfoInterface):
 
     def get_log_likelihood_per_observation_function(self):
         """Get the (complete) CL Log Likelihood function that evaluates the given instance under a noise model.
@@ -134,7 +136,7 @@ class SampleModelInterface(OptimizeModelInterface):
         This should return the LL's such that when linearly summed they yield the total log likelihood of the model.
 
         Returns:
-            mot.utils.NamedCLFunction: A function of the kind:
+            mot.utils.NameFunctionTuple: A function of the kind:
                 .. code-block:: c
 
                     double <fname>(mot_data_struct* data,
@@ -153,7 +155,7 @@ class SampleModelInterface(OptimizeModelInterface):
                 by default this is set to ``private``.
 
         Returns:
-            mot.utils.NamedCLFunction: A function with the signature:
+            mot.utils.NameFunctionTuple: A function with the signature:
                 .. code-block:: c
 
                     mot_float_type <func_name>(
@@ -177,7 +179,7 @@ class SampleModelInterface(OptimizeModelInterface):
         allows changing the proposal before it is put into the model and before it is stored.
 
         Returns:
-            mot.utils.NamedCLFunction: A function with the signature:
+            mot.utils.NameFunctionTuple: A function with the signature:
                 .. code-block:: c
 
                     mot_float_type <func_name>(
@@ -193,11 +195,11 @@ class SampleModelInterface(OptimizeModelInterface):
                 ''' + str(address_space_parameter_vector) + ''' const mot_float_type* const x){
             }
         '''
-        return SimpleNamedCLFunction(func, fname)
+        return NameFunctionTuple(fname, func)
 
 
 class NumericalDerivativeInterface(OptimizeModelInterface):
-    """Extends the model with information necessary for calculating numerical derivatives of the objective function.
+    """Extends an optimization model for calculating numerical derivatives of the objective function.
 
     For calculating derivatives (gradients / Hessians) numerically, we need a likelihood function and some additional
     information, like the step size for each parameter, a method for checking boundary conditions and possible parameter
@@ -267,7 +269,7 @@ class NumericalDerivativeInterface(OptimizeModelInterface):
         as those are handled already by the numerical differentiation routine.
 
         Returns:
-            mot.utils.NamedCLFunction: A function with the signature:
+            mot.utils.NameFunctionTuple: A function with the signature:
                 .. code-block:: c
 
                     void <func_name>(mot_data_struct* data, mot_float_type* params);

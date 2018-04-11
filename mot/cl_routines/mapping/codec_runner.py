@@ -1,6 +1,7 @@
 import logging
 from mot.cl_routines.mapping.run_procedure import RunProcedure
-from ...utils import SimpleNamedCLFunction, KernelInputArray
+from ...utils import NameFunctionTuple
+from mot.kernel_input_data import KernelInputArray
 from ...cl_routines.base import CLRoutine
 
 
@@ -105,4 +106,4 @@ class CodecRunner(CLRoutine):
                 }
             }
         '''
-        return SimpleNamedCLFunction(func, func_name)
+        return NameFunctionTuple(func_name, func)

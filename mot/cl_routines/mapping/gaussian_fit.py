@@ -1,5 +1,6 @@
 from mot.cl_routines.mapping.run_procedure import RunProcedure
-from ...utils import SimpleNamedCLFunction, KernelInputArray, KernelInputScalar, KernelInputAllocatedOutput
+from ...utils import NameFunctionTuple
+from mot.kernel_input_data import KernelInputScalar, KernelInputArray, KernelInputAllocatedOutput
 from ...cl_routines.base import CLRoutine
 import numpy as np
 
@@ -63,4 +64,4 @@ class GaussianFit(CLRoutine):
                 *(data->deviations) = ''' + ('variance' if return_variance else 'sqrt(variance)') + ''';
             }            
         '''
-        return SimpleNamedCLFunction(func, 'compute')
+        return NameFunctionTuple('compute', func)

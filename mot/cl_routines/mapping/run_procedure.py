@@ -25,7 +25,7 @@ class RunProcedure(CLRoutine):
         output can be written back to the according kernel data elements.
 
         Args:
-            cl_function (mot.utils.NamedCLFunction): the function to run on the datasets
+            cl_function (mot.utils.NameFunctionTuple): the function to run on the datasets
             kernel_data (dict[str: mot.utils.KernelInputData]): the data to use as input to the function
                 all the data will be wrapped in a single ``mot_data_struct``.
             nmr_instances (int): the number of parallel threads to run (used as ``global_size``)

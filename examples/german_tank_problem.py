@@ -1,10 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from mot import Powell
+
+from mot.cl_routines.generate_random import Random123Generator
 from mot.cl_routines.sampling.amwg import AdaptiveMetropolisWithinGibbs
-from mot.cl_routines.sampling.scam import SingleComponentAdaptiveMetropolis
 from mot.model_interfaces import SampleModelInterface
-from mot.utils import SimpleNamedCLFunction, KernelInputArray, add_include_guards
+from mot.utils import NameFunctionTuple, add_include_guards
+from mot.kernel_input_data import KernelInputArray
 
 __author__ = 'Robbert Harms'
 __date__ = '2018-04-04'
@@ -49,37 +50,6 @@ class GermanTanks(SampleModelInterface):
     def get_nmr_parameters(self):
         return 1
 
-    def get_objective_per_observation_function(self):
-        """Returns, per observation, the negative of the Discrete Uniform distribution's log-likelihood.
-        """
-        func_name = 'germanTank_neglogLikelihood'
-
-        func = self._discrete_uniform()
-        func += '''
-            mot_float_type ''' + func_name + '''(mot_data_struct* data, const mot_float_type* const x, 
-                                                 uint observation_index){
-                uint nmr_tanks = (uint)round(x[0]);
-                return -discrete_uniform(data->observed_tanks[observation_index], 1, nmr_tanks); 
-            }
-        '''
-        return SimpleNamedCLFunction(func, func_name)
-
-    def get_lower_bounds(self):
-        return np.max(self.observed_tanks, axis=1)
-
-    def get_upper_bounds(self):
-        return self.upper_bounds
-
-    def _discrete_uniform(self):
-        return add_include_guards('''
-            float discrete_uniform(uint x, uint lower, uint upper){
-                if(x < lower || x > upper){
-                    return -INFINITY;
-                }
-                return -log((float)(upper-lower));
-            }
-        ''')
-
     def get_log_likelihood_per_observation_function(self):
         """Used in Bayesian sampling."""
         fname = 'germanTank_logLikelihood'
@@ -89,13 +59,10 @@ class GermanTanks(SampleModelInterface):
             double ''' + fname + '''(mot_data_struct* data, const mot_float_type* const x, 
                                      uint observation_index){
                 uint nmr_tanks = (uint)round(x[0]);
-                
-                printf("%i, %i, %f", data->observed_tanks[observation_index], nmr_tanks, discrete_uniform(data->observed_tanks[observation_index], 1, nmr_tanks));
-                
                 return discrete_uniform(data->observed_tanks[observation_index], 1, nmr_tanks); 
             }
         '''
-        return SimpleNamedCLFunction(func, fname)
+        return NameFunctionTuple(fname, func)
 
     def get_log_prior_function(self, address_space_parameter_vector='private'):
         """Used in Bayesian sampling."""
@@ -107,34 +74,78 @@ class GermanTanks(SampleModelInterface):
                     ''' + str(address_space_parameter_vector) + ''' const mot_float_type* const x){
                 
                 uint nmr_tanks = (uint)round(x[0]);
-                return discrete_uniform(nmr_tanks, data->lower_bounds, data->upper_bounds);
+                return discrete_uniform(nmr_tanks, data->lower_bounds[0], data->upper_bounds[0]);
             }
         '''
-        return SimpleNamedCLFunction(func, fname)
+        return NameFunctionTuple(fname, func)
+
+    def _discrete_uniform(self):
+        return add_include_guards('''
+            float discrete_uniform(uint x, uint lower, uint upper){
+                if(x < lower || x > upper){
+                    return -INFINITY;
+                }
+                return -log((float)(upper-lower));
+            }
+        ''')
+
+
+def get_historical_data(nmr_problems):
+    """Get the historical tank data.
+
+    Args:
+        nmr_problems (int): the number of problems
+
+    Returns:
+        tuple: (observations, nmr_tanks_ground_truth)
+    """
+    observations = np.tile(np.array([[10, 256, 202, 97]]), (nmr_problems, 1))
+    nmr_tanks_ground_truth = np.ones((nmr_problems,)) * 276
+    return observations, nmr_tanks_ground_truth
+
+
+def get_simulated_data(nmr_problems):
+    """Simulate some data.
+
+    This returns the simulated tank observations and the corresponding ground truth maximum number of tanks.
+
+    Args:
+        nmr_problems (int): the number of problems
+
+    Returns:
+        tuple: (observations, nmr_tanks_ground_truth)
+    """
+    # The number of tanks we observe per problem
+    nmr_observed_tanks = 10
+
+    # Generate some maximum number of tanks. Basically the ground truth of the estimation problem.
+    nmr_tanks_ground_truth = Random123Generator().randn(nmr_problems, 1, mean=250, std=30, ctype='uint')
+
+    # Generate some random tank observations
+    observations = Random123Generator().rand(nmr_problems, nmr_observed_tanks, min_val=0,
+                                             max_val=nmr_tanks_ground_truth, ctype='uint')
+
+    return observations, nmr_tanks_ground_truth
 
 
 if __name__ == '__main__':
-    observations = np.array([[10, 256, 202, 97.]])
-    upper_bounds = np.array([10000])
+    # The number of problems
+    nmr_problems = 10000
 
+    # The data we would like to use
+    # observations, nmr_tanks_ground_truth = get_simulated_data(nmr_problems)
+    observations, nmr_tanks_ground_truth = get_historical_data(nmr_problems)
+
+    ## Sample ##
+    # Estimation upper bound
+    upper_bounds = np.ones((nmr_problems,)) * 1000
+
+    # Create the model with the observations and upper bounds
     model = GermanTanks(observations, upper_bounds)
 
     # The starting points
-    starting_points = np.max(observations, axis=1) + 100
+    starting_points = np.max(observations, axis=1)
 
-    # ## Optimization ##
-    # # Create an instance of the optimization routine we will use
-    # optimizer = Powell(patience=5)
-    #
-    #
-    # # Minimize the parameters of the model given the starting points.
-    # opt_output = optimizer.minimize(model, starting_points)
-    #
-    # # Print the output
-    # print(opt_output.get_optimization_result())
-
-
-    ## Sampling ##
     # The initial proposal standard deviations
     proposal_stds = np.ones_like(starting_points) * 10
 
@@ -142,16 +153,31 @@ if __name__ == '__main__':
     sampler = AdaptiveMetropolisWithinGibbs(model, starting_points, proposal_stds)
 
     # Sample each instance
-    sampling_output = sampler.sample(10, thinning=1, burnin=0)
+    sampling_output = sampler.sample(10000, thinning=1, burnin=0)
 
     # Obtain the samples
     samples = sampling_output.get_samples()
 
-    plt.hist(samples[0])
+    # Histogram of for the first 5 chains
+    for problem_instance in range(min(nmr_problems, 5)):
+        param_ind = 0
+        posterior = np.round(samples[problem_instance, param_ind])
+
+        print('Problem instance, estimate mean, ground truth: ',
+              problem_instance, np.mean(posterior), np.squeeze(nmr_tanks_ground_truth[problem_instance]))
+
+        plt.hist(posterior, bins=500)
+        plt.xlabel("Total number of tanks")
+        plt.ylabel("Posterior probability mass")
+        plt.show()
+
+    # Histogram of the errors
+    errors = np.squeeze(nmr_tanks_ground_truth) - np.squeeze(np.mean(samples, axis=2))
+
+    print('Mean absolute errors:', np.mean(np.abs(errors)))
+
+    plt.hist(errors)
+    plt.xlabel("Mean absolute error")
+    plt.ylabel("Probability mass")
     plt.show()
 
-    # # Scatter plot of the first two dimensions, for the first 5 problems
-    # for problem_instance in range(max(nmr_problems, 5)):
-    #     plt.scatter(samples[problem_instance, 0], samples[problem_instance, 1])
-    #     plt.show()
-#

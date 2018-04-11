@@ -1,6 +1,6 @@
 import numpy as np
 from ...cl_routines.sampling.base import AbstractRWMSampler
-from ...utils import KernelInputArray
+from mot.kernel_input_data import KernelInputArray
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-02-05"
@@ -13,7 +13,7 @@ class AdaptiveMetropolisWithinGibbs(AbstractRWMSampler):
 
     def __init__(self, model, starting_positions, proposal_stds, target_acceptance_rate=0.44,
                  batch_size=50, damping_factor=1, min_val=1e-15, max_val=1e3, **kwargs):
-        """An implementation of the Adaptive Metropolis-Within-Gibbs (AMWG) MCMC algorithm [1].
+        r"""An implementation of the Adaptive Metropolis-Within-Gibbs (AMWG) MCMC algorithm [1].
 
         This scales the proposal parameter (typically the std) such that it oscillates towards the chosen acceptance
         rate. We implement the delta function (see [1]) as: :math:`\delta(n) = \sqrt{1 / (d*n)}`.

@@ -2,8 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mot import Powell
 from mot.cl_routines.sampling.amwg import AdaptiveMetropolisWithinGibbs
-from mot.model_interfaces import SampleModelInterface
-from mot.utils import SimpleNamedCLFunction
+from mot.model_interfaces import SampleModelInterface, OptimizeModelInterface
+from mot.utils import NameFunctionTuple
 
 __author__ = 'Robbert Harms'
 __date__ = '2018-04-04'
@@ -12,7 +12,7 @@ __email__ = 'robbert.harms@maastrichtuniversity.nl'
 __licence__ = 'LGPL v3'
 
 
-class Rosenbrock(SampleModelInterface):
+class Rosenbrock(OptimizeModelInterface, SampleModelInterface):
 
     def __init__(self, nmr_problems, nmr_params):
         """MOT model definition of the multidimensional generalized Rosenbrock function.
@@ -37,6 +37,8 @@ class Rosenbrock(SampleModelInterface):
         self.nmr_problems = nmr_problems
         self.nmr_params = nmr_params
 
+
+    ## Methods used for both optimization and sampling ##
     def get_kernel_data(self):
         return {}
 
@@ -49,9 +51,11 @@ class Rosenbrock(SampleModelInterface):
     def get_nmr_parameters(self):
         return self.nmr_params
 
+
+    ## Methods used for optimization ##
     def get_objective_per_observation_function(self):
         """Used in Maximum Likelihood Estimation."""
-        func_name = 'rosenbrock_neglogLikelihood'
+        func_name = 'rosenbrock_MLE_func'
         func = '''
             mot_float_type ''' + func_name + '''(mot_data_struct* data, const mot_float_type* const x, 
                                                  uint observation_index){
@@ -59,7 +63,7 @@ class Rosenbrock(SampleModelInterface):
                 return 100 * pown(x[i + 1] - pown(x[i], 2), 2) + pown(1 - x[i], 2);
             }
         '''
-        return SimpleNamedCLFunction(func, func_name)
+        return NameFunctionTuple(func_name, func)
 
     def get_lower_bounds(self):
         return [-np.inf] * self.nmr_params
@@ -67,6 +71,8 @@ class Rosenbrock(SampleModelInterface):
     def get_upper_bounds(self):
         return [np.inf] * self.nmr_params
 
+
+    ## Methods used for sampling ##
     def get_log_likelihood_per_observation_function(self):
         """Used in Bayesian sampling."""
         fname = 'rosenbrock_logLikelihood'
@@ -77,7 +83,7 @@ class Rosenbrock(SampleModelInterface):
                 return -(100 * pown(x[i + 1] - pown(x[i], 2), 2) + pown(1 - x[i], 2));
             }
         '''
-        return SimpleNamedCLFunction(func, fname)
+        return NameFunctionTuple(fname, func)
 
     def get_log_prior_function(self, address_space_parameter_vector='private'):
         """Used in Bayesian sampling."""
@@ -94,7 +100,7 @@ class Rosenbrock(SampleModelInterface):
                 return log(1.0);
             }
         '''
-        return SimpleNamedCLFunction(func, fname)
+        return NameFunctionTuple(fname, func)
 
 
 if __name__ == '__main__':

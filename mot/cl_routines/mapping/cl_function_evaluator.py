@@ -1,8 +1,8 @@
 import numpy as np
 
 from mot.cl_routines.mapping.run_procedure import RunProcedure
-from ...utils import SimpleNamedCLFunction, KernelInputArray, KernelInputData, is_scalar, \
-    KernelInputScalar, KernelInputAllocatedOutput
+from ...utils import NameFunctionTuple, is_scalar
+from mot.kernel_input_data import KernelInputData, KernelInputScalar, KernelInputArray, KernelInputAllocatedOutput
 from ...cl_routines.base import CLRoutine
 
 
@@ -123,7 +123,7 @@ class CLFunctionEvaluator(CLRoutine):
                     *(data->_results) = ''' + cl_function.get_cl_function_name() + '(' + ', '.join(func_args) + ''');  
                 }
             '''
-        return SimpleNamedCLFunction(func, func_name)
+        return NameFunctionTuple(func_name, func)
 
     def _get_param_cl_name(self, param_name):
         if '.' in param_name:

@@ -1,12 +1,9 @@
-from random import Random
-
 import numpy as np
-import pyopencl as cl
-
 from mot.cl_routines.base import CLRoutine
-from mot.load_balance_strategies import Worker
+from mot.cl_routines.mapping.run_procedure import RunProcedure
 from mot.library_functions import Rand123
-
+from mot.utils import NameFunctionTuple, is_scalar
+from mot.kernel_input_data import KernelInputArray, KernelInputAllocatedOutput
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-10-29"
@@ -15,44 +12,10 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-def generate_uniform(nmr_samples, minimum=0, maximum=1, dtype=None, seed=None):
-    """Draw random samples from the uniform distribution.
+class Random123Generator(CLRoutine):
 
-    Args:
-        nmr_samples (int): The number of samples to draw
-        minimum (double): The minimum value of the random numbers
-        maximum (double): The minimum value of the random numbers
-        dtype (np.dtype): the numpy datatype, either one of float32 (default) or float64.
-        seed (float): the seed, if not given a random seed is used.
-
-    Returns:
-        ndarray: A numpy array with nmr_samples random samples drawn from the uniform distribution.
-    """
-    generator = Random123GeneratorBase(seed=seed)
-    return generator.generate_uniform(nmr_samples, minimum=minimum, maximum=maximum, dtype=dtype)
-
-
-def generate_gaussian(nmr_samples, mean=0, std=1, dtype=None, seed=None):
-    """Draw random samples from the Gaussian distribution.
-
-    Args:
-        nmr_samples (int): The number of samples to draw
-        mean (double): The mean of the distribution
-        std (double): The standard deviation or the distribution
-        dtype (np.dtype): the numpy datatype, either one of float32 (default) or float64.
-        seed (float): the seed, if not given a random seed is used.
-
-    Returns:
-        ndarray: A numpy array with nmr_samples random samples drawn from the Gaussian distribution.
-    """
-    generator = Random123GeneratorBase(seed=seed)
-    return generator.generate_gaussian(nmr_samples, mean=mean, std=std, dtype=dtype)
-
-
-class Random123GeneratorBase(CLRoutine):
-
-    def __init__(self, seed=None, **kwargs):
-        """Create the random123 basis for generating a list of random numbers.
+    def __init__(self, **kwargs):
+        """Create the random123 basis for generating multiple lists of random numbers.
 
         *From the Random123 documentation:*
 
@@ -71,158 +34,107 @@ class Random123GeneratorBase(CLRoutine):
         All the Random123 generators are counter-based RNGs that use integer multiplication, xor and permutation
         of W-bit words to scramble its N-word input key.
 
-
-        *Implementation note*:
-
         In this implementation we generate a counter and key automatically from a single seed.
 
         Args:
             seed (float): the seed, if not given a random seed is used.
         """
-        super(Random123GeneratorBase, self).__init__(**kwargs)
+        super(Random123Generator, self).__init__(**kwargs)
         self.context = self.cl_environments[0].context
-        self._rng_state = self._get_rng_state(seed)
 
-    def _get_rng_state(self, seed):
-        if seed is None:
-            seed = Random().randint(0, 2 ** 31)
-
-        rng = Random(seed)
-        dtype_info = np.iinfo(np.uint32)
-
-        return np.array(list(rng.randrange(dtype_info.min, dtype_info.max + 1) for _ in range(6)), dtype=np.uint32)
-
-    def generate_uniform(self, nmr_samples, minimum=0, maximum=1, dtype=None):
-        """Draw random samples from the uniform distribution.
+    def rand(self, nmr_distributions, nmr_samples, min_val=0, max_val=1, ctype='float'):
+        """Draw random samples from the Uniform distribution.
 
         Args:
+            nmr_distributions (int): the number of unique distributions to create
             nmr_samples (int): The number of samples to draw
             minimum (double): The minimum value of the random numbers
             maximum (double): The minimum value of the random numbers
-            dtype (np.dtype): the numpy datatype, either one of float32 (default) or float64.
+            ctype (str): the C type of the output samples
 
         Returns:
-            ndarray: A numpy array with nmr_samples random samples drawn from the uniform distribution.
+            ndarray: A two dimensional numpy array as (nmr_distributions, nmr_samples).
         """
-        dtype = dtype or np.float32
-        if dtype not in (np.float32, np.float64):
-            raise ValueError('The given dtype should be either float32 or float64, {} given.'.format(
-                dtype.__class__.__name__))
+        if is_scalar(min_val):
+            min_val = np.ones((nmr_distributions, 1)) * min_val
+        if is_scalar(max_val):
+            max_val = np.ones((nmr_distributions, 1)) * max_val
 
-        c_type = 'float'
-        if dtype == np.float64:
-            c_type = "double"
+        kernel_data = {'min_val': KernelInputArray(min_val),
+                       'max_val': KernelInputArray(max_val)}
 
-        return self._generate_samples(nmr_samples, self._get_uniform_kernel(minimum, maximum, c_type))
+        return self._generate_samples(nmr_distributions, nmr_samples, ctype, kernel_data,
+                                      self._get_uniform_kernel(nmr_samples, ctype))
 
-    def generate_gaussian(self, nmr_samples, mean=0, std=1, dtype=None):
+    def randn(self, nmr_distributions, nmr_samples, mean=0, std=1, ctype='float'):
         """Draw random samples from the Gaussian distribution.
 
         Args:
+            nmr_distributions (int): the number of unique distributions to create
             nmr_samples (int): The number of samples to draw
-            mean (double): The mean of the distribution
-            std (double): The standard deviation or the distribution
-            dtype (np.dtype): the numpy datatype, either one of float32 (default) or float64.
+            mean (float or ndarray): The mean of the distribution
+            std (float or ndarray): The standard deviation or the distribution
+            ctype (str): the C type of the output samples
 
         Returns:
-            ndarray: A numpy array with nmr_samples random samples drawn from the Gaussian distribution.
+            ndarray: A two dimensional numpy array as (nmr_distributions, nmr_samples).
         """
-        dtype = dtype or np.float32
-        if dtype not in (np.float32, np.float64):
-            raise ValueError('The given dtype should be either float32 or float64, {} given.'.format(
-                dtype.__class__.__name__))
+        if is_scalar(mean):
+            mean = np.ones((nmr_distributions, 1)) * mean
+        if is_scalar(std):
+            std = np.ones((nmr_distributions, 1)) * std
 
-        c_type = 'float'
-        if dtype == np.float64:
-            c_type = "double"
+        kernel_data = {'mean': KernelInputArray(mean),
+                       'std': KernelInputArray(std)}
 
-        return self._generate_samples(nmr_samples, self._get_gaussian_kernel(mean, std, c_type))
+        return self._generate_samples(nmr_distributions, nmr_samples, ctype, kernel_data,
+                                      self._get_gaussian_kernel(nmr_samples, ctype))
 
-    def _generate_samples(self, nmr_samples, kernel_source):
-        padding = (-nmr_samples) % 4
-        nmr_samples += padding
-        samples = np.zeros((nmr_samples,), dtype=np.float32)
+    def _generate_samples(self, nmr_distributions, nmr_samples, ctype, kernel_data, cl_function):
+        rng_state = np.random.uniform(low=np.iinfo(np.uint32).min, high=np.iinfo(np.uint32).max + 1,
+                                      size=(nmr_distributions, 6)).astype(np.uint32)
 
-        workers = self._create_workers(lambda cl_environment: _Random123Worker(cl_environment, samples,
-                                                                               kernel_source, self._rng_state))
-        self.load_balancer.process(workers, nmr_samples // 4)
+        kernel_data.update({'samples': KernelInputAllocatedOutput((nmr_distributions, nmr_samples), ctype),
+                            '_rng_state': KernelInputArray(rng_state, 'uint')})
 
-        if padding:
-            return samples[:-padding]
-        return samples
+        runner = RunProcedure(**self.get_cl_routine_kwargs())
+        runner.run_procedure(cl_function, kernel_data, nmr_distributions)
 
-    def _get_uniform_kernel(self, min_val, max_val, c_type):
+        return kernel_data['samples'].get_data()
+
+    def _get_uniform_kernel(self, nmr_samples, ctype):
         random_library = Rand123()
         src = random_library.get_cl_code()
-        # By setting the rand123 state as kernel arguments the kernel does not need to be recompiled for a new state.
         src += '''
-            __kernel void generate(constant uint* restrict rng_state,
-                                   global ''' + c_type + '''* restrict samples){
+            void compute(mot_data_struct* data){
+                rand123_data rand123_rng_data = rand123_initialize_data((uint[]){
+                    data->_rng_state[0], data->_rng_state[1], data->_rng_state[2], data->_rng_state[3], 
+                    data->_rng_state[4], data->_rng_state[5], 0});
+                void* rng_data = (void*)&rand123_rng_data;
 
-                rand123_data rng_data = rand123_initialize_data(
-                    (uint[]){rng_state[0], rng_state[1], rng_state[2], rng_state[3], rng_state[4], rng_state[5],
-                             get_global_id(0), 0});
-
-                ''' + c_type + '''4 randomnr =  rand123_uniform_''' + c_type + '''4(&rng_data);
-
-                ulong gid = get_global_id(0);
-
-                samples[gid * 4] = ''' + str(min_val) + ''' + randomnr.x * ''' + str(max_val - min_val) + ''';
-                samples[gid * 4 + 1] = ''' + str(min_val) + ''' + randomnr.y * ''' + str(max_val - min_val) + ''';
-                samples[gid * 4 + 2] = ''' + str(min_val) + ''' + randomnr.z * ''' + str(max_val - min_val) + ''';
-                samples[gid * 4 + 3] = ''' + str(min_val) + ''' + randomnr.w * ''' + str(max_val - min_val) + ''';
+                for(uint i = 0; i < ''' + str(nmr_samples) + '''; i++){
+                    double4 randomnr = rand4(rng_data);
+                    data->samples[i] = (''' + ctype + ''')(data->min_val[0] + 
+                                                           randomnr.x * (data->max_val[0] - data->min_val[0]));
+                }
             }
         '''
-        return src
+        return NameFunctionTuple('compute', src)
 
-    def _get_gaussian_kernel(self, mean, std, c_type):
+    def _get_gaussian_kernel(self, nmr_samples, ctype):
         random_library = Rand123()
         src = random_library.get_cl_code()
-        # By setting the rand123 state as kernel arguments the kernel does not need to be recompiled for a new state.
         src += '''
-            __kernel void generate(constant uint* restrict rng_state,
-                                   global ''' + c_type + '''* restrict samples){
-
-                rand123_data rng_data = rand123_initialize_data(
-                    (uint[]){rng_state[0], rng_state[1], rng_state[2], rng_state[3], rng_state[4], rng_state[5],
-                             get_global_id(0), 0});
-
-                ''' + c_type + '''4 randomnr =  rand123_normal_''' + c_type + '''4(&rng_data);
-
-                ulong gid = get_global_id(0);
-
-                samples[gid * 4] = ''' + str(mean) + ''' + randomnr.x * ''' + str(std) + ''';
-                samples[gid * 4 + 1] = ''' + str(mean) + ''' + randomnr.y * ''' + str(std) + ''';
-                samples[gid * 4 + 2] = ''' + str(mean) + ''' + randomnr.z * ''' + str(std) + ''';
-                samples[gid * 4 + 3] = ''' + str(mean) + ''' + randomnr.w * ''' + str(std) + ''';
+            void compute(mot_data_struct* data){
+                rand123_data rand123_rng_data = rand123_initialize_data((uint[]){
+                    data->_rng_state[0], data->_rng_state[1], data->_rng_state[2], data->_rng_state[3], 
+                    data->_rng_state[4], data->_rng_state[5], 0});
+                void* rng_data = (void*)&rand123_rng_data;
+                
+                for(uint i = 0; i < ''' + str(nmr_samples) + '''; i++){
+                    double4 randomnr = randn4(rng_data);
+                    data->samples[i] = (''' + ctype + ''')(data->mean[0] + randomnr.x * data->std[0]);
+                }
             }
         '''
-        return src
-
-
-class _Random123Worker(Worker):
-
-    def __init__(self, cl_environment, samples, kernel_source, rng_state):
-        super(_Random123Worker, self).__init__(cl_environment)
-        self._samples = samples
-        self._nmr_samples = self._samples.shape[0]
-        self._kernel_source = kernel_source
-        self._rng_state = rng_state
-
-        self._samples_buf = cl.Buffer(self._cl_context, cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR,
-                                      hostbuf=self._samples)
-
-        self._rng_state_buffer = cl.Buffer(self._cl_context,
-                                           cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=self._rng_state)
-
-        self._kernel = self._build_kernel(self._get_kernel_source())
-
-    def calculate(self, range_start, range_end):
-        nmr_problems = range_end - range_start
-        kernel_args = [self._rng_state_buffer, self._samples_buf]
-        self._kernel.generate(self._cl_queue, (int(nmr_problems), ), None,
-                              *kernel_args, global_offset=(range_start,))
-        self._enqueue_readout(self._samples_buf, self._samples, range_start * 4, range_end * 4)
-
-    def _get_kernel_source(self):
-        return self._kernel_source
+        return NameFunctionTuple('compute', src)

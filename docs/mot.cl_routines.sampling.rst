@@ -1,27 +1,27 @@
-mot.cl_routines.sampling package
-================================
+mot.cl\_routines.sampling package
+=================================
 
 Submodules
 ----------
 
-mot.cl_routines.sampling.amwg module
-------------------------------------
+mot.cl\_routines.sampling.amwg module
+-------------------------------------
 
 .. automodule:: mot.cl_routines.sampling.amwg
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot.cl_routines.sampling.base module
-------------------------------------
+mot.cl\_routines.sampling.base module
+-------------------------------------
 
 .. automodule:: mot.cl_routines.sampling.base
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot.cl_routines.sampling.scam module
-------------------------------------
+mot.cl\_routines.sampling.scam module
+-------------------------------------
 
 .. automodule:: mot.cl_routines.sampling.scam
     :members:

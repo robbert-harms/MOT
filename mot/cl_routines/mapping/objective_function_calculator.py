@@ -1,5 +1,6 @@
 from mot.cl_routines.mapping.run_procedure import RunProcedure
-from ...utils import KernelInputArray, SimpleNamedCLFunction, KernelInputLocalMemory, KernelInputAllocatedOutput
+from ...utils import NameFunctionTuple
+from mot.kernel_input_data import KernelInputLocalMemory, KernelInputArray, KernelInputAllocatedOutput
 from ...cl_routines.base import CLRoutine
 
 
@@ -91,4 +92,4 @@ class ObjectiveFunctionCalculator(CLRoutine):
                 }
             }
         '''
-        return SimpleNamedCLFunction(func, 'compute')
+        return NameFunctionTuple('compute', func)

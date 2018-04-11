@@ -1,6 +1,6 @@
 import numpy as np
 from ...cl_routines.sampling.base import AbstractRWMSampler
-from ...utils import KernelInputArray
+from mot.kernel_input_data import KernelInputArray
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-02-05"

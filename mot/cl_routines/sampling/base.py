@@ -2,8 +2,9 @@ import logging
 from contextlib import contextmanager
 from mot.cl_routines.mapping.run_procedure import RunProcedure
 from mot.library_functions import Rand123
-from mot.utils import split_in_batches, KernelInputScalar, KernelInputArray, KernelInputLocalMemory, \
-    KernelInputAllocatedOutput, get_float_type_def, SimpleNamedCLFunction
+from mot.utils import split_in_batches, get_float_type_def, NameFunctionTuple
+from mot.kernel_input_data import KernelInputScalar, KernelInputLocalMemory, KernelInputArray, \
+    KernelInputAllocatedOutput
 from ...cl_routines.base import CLRoutine
 import numpy as np
 
@@ -167,7 +168,7 @@ class AbstractSampler(CLRoutine):
             return_output (boolean): if the kernel should return output
 
         Returns:
-            mot.utils.SimpleNamedCLFunction: the compute function
+            mot.utils.NameFunctionTuple: the compute function
         """
         kernel_source = '''
                     #define NMR_INST_PER_PROBLEM ''' + str(self._model.get_nmr_inst_per_problem()) + '''
@@ -240,7 +241,7 @@ class AbstractSampler(CLRoutine):
                 }
             }
         '''
-        return SimpleNamedCLFunction(kernel_source, 'compute')
+        return NameFunctionTuple('compute', kernel_source)
 
     def _get_state_update_cl_func(self, nmr_samples, thinning, return_output):
         """Get the function that can advance the sampler state.

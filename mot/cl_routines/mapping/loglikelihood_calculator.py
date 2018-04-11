@@ -1,5 +1,6 @@
 from mot.cl_routines.mapping.run_procedure import RunProcedure
-from ...utils import KernelInputArray, KernelInputScalar, SimpleNamedCLFunction, KernelInputLocalMemory, \
+from ...utils import NameFunctionTuple
+from mot.kernel_input_data import KernelInputScalar, KernelInputLocalMemory, KernelInputArray, \
     KernelInputAllocatedOutput
 from ...cl_routines.base import CLRoutine
 
@@ -129,4 +130,4 @@ class LogLikelihoodCalculator(CLRoutine):
                     }
                 }
             '''
-        return SimpleNamedCLFunction(func, 'compute')
+        return NameFunctionTuple('compute', func)

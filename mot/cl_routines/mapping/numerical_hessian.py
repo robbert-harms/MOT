@@ -1,7 +1,8 @@
 import itertools
 import numpy as np
 from mot.cl_routines.mapping.run_procedure import RunProcedure
-from ...utils import KernelInputArray, SimpleNamedCLFunction, KernelInputLocalMemory, KernelInputAllocatedOutput
+from ...utils import NameFunctionTuple
+from mot.kernel_input_data import KernelInputLocalMemory, KernelInputArray, KernelInputAllocatedOutput
 from ...cl_routines.base import CLRoutine
 from scipy import linalg
 
@@ -569,7 +570,7 @@ class NumericalHessian(CLRoutine):
                 }
             }
         '''
-        return SimpleNamedCLFunction(func, 'compute')
+        return NameFunctionTuple('compute', func)
 
     def _richardson_error_kernel(self, nmr_steps, nmr_convolutions, richardson_coefficients):
         func = ''
@@ -580,7 +581,7 @@ class NumericalHessian(CLRoutine):
                 _compute_richardson_errors(data->derivatives, data->richardson_extrapolations, data->errors);
             }
         '''
-        return SimpleNamedCLFunction(func, 'convolute')
+        return NameFunctionTuple('convolute', func)
 
     def _wynn_extrapolation_kernel(self, nmr_steps):
         """OpenCL kernel for extrapolating a slowly convergent sequence.
@@ -650,4 +651,4 @@ class NumericalHessian(CLRoutine):
                 }
             }
         '''
-        return SimpleNamedCLFunction(func, 'compute')
+        return NameFunctionTuple('compute', func)
