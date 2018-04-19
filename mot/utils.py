@@ -486,31 +486,6 @@ def split_in_batches(nmr_elements, max_batch_size):
         offset += batch_size
 
 
-def get_class_that_defined_method(method):
-    """Get the class that defined the given method.
-
-    This is taken from one of the answers of:
-    ``https://stackoverflow.com/questions/3589311/get-defining-class-of-unbound-method-object-in-python-3/25959545``
-
-    Args:
-        method (func): a python function or method
-
-    Returns:
-        cls: the class that defined the given method
-    """
-    if inspect.ismethod(method):
-        for cls in inspect.getmro(method.__self__.__class__):
-            if cls.__dict__.get(method.__name__) is method:
-                return cls
-        method = method.__func__
-    if inspect.isfunction(method):
-        cls = getattr(inspect.getmodule(method),
-                      method.__qualname__.split('.<locals>', 1)[0].rsplit('.', 1)[0])
-        if isinstance(cls, type):
-            return cls
-    return getattr(method, '__objclass__', None)
-
-
 def hessian_to_covariance(hessian, output_singularity=False):
     """Calculate a covariance matrix from a Hessian by inverting the Hessian.
 
