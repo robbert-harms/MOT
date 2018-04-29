@@ -61,7 +61,7 @@ class CLFunction(object):
         """
         raise NotImplementedError()
 
-    def evaluate(self, inputs, double_precision=False, return_inputs=False):
+    def evaluate(self, inputs, return_inputs=False, cl_runtime_info=None):
         """Evaluate this function for each set of given parameters.
 
         Given a set of input parameters, this model will be evaluated for every parameter set.
@@ -71,8 +71,8 @@ class CLFunction(object):
                 the input data. Each of these input datasets must either be a scalar or be of equal length in the
                 first dimension. The user can either input raw ndarrays or input KernelData objects.
                 If an ndarray is given we will load it read/write by default.
-            double_precision (boolean): if the function should be evaluated in double precision or not
             return_inputs (boolean): if we are interested in the values of the input arrays after evaluation.
+            cl_runtime_info (mot.cl_runtime_info.CLRuntimeInfo): the runtime information for execution
 
         Returns:
             ndarray or tuple(ndarray, dict[str: ndarray]): we always return at least the return values of the function,
@@ -151,8 +151,8 @@ class SimpleCLFunction(CLFunction):
     def get_cl_extra(self):
         return self._cl_extra
 
-    def evaluate(self, inputs, double_precision=False, return_inputs=False):
-        return CLFunctionEvaluator(double_precision=double_precision).evaluate(
+    def evaluate(self, inputs, return_inputs=False, cl_runtime_info=None):
+        return CLFunctionEvaluator(cl_runtime_info=cl_runtime_info).evaluate(
             self, inputs, return_inputs=return_inputs)
 
     def get_dependencies(self):
