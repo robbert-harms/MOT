@@ -15,7 +15,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class AbstractFilter(CLRoutine):
 
-    def __init__(self, size, double_precision=True, **kwargs):
+    def __init__(self, size, **kwargs):
         """Initialize the filter routine.
 
         Args:
@@ -32,7 +32,7 @@ class AbstractFilter(CLRoutine):
                 Either way this value is the distance to the left and to the right of each value.
                 That means that the total kernel size is the product of 1 + 2*s for each size s of each dimension.
         """
-        super(AbstractFilter, self).__init__(double_precision=double_precision, **kwargs)
+        super(AbstractFilter, self).__init__(**kwargs)
         self.size = size
         self._logger = logging.getLogger(__name__)
 
@@ -73,16 +73,16 @@ class AbstractFilter(CLRoutine):
             if len(value.shape) > 3 and value.shape[3] > 1:
                 raise ValueError('The given volume {} is a 4d volume with a 4th dimension >1. We can not use this.')
 
-            volumes_dict[key] = value.astype(dtype=self._mot_float_dtype, copy=False, order='C')
-            results_dict[key] = np.zeros_like(volumes_dict[key], dtype=self._mot_float_dtype, order='C')
+            volumes_dict[key] = value.astype(dtype=self._cl_runtime_info.mot_float_dtype, copy=False, order='C')
+            results_dict[key] = np.zeros_like(volumes_dict[key], dtype=self._cl_runtime_info.mot_float_dtype, order='C')
 
         if mask is not None:
             mask = mask.astype(np.int8, order='C', copy=True)
 
         volumes_list = list(volumes_dict.items())
         workers = self._create_workers(self._get_worker_generator(self, results_dict, volumes_list, mask,
-                                                                  self._double_precision))
-        self._load_balancer.process(workers, len(volumes_list))
+                                                                  self._cl_runtime_info.double_precision))
+        self._cl_runtime_info.load_balancer.process(workers, len(volumes_list))
 
         return results_dict
 
@@ -94,7 +94,8 @@ class AbstractFilter(CLRoutine):
         Returns:
             the python callback for generating the worker
         """
-        return lambda cl_environment: AbstractFilterWorker(cl_environment, self.get_compile_flags_list(), *args)
+        return lambda cl_environment: AbstractFilterWorker(cl_environment,
+                                                           self._cl_runtime_info.get_compile_flags(), *args)
 
 
 class AbstractFilterWorker(Worker):

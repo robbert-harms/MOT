@@ -557,13 +557,13 @@ def covariance_to_correlations(covariance):
     return np.clip(np.nan_to_num(result), -1, 1)
 
 
-class KernelInputDataManager(object):
+class KernelDataManager(object):
 
     def __init__(self, kernel_input_dict, mot_float_dtype):
         """This class manages the transfer and definitions of the user input data into and from the kernel.
 
         Args:
-            kernel_input_dict (dict[str: KernelInputData]): the kernel input data items by name
+            kernel_input_dict (dict[str: KernelData]): the kernel input data items by name
             mot_float_dtype (dtype): a numpy datatype indicating the data type we must use for inputs with ctype
                 ``mot_float_type``.
         """
@@ -625,8 +625,8 @@ class KernelInputDataManager(object):
 
         definitions = []
         for name in self._input_order:
-            kernel_input_data = self._kernel_input_dict[name]
-            definitions.append(kernel_input_data.get_struct_declaration(name))
+            kernel_data = self._kernel_input_dict[name]
+            definitions.append(kernel_data.get_struct_declaration(name))
 
         return '''
             typedef struct{
@@ -644,9 +644,9 @@ class KernelInputDataManager(object):
         """
         definitions = []
         for name in self._input_order:
-            kernel_input_data = self._kernel_input_dict[name]
-            if kernel_input_data.include_in_kernel_call() and name not in self._data_duplicates:
-                definitions.append(kernel_input_data.get_kernel_argument_declaration(name))
+            kernel_data = self._kernel_input_dict[name]
+            if kernel_data.include_in_kernel_call() and name not in self._data_duplicates:
+                definitions.append(kernel_data.get_kernel_argument_declaration(name))
         return definitions
 
     def get_struct_init_string(self, problem_id_substitute):
@@ -669,8 +669,8 @@ class KernelInputDataManager(object):
             if name in self._data_duplicates:
                 name = self._data_duplicates[name]
 
-            kernel_input_data = self._kernel_input_dict[name]
-            definitions.append(kernel_input_data.get_struct_init_string(name, problem_id_substitute))
+            kernel_data = self._kernel_input_dict[name]
+            definitions.append(kernel_data.get_struct_init_string(name, problem_id_substitute))
 
         return '{' + ', '.join(definitions) + '}'
 

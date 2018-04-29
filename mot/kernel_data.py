@@ -11,7 +11,7 @@ __email__ = 'robbert.harms@maastrichtuniversity.nl'
 __licence__ = 'LGPL v3'
 
 
-class KernelInputData(object):
+class KernelData(object):
 
     def set_mot_float_dtype(self, mot_float_dtype):
         """Set the numpy data type corresponding to the ``mot_float_type`` ctype.
@@ -130,7 +130,7 @@ class KernelInputData(object):
         raise NotImplementedError()
 
 
-class KernelInputScalar(KernelInputData):
+class KernelScalar(KernelData):
 
     def __init__(self, value, ctype=None):
         """A kernel input scalar.
@@ -190,7 +190,7 @@ class KernelInputScalar(KernelInputData):
         return False
 
 
-class KernelInputLocalMemory(KernelInputData):
+class KernelLocalMemory(KernelData):
 
     def __init__(self, ctype, size_func=None):
         """Indicates that a local memory array of the indicated size must be loaded as kernel input data.
@@ -238,7 +238,7 @@ class KernelInputLocalMemory(KernelInputData):
         return True
 
 
-class KernelInputArray(KernelInputData):
+class KernelArray(KernelData):
 
     def __init__(self, data, ctype=None, offset_str=None, is_writable=False, is_readable=True, ensure_zero_copy=False):
         """Loads the given array as a buffer into the kernel.
@@ -379,12 +379,12 @@ class KernelInputArray(KernelInputData):
         return True
 
 
-class KernelInputAllocatedOutput(KernelInputData):
+class KernelAllocatedArray(KernelData):
 
     def __init__(self, shape, ctype, offset_str=None, is_writable=True, is_readable=False):
         """Allocate an output buffer of the given shape.
 
-        This is similar to :class:`~mot.utils.KernelInputArray` although these objects are not readable but only
+        This is similar to :class:`~mot.utils.KernelArray` although these objects are not readable but only
         writable by default.
 
         This is meant to quickly allocate a buffer large enough to hold the data requested. After running an OpenCL

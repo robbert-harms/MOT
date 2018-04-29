@@ -2,7 +2,7 @@ import itertools
 import numpy as np
 from mot.cl_routines.mapping.run_procedure import RunProcedure
 from ...utils import NameFunctionTuple
-from mot.kernel_input_data import KernelInputLocalMemory, KernelInputArray, KernelInputAllocatedOutput
+from mot.kernel_data import KernelLocalMemory, KernelArray, KernelAllocatedArray
 from ...cl_routines.base import CLRoutine
 from scipy import linalg
 
@@ -110,14 +110,14 @@ class NumericalHessian(CLRoutine):
 
         all_kernel_data = dict(model.get_kernel_data())
         all_kernel_data.update({
-            'parameters': KernelInputArray(parameters, ctype='mot_float_type'),
-            'local_reduction_lls': KernelInputLocalMemory('double'),
-            'parameter_scalings_inv': KernelInputArray(1. / parameter_scalings, ctype='float', offset_str='0'),
-            'initial_step': KernelInputArray(initial_step, ctype='float'),
-            'step_evaluates': KernelInputAllocatedOutput((parameters.shape[0], nmr_derivatives, nmr_steps), 'double'),
+            'parameters': KernelArray(parameters, ctype='mot_float_type'),
+            'local_reduction_lls': KernelLocalMemory('double'),
+            'parameter_scalings_inv': KernelArray(1. / parameter_scalings, ctype='float', offset_str='0'),
+            'initial_step': KernelArray(initial_step, ctype='float'),
+            'step_evaluates': KernelAllocatedArray((parameters.shape[0], nmr_derivatives, nmr_steps), 'double'),
         })
 
-        runner = RunProcedure(**self.get_cl_routine_kwargs())
+        runner = RunProcedure(self._cl_runtime_info)
         runner.run_procedure(self._derivation_kernel(model, nmr_params, nmr_steps, step_ratio),
                              all_kernel_data, parameters.shape[0], use_local_reduction=True)
 
@@ -145,14 +145,14 @@ class NumericalHessian(CLRoutine):
         final_nmr_convolutions = nmr_convolutions_needed - 1
 
         kernel_data = {
-            'derivatives': KernelInputArray(derivatives, 'double', offset_str='{problem_id} * ' + str(nmr_steps)),
-            'richardson_extrapolations': KernelInputAllocatedOutput(
+            'derivatives': KernelArray(derivatives, 'double', offset_str='{problem_id} * ' + str(nmr_steps)),
+            'richardson_extrapolations': KernelAllocatedArray(
                 (nmr_problems * nmr_derivatives, nmr_convolutions_needed), 'double', is_readable=True),
-            'errors': KernelInputAllocatedOutput(
+            'errors': KernelAllocatedArray(
                 (nmr_problems * nmr_derivatives, final_nmr_convolutions), 'double', is_readable=True),
         }
 
-        runner = RunProcedure(**self.get_cl_routine_kwargs())
+        runner = RunProcedure(self._cl_runtime_info)
         runner.run_procedure(self._richardson_error_kernel(nmr_steps, nmr_convolutions_needed, richardson_coefficients),
                              kernel_data, nmr_problems * nmr_derivatives,  use_local_reduction=False)
 
@@ -168,14 +168,14 @@ class NumericalHessian(CLRoutine):
         nmr_extrapolations = nmr_steps - 2
 
         kernel_data = {
-            'derivatives': KernelInputArray(derivatives, 'double', offset_str='{problem_id} * ' + str(nmr_steps)),
-            'extrapolations': KernelInputAllocatedOutput((nmr_problems * nmr_derivatives, nmr_extrapolations),
+            'derivatives': KernelArray(derivatives, 'double', offset_str='{problem_id} * ' + str(nmr_steps)),
+            'extrapolations': KernelAllocatedArray((nmr_problems * nmr_derivatives, nmr_extrapolations),
                                                          'double', is_readable=True),
-            'errors': KernelInputAllocatedOutput((nmr_problems * nmr_derivatives, nmr_extrapolations), 'double',
-                                                 is_readable=True),
+            'errors': KernelAllocatedArray((nmr_problems * nmr_derivatives, nmr_extrapolations), 'double',
+                                           is_readable=True),
         }
 
-        runner = RunProcedure(**self.get_cl_routine_kwargs())
+        runner = RunProcedure(self._cl_runtime_info)
         runner.run_procedure(self._wynn_extrapolation_kernel(nmr_steps),
                              kernel_data, nmr_problems * nmr_derivatives, use_local_reduction=False)
 

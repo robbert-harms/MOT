@@ -1,8 +1,7 @@
 import os
 from pkg_resources import resource_filename
-import pyopencl as cl
-from mot.utils import get_float_type_def
-from .base import AbstractParallelOptimizer, AbstractParallelOptimizerWorker
+from mot.kernel_data import KernelAllocatedArray
+from .base import AbstractParallelOptimizer
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-02-05"
@@ -44,83 +43,21 @@ class LevenbergMarquardt(AbstractParallelOptimizer):
 
         super(LevenbergMarquardt, self).__init__(patience=patience, optimizer_settings=optimizer_settings, **kwargs)
 
-    def _get_worker_generator(self, *args):
-        return lambda cl_environment: LevenbergMarquardtWorker(cl_environment, self._double_precision, *args)
-
-
-class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
-
-    def __init__(self, *args, **kwargs):
-        super(LevenbergMarquardtWorker, self).__init__(*args, **kwargs)
-
-        if self._model.get_nmr_inst_per_problem() < self._nmr_params:
+    def minimize(self, model, starting_positions):
+        if model.get_nmr_inst_per_problem() < model.get_nmr_parameters():
             raise ValueError('The number of instances per problem must be greater than the number of parameters')
+        return super(LevenbergMarquardt, self).minimize(model, starting_positions)
 
-    def _create_buffers(self):
-        all_buffers, parameters_buffer, return_code_buffer = super(LevenbergMarquardtWorker, self)._create_buffers()
+    def _get_optimizer_kernel_data(self, model):
+        return {'_fjac_all': KernelAllocatedArray((model.get_nmr_problems(),
+                                                   model.get_nmr_parameters(),
+                                                   model.get_nmr_inst_per_problem()), ctype='mot_float_type',
+                                                  is_writable=True, is_readable=True)}
 
-        fjac_items = self._nmr_params * self._model.get_nmr_inst_per_problem() * self._starting_points.shape[0]
-        fjac_buffer_size = fjac_items * self._starting_points.dtype.itemsize
-        fjac_buffer = cl.Buffer(self._cl_context, cl.mem_flags.READ_WRITE, size=fjac_buffer_size)
-        all_buffers.append(fjac_buffer)
+    def _get_optimizer_call_args(self):
+        return super(LevenbergMarquardt, self)._get_optimizer_call_args() + ['data->_fjac_all']
 
-        return all_buffers, parameters_buffer, return_code_buffer
-
-    def _get_buffer_scalar_args(self):
-        scalar_args = super(LevenbergMarquardtWorker, self)._get_buffer_scalar_args()
-        scalar_args.insert(2, None)
-        return scalar_args
-
-    def _get_kernel_source(self):
-        """Overwrite the default kernel source generation.
-
-        We need to add a few extra buffers to the kernel and the lmmin call. This makes the optimizer
-        more robust when using datasets with a high number of observations per problem instance.
-
-        If we inline these buffers the CL compiler may throw a 'out of resources' error since it can fail to find
-        a contiguous block of memory large enough for any of these buffers. We circumvent that now by creating them
-        in global memory space.
-        """
-        nmr_params = self._nmr_params
-
-        kernel_param_names = ['global mot_float_type* restrict params',
-                              'global char* restrict return_codes']
-        kernel_param_names.extend(self._data_struct_manager.get_kernel_arguments())
-        kernel_param_names.append('global mot_float_type* restrict fjac_all')
-
-        optimizer_call_args = 'x, (void*)&data'
-
-        kernel_source = ''
-        kernel_source += get_float_type_def(self._double_precision)
-        kernel_source += self._data_struct_manager.get_struct_definition()
-
-        kernel_source += self._get_optimizer_cl_code()
-        kernel_source += '''
-            __kernel void minimize(
-                ''' + ",\n".join(kernel_param_names) + '''
-                ){
-                    ulong gid = get_global_id(0);
-
-                    mot_float_type x[''' + str(nmr_params) + '''];
-                    for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
-                        x[i] = params[gid * ''' + str(nmr_params) + ''' + i];
-                    }
-
-                    global mot_float_type* fjac = fjac_all + gid * ''' \
-                         + str(self._nmr_params * self._model.get_nmr_inst_per_problem()) + ''';
-
-                    mot_data_struct data = ''' + self._data_struct_manager.get_struct_init_string('gid') + ''';
-                    return_codes[gid] = (char) ''' + self._get_optimizer_call_name() + '''(''' \
-                         + optimizer_call_args + ''', fjac);
-
-                    for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
-                        params[gid * ''' + str(nmr_params) + ''' + i] = x[i];
-                    }
-                }
-        '''
-        return kernel_source
-
-    def _get_evaluate_function(self):
+    def _get_evaluate_function(self, model):
         """Get the CL code for the evaluation function. This is called from _get_optimizer_cl_code.
 
         Implementing optimizers can change this if desired.
@@ -128,8 +65,8 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
         Returns:
             str: the evaluation function.
         """
-        objective_func = self._model.get_objective_per_observation_function()
-        param_modifier = self._model.get_pre_eval_parameter_modifier()
+        objective_func = model.get_objective_per_observation_function()
+        param_modifier = model.get_pre_eval_parameter_modifier()
 
         kernel_source = ''
         kernel_source += objective_func.get_cl_code()
@@ -138,13 +75,13 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
             void evaluate(mot_float_type* x, void* data_void, mot_float_type* result){
                 mot_data_struct* data = (mot_data_struct*)data_void;
                 
-                mot_float_type x_model[''' + str(self._model.get_nmr_parameters()) + '''];
-                for(uint i = 0; i < ''' + str(self._model.get_nmr_parameters()) + '''; i++){
+                mot_float_type x_model[''' + str(model.get_nmr_parameters()) + '''];
+                for(uint i = 0; i < ''' + str(model.get_nmr_parameters()) + '''; i++){
                     x_model[i] = x[i];
                 }
                 ''' + param_modifier.get_cl_function_name() + '''(data, x_model);
                 
-                for(uint i = 0; i < ''' + str(self._model.get_nmr_inst_per_problem()) + '''; i++){
+                for(uint i = 0; i < ''' + str(model.get_nmr_inst_per_problem()) + '''; i++){
                     // the model expects the L1 norm, while the LM method takes the L2 norm. Taking square root here.
                     result[i] = sqrt(fabs(''' + objective_func.get_cl_function_name() + '''(data, x_model, i)));
                 }
@@ -152,10 +89,10 @@ class LevenbergMarquardtWorker(AbstractParallelOptimizerWorker):
         '''
         return kernel_source
 
-    def _get_optimization_function(self):
-        params = {'NMR_PARAMS': self._nmr_params,
-                  'PATIENCE': self._parent_optimizer.patience,
-                  'NMR_INST_PER_PROBLEM': self._model.get_nmr_inst_per_problem(),
+    def _get_optimization_function(self, model):
+        params = {'NMR_PARAMS': model.get_nmr_parameters(),
+                  'PATIENCE': self.patience,
+                  'NMR_INST_PER_PROBLEM': model.get_nmr_inst_per_problem(),
                   'USER_TOL_MULT': 30}
 
         optimizer_settings = self._optimizer_settings or {}

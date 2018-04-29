@@ -1,6 +1,6 @@
 from mot.cl_routines.mapping.run_procedure import RunProcedure
 from ...utils import NameFunctionTuple
-from mot.kernel_input_data import KernelInputLocalMemory, KernelInputArray, KernelInputAllocatedOutput
+from mot.kernel_data import KernelLocalMemory, KernelArray, KernelAllocatedArray
 from ...cl_routines.base import CLRoutine
 
 
@@ -27,12 +27,12 @@ class ObjectiveFunctionCalculator(CLRoutine):
         shape = parameters.shape
         all_kernel_data = dict(model.get_kernel_data())
         all_kernel_data.update({
-            'parameters': KernelInputArray(parameters),
-            'objective_values': KernelInputAllocatedOutput((shape[0],), 'mot_float_type'),
-            'local_reduction_lls': KernelInputLocalMemory('double')
+            'parameters': KernelArray(parameters),
+            'objective_values': KernelAllocatedArray((shape[0],), 'mot_float_type'),
+            'local_reduction_lls': KernelLocalMemory('double')
         })
 
-        runner = RunProcedure(**self.get_cl_routine_kwargs())
+        runner = RunProcedure(self._cl_runtime_info)
         runner.run_procedure(self._get_wrapped_function(model, parameters), all_kernel_data, parameters.shape[0],
                              use_local_reduction=True)
 

@@ -14,8 +14,11 @@
 #define BETA      %(BETA)r                    /* contraction coefficient, default 0.5 */
 #define GAMMA     %(GAMMA)r                   /* expansion coefficient default 2 */
 #define DELTA     %(DELTA)r                   /* reduction coefficient default 0.5 */
-#define PSI       %(PSI)r                   /* simplex reduction coefficient, default 0.25 */
-#define OMEGA     %(OMEGA)r                 /* step reduction coefficient, default 0.1 */
+#define PSI       %(PSI)r                     /* simplex reduction coefficient, default 0.25 */
+#define OMEGA     %(OMEGA)r                   /* step reduction coefficient, default 0.1 */
+
+/** If we use adaptive scales for ALPHA, BETA, GAMMA and DELTA in the NMSimplex calls. */
+#define ADAPTIVE_SCALES %(ADAPTIVE_SCALES)d
 
 /* the minimum subspace dimension, defaults to min(2, n) */
 #define MIN_SUBSPACE_LENGTH %(MIN_SUBSPACE_LENGTH)r
@@ -54,7 +57,13 @@ typedef struct {
 } SubspaceData;
 
 
-// the evaluation function used by the simplex calls
+/**
+ * The evaluation function used by the NMSimplex calls
+ *
+ * The NMSimplex routine only optimizes subsets of the parameters at a time with all other parameters held constant.
+ *
+ */
+
 double subspace_evaluate(mot_float_type* subspace_model_parameters, void* subspace_data){
 
     SubspaceData* d = (SubspaceData*) subspace_data;
@@ -224,6 +233,11 @@ int sbplx_minimize(mot_float_type* model_parameters, /* in: initial guess, out: 
     mot_float_type stepnorm; // used in the computation of the next step size
     mot_float_type dxnorm;   // used in the computation of the next step size
 
+    mot_float_type alpha = ALPHA;
+    mot_float_type beta = BETA;
+    mot_float_type gamma = GAMMA;
+    mot_float_type delta = DELTA;
+
     mot_float_type minf = evaluate(model_parameters, data);
 
     for(i = 0; i < %(NMR_PARAMS)r; i++){
@@ -262,9 +276,16 @@ int sbplx_minimize(mot_float_type* model_parameters, /* in: initial guess, out: 
                 subspace_xstep[k-subspace_starting_index] = xstep[x_indices[k]];
             }
 
+            if(ADAPTIVE_SCALES){
+                alpha = 1;
+                beta = 0.75 - 1.0 / (2 * subspace_dimensions[i]);
+                gamma = 1 + 2.0 / subspace_dimensions[i];
+                delta = 1 - 1.0 / subspace_dimensions[i];
+            }
+
             lib_nmsimplex(subspace_dimensions[i], subspace_model_parameters, (void*)&subspace_data, subspace_xstep,
                           &fdiff, PSI, %(PATIENCE_NMSIMPLEX)r * (subspace_dimensions[i] + 1),
-                          ALPHA, BETA, GAMMA, DELTA, nms_scratch);
+                          alpha, beta, gamma, delta, nms_scratch);
 
             // add the optimized subspace parameters to the current optimal set of model_parameters
             for(k = subspace_starting_index; k < subspace_dimensions[i] + subspace_starting_index; k++){
@@ -295,7 +316,9 @@ int sbplx_minimize(mot_float_type* model_parameters, /* in: initial guess, out: 
             return 3;
         }
 
+        /**************************/
         // calculate the step size
+        /**************************/
         if(nmr_subspaces == 1){
             step_size_scale = PSI;
         }
@@ -319,6 +342,9 @@ int sbplx_minimize(mot_float_type* model_parameters, /* in: initial guess, out: 
                 xstep[i] = copysign(xstep[i] * step_size_scale, delta_x[i]);
             }
         }
+        /**************************/
+        // calculate the step size
+        /**************************/
     }
 
     return 6;

@@ -1,11 +1,12 @@
 import logging
 from contextlib import contextmanager
+
+from mot.cl_routines.base import CLRoutine
 from mot.cl_routines.mapping.run_procedure import RunProcedure
 from mot.library_functions import Rand123
 from mot.utils import split_in_batches, get_float_type_def, NameFunctionTuple
-from mot.kernel_input_data import KernelInputScalar, KernelInputLocalMemory, KernelInputArray, \
-    KernelInputAllocatedOutput
-from ...cl_routines.base import CLRoutine
+from mot.kernel_data import KernelScalar, KernelLocalMemory, KernelArray, \
+    KernelAllocatedArray
 import numpy as np
 
 __author__ = 'Robbert Harms'
@@ -38,7 +39,8 @@ class AbstractSampler(CLRoutine):
         self._nmr_params = self._starting_positions.shape[1]
         self._sampling_index = 0
         self._current_chain_position = np.require(np.copy(self._starting_positions),
-                                                  requirements=['C', 'A', 'O', 'W'], dtype=self._mot_float_dtype)
+                                                  requirements=['C', 'A', 'O', 'W'],
+                                                  dtype=self._cl_runtime_info.mot_float_dtype)
         self._rng_state = np.random.uniform(low=np.iinfo(np.uint32).min, high=np.iinfo(np.uint32).max + 1,
                                             size=(self._nmr_problems, 6)).astype(np.uint32)
 
@@ -95,7 +97,7 @@ class AbstractSampler(CLRoutine):
         """
         kernel_data = self._get_kernel_data(nmr_samples, thinning, return_output)
 
-        runner = RunProcedure(**self.get_cl_routine_kwargs())
+        runner = RunProcedure(self._cl_runtime_info)
         runner.run_procedure(self._get_compute_func(nmr_samples, thinning, return_output), kernel_data,
                              self._nmr_problems, use_local_reduction=True)
         self._sampling_index += nmr_samples * thinning
@@ -130,24 +132,24 @@ class AbstractSampler(CLRoutine):
             return_output (boolean): if the kernel should return output
 
         Returns:
-            dict[str: mot.utils.KernelInputData]: the kernel input data
+            dict[str: mot.utils.KernelData]: the kernel input data
         """
         kernel_data = dict(self._model.get_kernel_data())
         kernel_data.update({
-            '_nmr_iterations': KernelInputScalar(nmr_samples * thinning, ctype='ulong'),
-            '_iteration_offset': KernelInputScalar(self._sampling_index, ctype='ulong'),
-            '_rng_state': KernelInputArray(self._rng_state, 'uint', is_writable=True, ensure_zero_copy=True),
-            '_current_chain_position': KernelInputArray(self._current_chain_position, 'mot_float_type',
-                                                        is_writable=True, ensure_zero_copy=True),
-            '_log_likelihood_tmp': KernelInputLocalMemory('double')
+            '_nmr_iterations': KernelScalar(nmr_samples * thinning, ctype='ulong'),
+            '_iteration_offset': KernelScalar(self._sampling_index, ctype='ulong'),
+            '_rng_state': KernelArray(self._rng_state, 'uint', is_writable=True, ensure_zero_copy=True),
+            '_current_chain_position': KernelArray(self._current_chain_position, 'mot_float_type',
+                                                   is_writable=True, ensure_zero_copy=True),
+            '_log_likelihood_tmp': KernelLocalMemory('double')
         })
 
         if return_output:
             kernel_data.update({
-                '_samples': KernelInputAllocatedOutput((self._nmr_problems, self._nmr_params, nmr_samples),
+                '_samples': KernelAllocatedArray((self._nmr_problems, self._nmr_params, nmr_samples),
                                                        'mot_float_type'),
-                '_log_likelihoods': KernelInputAllocatedOutput((self._nmr_problems, nmr_samples), 'mot_float_type'),
-                '_log_priors': KernelInputAllocatedOutput((self._nmr_problems, nmr_samples), 'mot_float_type'),
+                '_log_likelihoods': KernelAllocatedArray((self._nmr_problems, nmr_samples), 'mot_float_type'),
+                '_log_priors': KernelAllocatedArray((self._nmr_problems, nmr_samples), 'mot_float_type'),
             })
         return kernel_data
 
@@ -155,7 +157,7 @@ class AbstractSampler(CLRoutine):
         """Readout the kernel data and update the sampler state with the state from the compute device.
 
         Args:
-            kernel_data (dict[str: mot.utils.KernelInputData]): the kernel data from which to read the output
+            kernel_data (dict[str: mot.utils.KernelData]): the kernel data from which to read the output
         """
         pass
 
@@ -173,7 +175,7 @@ class AbstractSampler(CLRoutine):
         kernel_source = '''
                     #define NMR_INST_PER_PROBLEM ''' + str(self._model.get_nmr_inst_per_problem()) + '''
                 '''
-        kernel_source += get_float_type_def(self._double_precision)
+        kernel_source += get_float_type_def(self._cl_runtime_info.double_precision)
         random_library = Rand123()
         kernel_source += random_library.get_cl_code()
 
@@ -339,12 +341,12 @@ class AbstractSampler(CLRoutine):
     def _logging(self, nmr_samples, burnin, thinning):
         self._logger.info('Starting sampling with method {0}'.format(self.__class__.__name__))
         self._logger.info('We will use a {} precision float type for the calculations.'.format(
-            'double' if self._double_precision else 'single'))
+            'double' if self._cl_runtime_info.double_precision else 'single'))
 
-        for env in self.load_balancer.get_used_cl_environments(self.cl_environments):
+        for env in self._cl_runtime_info.get_cl_environments():
             self._logger.info('Using device \'{}\'.'.format(str(env)))
 
-        self._logger.info('Using compile flags: {}'.format(self.get_compile_flags_list()))
+        self._logger.info('Using compile flags: {}'.format(self._cl_runtime_info.get_compile_flags()))
 
         sample_settings = dict(nmr_samples=nmr_samples,
                                burnin=burnin,
@@ -378,14 +380,15 @@ class AbstractRWMSampler(AbstractSampler):
                 last. With a random scan we randomize the indices every iteration.
         """
         super(AbstractRWMSampler, self).__init__(model, starting_positions, **kwargs)
-        self._proposal_stds = np.copy(np.require(proposal_stds, requirements='CAOW', dtype=self._mot_float_dtype))
+        self._proposal_stds = np.copy(np.require(proposal_stds, requirements='CAOW',
+                                                 dtype=self._cl_runtime_info.mot_float_dtype))
         self._use_random_scan = use_random_scan
 
     def _get_kernel_data(self, nmr_samples, thinning, return_output):
         kernel_data = super(AbstractRWMSampler, self)._get_kernel_data(nmr_samples, thinning, return_output)
         kernel_data.update({
-            '_proposal_stds': KernelInputArray(self._proposal_stds, 'mot_float_type', is_writable=True,
-                                               ensure_zero_copy=True)
+            '_proposal_stds': KernelArray(self._proposal_stds, 'mot_float_type', is_writable=True,
+                                          ensure_zero_copy=True)
         })
         return kernel_data
 

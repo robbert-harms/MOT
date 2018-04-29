@@ -1,6 +1,6 @@
 import os
 from pkg_resources import resource_filename
-from .base import AbstractParallelOptimizer, AbstractParallelOptimizerWorker
+from .base import AbstractParallelOptimizer
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-02-05"
@@ -53,14 +53,8 @@ class Powell(AbstractParallelOptimizer):
 
         super(Powell, self).__init__(patience=patience, optimizer_settings=optimizer_settings, **kwargs)
 
-    def _get_worker_generator(self, *args):
-        return lambda cl_environment: PowellWorker(cl_environment, self._double_precision, *args)
-
-
-class PowellWorker(AbstractParallelOptimizerWorker):
-
-    def _get_optimization_function(self):
-        params = {'NMR_PARAMS': self._nmr_params, 'PATIENCE': self._parent_optimizer.patience}
+    def _get_optimization_function(self, model):
+        params = {'NMR_PARAMS': model.get_nmr_parameters(), 'PATIENCE': self.patience}
 
         for option, value in self._optimizer_settings.items():
             params.update({option.upper(): value})

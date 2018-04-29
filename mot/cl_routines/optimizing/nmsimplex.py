@@ -1,5 +1,5 @@
 from mot.library_functions import LibNMSimplex
-from ...cl_routines.optimizing.base import AbstractParallelOptimizer, AbstractParallelOptimizerWorker
+from ...cl_routines.optimizing.base import AbstractParallelOptimizer
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-02-05"
@@ -81,31 +81,24 @@ class NMSimplex(AbstractParallelOptimizer):
 
         super(NMSimplex, self).__init__(patience=patience, optimizer_settings=optimizer_settings, **kwargs)
 
-    def minimize(self, model, starting_positions):
-        if self._optimizer_settings.get('adaptive_scales', True):
-            nmr_params = model.get_nmr_parameters()
-            self._optimizer_settings.update(
-                {'alpha': 1,
-                 'beta': 0.75 - 1.0 / (2 * nmr_params),
-                 'gamma': 1 + 2.0 / nmr_params,
-                 'delta': 1 - 1.0 / nmr_params}
-                )
-        return super(NMSimplex, self).minimize(model, starting_positions)
+    def _get_optimization_function(self, model):
+        nmr_params = model.get_nmr_parameters()
 
-    def _get_worker_generator(self, *args):
-        return lambda cl_environment: NMSimplexWorker(cl_environment, self._double_precision, *args)
-
-
-class NMSimplexWorker(AbstractParallelOptimizerWorker):
-
-    def _get_optimization_function(self):
-        params = {'NMR_PARAMS': self._nmr_params, 'PATIENCE': self._parent_optimizer.patience}
+        params = {'NMR_PARAMS': nmr_params, 'PATIENCE': self.patience}
 
         for option, value in self._optimizer_settings.items():
             if option == 'scale':
-                params['INITIAL_SIMPLEX_SCALES'] = '{' + ', '.join([str(value)] * self._nmr_params) + '}'
+                params['INITIAL_SIMPLEX_SCALES'] = '{' + ', '.join([str(value)] * nmr_params) + '}'
             else:
                 params.update({option.upper(): value})
+
+        if self._optimizer_settings.get('adaptive_scales', True):
+            params.update(
+                {'ALPHA': 1,
+                 'BETA': 0.75 - 1.0 / (2 * nmr_params),
+                 'GAMMA': 1 + 2.0 / nmr_params,
+                 'DELTA': 1 - 1.0 / nmr_params}
+                )
 
         lib_nmsimplex = LibNMSimplex(evaluate_fname='evaluate')
         body = lib_nmsimplex.get_cl_code()

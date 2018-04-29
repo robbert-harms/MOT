@@ -1,8 +1,7 @@
 import os
 from pkg_resources import resource_filename
-
 from mot.library_functions import LibNMSimplex
-from ...cl_routines.optimizing.base import AbstractParallelOptimizer, AbstractParallelOptimizerWorker
+from ...cl_routines.optimizing.base import AbstractParallelOptimizer
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-02-05"
@@ -13,7 +12,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class SBPlex(AbstractParallelOptimizer):
 
-    default_patience = 5
+    default_patience = 10
 
     def __init__(self, scale=None, alpha=None, beta=None, gamma=None, delta=None, psi=None, omega=None,
                  min_subspace_length=None, max_subspace_length=None, adaptive_scales=None,
@@ -33,9 +32,8 @@ class SBPlex(AbstractParallelOptimizer):
             beta (double): contraction coefficient, default 0.5
             gamma (double); expansion coefficient, default 2.0
             delta (double); shrinkage coefficient, default 0.5
-            psi (double): subplex specific, simplex reduction coefficient, default 0.01
-                The default used in Rowan's Thesis is 0.25, we opted here for 0.01 for greater accuracy.
-            omega (double): subplex specific, scaling reduction coefficient, default 0.1
+            psi (double): subplex specific, simplex reduction coefficient, default 0.001.
+            omega (double): subplex specific, scaling reduction coefficient, default 0.01
             min_subspace_length (int): the minimum subspace length, defaults to min(2, n).
                 This should hold: (1 <= min_s_d <= max_s_d <= n and min_s_d*ceil(n/nsmax_s_dmax) <= n)
             max_subspace_length (int): the maximum subspace length, defaults to min(5, n).
@@ -89,8 +87,8 @@ class SBPlex(AbstractParallelOptimizer):
         keyword_values['patience_nmsimplex'] = patience_nmsimplex
 
         option_defaults = {'alpha': 1.0, 'beta': 0.5, 'gamma': 2.0, 'delta': 0.5, 'scale': 1.0,
-                           'adaptive_scales': True, 'psi': 0.01, 'omega': 0.1, 'min_subspace_length': 'auto',
-                           'max_subspace_length': 'auto', 'patience_nmsimplex': 10}
+                           'adaptive_scales': True, 'psi': 0.001, 'omega': 0.01, 'min_subspace_length': 'auto',
+                           'max_subspace_length': 'auto', 'patience_nmsimplex': 100}
 
         def get_value(option_name):
             value = keyword_values.get(option_name)
@@ -105,39 +103,22 @@ class SBPlex(AbstractParallelOptimizer):
 
         super(SBPlex, self).__init__(patience=patience, optimizer_settings=optimizer_settings, **kwargs)
 
-    def minimize(self, model, starting_positions):
+    def _get_optimization_function(self, model):
         nmr_params = model.get_nmr_parameters()
-
-        if self._optimizer_settings.get('adaptive_scales', True):
-            self._optimizer_settings.update(
-                {'alpha': 1,
-                 'beta': 0.75 - 1.0 / (2 * nmr_params),
-                 'gamma': 1 + 2.0 / nmr_params,
-                 'delta': 1 - 1.0 / nmr_params}
-                )
-
-        if self._optimizer_settings.get('min_subspace_length', 'auto') == 'auto':
-            self._optimizer_settings.update({'min_subspace_length': min(2, nmr_params)})
-
-        if self._optimizer_settings.get('max_subspace_length', 'auto') == 'auto':
-            self._optimizer_settings.update({'max_subspace_length': min(5, nmr_params)})
-
-        return super(SBPlex, self).minimize(model, starting_positions)
-
-    def _get_worker_generator(self, *args):
-        return lambda cl_environment: SBPlexWorker(cl_environment, self._double_precision, *args)
-
-
-class SBPlexWorker(AbstractParallelOptimizerWorker):
-
-    def _get_optimization_function(self):
-        params = {'NMR_PARAMS': self._nmr_params, 'PATIENCE': self._parent_optimizer.patience}
+        params = {'NMR_PARAMS': nmr_params, 'PATIENCE': self.patience,
+                  'ADAPTIVE_SCALES': int(self.optimizer_settings.get('adaptive_scales', True))}
 
         for option, value in self._optimizer_settings.items():
             if option == 'scale':
-                params['INITIAL_SIMPLEX_SCALES'] = '{' + ', '.join([str(value)] * self._nmr_params) + '}'
+                params['INITIAL_SIMPLEX_SCALES'] = '{' + ', '.join([str(value)] * nmr_params) + '}'
             else:
                 params.update({option.upper(): value})
+
+        if self._optimizer_settings.get('min_subspace_length', 'auto') == 'auto':
+            params.update({'MIN_SUBSPACE_LENGTH': min(2, nmr_params)})
+
+        if self._optimizer_settings.get('max_subspace_length', 'auto') == 'auto':
+            params.update({'MAX_SUBSPACE_LENGTH': min(5, nmr_params)})
 
         sbplex = open(os.path.abspath(resource_filename('mot', 'data/opencl/sbplex.cl')), 'r').read()
         if params:

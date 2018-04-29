@@ -2,7 +2,7 @@ import numpy as np
 
 from mot.cl_routines.mapping.run_procedure import RunProcedure
 from ...utils import NameFunctionTuple, is_scalar
-from mot.kernel_input_data import KernelInputData, KernelInputScalar, KernelInputArray, KernelInputAllocatedOutput
+from mot.kernel_data import KernelData, KernelScalar, KernelArray, KernelAllocatedArray
 from ...cl_routines.base import CLRoutine
 
 
@@ -28,9 +28,9 @@ class CLFunctionEvaluator(CLRoutine):
         Args:
             cl_function (mot.cl_function.CLFunction): the CL function to evaluate
             input_data (dict): for each parameter of the function either an array with input data or an
-                :class:`mot.utils.KernelInputData` object. Each of these input datasets must either be a scalar or be
+                :class:`mot.utils.KernelData` object. Each of these input datasets must either be a scalar or be
                 of equal length in the first dimension. The user can either input raw ndarrays or input
-                KernelInputData objects. If an ndarray is given we will load it read/write by default.
+                KernelData objects. If an ndarray is given we will load it read/write by default.
             return_inputs (boolean): if we are interested in the values of the input arrays after evaluation.
 
         Returns:
@@ -44,9 +44,9 @@ class CLFunctionEvaluator(CLRoutine):
         kernel_items = self._wrap_input_data(cl_function, input_data)
 
         if cl_function.get_return_type() != 'void':
-            kernel_items['_results'] = KernelInputAllocatedOutput((nmr_data_points,), cl_function.get_return_type())
+            kernel_items['_results'] = KernelAllocatedArray((nmr_data_points,), cl_function.get_return_type())
 
-        runner = RunProcedure(**self.get_cl_routine_kwargs())
+        runner = RunProcedure(self._cl_runtime_info)
         runner.run_procedure(self._wrap_cl_function(cl_function, kernel_items), kernel_items, nmr_data_points)
 
         if cl_function.get_return_type() != 'void':
@@ -64,17 +64,17 @@ class CLFunctionEvaluator(CLRoutine):
 
         kernel_items = {}
         for param in cl_function.get_parameters():
-            if isinstance(input_data[param.name], KernelInputData):
+            if isinstance(input_data[param.name], KernelData):
                 kernel_items[self._get_param_cl_name(param.name)] = input_data[param.name]
             elif is_scalar(input_data[param.name]) and not param.data_type.is_pointer_type:
-                kernel_items[self._get_param_cl_name(param.name)] = KernelInputScalar(input_data[param.name])
+                kernel_items[self._get_param_cl_name(param.name)] = KernelScalar(input_data[param.name])
             else:
                 if is_scalar(input_data[param.name]):
                     data = np.ones(min_data_length) * input_data[param.name]
                 else:
                     data = input_data[param.name]
 
-                kernel_items[self._get_param_cl_name(param.name)] = KernelInputArray(
+                kernel_items[self._get_param_cl_name(param.name)] = KernelArray(
                     data, ctype=param.data_type.ctype, is_writable=True, is_readable=True)
 
         return kernel_items
@@ -83,7 +83,7 @@ class CLFunctionEvaluator(CLRoutine):
         min_length = 1
 
         for value in input_data.values():
-            if isinstance(value, KernelInputData):
+            if isinstance(value, KernelData):
                 data = value.get_data()
                 if data is not None:
                     if np.ndarray(data).shape[0] > min_length:

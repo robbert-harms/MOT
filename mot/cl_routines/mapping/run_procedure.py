@@ -1,4 +1,4 @@
-from ...utils import get_float_type_def, KernelInputDataManager
+from ...utils import get_float_type_def, KernelDataManager
 from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
 import pyopencl as cl
@@ -13,9 +13,9 @@ __licence__ = 'LGPL v3'
 
 class RunProcedure(CLRoutine):
 
-    def __init__(self, **kwargs):
+    def __init__(self, *args, **kwargs):
         """This class can run any arbitrary given CL procedure on the given set of data."""
-        super(RunProcedure, self).__init__(**kwargs)
+        super(RunProcedure, self).__init__(*args, **kwargs)
 
     def run_procedure(self, cl_function, kernel_data, nmr_instances, use_local_reduction=False):
         """Run the given function/procedure on the given set of data.
@@ -26,7 +26,7 @@ class RunProcedure(CLRoutine):
 
         Args:
             cl_function (mot.utils.NameFunctionTuple): the function to run on the datasets
-            kernel_data (dict[str: mot.utils.KernelInputData]): the data to use as input to the function
+            kernel_data (dict[str: mot.utils.KernelData]): the data to use as input to the function
                 all the data will be wrapped in a single ``mot_data_struct``.
             nmr_instances (int): the number of parallel threads to run (used as ``global_size``)
             use_local_reduction (boolean): set this to True if you want to use local memory reduction in
@@ -34,9 +34,20 @@ class RunProcedure(CLRoutine):
                  by the work group sizes.
         """
         workers = self._create_workers(lambda cl_environment: _ProcedureWorker(
-            cl_environment, self.get_compile_flags_list(),
-            cl_function, kernel_data, self._double_precision, use_local_reduction))
-        self.load_balancer.process(workers, nmr_instances)
+            cl_environment, self._cl_runtime_info.get_compile_flags(),
+            cl_function, kernel_data, self._cl_runtime_info.double_precision, use_local_reduction))
+        self._cl_runtime_info.load_balancer.process(workers, nmr_instances)
+
+    def _create_workers(self, worker_generating_cb):
+        """Create workers for all the CL environments in current use.
+
+        Args:
+            worker_generating_cb (python function): the callback function that we use to generate the
+                worker for a specific CL environment. This should accept as single argument a CL environment and
+                should return a Worker instance for use in CL computations.
+        """
+        cl_environments = self._cl_runtime_info.get_cl_environments()
+        return [worker_generating_cb(env) for env in cl_environments]
 
 
 class _ProcedureWorker(Worker):
@@ -54,7 +65,7 @@ class _ProcedureWorker(Worker):
         if double_precision:
             mot_float_dtype = np.float64
 
-        self._data_struct_manager = KernelInputDataManager(self._kernel_data, mot_float_dtype)
+        self._data_struct_manager = KernelDataManager(self._kernel_data, mot_float_dtype)
         self._kernel = self._build_kernel(self._get_kernel_source(), compile_flags)
         self._workgroup_size = self._kernel.run_procedure.get_work_group_info(
             cl.kernel_work_group_info.PREFERRED_WORK_GROUP_SIZE_MULTIPLE,

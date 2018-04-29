@@ -3,7 +3,7 @@ from mot.cl_routines.base import CLRoutine
 from mot.cl_routines.mapping.run_procedure import RunProcedure
 from mot.library_functions import Rand123
 from mot.utils import NameFunctionTuple, is_scalar
-from mot.kernel_input_data import KernelInputArray, KernelInputAllocatedOutput
+from mot.kernel_data import KernelArray, KernelAllocatedArray
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-10-29"
@@ -40,7 +40,6 @@ class Random123Generator(CLRoutine):
             seed (float): the seed, if not given a random seed is used.
         """
         super(Random123Generator, self).__init__(**kwargs)
-        self.context = self.cl_environments[0].context
 
     def rand(self, nmr_distributions, nmr_samples, min_val=0, max_val=1, ctype='float'):
         """Draw random samples from the Uniform distribution.
@@ -60,8 +59,8 @@ class Random123Generator(CLRoutine):
         if is_scalar(max_val):
             max_val = np.ones((nmr_distributions, 1)) * max_val
 
-        kernel_data = {'min_val': KernelInputArray(min_val),
-                       'max_val': KernelInputArray(max_val)}
+        kernel_data = {'min_val': KernelArray(min_val),
+                       'max_val': KernelArray(max_val)}
 
         return self._generate_samples(nmr_distributions, nmr_samples, ctype, kernel_data,
                                       self._get_uniform_kernel(nmr_samples, ctype))
@@ -84,8 +83,8 @@ class Random123Generator(CLRoutine):
         if is_scalar(std):
             std = np.ones((nmr_distributions, 1)) * std
 
-        kernel_data = {'mean': KernelInputArray(mean),
-                       'std': KernelInputArray(std)}
+        kernel_data = {'mean': KernelArray(mean),
+                       'std': KernelArray(std)}
 
         return self._generate_samples(nmr_distributions, nmr_samples, ctype, kernel_data,
                                       self._get_gaussian_kernel(nmr_samples, ctype))
@@ -94,10 +93,10 @@ class Random123Generator(CLRoutine):
         rng_state = np.random.uniform(low=np.iinfo(np.uint32).min, high=np.iinfo(np.uint32).max + 1,
                                       size=(nmr_distributions, 6)).astype(np.uint32)
 
-        kernel_data.update({'samples': KernelInputAllocatedOutput((nmr_distributions, nmr_samples), ctype),
-                            '_rng_state': KernelInputArray(rng_state, 'uint')})
+        kernel_data.update({'samples': KernelAllocatedArray((nmr_distributions, nmr_samples), ctype),
+                            '_rng_state': KernelArray(rng_state, 'uint')})
 
-        runner = RunProcedure(**self.get_cl_routine_kwargs())
+        runner = RunProcedure(self._cl_runtime_info)
         runner.run_procedure(cl_function, kernel_data, nmr_distributions)
 
         return kernel_data['samples'].get_data()

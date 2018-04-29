@@ -1,8 +1,8 @@
 from mot.cl_routines.mapping.run_procedure import RunProcedure
 from ...utils import NameFunctionTuple
-from mot.kernel_input_data import KernelInputScalar, KernelInputArray, KernelInputAllocatedOutput
+from mot.kernel_data import KernelScalar, KernelArray, KernelAllocatedArray
 from ...cl_routines.base import CLRoutine
-import numpy as np
+
 
 __author__ = 'Robbert Harms'
 __date__ = '2017-09-11'
@@ -32,14 +32,14 @@ class GaussianFit(CLRoutine):
             tuple: mean and deviation arrays
         """
         all_kernel_data = {
-            'samples': KernelInputArray(samples, ctype='mot_float_type'),
-            'means': KernelInputAllocatedOutput(samples.shape[0], 'mot_float_type'),
-            'deviations': KernelInputAllocatedOutput(samples.shape[0], 'mot_float_type'),
-            'nmr_samples': KernelInputScalar(samples.shape[1]),
-            'ddof': KernelInputScalar(ddof)
+            'samples': KernelArray(samples, ctype='mot_float_type'),
+            'means': KernelAllocatedArray(samples.shape[0], 'mot_float_type'),
+            'deviations': KernelAllocatedArray(samples.shape[0], 'mot_float_type'),
+            'nmr_samples': KernelScalar(samples.shape[1]),
+            'ddof': KernelScalar(ddof)
         }
 
-        runner = RunProcedure(**self.get_cl_routine_kwargs())
+        runner = RunProcedure(self._cl_runtime_info)
         runner.run_procedure(self._get_wrapped_function(return_variance), all_kernel_data, samples.shape[0])
 
         return all_kernel_data['means'].get_data(), all_kernel_data['deviations'].get_data()

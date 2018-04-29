@@ -46,7 +46,8 @@ _config = {
         # The flags to disable when running in double mode
         'disable_in_double_precision': ['-cl-single-precision-constant']
     },
-    'ignore_kernel_compile_warnings': True
+    'ignore_kernel_compile_warnings': True,
+    'double_precision': False
 }
 
 
@@ -144,6 +145,24 @@ def set_default_proposal_update(proposal_update):
     _config['default_proposal_update'] = proposal_update
 
 
+def use_double_precision():
+    """Check if we run the computations in default precision or not.
+
+    Returns:
+        boolean: if we run the computations in double precision or not
+    """
+    return _config['double_precision']
+
+
+def set_use_double_precision(double_precision):
+    """Set the default use of double precision.
+
+    Returns:
+        boolean: if we use double precision by default or not
+    """
+    _config['double_precision'] = double_precision
+
+
 @contextmanager
 def config_context(config_action):
     """Creates a context in which the config action is applied and unapplies the configuration after execution.
@@ -203,16 +222,18 @@ class SimpleConfigAction(ConfigAction):
 
 class RuntimeConfigurationAction(SimpleConfigAction):
 
-    def __init__(self, cl_environments=None, load_balancer=None):
+    def __init__(self, cl_environments=None, load_balancer=None, double_precision=None):
         """Updates the runtime settings.
 
         Args:
             cl_environments (list of CLEnvironment): the new CL environments we wish to use for future computations
             load_balancer (SimpleLoadBalanceStrategy): the load balancer to use
+            double_precision (boolean): if we compute in double precision or not
         """
         super(RuntimeConfigurationAction, self).__init__()
         self._cl_environments = cl_environments
         self._load_balancer = load_balancer
+        self._double_precision = double_precision
 
     def _apply(self):
         if self._cl_environments is not None:
@@ -220,6 +241,9 @@ class RuntimeConfigurationAction(SimpleConfigAction):
 
         if self._load_balancer is not None:
             set_load_balancer(self._load_balancer)
+
+        if self._double_precision is not None:
+            set_use_double_precision(self._double_precision)
 
 
 class VoidConfigurationAction(ConfigAction):

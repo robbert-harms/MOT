@@ -1,6 +1,6 @@
 import pyopencl as cl
 import numpy as np
-from ...utils import get_float_type_def, all_logging_disabled, KernelInputDataManager
+from ...utils import get_float_type_def, all_logging_disabled, KernelDataManager
 from ...cl_routines.base import CLRoutine
 from ...load_balance_strategies import Worker
 from copy import copy
@@ -38,15 +38,15 @@ class WAICCalculator(CLRoutine):
 
         waics = np.zeros((nmr_problems,))
 
-        samples = np.require(samples, dtype=self._mot_float_dtype, requirements=['C', 'A', 'O'])
+        samples = np.require(samples, dtype=self._cl_runtime_info.mot_float_dtype, requirements=['C', 'A', 'O'])
         logsumexps = np.zeros(nmr_observations, dtype=np.float64, order='C')
         variances = np.zeros(nmr_observations, dtype=np.float64, order='C')
 
         workers = self._create_workers(
             lambda cl_environment: _LLWorker(cl_environment,
-                                             self.get_compile_flags_list(),
-                                             model, samples, logsumexps, variances, self._mot_float_dtype,
-                                             self._double_precision))
+                                             self._cl_runtime_info.get_compile_flags(),
+                                             model, samples, logsumexps, variances, self._cl_runtime_info.mot_float_dtype,
+                                             self._cl_runtime_info.double_precision))
 
         for problem_ind in range(nmr_problems):
 
@@ -54,7 +54,7 @@ class WAICCalculator(CLRoutine):
                 worker.set_problem_index(problem_ind)
 
             with all_logging_disabled():
-                self.load_balancer.process(workers, nmr_observations)
+                self._cl_runtime_info.load_balancer.process(workers, nmr_observations)
 
             lpd = np.sum(logsumexps)
             p_waic = np.sum(variances)
@@ -74,7 +74,7 @@ class _LLWorker(Worker):
 
         self._model = model
         self._data_info = self._model.get_kernel_data()
-        self._data_struct_manager = KernelInputDataManager(self._data_info, mot_float_dtype)
+        self._data_struct_manager = KernelDataManager(self._data_info, mot_float_dtype)
         self._double_precision = double_precision
 
         self._samples = samples

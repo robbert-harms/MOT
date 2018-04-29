@@ -1,6 +1,6 @@
 from mot.cl_routines.mapping.run_procedure import RunProcedure
 from ...utils import NameFunctionTuple
-from mot.kernel_input_data import KernelInputScalar, KernelInputArray, KernelInputAllocatedOutput
+from mot.kernel_data import KernelScalar, KernelArray, KernelAllocatedArray
 from ...cl_routines.base import CLRoutine
 import numpy as np
 
@@ -24,15 +24,15 @@ class CircularGaussianFit(CLRoutine):
         Returns:
             tuple: mean and std arrays
         """
-        all_kernel_data = {'samples': KernelInputArray(samples, 'mot_float_type'),
-                           'means': KernelInputAllocatedOutput(samples.shape[0], 'mot_float_type'),
-                           'stds': KernelInputAllocatedOutput(samples.shape[0], 'mot_float_type'),
-                           'nmr_samples': KernelInputScalar(samples.shape[1]),
-                           'low': KernelInputScalar(low),
-                           'high': KernelInputScalar(high),
+        all_kernel_data = {'samples': KernelArray(samples, 'mot_float_type'),
+                           'means': KernelAllocatedArray(samples.shape[0], 'mot_float_type'),
+                           'stds': KernelAllocatedArray(samples.shape[0], 'mot_float_type'),
+                           'nmr_samples': KernelScalar(samples.shape[1]),
+                           'low': KernelScalar(low),
+                           'high': KernelScalar(high),
                            }
 
-        runner = RunProcedure(**self.get_cl_routine_kwargs())
+        runner = RunProcedure(self._cl_runtime_info)
         runner.run_procedure(self._get_wrapped_function(), all_kernel_data, samples.shape[0])
 
         return all_kernel_data['means'].get_data(), all_kernel_data['stds'].get_data()

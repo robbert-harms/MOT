@@ -1,6 +1,6 @@
 from mot.cl_routines.mapping.run_procedure import RunProcedure
 from ...utils import NameFunctionTuple
-from mot.kernel_input_data import KernelInputArray, KernelInputAllocatedOutput
+from mot.kernel_data import KernelArray, KernelAllocatedArray
 from ...cl_routines.base import CLRoutine
 import numpy as np
 
@@ -29,7 +29,7 @@ class CalculateDependentParameters(CLRoutine):
         the maps for the dependent parameters.
 
         Args:
-            kernel_data (dict[str: mot.utils.KernelInputData]): the list of additional data to load
+            kernel_data (dict[str: mot.utils.KernelData]): the list of additional data to load
             estimated_parameters_list (list of ndarray): The list with the one-dimensional
                 ndarray of estimated parameters
             parameters_listing (str): The parameters listing in CL
@@ -42,11 +42,11 @@ class CalculateDependentParameters(CLRoutine):
                                                    dependent_parameter_names)
 
         all_kernel_data = dict(kernel_data)
-        all_kernel_data['x'] = KernelInputArray(np.dstack(estimated_parameters_list)[0, ...], ctype='mot_float_type')
-        all_kernel_data['_results'] = KernelInputAllocatedOutput(
+        all_kernel_data['x'] = KernelArray(np.dstack(estimated_parameters_list)[0, ...], ctype='mot_float_type')
+        all_kernel_data['_results'] = KernelAllocatedArray(
             (estimated_parameters_list[0].shape[0], len(dependent_parameter_names)), 'mot_float_type')
 
-        runner = RunProcedure(**self.get_cl_routine_kwargs())
+        runner = RunProcedure(self._cl_runtime_info)
         runner.run_procedure(cl_named_func, all_kernel_data, estimated_parameters_list[0].shape[0])
 
         return all_kernel_data['_results'].get_data()

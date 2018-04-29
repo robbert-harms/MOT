@@ -19,7 +19,7 @@ class ModelBasicInfoInterface(object):
         """Return a dictionary of input data objects we need to load into the kernel.
 
         Returns:
-            dict[str: mot.utils.KernelInputData]: the list of data objects we need to load in the kernel
+            dict[str: mot.utils.KernelData]: the list of data objects we need to load in the kernel
         """
         raise NotImplementedError()
 
@@ -112,9 +112,9 @@ class OptimizeModelInterface(ModelBasicInfoInterface):
         raise NotImplementedError()
 
     def finalize_optimized_parameters(self, parameters):
-        """Called by the optimization routine after optimization to finalize the optimized parameters.
+        """Post optimization modification hook called by the optimization routine to finalize the optimized parameters.
 
-        This can be used to do some automatic post-processing similar to for example what the
+        This can be used to do some automatic post-processing similar to what, for example, the
         ``get_pre_eval_parameter_modifier`` can do within the kernel.
 
         Args:

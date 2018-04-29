@@ -1,6 +1,6 @@
 import numpy as np
 from ...cl_routines.sampling.base import AbstractRWMSampler
-from mot.kernel_input_data import KernelInputArray
+from mot.kernel_data import KernelArray
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-02-05"
@@ -50,21 +50,22 @@ class SingleComponentAdaptiveMetropolis(AbstractRWMSampler):
         self._scaling_factor = scaling_factor
         self._epsilon = epsilon
 
-        self._parameter_means = np.zeros((self._nmr_problems, self._nmr_params), dtype=self._mot_float_dtype, order='C')
+        self._parameter_means = np.zeros((self._nmr_problems, self._nmr_params),
+                                         dtype=self._cl_runtime_info.mot_float_dtype, order='C')
         self._parameter_variances = np.zeros((self._nmr_problems, self._nmr_params),
-                                             dtype=self._mot_float_dtype, order='C')
+                                             dtype=self._cl_runtime_info.mot_float_dtype, order='C')
         self._parameter_variance_update_m2s = np.zeros((self._nmr_problems, self._nmr_params),
-                                                       dtype=self._mot_float_dtype, order='C')
+                                                       dtype=self._cl_runtime_info.mot_float_dtype, order='C')
 
     def _get_kernel_data(self, nmr_samples, thinning, return_output):
         kernel_data = super(SingleComponentAdaptiveMetropolis, self)._get_kernel_data(nmr_samples, thinning, return_output)
         kernel_data.update({
-            '_parameter_means': KernelInputArray(self._parameter_means, 'mot_float_type', is_writable=True,
-                                                 ensure_zero_copy=True),
-            '_parameter_variances': KernelInputArray(self._parameter_variances, 'mot_float_type', is_writable=True,
-                                                     ensure_zero_copy=True),
-            '_parameter_variance_update_m2s': KernelInputArray(self._parameter_variance_update_m2s, 'mot_float_type',
-                                                               is_writable=True, ensure_zero_copy=True)
+            '_parameter_means': KernelArray(self._parameter_means, 'mot_float_type', is_writable=True,
+                                            ensure_zero_copy=True),
+            '_parameter_variances': KernelArray(self._parameter_variances, 'mot_float_type', is_writable=True,
+                                                ensure_zero_copy=True),
+            '_parameter_variance_update_m2s': KernelArray(self._parameter_variance_update_m2s, 'mot_float_type',
+                                                          is_writable=True, ensure_zero_copy=True)
         })
         return kernel_data
 

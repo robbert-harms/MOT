@@ -67,9 +67,9 @@ class CLFunction(object):
         Given a set of input parameters, this model will be evaluated for every parameter set.
 
         Args:
-            inputs (dict[str: Union(ndarray, mot.utils.KernelInputData)]): for each parameter of the function
+            inputs (dict[str: Union(ndarray, mot.utils.KernelData)]): for each parameter of the function
                 the input data. Each of these input datasets must either be a scalar or be of equal length in the
-                first dimension. The user can either input raw ndarrays or input KernelInputData objects.
+                first dimension. The user can either input raw ndarrays or input KernelData objects.
                 If an ndarray is given we will load it read/write by default.
             double_precision (boolean): if the function should be evaluated in double precision or not
             return_inputs (boolean): if we are interested in the values of the input arrays after evaluation.

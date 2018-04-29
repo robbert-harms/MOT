@@ -5,7 +5,7 @@ from mot.cl_routines.generate_random import Random123Generator
 from mot.cl_routines.sampling.amwg import AdaptiveMetropolisWithinGibbs
 from mot.model_interfaces import SampleModelInterface
 from mot.utils import NameFunctionTuple, add_include_guards
-from mot.kernel_input_data import KernelInputArray
+from mot.kernel_data import KernelArray
 
 __author__ = 'Robbert Harms'
 __date__ = '2018-04-04'
@@ -37,9 +37,9 @@ class GermanTanks(SampleModelInterface):
         self.upper_bounds = upper_bounds
 
     def get_kernel_data(self):
-        return {'observed_tanks': KernelInputArray(self.observed_tanks, 'uint'),
-                'lower_bounds': KernelInputArray(np.max(self.observed_tanks, axis=1), 'uint'),
-                'upper_bounds': KernelInputArray(self.upper_bounds, 'uint')}
+        return {'observed_tanks': KernelArray(self.observed_tanks, 'uint'),
+                'lower_bounds': KernelArray(np.max(self.observed_tanks, axis=1), 'uint'),
+                'upper_bounds': KernelArray(self.upper_bounds, 'uint')}
 
     def get_nmr_problems(self):
         return self.observed_tanks.shape[0]

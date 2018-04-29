@@ -1,7 +1,7 @@
 from mot.cl_routines.mapping.run_procedure import RunProcedure
 from ...utils import NameFunctionTuple
-from mot.kernel_input_data import KernelInputScalar, KernelInputLocalMemory, KernelInputArray, \
-    KernelInputAllocatedOutput
+from mot.kernel_data import KernelScalar, KernelLocalMemory, KernelArray, \
+    KernelAllocatedArray
 from ...cl_routines.base import CLRoutine
 
 
@@ -33,24 +33,24 @@ class LogLikelihoodCalculator(CLRoutine):
         """
         all_kernel_data = dict(model.get_kernel_data())
         all_kernel_data.update({
-            'parameters': KernelInputArray(parameters),
+            'parameters': KernelArray(parameters),
         })
 
         shape = parameters.shape
         if len(shape) > 2:
             all_kernel_data.update({
-                'log_likelihoods': KernelInputAllocatedOutput((shape[0], shape[2]), 'mot_float_type'),
-                'nmr_params': KernelInputScalar(parameters.shape[1]),
-                'nmr_samples': KernelInputScalar(parameters.shape[2]),
-                'local_reduction_lls': KernelInputLocalMemory('double')
+                'log_likelihoods': KernelAllocatedArray((shape[0], shape[2]), 'mot_float_type'),
+                'nmr_params': KernelScalar(parameters.shape[1]),
+                'nmr_samples': KernelScalar(parameters.shape[2]),
+                'local_reduction_lls': KernelLocalMemory('double')
             })
         else:
             all_kernel_data.update({
-                'log_likelihoods': KernelInputAllocatedOutput((shape[0],), 'mot_float_type'),
-                'local_reduction_lls': KernelInputLocalMemory('double')
+                'log_likelihoods': KernelAllocatedArray((shape[0],), 'mot_float_type'),
+                'local_reduction_lls': KernelLocalMemory('double')
             })
 
-        runner = RunProcedure(**self.get_cl_routine_kwargs())
+        runner = RunProcedure(self._cl_runtime_info)
         runner.run_procedure(self._get_wrapped_function(model, parameters), all_kernel_data, parameters.shape[0],
                              use_local_reduction=True)
 
