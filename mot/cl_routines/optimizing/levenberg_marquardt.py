@@ -44,14 +44,14 @@ class LevenbergMarquardt(AbstractParallelOptimizer):
         super(LevenbergMarquardt, self).__init__(patience=patience, optimizer_settings=optimizer_settings, **kwargs)
 
     def minimize(self, model, starting_positions):
-        if model.get_nmr_inst_per_problem() < model.get_nmr_parameters():
+        if model.get_nmr_observations() < model.get_nmr_parameters():
             raise ValueError('The number of instances per problem must be greater than the number of parameters')
         return super(LevenbergMarquardt, self).minimize(model, starting_positions)
 
     def _get_optimizer_kernel_data(self, model):
         return {'_fjac_all': KernelAllocatedArray((model.get_nmr_problems(),
                                                    model.get_nmr_parameters(),
-                                                   model.get_nmr_inst_per_problem()), ctype='mot_float_type',
+                                                   model.get_nmr_observations()), ctype='mot_float_type',
                                                   is_writable=True, is_readable=True)}
 
     def _get_optimizer_call_args(self):
@@ -81,7 +81,7 @@ class LevenbergMarquardt(AbstractParallelOptimizer):
                 }
                 ''' + param_modifier.get_cl_function_name() + '''(data, x_model);
                 
-                for(uint i = 0; i < ''' + str(model.get_nmr_inst_per_problem()) + '''; i++){
+                for(uint i = 0; i < ''' + str(model.get_nmr_observations()) + '''; i++){
                     // the model expects the L1 norm, while the LM method takes the L2 norm. Taking square root here.
                     result[i] = sqrt(fabs(''' + objective_func.get_cl_function_name() + '''(data, x_model, i)));
                 }
@@ -92,7 +92,7 @@ class LevenbergMarquardt(AbstractParallelOptimizer):
     def _get_optimization_function(self, model):
         params = {'NMR_PARAMS': model.get_nmr_parameters(),
                   'PATIENCE': self.patience,
-                  'NMR_INST_PER_PROBLEM': model.get_nmr_inst_per_problem(),
+                  'NMR_OBSERVATIONS': model.get_nmr_observations(),
                   'USER_TOL_MULT': 30}
 
         optimizer_settings = self._optimizer_settings or {}

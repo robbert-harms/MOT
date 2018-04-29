@@ -34,7 +34,7 @@ class WAICCalculator(CLRoutine):
             ndarray: per problem the calculated WAIC
         """
         nmr_problems = samples.shape[0]
-        nmr_observations = model.get_nmr_inst_per_problem()
+        nmr_observations = model.get_nmr_observations()
 
         waics = np.zeros((nmr_problems,))
 

@@ -89,7 +89,7 @@ double lm_euclidian_norm_global(global const mot_float_type* const x, const int 
 /**
  * Make sure that the following holds:
  * %(NMR_PARAMS)s > 0
- * %(NMR_INST_PER_PROBLEM)s >= %(NMR_PARAMS)s
+ * %(NMR_OBSERVATIONS)s >= %(NMR_PARAMS)s
  * FTOL >= 0. && XTOL >= 0. && GTOL >= 0.
  * MAXFEV > 0
  * STEP_BOUND > 0.
@@ -113,13 +113,13 @@ int lmmin(mot_float_type * const x, void* data, global mot_float_type* fjac){
 	int nfev = 0;
 
 	/***  Allocate work space.  ***/
-    mot_float_type fvec[%(NMR_INST_PER_PROBLEM)s];
+    mot_float_type fvec[%(NMR_OBSERVATIONS)s];
     mot_float_type diag[%(NMR_PARAMS)s];
     mot_float_type qtf[%(NMR_PARAMS)s];
     mot_float_type wa1[%(NMR_PARAMS)s];
     mot_float_type wa2[%(NMR_PARAMS)s];
     mot_float_type wa3[%(NMR_PARAMS)s];
-    mot_float_type wf[%(NMR_INST_PER_PROBLEM)s];
+    mot_float_type wf[%(NMR_OBSERVATIONS)s];
     int Pivot[%(NMR_PARAMS)s];
 
     /* Initialize diag. */
@@ -132,7 +132,7 @@ int lmmin(mot_float_type * const x, void* data, global mot_float_type* fjac){
 
     evaluate(x, data, fvec);
     nfev = 1;
-    fnorm = lm_euclidian_norm(fvec, %(NMR_INST_PER_PROBLEM)s);
+    fnorm = lm_euclidian_norm(fvec, %(NMR_OBSERVATIONS)s);
     if (!isfinite(fnorm)) {
 	    return 10; /* nan */
     } else if (fnorm <= LM_DWARF) {
@@ -149,8 +149,8 @@ int lmmin(mot_float_type * const x, void* data, global mot_float_type* fjac){
             x[j] += step; /* replace temporarily */
             evaluate(x, data, wf);
             ++nfev;
-            for (i = 0; i < %(NMR_INST_PER_PROBLEM)s; i++){
-                fjac[j*%(NMR_INST_PER_PROBLEM)s+i] = (wf[i] - fvec[i]) / step;
+            for (i = 0; i < %(NMR_OBSERVATIONS)s; i++){
+                fjac[j*%(NMR_OBSERVATIONS)s+i] = (wf[i] - fvec[i]) / step;
             }
             x[j] = temp; /* restore */
         }
@@ -177,27 +177,27 @@ int lmmin(mot_float_type * const x, void* data, global mot_float_type* fjac){
          *   is column Pivot(j) of the identity matrix.
          */
 
-        lm_qrfac(%(NMR_INST_PER_PROBLEM)s, %(NMR_PARAMS)s, fjac, Pivot, wa1, wa2, wa3);
+        lm_qrfac(%(NMR_OBSERVATIONS)s, %(NMR_PARAMS)s, fjac, Pivot, wa1, wa2, wa3);
         /* return values are Pivot, wa1=rdiag, wa2=acnorm */
 
         /** Form Q^T * fvec, and store first n components in qtf. **/
-        for (i = 0; i < %(NMR_INST_PER_PROBLEM)s; i++){
+        for (i = 0; i < %(NMR_OBSERVATIONS)s; i++){
             wf[i] = fvec[i];
         }
 
         for(j = 0; j < %(NMR_PARAMS)s; j++){
-            temp3 = fjac[j*%(NMR_INST_PER_PROBLEM)s+j];
+            temp3 = fjac[j*%(NMR_OBSERVATIONS)s+j];
             if (temp3 != 0) {
                 sum = 0;
-                for (i = j; i < %(NMR_INST_PER_PROBLEM)s; i++){
-                    sum += fjac[j*%(NMR_INST_PER_PROBLEM)s+i] * wf[i];
+                for (i = j; i < %(NMR_OBSERVATIONS)s; i++){
+                    sum += fjac[j*%(NMR_OBSERVATIONS)s+i] * wf[i];
                 }
                 temp = -sum / temp3;
-                for (i = j; i < %(NMR_INST_PER_PROBLEM)s; i++){
-                    wf[i] += fjac[j*%(NMR_INST_PER_PROBLEM)s+i] * temp;
+                for (i = j; i < %(NMR_OBSERVATIONS)s; i++){
+                    wf[i] += fjac[j*%(NMR_OBSERVATIONS)s+i] * temp;
                 }
             }
-            fjac[j*%(NMR_INST_PER_PROBLEM)s+j] = wa1[j];
+            fjac[j*%(NMR_OBSERVATIONS)s+j] = wa1[j];
             qtf[j] = wf[j];
         }
 
@@ -209,7 +209,7 @@ int lmmin(mot_float_type * const x, void* data, global mot_float_type* fjac){
             else{
                 sum = 0;
                 for (i = 0; i <= j; i++){
-                    sum += fjac[j*%(NMR_INST_PER_PROBLEM)s+i] * qtf[i];
+                    sum += fjac[j*%(NMR_OBSERVATIONS)s+i] * qtf[i];
                 }
                 gnorm = max((double)gnorm, fabs(sum / wa2[Pivot[j]] / fnorm));
             }
@@ -256,7 +256,7 @@ int lmmin(mot_float_type * const x, void* data, global mot_float_type* fjac){
         /** The inner loop. **/
         do {
             /** Determine the Levenberg-Marquardt parameter. **/
-            lm_lmpar(%(NMR_PARAMS)s, fjac, %(NMR_INST_PER_PROBLEM)s, Pivot, diag, qtf, delta, &lmpar, wa1, wa2, wf, wa3 );
+            lm_lmpar(%(NMR_PARAMS)s, fjac, %(NMR_OBSERVATIONS)s, Pivot, diag, qtf, delta, &lmpar, wa1, wa2, wf, wa3 );
             /* used return values are fjac (partly), lmpar, wa1=x, wa3=diag*x */
 
             /* Predict scaled reduction */
@@ -268,7 +268,7 @@ int lmmin(mot_float_type * const x, void* data, global mot_float_type* fjac){
             for (j = 0; j < %(NMR_PARAMS)s; j++) {
                 wa3[j] = 0;
                 for (i = 0; i <= j; i++){
-                    wa3[i] -= fjac[j*%(NMR_INST_PER_PROBLEM)s+i] * wa1[Pivot[j]];
+                    wa3[i] -= fjac[j*%(NMR_OBSERVATIONS)s+i] * wa1[Pivot[j]];
 				}
             }
             temp1 = lm_euclidian_norm(wa3, %(NMR_PARAMS)s) / fnorm;
@@ -291,7 +291,7 @@ int lmmin(mot_float_type * const x, void* data, global mot_float_type* fjac){
 
             evaluate(wa2, data, wf);
             ++nfev;
-            fnorm1 = lm_euclidian_norm(wf, %(NMR_INST_PER_PROBLEM)s);
+            fnorm1 = lm_euclidian_norm(wf, %(NMR_OBSERVATIONS)s);
             if(!isfinite(fnorm1)){
                 return 10;
             }
@@ -341,7 +341,7 @@ int lmmin(mot_float_type * const x, void* data, global mot_float_type* fjac){
                         x[j] = wa2[j];
                     }
                 }
-                for (i = 0; i < %(NMR_INST_PER_PROBLEM)s; i++){
+                for (i = 0; i < %(NMR_OBSERVATIONS)s; i++){
                     fvec[i] = wf[i];
                 }
                 xnorm = lm_euclidian_norm(wa2, %(NMR_PARAMS)s);

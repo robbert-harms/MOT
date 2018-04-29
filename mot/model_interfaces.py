@@ -31,7 +31,7 @@ class ModelBasicInfoInterface(object):
         """
         raise NotImplementedError()
 
-    def get_nmr_inst_per_problem(self):
+    def get_nmr_observations(self):
         """Get the number of instances/data points per problem.
 
         The minimum is one instance per problem.

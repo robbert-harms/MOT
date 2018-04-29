@@ -278,7 +278,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
             str: the evaluation function.
         """
         nmr_params = model.get_nmr_parameters()
-        nmr_inst_per_problem = model.get_nmr_inst_per_problem()
+        nmr_observations = model.get_nmr_observations()
 
         objective_function = model.get_objective_per_observation_function()
         param_modifier = model.get_pre_eval_parameter_modifier()
@@ -299,7 +299,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
                 ''' + param_modifier.get_cl_function_name() + '''(data, x_model);
 
                 double sum = 0;
-                for(uint i = 0; i < ''' + str(nmr_inst_per_problem) + '''; i++){
+                for(uint i = 0; i < ''' + str(nmr_observations) + '''; i++){
                     sum += ''' + objective_function.get_cl_function_name() + '''(data, x_model, i);
                 }
                 return sum;

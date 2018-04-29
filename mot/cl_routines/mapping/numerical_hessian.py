@@ -331,7 +331,7 @@ class NumericalHessian(CLRoutine):
         ll_function = model.get_objective_per_observation_function()
         numdiff_param_transform = model.numdiff_parameter_transformation()
 
-        nmr_inst_per_problem = model.get_nmr_inst_per_problem()
+        nmr_observations = model.get_nmr_observations()
 
         func = ll_function.get_cl_code()
         func += numdiff_param_transform.get_cl_code()
@@ -342,10 +342,10 @@ class NumericalHessian(CLRoutine):
                 ulong local_id = get_local_id(0);
                 data->local_reduction_lls[local_id] = 0;
                 uint workgroup_size = get_local_size(0);
-                uint elements_for_workitem = ceil(''' + str(nmr_inst_per_problem) + '''
+                uint elements_for_workitem = ceil(''' + str(nmr_observations) + '''
                                                   / (mot_float_type)workgroup_size);
 
-                if(workgroup_size * (elements_for_workitem - 1) + local_id >= ''' + str(nmr_inst_per_problem) + '''){
+                if(workgroup_size * (elements_for_workitem - 1) + local_id >= ''' + str(nmr_observations) + '''){
                     elements_for_workitem -= 1;
                 }
 

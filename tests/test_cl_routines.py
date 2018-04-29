@@ -120,7 +120,7 @@ class Rosenbrock(OptimizeModelInterface):
     def get_nmr_problems(self):
         return 1
 
-    def get_nmr_inst_per_problem(self):
+    def get_nmr_observations(self):
         return self.n - 1
 
     def get_nmr_parameters(self):
@@ -175,7 +175,7 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
     def get_nmr_problems(self):
         return 1
 
-    def get_nmr_inst_per_problem(self):
+    def get_nmr_observations(self):
         return 10
 
     def get_nmr_parameters(self):

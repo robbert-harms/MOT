@@ -53,11 +53,11 @@ class ObjectiveFunctionCalculator(CLRoutine):
                 ulong local_id = get_local_id(0);
                 objective_value_tmp[local_id] = 0;
                 uint workgroup_size = get_local_size(0);
-                uint elements_for_workitem = ceil(''' + str(model.get_nmr_inst_per_problem()) + ''' 
+                uint elements_for_workitem = ceil(''' + str(model.get_nmr_observations()) + ''' 
                                                   / (mot_float_type)workgroup_size);
                 
                 if(workgroup_size * (elements_for_workitem - 1) + local_id 
-                        >= ''' + str(model.get_nmr_inst_per_problem()) + '''){
+                        >= ''' + str(model.get_nmr_observations()) + '''){
                     elements_for_workitem -= 1;
                 }
                 

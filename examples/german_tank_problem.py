@@ -44,7 +44,7 @@ class GermanTanks(SampleModelInterface):
     def get_nmr_problems(self):
         return self.observed_tanks.shape[0]
 
-    def get_nmr_inst_per_problem(self):
+    def get_nmr_observations(self):
         return self.observed_tanks.shape[1]
 
     def get_nmr_parameters(self):

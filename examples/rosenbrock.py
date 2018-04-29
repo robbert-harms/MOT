@@ -45,7 +45,7 @@ class Rosenbrock(OptimizeModelInterface, SampleModelInterface):
     def get_nmr_problems(self):
         return self.nmr_problems
 
-    def get_nmr_inst_per_problem(self):
+    def get_nmr_observations(self):
         return self.nmr_params
 
     def get_nmr_parameters(self):

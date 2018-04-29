@@ -173,7 +173,7 @@ class AbstractSampler(CLRoutine):
             mot.utils.NameFunctionTuple: the compute function
         """
         kernel_source = '''
-                    #define NMR_INST_PER_PROBLEM ''' + str(self._model.get_nmr_inst_per_problem()) + '''
+                    #define NMR_OBSERVATIONS ''' + str(self._model.get_nmr_observations()) + '''
                 '''
         kernel_source += get_float_type_def(self._cl_runtime_info.double_precision)
         random_library = Rand123()
@@ -307,9 +307,9 @@ class AbstractSampler(CLRoutine):
                 ulong local_id = get_local_id(0);
                 log_likelihood_tmp[local_id] = 0;
                 uint workgroup_size = get_local_size(0);
-                uint elements_for_workitem = ceil(NMR_INST_PER_PROBLEM / (mot_float_type)workgroup_size);
+                uint elements_for_workitem = ceil(NMR_OBSERVATIONS / (mot_float_type)workgroup_size);
 
-                if(workgroup_size * (elements_for_workitem - 1) + local_id >= NMR_INST_PER_PROBLEM){
+                if(workgroup_size * (elements_for_workitem - 1) + local_id >= NMR_OBSERVATIONS){
                     elements_for_workitem -= 1;
                 }
 
