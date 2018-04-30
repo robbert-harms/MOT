@@ -15,12 +15,11 @@ class CLRuntimeInfo(object):
         """All information necessary for applying operations using OpenCL.
 
         Args:
-            cl_environments (list of mot.cl_environments.CLEnvironment): The list of CL environments using by this routine.
-                If None is given we use the defaults in the current configuration.
+            cl_environments (list of mot.cl_environments.CLEnvironment): The list of CL environments used by
+                this routine. If None is given we use the defaults in the current configuration.
             load_balancer (LoadBalancingStrategy): The load balancing strategy to be used by this routine.
                 If None is given we use the defaults in the current configuration.
-            compile_flags (dict): the list of compile flags to use during model fitting. As values use the
-                flag name, as keys a boolean flag indicating if that one is active.
+            compile_flags (list): the list of compile flags to use during analysis.
             double_precision (boolean): if we apply the computations in double precision or in single float precision.
                 By default we go for single float precision.
         """
@@ -36,7 +35,7 @@ class CLRuntimeInfo(object):
             self._load_balancer = configuration.get_load_balancer()
 
         if self._compile_flags is None:
-            self._compile_flags = configuration.get_compile_flags(self.__class__.__name__)
+            self._compile_flags = configuration.get_compile_flags()
 
         if self._double_precision is None:
             self._double_precision = configuration.use_double_precision()
@@ -65,12 +64,10 @@ class CLRuntimeInfo(object):
         Returns:
             list: the list of enabled compile flags.
         """
-        elements = [flag for flag, enabled in self._compile_flags.items() if enabled]
-
+        elements = list(self._compile_flags)
         if self._double_precision:
             elements_to_remove = get_compile_flags_to_disable_in_double_precision()
             elements = list(filter(lambda e: e not in elements_to_remove, elements))
-
         return elements
 
     def get_cl_environments(self):

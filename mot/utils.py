@@ -1,5 +1,4 @@
 import hashlib
-import inspect
 import logging
 import multiprocessing
 import numbers
@@ -11,7 +10,6 @@ from functools import reduce
 import numpy as np
 import pyopencl as cl
 import pyopencl.array as cl_array
-from scipy.special import jnp_zeros
 
 from mot.cl_data_type import SimpleCLDataType
 
@@ -96,22 +94,6 @@ def ctype_to_dtype(cl_type, mot_float_type='float'):
         for ctype, dtype in data_types:
             if ctype == data_type.raw_data_type:
                 return dtype
-
-
-def get_bessel_roots(number_of_roots=30, np_data_type=np.float64):
-    """These roots are used in some of the compartment models. It are the roots of the equation ``J'_1(x) = 0``.
-
-    That is, where ``J_1`` is the first order Bessel function of the first kind.
-
-    Args:
-        number_of_root (int): The number of roots we want to calculate.
-        np_data_type (np.data_type): the numpy data type
-
-    Returns:
-        ndarray: A vector with the indicated number of bessel roots (of the first order Bessel function
-            of the first kind).
-    """
-    return jnp_zeros(1, number_of_roots).astype(np_data_type, copy=False, order='C')
 
 
 def convert_data_to_dtype(data, data_type, mot_float_type='float'):

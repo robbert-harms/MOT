@@ -32,20 +32,8 @@ module. This entire module acts as a singleton containing the current runtime co
 _config = {
     'cl_environments': CLEnvironmentFactory.smart_device_selection(),
     'load_balancer': PreferGPU(),
-    'compile_flags': {
-        'general': {
-            '-cl-single-precision-constant': True,
-            '-cl-denorms-are-zero': True,
-            '-cl-mad-enable': True,
-            '-cl-no-signed-zeros': True
-        },
-
-        # CL Routine specific flags
-        'cl_routine_specific': {},
-
-        # The flags to disable when running in double mode
-        'disable_in_double_precision': ['-cl-single-precision-constant']
-    },
+    'compile_flags': ['-cl-single-precision-constant', '-cl-denorms-are-zero', '-cl-mad-enable', '-cl-no-signed-zeros'],
+    'compile_flags_to_disable_in_double_precision': ['-cl-single-precision-constant'],
     'ignore_kernel_compile_warnings': True,
     'double_precision': False
 }
@@ -107,20 +95,22 @@ def set_load_balancer(load_balancer):
     _config['load_balancer'] = load_balancer
 
 
-def get_compile_flags(cl_routine_name=None):
+def get_compile_flags():
     """Get the default compile flags to use in a CL routine.
 
-    Args:
-        cl_routine_name (str): the name of the CL routine for which we want the compile flags. If not given
-            we return the default flags. If given we return the default flags updated with the routine specific flags.
-
     Returns:
-        dict: the default list of compile flags we wish to use
+        list: the default list of compile flags we wish to use
     """
-    flags = copy(_config['compile_flags']['general'])
-    if cl_routine_name in _config['compile_flags']['cl_routine_specific']:
-        flags.update(_config['compile_flags']['cl_routine_specific'][cl_routine_name])
-    return flags
+    return list(_config['compile_flags'])
+
+
+def set_compile_flags(compile_flags):
+    """Set the current compile flags.
+
+    Args:
+        compile_flags (list): the new list of compile flags
+    """
+    _config['compile_flags'] = compile_flags
 
 
 def get_compile_flags_to_disable_in_double_precision():
@@ -129,7 +119,7 @@ def get_compile_flags_to_disable_in_double_precision():
     Returns:
         boolean: the list of flags we want to disable when running in double mode
     """
-    return copy(_config['compile_flags']['disable_in_double_precision'])
+    return copy(_config['compile_flags_to_disable_in_double_precision'])
 
 
 def set_default_proposal_update(proposal_update):
@@ -222,17 +212,19 @@ class SimpleConfigAction(ConfigAction):
 
 class RuntimeConfigurationAction(SimpleConfigAction):
 
-    def __init__(self, cl_environments=None, load_balancer=None, double_precision=None):
+    def __init__(self, cl_environments=None, load_balancer=None, compile_flags=None, double_precision=None):
         """Updates the runtime settings.
 
         Args:
             cl_environments (list of CLEnvironment): the new CL environments we wish to use for future computations
             load_balancer (SimpleLoadBalanceStrategy): the load balancer to use
+            compile_flags (list): the list of compile flags to use during analysis.
             double_precision (boolean): if we compute in double precision or not
         """
         super(RuntimeConfigurationAction, self).__init__()
         self._cl_environments = cl_environments
         self._load_balancer = load_balancer
+        self._compile_flags = compile_flags
         self._double_precision = double_precision
 
     def _apply(self):
@@ -241,6 +233,9 @@ class RuntimeConfigurationAction(SimpleConfigAction):
 
         if self._load_balancer is not None:
             set_load_balancer(self._load_balancer)
+
+        if self._compile_flags is not None:
+            set_compile_flags(self._compile_flags)
 
         if self._double_precision is not None:
             set_use_double_precision(self._double_precision)
