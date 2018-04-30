@@ -112,7 +112,8 @@ class KernelData(object):
 
         Args:
             cl_context (pyopencl.Context): the CL context in which we are working.
-            workgroup_size (int): the workgroup size the kernel will use
+            workgroup_size (int or None): the workgroup size the kernel will use. If None, we are not using any
+                local reduction.
 
         Returns:
             a buffer, a local memory object, a scalars, etc., anything that can be loaded into the kernel.
@@ -231,6 +232,9 @@ class KernelLocalMemory(KernelData):
         return name
 
     def get_kernel_inputs(self, cl_context, workgroup_size):
+        if workgroup_size is None:
+            raise ValueError("Can not initialize the local memory kernel data, the workgroup_size is None.")
+
         return cl.LocalMemory(self._size_func(
             workgroup_size, ctype_to_dtype(self._ctype, dtype_to_ctype(self._mot_float_dtype))))
 

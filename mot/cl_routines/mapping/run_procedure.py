@@ -71,7 +71,7 @@ class _ProcedureWorker(Worker):
             cl.kernel_work_group_info.PREFERRED_WORK_GROUP_SIZE_MULTIPLE,
             self._cl_environment.device)
         if not self._use_local_reduction:
-            self._workgroup_size = 1
+            self._workgroup_size = None
 
         self._kernel_input = self._get_kernel_input()
 
@@ -83,11 +83,19 @@ class _ProcedureWorker(Worker):
 
         func = self._kernel.run_procedure
         func.set_scalar_arg_dtypes(self._data_struct_manager.get_scalar_arg_dtypes())
-        func(self._cl_queue,
-             (int(nmr_problems * self._workgroup_size), ),
-             (int(self._workgroup_size),),
-             *self._kernel_input,
-             global_offset=(int(range_start * self._workgroup_size),))
+
+        if self._workgroup_size is None:
+            func(self._cl_queue,
+                 (int(nmr_problems), ),
+                 None,
+                 *self._kernel_input,
+                 global_offset=(int(range_start),))
+        else:
+            func(self._cl_queue,
+                 (int(nmr_problems * self._workgroup_size),),
+                 (int(self._workgroup_size),),
+                 *self._kernel_input,
+                 global_offset=(int(range_start * self._workgroup_size),))
 
         for ind, name in self._data_struct_manager.get_items_to_write_out():
             self._enqueue_readout(self._kernel_input[ind], self._kernel_data[name].get_data(), range_start, range_end)

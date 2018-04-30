@@ -679,7 +679,8 @@ class KernelDataManager(object):
 
         Args:
             cl_context (pyopencl.Context): the context in which we create the buffer
-            workgroup_size (int): the workgroup size the kernel will use
+            workgroup_size (int or None): the work group size the kernel will use. If None we are not using any
+                local reduction.
 
         Returns:
             list of kernel input elements (buffers, local memory object, scalars, etc.)
