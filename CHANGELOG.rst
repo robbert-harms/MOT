@@ -2,6 +2,25 @@
 Changelog
 *********
 
+v0.4.3 (2018-05-03)
+===================
+
+Added
+-----
+- Adds gamma pdf CL function.
+
+Changed
+-------
+- Improved the runtime efficiency of the ProcedureRunner by allowing a workgroup size of None.
+- Renamed get_nmr_inst_per_problem to get_nmr_observations.
+- Updated to the function evaluate signature to use the cl_runtime_info object.
+
+Other
+-----
+- Refactored the optimization routines to use the RunProcedure paradigm.
+- Made the compile flags a list instead of a dict.
+
+
 v0.4.2 (2018-04-11)
 ===================
 
