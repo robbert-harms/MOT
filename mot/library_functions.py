@@ -306,6 +306,25 @@ class GammaP(SimpleCLLibrary):
         ''')
 
 
+class GammaPDF(SimpleCLLibrary):
+
+    def __init__(self):
+        """Computes the Gamma probability density function using the shape and scale parameterization.
+
+        This computes the gamma PDF as: :math:`{\frac {1}{\Gamma (k)\theta ^{k}}}x^{k-1}e^{-{\frac {x}{\theta }}}`
+
+        With x the desired position, :math:`k` the shape and :math:`\theta` the scale.
+        """
+        super(GammaPDF, self).__init__(
+            'double', 'gamma_pdf',
+            [('double', 'shape'),
+             ('double', 'scale'),
+             ('double', 'x')],
+            '''
+                return (pow(x, shape - 1) * exp(-x / scale)) / (tgamma(shape) * pow(scale, shape));
+            ''')
+
+
 class LogCosh(SimpleCLLibrary):
 
     def __init__(self):
