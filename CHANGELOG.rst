@@ -2,6 +2,14 @@
 Changelog
 *********
 
+v0.4.4 (2018-05-15)
+===================
+
+Added
+-----
+- Adds the PDF, CDF and PPF (Quantile function) of the Normal and Gamma distribution as reusable CL functions.
+
+
 v0.4.3 (2018-05-03)
 ===================
 
