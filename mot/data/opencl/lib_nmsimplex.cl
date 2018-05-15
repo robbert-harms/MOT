@@ -52,7 +52,7 @@
  * Added constraints.
  *
  * 2014
- * Removed constraints since MOT features parameter transformations
+ * Removed constraints since MOT features parameter transformations.
  */
 #define USER_TOL_X  30*MOT_EPSILON              /** the precision we break at*/
 

@@ -19,7 +19,8 @@
 double w_im_y100(double y100, double x);
 
 /**
- * Main function from libcerf
+ * Faddeeva's rescaled complex error function
+ * Taken from libcerf.
  */
 double im_w_of_x(double x){
     // Steven G. Johnson, October 2012.

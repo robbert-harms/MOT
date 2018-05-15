@@ -82,7 +82,7 @@ def fit_truncated_gaussian(samples, lower_bounds, upper_bounds):
 
 
 def gaussian_overlapping_coefficient(means_0, stds_0, means_1, stds_1, lower=None, upper=None):
-    """Compute the overlapping coefficient of two Gaussian distributions.
+    """Compute the overlapping coefficient of two Gaussian continuous_distributions.
 
     This computes the :math:`\int_{-\infty}^{\infty}{\min(f(x), g(x))\partial x}` where
     :math:`f \sim \mathcal{N}(\mu_0, \sigma_0^{2})` and :math:`f \sim \mathcal{N}(\mu_1, \sigma_1^{2})` are normally

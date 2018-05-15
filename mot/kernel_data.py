@@ -317,6 +317,18 @@ class KernelArray(KernelData):
         return offset_str.replace('{problem_id}', problem_id_substitute)
 
     @property
+    def data_length(self):
+        """Get the number of elements per problem instance.
+
+        In the kernels, arrays are loaded as one dimensional arrays per problem instance. This property should return
+        the length of that one dimensional array per problem instance.
+
+        Returns:
+            int: the number of elements per problem instance.
+        """
+        return self._data.strides[0] // self._data.itemsize
+
+    @property
     def is_scalar(self):
         return False
 

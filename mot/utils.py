@@ -180,6 +180,13 @@ def get_float_type_def(double_precision):
     Returns:
         str: defines the mot_float_type types, the epsilon and the MIN and MAX values.
     """
+    scipy_constants = '''
+        #define MACHEP DBL_EPSILON
+        #define MAXLOG log(DBL_MAX)
+        #define LANCZOS_G 6.024680040776729583740234375 /* taken from Scipy */
+        #define EULER 0.577215664901532860606512090082402431 /* Euler constant, from Scipy */
+    '''
+
     if double_precision:
         return '''
             #if __OPENCL_VERSION__ <= CL_VERSION_1_1
@@ -195,7 +202,7 @@ def get_float_type_def(double_precision):
             #define MOT_MIN DBL_MIN
             #define MOT_MAX DBL_MAX
             #define MOT_INT_CMP_TYPE long
-        '''
+        ''' + scipy_constants
     else:
         return '''
             #if __OPENCL_VERSION__ <= CL_VERSION_1_1
@@ -211,7 +218,7 @@ def get_float_type_def(double_precision):
             #define MOT_MIN FLT_MIN
             #define MOT_MAX FLT_MAX
             #define MOT_INT_CMP_TYPE int
-        '''
+        ''' + scipy_constants
 
 
 def topological_sort(data):

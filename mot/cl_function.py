@@ -34,7 +34,16 @@ class CLFunction(object):
         """Return the list of parameters from this CL function.
 
         Returns:
-            list of CLFunctionParameter: list of the parameters in this model in the same order as in the CL function"""
+            list of :class:`mot.cl_function.CLFunctionParameter`: list of the parameters in this
+                model in the same order as in the CL function"""
+        raise NotImplementedError()
+
+    def get_signature(self):
+        """Get the CL signature of this function.
+
+        Returns:
+            str: the CL code for the signature of this CL function.
+        """
         raise NotImplementedError()
 
     def get_cl_code(self):
@@ -122,6 +131,12 @@ class SimpleCLFunction(CLFunction):
 
     def get_parameters(self):
         return self._parameter_list
+
+    def get_signature(self):
+        return '{return_type} {cl_function_name}({parameters});'.format(
+            return_type=self.get_return_type(),
+            cl_function_name=self.get_cl_function_name(),
+            parameters=', '.join(self._get_parameter_signatures()))
 
     def get_cl_code(self):
         cl_code = dedent('''

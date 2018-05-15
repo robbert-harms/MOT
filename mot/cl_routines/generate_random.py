@@ -45,7 +45,7 @@ class Random123Generator(CLRoutine):
         """Draw random samples from the Uniform distribution.
 
         Args:
-            nmr_distributions (int): the number of unique distributions to create
+            nmr_distributions (int): the number of unique continuous_distributions to create
             nmr_samples (int): The number of samples to draw
             minimum (double): The minimum value of the random numbers
             maximum (double): The minimum value of the random numbers
@@ -69,7 +69,7 @@ class Random123Generator(CLRoutine):
         """Draw random samples from the Gaussian distribution.
 
         Args:
-            nmr_distributions (int): the number of unique distributions to create
+            nmr_distributions (int): the number of unique continuous_distributions to create
             nmr_samples (int): The number of samples to draw
             mean (float or ndarray): The mean of the distribution
             std (float or ndarray): The standard deviation or the distribution

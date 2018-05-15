@@ -80,6 +80,14 @@ class CLDataType(object):
         """
         raise NotImplementedError()
 
+    @property
+    def address_space(self):
+        """Get the address space of this data declaration.
+
+        Returns:
+            str: the data type address space, one of ``global``, ``local``, ``constant`` or ``private``.
+        """
+
 
 class SimpleCLDataType(CLDataType):
 
@@ -111,7 +119,17 @@ class SimpleCLDataType(CLDataType):
         if self.vector_length:
             self._vector_length = int(self.vector_length)
 
-        self.address_space_qualifier = address_space_qualifier
+        self._address_space_qualifier = address_space_qualifier
+
+        if self._address_space_qualifier is not None:
+            if '__' in self._address_space_qualifier:
+                self._address_space_qualifier = self._address_space_qualifier[2:]
+
+            valid_address_spaces = ('global', 'constant', 'local', 'private')
+
+            if self._address_space_qualifier not in valid_address_spaces:
+                raise ValueError('The given address space qualifier "{}" is not one of {}.'.format(
+                    self._address_space_qualifier, valid_address_spaces))
 
         self.pre_asterisk_qualifiers = pre_asterisk_qualifiers
         if isinstance(self.pre_asterisk_qualifiers, six.string_types):
@@ -136,8 +154,8 @@ class SimpleCLDataType(CLDataType):
 
     def get_declaration(self):
         declaration = ''
-        if self.address_space_qualifier:
-            declaration += str(self.address_space_qualifier) + ' '
+        if self._address_space_qualifier:
+            declaration += str(self._address_space_qualifier) + ' '
         if self.pre_asterisk_qualifiers:
             declaration += str(' '.join(self.pre_asterisk_qualifiers)) + ' '
         declaration += str(self.declaration_type)
@@ -178,6 +196,12 @@ class SimpleCLDataType(CLDataType):
         if self.is_vector_type:
             return self._raw_data_type + str(self.vector_length)
         return self._raw_data_type
+
+    @property
+    def address_space(self):
+        if self._address_space_qualifier is None:
+            return 'private'
+        return self._address_space_qualifier
 
     def __str__(self):
         return self.get_declaration()

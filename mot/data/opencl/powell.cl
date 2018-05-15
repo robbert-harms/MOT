@@ -16,7 +16,7 @@
    the Numerical Recipes chapter on Powell.
 
    It features two reset methods, the one from Numerical Recipes and the one Identity reset from Brent.
-   The other Brent's reset method [2] could still be added, i.e. resetting to an orthogonal matrix found by singular
+   The other reset method by Brent [2] could still be added, i.e. resetting to an orthogonal matrix found by singular
    value decomposition.
 
    References:
@@ -28,17 +28,18 @@
 */
 
 /* Used to set the maximum number of iterations to patience*(number_of_parameters+1). */
-#define PATIENCE %(PATIENCE)r
-#define PATIENCE_LINE_SEARCH %(PATIENCE_LINE_SEARCH)r
-#define POWELL_MAX_ITERATIONS (PATIENCE * (%(NMR_PARAMS)r+1))
+#define POWELL_EPSILON 30*MOT_EPSILON
+#define POWELL_MAX_ITERATIONS (%(PATIENCE)r * (%(NMR_PARAMS)r+1))
 #define POWELL_FUNCTION_TOLERANCE 30*MOT_EPSILON
-#define BRENT_MAX_ITERATIONS (PATIENCE_LINE_SEARCH * (%(NMR_PARAMS)r+1))
-#define BRENT_TOL 2*30*MOT_EPSILON
-#define BRACKET_GOLD 1.618034 /* the default ratio by which successive intervals are magnified in Bracketing */
-#define GLIMIT 100.0 /* the maximum magnification allowed for a parabolic-fit step in Bracketing */
-#define EPSILON 30*MOT_EPSILON
-#define CGOLD 0.3819660 /* golden ratio = (3 - sqrt(5))/2 */
-#define ZEPS 30*MOT_EPSILON
+
+#define MNBRACK_GOLD 1.618034 /* the default ratio by which successive intervals are magnified in Bracketing */
+#define MNBRACK_GLIMIT 100.0 /* the maximum magnification allowed for a parabolic-fit step in Bracketing */
+#define MNBRACK_EPSILON 30*MOT_EPSILON
+
+#define BRENT_MAX_ITERATIONS (%(PATIENCE_LINE_SEARCH)r * (%(NMR_PARAMS)r+1))
+#define BRENT_TOL 2 * 30 * MOT_EPSILON
+#define BRENT_GOLD 0.3819660 /* golden ratio = (3 - sqrt(5))/2 */
+#define BRENT_ZEPS 30 * MOT_EPSILON
 
 /**
   * Set one of the reset methods. These are used to reset the search directions after a set number of steps to
@@ -60,17 +61,13 @@ typedef struct{
     void* data;
 } linear_function_data;
 
-/**
- * Simple swapping function that swaps a and b
- */
-void swap(mot_float_type* a, mot_float_type* b){
-   mot_float_type temp;
-   temp = *b;
-   *b = *a;
-   *a = temp;
-}
 
-mot_float_type bracket_and_brent(mot_float_type *xmin, void* eval_data);
+void mnbrack(mot_float_type* ax, mot_float_type* bx, mot_float_type* cx,
+             mot_float_type* fa, mot_float_type* fb, mot_float_type* fc,
+             void* eval_data);
+int brent(mot_float_type ax, mot_float_type bx, mot_float_type cx,
+          mot_float_type* xmin, mot_float_type* fmin, void* eval_data);
+
 
 /**
  * Initializes the starting vectors.
@@ -103,7 +100,7 @@ void powell_init_search_directions(mot_float_type search_directions[%(NMR_PARAMS
  *  True if the optimizer should top, False otherwise
  */
 bool powell_fval_diff_within_threshold(mot_float_type previous_fval, mot_float_type new_fval){
-    return 2.0 * (previous_fval - new_fval) <= POWELL_FUNCTION_TOLERANCE * (fabs(previous_fval) + fabs(new_fval)) + EPSILON;
+    return 2.0 * (previous_fval - new_fval) <= POWELL_FUNCTION_TOLERANCE * (fabs(previous_fval) + fabs(new_fval)) + POWELL_EPSILON;
 }
 
 
@@ -138,8 +135,12 @@ mot_float_type powell_find_linear_minimum(
 
     linear_function_data eval_data = {point_0, point_1, data};
 
-    mot_float_type xmin = 0;
-    mot_float_type fval = bracket_and_brent(&xmin, (void*)&eval_data);
+    mot_float_type xmin;
+    mot_float_type fval;
+    mot_float_type ax, bx, cx, fa, fb, fc;
+
+    mnbrack(&ax, &bx, &cx, &fa, &fb, &fc, (void*)&eval_data);
+    brent(ax, bx, cx, &xmin, &fval, (void*)&eval_data);
 
     for(int j=0; j < %(NMR_PARAMS)r; j++){
         point_1[j] *= xmin;
@@ -348,94 +349,110 @@ int powell(mot_float_type* model_parameters, void* data){
     return 6;
 }
 
-
-mot_float_type bracket_and_brent(mot_float_type* xmin, void* eval_data){
-
-    mot_float_type ax = 0.0;
-    mot_float_type bx = 1.0;
-    mot_float_type cx;
+/**
+ * Bracket the minimum of a function.
+ */
+void mnbrack(mot_float_type* ax, mot_float_type* bx, mot_float_type* cx,
+             mot_float_type* fa, mot_float_type* fb, mot_float_type* fc,
+             void* eval_data){
+    *ax = 0.0;
+    *bx = 1.0;
+    *fa = 0.0;
+    *fb = 0.0;
+    *fc = 0.0;
 
     mot_float_type ulim, u, r, q, fu, tmp;
     mot_float_type maxarg = 0.0;
-    mot_float_type fa = 0.0;
-    mot_float_type fb = 0.0;
-    mot_float_type fc = 0.0;
 
-    fa = powell_linear_eval_function(ax, eval_data);
-    fb = powell_linear_eval_function(bx, eval_data);
+    *fa = powell_linear_eval_function(*ax, eval_data);
+    *fb = powell_linear_eval_function(*bx, eval_data);
 
-    if(fb > fa){
-        swap(&ax, &bx);
-        swap(&fa, &fb);
+    if(*fb > *fa){
+        tmp = *bx;
+        *bx = *ax;
+        *ax = tmp;
+
+        tmp = *fb;
+        *fb = *fa;
+        *fa = tmp;
     }
 
-    cx = bx + BRACKET_GOLD * (bx - ax);
-    fc = powell_linear_eval_function(cx, eval_data);
+    *cx = *bx + MNBRACK_GOLD * (*bx - *ax);
+    *fc = powell_linear_eval_function(*cx, eval_data);
 
-    while(fb > fc){
-        r = (bx - ax) * (fb - fc);
-        q = (bx - cx) * (fb - fa);
+    while(*fb > *fc){
+        r = (*bx - *ax) * (*fb - *fc);
+        q = (*bx - *cx) * (*fb - *fa);
 
-        maxarg = fmax(fabs(q-r), (mot_float_type)EPSILON);
+        maxarg = fmax(fabs(q-r), (mot_float_type)MNBRACK_EPSILON);
 
-        u = (bx) - ((bx - cx) * q - (bx - ax) * r) / (2.0 * copysign(maxarg, q-r));
-        ulim = (bx) + GLIMIT * (cx - bx);
+        u = (*bx) - ((*bx - *cx) * q - (*bx - *ax) * r) / (2.0 * copysign(maxarg, q-r));
+        ulim = (*bx) + MNBRACK_GLIMIT * (*cx - *bx);
 
-        if((bx - u) * (u - cx) > 0.0){
+        if((*bx - u) * (u - *cx) > 0.0){
             fu = powell_linear_eval_function(u, eval_data);
 
-            if(fu < fc){
-                ax = bx;
-                bx = u;
-                fa = fb;
-                fb = fu;
+            if(fu < *fc){
+                *ax = *bx;
+                *bx = u;
+                *fa = *fb;
+                *fb = fu;
                 break;
             }
-            else if(fu > fb){
-                cx = u;
-                fc = fu;
+            else if(fu > *fb){
+                *cx = u;
+                *fc = fu;
                 break;
             }
-            u = (cx) + BRACKET_GOLD * (cx - bx);
+            u = (*cx) + MNBRACK_GOLD * (*cx - *bx);
             fu = powell_linear_eval_function(u, eval_data);
         }
-        else if((cx - u) * (u - ulim) > 0.0){
+        else if((*cx - u) * (u - ulim) > 0.0){
             fu = powell_linear_eval_function(u, eval_data);
 
-            if(fu < fc){
-                bx = cx;
-                cx = u;
-                u = cx+BRACKET_GOLD*(cx-bx);
+            if(fu < *fc){
+                *bx = *cx;
+                *cx = u;
+                u = *cx + MNBRACK_GOLD * (*cx - *bx);
 
-                fb = fc;
-                fc = fu;
+                *fb = *fc;
+                *fc = fu;
                 fu = powell_linear_eval_function(u, eval_data);
             }
         }
-        else if((u - ulim) * (ulim - cx) >= 0.0){
+        else if((u - ulim) * (ulim - *cx) >= 0.0){
             u = ulim;
             fu = powell_linear_eval_function(u, eval_data);
         }
         else{
-            u = (cx) + BRACKET_GOLD * (cx - bx);
+            u = (*cx) + MNBRACK_GOLD * (*cx - *bx);
             fu = powell_linear_eval_function(u, eval_data);
         }
-        ax = bx;
-        bx = cx;
-        cx = u;
+        *ax = *bx;
+        *bx = *cx;
+        *cx = u;
 
-        fa = fb;
-        fb = fc;
-        fc = fu;
+        *fa = *fb;
+        *fb = *fc;
+        *fc = fu;
     }
+}
 
-    /** from here starts brent */
-    /** I inlined this function to save memory. Please view the original implementation for the details. */
+/**
+ * Line search using Brent's method.
+ * Given a function f, and given a bracketing triplet of abscissas ax, bx, cx (such that bx is between ax and cx,
+ * and f(bx) is less than both f(ax) and (cx)), this routine isolates the minimum to a fractional precision of about
+ * tol using Brent’s method. The abscissa of the minimum is returned as xmin, and the minimum function value is
+ * returned as fmin.
+ *
+ * The return value signifies the return code.
+ */
+int brent(mot_float_type ax, mot_float_type bx, mot_float_type cx, mot_float_type* xmin,
+          mot_float_type* fmin, void* eval_data){
+    mot_float_type u, r, q, fu, tmp;
     mot_float_type d, fx, fv, fw;
     mot_float_type p, tol1, tol2, v, w, x, xm;
     mot_float_type e=0.0;
-
-    int iter;
 
     mot_float_type a=(ax < cx ? ax : cx);
     mot_float_type b=(ax > cx ? ax : cx);
@@ -443,15 +460,15 @@ mot_float_type bracket_and_brent(mot_float_type* xmin, void* eval_data){
     x=w=v=bx;
     fw=fv=fx=powell_linear_eval_function(x, eval_data);
 
-    #pragma unroll 1
-    for(iter=0; iter < BRENT_MAX_ITERATIONS; iter++){
+    for(uint iter = 0; iter < BRENT_MAX_ITERATIONS; iter++){
         xm = 0.5 * (a + b);
-        tol1 = BRENT_TOL * fabs(x) + ZEPS;
+        tol1 = BRENT_TOL * fabs(x) + BRENT_ZEPS;
         tol2 = 2.0 * tol1;
 
         if(fabs(x - xm) <= (tol2 - 0.5 * (b - a))){
             *xmin = x;
-            return fx;
+            *fmin = fx;
+            return 0;
         }
 
         if(fabs(e) > tol1){
@@ -468,9 +485,11 @@ mot_float_type bracket_and_brent(mot_float_type* xmin, void* eval_data){
             tmp = e;
             e = d;
 
-            if(fabs(p) >= fabs(0.5 * q * tmp) || p <= q * (a - x) || p >= q * (b - x)){
+            // Explicit checking that the three points used to fit the quadratic are not in fact co-linear
+            // http://numerical.recipes/forum/showthread.php?p=4893 (2018-05-14).
+            if(fabs(p) < BRENT_TOL || fabs(p) >= fabs(0.5 * q * tmp) || p <= q*(a-x) || p >= q*(b-x)){
                 e = (x >= xm ? a : b) - x;
-                d = CGOLD * e;
+                d = BRENT_GOLD * e;
             }
             else {
                 d = p / q;
@@ -482,7 +501,7 @@ mot_float_type bracket_and_brent(mot_float_type* xmin, void* eval_data){
         }
         else{
             e = (x >= xm ? a : b) - x;
-            d = CGOLD * e;
+            d = BRENT_GOLD * e;
         }
 
         u = (fabs(d) >= tol1 ? x + d : x + copysign(tol1, d));
@@ -522,18 +541,21 @@ mot_float_type bracket_and_brent(mot_float_type* xmin, void* eval_data){
         }
     }
     *xmin=x;
-    return fx;
+    *fmin = fx;
+    return 0;
 }
 
-#undef PATIENCE
-#undef MAX_ITERATIONS
-#undef POWELL_FUNCTION_TOLERANCE
+#undef BRENT_MAX_ITERATIONS
 #undef BRENT_TOL
-#undef BRACKET_GOLD
-#undef GLIMIT
-#undef EPSILON
-#undef CGOLD
-#undef ZEPS
+#undef BRENT_GOLD
+#undef BRENT_ZEPS
+
+#undef MAX_ITERATIONS
+#undef MNBRACK_GOLD
+#undef MNBRACK_GLIMIT
+#undef MNBRACK_EPSILON
+#undef POWELL_FUNCTION_TOLERANCE
+#undef POWELL_EPSILON
 #undef POWELL_RESET_METHOD_RESET_TO_IDENTITY
 #undef POWELL_RESET_METHOD_EXTRAPOLATED_POINT
 #undef POWELL_RESET_METHOD

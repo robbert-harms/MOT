@@ -90,6 +90,8 @@ class CLFunctionEvaluator(CLRoutine):
                         min_length = np.ndarray(data).shape[0]
             elif is_scalar(value):
                 pass
+            elif isinstance(value, (tuple, list)):
+                min_length = len(value)
             elif value.shape[0] > min_length:
                 min_length = value.shape[0]
 
@@ -104,26 +106,59 @@ class CLFunctionEvaluator(CLRoutine):
                 func_args.append('data->{}'.format(param_cl_name))
             else:
                 if param.data_type.is_pointer_type:
-                    func_args.append('data->{}'.format(param_cl_name))
+                    func_args.append(param_cl_name)
                 else:
                     func_args.append('data->{}[0]'.format(param_cl_name))
 
         func_name = 'evaluate'
         func = cl_function.get_cl_code()
 
+        wrapped_arrays = self._wrap_arrays(cl_function, kernel_items)
+
         if cl_function.get_return_type() == 'void':
             func += '''
                 void ''' + func_name + '''(mot_data_struct* data){
+                ''' + wrapped_arrays + '''
                     ''' + cl_function.get_cl_function_name() + '''(''' + ', '.join(func_args) + ''');  
                 }
             '''
         else:
             func += '''
                 void ''' + func_name + '''(mot_data_struct* data){
+                    ''' + wrapped_arrays + '''
                     *(data->_results) = ''' + cl_function.get_cl_function_name() + '(' + ', '.join(func_args) + ''');  
                 }
             '''
         return NameFunctionTuple(func_name, func)
+
+    def _wrap_arrays(self, cl_function, kernel_items):
+        """For functions that require private arrays as input, change the address space of the global arrays.
+
+        This does not actually change the address space, but creates a new array in the global address space and
+        fills it with the values of the global array.
+
+        Returns:
+            str: converts the address space of the input array from global to private, for those parameters that
+                require it.
+        """
+        conversions = ''
+
+        parameters = cl_function.get_parameters()
+        for parameter in parameters:
+            if parameter.data_type.is_pointer_type:
+                if parameter.data_type.address_space == 'private':
+                    conversions += '''
+                        {ctype} {param_name}[{nmr_elements}];
+                        
+                        for(uint i = 0; i < {nmr_elements}; i++){{
+                            {param_name}[i] = data->{param_name}[i];
+                        }}
+                    '''.format(ctype=parameter.data_type.ctype, param_name=parameter.name,
+                               nmr_elements=kernel_items[parameter.name].data_length)
+
+        print(conversions)
+        return conversions
+
 
     def _get_param_cl_name(self, param_name):
         if '.' in param_name:
