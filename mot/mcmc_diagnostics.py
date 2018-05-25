@@ -73,7 +73,7 @@ def univariate_ess(samples, method='standard_error', **kwargs):
 
     References:
         * Flegal, J.M., Haran, M., and Jones, G.L. (2008). "Markov chain Monte Carlo: Can We
-          Trust the Third Significant Figure?". Statistical Science, 23, p. 250–260.
+          Trust the Third Significant Figure?". Statistical Science, 23, p. 250-260.
         * Marc S. Meketon and Bruce Schmeiser. 1984. Overlapping batch means: something for nothing?.
           In Proceedings of the 16th conference on Winter simulation (WSC '84), Sallie Sheppard (Ed.).
           IEEE Press, Piscataway, NJ, USA, 226-230.
