@@ -66,9 +66,8 @@ The installation on Windows is a little bit more convoluted due to the lack of a
 
 Installing Python
 =================
-Since MOT is a Python package we need to install a Python interpreter. Considering that Python2 is soon end-of-life, we focus here on installing Python3.
-One can of course use this guide for Python 2 as well by substituting Python version 2(.7) for 3(.x) where stated.
-Note that MOT is not compatible with Python < 2.7 and that a recent version of Python 3 is recommended.
+Since MOT is a Python package we need to install a Python interpreter.
+Considering that Python2 is soon end-of-life, this package only supports Python3.
 
 The easiest way to install Python3 is with the Anaconda Python distribution.
 Please download and install the Python3.x 64 bit distribution, version 4.2 or higher which includes PyQt5, from `Anaconda <https://www.continuum.io/downloads>`_ and install it with the default settings.
