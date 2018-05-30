@@ -4,9 +4,6 @@ from mot.cl_routines.optimizing.sbplex import SBPlex
 from mot.cl_routines.sampling.amwg import AdaptiveMetropolisWithinGibbs
 from mot.cl_routines.sampling.scam import SingleComponentAdaptiveMetropolis
 from .cl_routines.optimizing.levenberg_marquardt import LevenbergMarquardt
-from .cl_routines.filters.gaussian import GaussianFilter
-from .cl_routines.filters.mean import MeanFilter
-from .cl_routines.filters.median import MedianFilter
 from .cl_routines.optimizing.nmsimplex import NMSimplex
 from .cl_routines.optimizing.powell import Powell
 from .load_balance_strategies import EvenDistribution, RuntimeLoadBalancing, PreferGPU, PreferCPU, \
@@ -20,7 +17,6 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 optimizers = [LevenbergMarquardt, Powell, NMSimplex, SBPlex, MultiStepOptimizer, RandomRestart]
 samplers = [AdaptiveMetropolisWithinGibbs, SingleComponentAdaptiveMetropolis]
-filters = [GaussianFilter, MeanFilter, MedianFilter]
 load_balance_strategies = [EvenDistribution, RuntimeLoadBalancing, PreferGPU, PreferCPU, PreferSpecificEnvironment]
 
 
@@ -50,20 +46,6 @@ def get_sampler_by_name(name):
         class: the class of the sampler requested
     """
     return _get_item(name, samplers, 'samplers')
-
-
-def get_filter_by_name(name):
-    """ Get the class by the given name.
-
-    This does not instantiate the class, only returns a reference to it.
-
-    Args:
-        name: the name of the filter routine we want to return
-
-    Returns:
-        class: the class of the filter routine requested
-    """
-    return _get_item(name, filters, 'smoothers')
 
 
 def get_load_balance_strategy_by_name(name):
