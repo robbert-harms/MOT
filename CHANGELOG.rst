@@ -2,6 +2,23 @@
 Changelog
 *********
 
+v0.5.0 (2018-06-01)
+===================
+This version removes support for Python version <= 2.7. Now only Python > 3 is supported.
+
+Added
+-----
+- Adds Ubuntu 18.04 release target.
+
+Changed
+-------
+- Removes Python version <= 2.7 support.
+
+Other
+-----
+- Removed the gaussian/mean/median filters from the package. If this is needed in the future it would be better to support it as list-processing kernels instead of 3d volume filters.
+
+
 v0.4.4 (2018-05-15)
 ===================
 
