@@ -182,7 +182,7 @@ class SampleModelInterface(ModelBasicInfoInterface):
             mot.utils.NameFunctionTuple: A function with the signature:
                 .. code-block:: c
 
-                    mot_float_type <func_name>(
+                    void <func_name>(
                         mot_data_struct* data,
                         <address_space_parameter_vector> mot_float_type* x
                     );
@@ -191,7 +191,7 @@ class SampleModelInterface(ModelBasicInfoInterface):
         """
         fname = 'finalizeProposal'
         func = '''
-            double ''' + fname + '''(mot_data_struct* data,
+            void ''' + fname + '''(mot_data_struct* data,
                 ''' + str(address_space_parameter_vector) + ''' const mot_float_type* const x){
             }
         '''
