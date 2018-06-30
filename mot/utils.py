@@ -3,7 +3,7 @@ import logging
 import multiprocessing
 import numbers
 import os
-from collections import Sequence
+from collections import Sequence, Mapping, OrderedDict
 from contextlib import contextmanager
 from functools import reduce
 
@@ -549,53 +549,19 @@ def covariance_to_correlations(covariance):
 class KernelDataManager(object):
 
     def __init__(self, kernel_input_dict, mot_float_dtype):
-        """This class manages the transfer and definitions of the user input data into and from the kernel.
+        """This class manages the transfer and definitions of the user input data to and from the kernel.
 
         Args:
-            kernel_input_dict (dict[str: KernelData]): the kernel input data items by name
+            kernel_input_dict (Dict[str, Union[KernelData, dict]]): the kernel input data items by name
             mot_float_dtype (dtype): a numpy datatype indicating the data type we must use for inputs with ctype
                 ``mot_float_type``.
         """
-        self._kernel_input_dict = kernel_input_dict or []
-        self._input_order = list(sorted(self._kernel_input_dict))
-        self._data_duplicates = self.get_duplicate_items()
+        self._kernel_input_dict = self._sort_kernel_input_names(kernel_input_dict or {})
+        self._flat_kernel_inputs = self._get_flat_kernel_input_dict()
         self._mot_float_dtype = mot_float_dtype
 
-        for input_data in kernel_input_dict.values():
-            input_data.set_mot_float_dtype(mot_float_dtype)
-
-    def get_duplicate_items(self):
-        """Get a list of duplicate kernel inputs such that we don't load duplicate information twice.
-
-        This will search for duplicate elements that are to be loaded in the kernel call, point to exactly the
-        same memory and are defined to be write only.
-
-        Returns:
-            dict: a mapping from duplicate inputs (by name) to the only copy of the duplicate input object we load.
-        """
-        duplicates = {}
-
-        for index in range(len(self._input_order)):
-            key = self._input_order[index]
-            kernel_input = self._kernel_input_dict[key]
-            data = kernel_input.get_data()
-
-            if not kernel_input.include_in_kernel_call() or kernel_input.read_data_back:
-                continue
-
-            if key not in duplicates:
-                for other_index in range(index + 1, len(self._input_order)):
-                    other_key = self._input_order[other_index]
-                    other_kernel_input = self._kernel_input_dict[other_key]
-                    other_data = other_kernel_input.get_data()
-
-                    if not other_kernel_input.include_in_kernel_call() or other_kernel_input.read_data_back:
-                        continue
-
-                    if np.array_equal(data, other_data):
-                        duplicates[other_key] = key
-
-        return duplicates
+        for data in self._flat_kernel_inputs.values():
+            data.set_mot_float_dtype(self._mot_float_dtype)
 
     def get_struct_definition(self):
         """Return the structure definition of the mot_data_struct.
@@ -607,19 +573,27 @@ class KernelDataManager(object):
         """
         if not len(self._kernel_input_dict):
             return '''
-                typedef struct{
+                typedef struct mot_data_struct{
                     constant void* place_holder;
                 } mot_data_struct;
             '''
 
-        definitions = []
-        for name in self._input_order:
-            kernel_data = self._kernel_input_dict[name]
-            definitions.append(kernel_data.get_struct_declaration(name))
+        def recursive_create_definitions(kernel_input):
+            definitions = []
+            for name, data in kernel_input.items():
+                if isinstance(data, Mapping):
+                    definitions.append('''
+                        struct {{
+                            {definitions}
+                        }} {name};
+                    '''.format(definitions='\n'.join(recursive_create_definitions(data)), name=name))
+                else:
+                    definitions.append(data.get_struct_declaration(name))
+            return definitions
 
         return '''
-            typedef struct{
-                ''' + '\n'.join(definitions) + '''
+            typedef struct mot_data_struct{
+                ''' + '\n'.join(recursive_create_definitions(self._kernel_input_dict)) + '''
             } mot_data_struct;
         '''
 
@@ -631,17 +605,11 @@ class KernelDataManager(object):
         Returns:
             list of str: the list of parameter definitions
         """
-        definitions = []
-        for name in self._input_order:
-            kernel_data = self._kernel_input_dict[name]
-            if kernel_data.include_in_kernel_call() and name not in self._data_duplicates:
-                definitions.append(kernel_data.get_kernel_argument_declaration(name))
-        return definitions
+        return [data.get_kernel_argument_declaration(name) for name, data in self._flat_kernel_inputs.items()
+                if data.include_in_kernel_call()]
 
     def get_struct_init_string(self, problem_id_substitute):
         """Create the structure initialization string.
-
-        This will use the sorted keys for looping through the kernel input items.
 
         Args:
             problem_id_substitute (str): the substitute for the ``{problem_id}`` in the kernel data info elements.
@@ -652,16 +620,17 @@ class KernelDataManager(object):
         if not len(self._kernel_input_dict):
             return '{0}'
 
-        definitions = []
-        for name in self._input_order:
+        def recursive_create_init_string(kernel_input, name_prefix):
+            definitions = []
+            for name, data in kernel_input.items():
+                if isinstance(data, Mapping):
+                    definitions.append('{' + ', '.join(recursive_create_init_string(
+                        data, '{}{}_'.format(name_prefix, name))) + '}')
+                else:
+                    definitions.append(data.get_struct_init_string(name_prefix + name, problem_id_substitute))
+            return definitions
 
-            if name in self._data_duplicates:
-                name = self._data_duplicates[name]
-
-            kernel_data = self._kernel_input_dict[name]
-            definitions.append(kernel_data.get_struct_init_string(name, problem_id_substitute))
-
-        return '{' + ', '.join(definitions) + '}'
+        return '{' + ', '.join(recursive_create_init_string(self._kernel_input_dict, '')) + '}'
 
     def get_kernel_inputs(self, cl_context, workgroup_size):
         """Get the kernel inputs to load.
@@ -675,9 +644,8 @@ class KernelDataManager(object):
             list of kernel input elements (buffers, local memory object, scalars, etc.)
         """
         kernel_inputs = []
-        for name in self._input_order:
-            data = self._kernel_input_dict[name]
-            if data.include_in_kernel_call() and name not in self._data_duplicates:
+        for name, data in self._flat_kernel_inputs.items():
+            if data.include_in_kernel_call():
                 kernel_inputs.append(data.get_kernel_inputs(cl_context, workgroup_size))
         return kernel_inputs
 
@@ -689,9 +657,8 @@ class KernelDataManager(object):
                 if is a scalar.
         """
         dtypes = []
-        for ind, name in enumerate(self._input_order):
-            data = self._kernel_input_dict[name]
-            if data.include_in_kernel_call() and name not in self._data_duplicates:
+        for name, data in self._flat_kernel_inputs.items():
+            if data.include_in_kernel_call():
                 dtypes.append(data.get_scalar_arg_dtype())
         return dtypes
 
@@ -704,12 +671,49 @@ class KernelDataManager(object):
         """
         items = []
         input_index = 0
-        for name in self._input_order:
-            if self._kernel_input_dict[name].read_data_back:
+        for name, data in self._flat_kernel_inputs.items():
+            if data.read_data_back:
                 items.append([input_index, name])
-            if self._kernel_input_dict[name].include_in_kernel_call() and name not in self._data_duplicates:
+            if data.include_in_kernel_call():
                 input_index += 1
         return items
+
+    def _sort_kernel_input_names(self, original_dict):
+        """Create an ordered dict out of the kernel input items.
+
+        Since we have to take care in which order we load an initialize the data members, it is easier if
+        the dict is sorted. Furthermore, this ensures that created kernels become deterministic in the kernel inputs.
+
+        Args:
+            original_dict (dict): the kernel input items
+
+        Returns:
+            OrderedDict: the ordered input items
+        """
+        def recursive_sort(kernel_items):
+            return_dict = OrderedDict()
+            for name in sorted(kernel_items):
+                value = kernel_items[name]
+                if isinstance(value, Mapping):
+                    return_dict[name] = recursive_sort(value)
+                else:
+                    return_dict[name] = kernel_items[name]
+            return return_dict
+        return recursive_sort(original_dict)
+
+    def _get_flat_kernel_input_dict(self):
+        """Flatten the kernel input items."""
+        flat_dict = OrderedDict()
+
+        def recurse_inputs(kernel_input, name_prefix):
+            for name, data in kernel_input.items():
+                if isinstance(data, Mapping):
+                    recurse_inputs(data, '{}{}_'.format(name_prefix, name))
+                else:
+                    flat_dict[name_prefix + name] = data
+
+        recurse_inputs(self._kernel_input_dict, '')
+        return flat_dict
 
 
 def multiprocess_mapping(func, iterable):
