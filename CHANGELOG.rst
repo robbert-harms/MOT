@@ -2,6 +2,14 @@
 Changelog
 *********
 
+v0.5.1 (2018-07-01)
+===================
+
+Added
+-----
+- Adds support for nested structures in the kernel input data.
+
+
 v0.5.0 (2018-06-01)
 ===================
 This version removes support for Python version <= 2.7. Now only Python > 3 is supported.
