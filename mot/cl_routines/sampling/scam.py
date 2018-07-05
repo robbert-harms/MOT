@@ -71,12 +71,12 @@ class SingleComponentAdaptiveMetropolis(AbstractRWMSampler):
 
     def _get_proposal_update_function(self, nmr_samples, thinning, return_output):
         kernel_source = '''
-            /** Online variance algorithm by Welford
-             *  B. P. Welford (1962)."Note on a method for calculating corrected sums of squares
+            /** Online variance algorithm by Welford:
+             *      B. P. Welford (1962)."Note on a method for calculating corrected sums of squares
              *      and products". Technometrics 4(3):419-420.
              *
              * Also studied in:
-             * Chan, Tony F.; Golub, Gene H.; LeVeque, Randall J. (1983).
+             *      Chan, Tony F.; Golub, Gene H.; LeVeque, Randall J. (1983).
              *      Algorithms for Computing the Sample Variance: Analysis and Recommendations.
              *      The American Statistician 37, 242-247. http://www.jstor.org/stable/2683386
              */

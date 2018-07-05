@@ -299,9 +299,9 @@ class AbstractSampler(CLRoutine):
         kernel_source = ll_func.get_cl_code()
         kernel_source += '''
             void _computeLogLikelihood(mot_data_struct* data,
-                                          local mot_float_type* const current_position,
-                                          local double* log_likelihood_tmp,
-                                          local double* likelihood_sum){
+                                       local mot_float_type* const current_position,
+                                       local double* log_likelihood_tmp,
+                                       local double* likelihood_sum){
 
                 ulong observation_ind;
                 ulong local_id = get_local_id(0);
@@ -496,24 +496,28 @@ class AbstractRWMSampler(AbstractSampler):
                             if(frand(rng_data) < bayesian_f){
                                 *current_likelihood = new_likelihood;
                                 *current_prior = new_prior;
+                                for(uint k = 0; k < ''' + str(self._nmr_params) + '''; k++){
+                                    current_position[k] = new_position[k];
+                                }           
                                 _sampleAccepted(data, current_iteration, k);
                             }
                             else{
-                                new_position[k] = current_position[k];
+                                for(uint k = 0; k < ''' + str(self._nmr_params) + '''; k++){
+                                    new_position[k] = current_position[k];
+                                }
                             }
                         }
                     }
                     else{ // prior returned 0
                         if(is_first_work_item){
-                            new_position[k] = current_position[k];
+                            for(uint k = 0; k < ''' + str(self._nmr_params) + '''; k++){
+                                new_position[k] = current_position[k];
+                            }
                         }
                     }
                 }
                 
                 if(is_first_work_item){
-                    for(uint k = 0; k < ''' + str(self._nmr_params) + '''; k++){
-                        current_position[k] = new_position[k];
-                    }    
                     _updateProposalState(data, current_iteration, current_position);
                 }
                 barrier(CLK_LOCAL_MEM_FENCE);
