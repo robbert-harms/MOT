@@ -2,6 +2,14 @@
 Changelog
 *********
 
+v0.5.2 (2018-07-05)
+===================
+
+Fixed
+-----
+- Fixed model proposal updating using the model. The parameter vector was not correctly reset if more than one parameter was updated.
+
+
 v0.5.1 (2018-07-01)
 ===================
 
