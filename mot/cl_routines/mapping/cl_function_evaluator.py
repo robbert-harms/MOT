@@ -39,7 +39,14 @@ class CLFunctionEvaluator(CLRoutine):
                 we return a tuple with as first element the return value and as second element a dictionary mapping
                 the output state of the parameters.
         """
-        nmr_data_points = self._get_minimum_data_length(input_data)
+        for param in cl_function.get_parameters():
+            if param.name not in input_data:
+                names = [param.name for param in cl_function.get_parameters()]
+                missing_names = [name for name in names if name not in input_data]
+                raise ValueError('Some parameters are missing an input value, '
+                                 'required parameters are: {}, missing inputs are: {}'.format(names, missing_names))
+
+        nmr_data_points = self._get_minimum_data_length(cl_function, input_data)
 
         kernel_items = self._wrap_input_data(cl_function, input_data)
 
@@ -60,40 +67,50 @@ class CLFunctionEvaluator(CLRoutine):
         return return_value
 
     def _wrap_input_data(self, cl_function, input_data):
-        min_data_length = self._get_minimum_data_length(input_data)
+        min_data_length = self._get_minimum_data_length(cl_function, input_data)
 
-        kernel_items = {}
-        for param in cl_function.get_parameters():
+        def get_kernel_data(param):
             if isinstance(input_data[param.name], KernelData):
-                kernel_items[self._get_param_cl_name(param.name)] = input_data[param.name]
+                return input_data[param.name]
+            elif param.data_type.is_vector_type and np.squeeze(input_data[param.name]).shape[0] == 3:
+                return KernelScalar(input_data[param.name], ctype=param.data_type.ctype)
             elif is_scalar(input_data[param.name]) and not param.data_type.is_pointer_type:
-                kernel_items[self._get_param_cl_name(param.name)] = KernelScalar(input_data[param.name])
+                return KernelScalar(input_data[param.name])
             else:
                 if is_scalar(input_data[param.name]):
                     data = np.ones(min_data_length) * input_data[param.name]
                 else:
                     data = input_data[param.name]
 
-                kernel_items[self._get_param_cl_name(param.name)] = KernelArray(
-                    data, ctype=param.data_type.ctype, is_writable=True, is_readable=True)
+                return KernelArray(data, ctype=param.data_type.ctype, is_writable=True, is_readable=True)
+
+        kernel_items = {}
+        for param in cl_function.get_parameters():
+            kernel_items[self._get_param_cl_name(param.name)] = get_kernel_data(param)
 
         return kernel_items
 
-    def _get_minimum_data_length(self, input_data):
+    def _get_minimum_data_length(self, cl_function, input_data):
         min_length = 1
 
-        for value in input_data.values():
-            if isinstance(value, KernelData):
+        for param in cl_function.get_parameters():
+            value = input_data[param.name]
+
+            if isinstance(input_data[param.name], KernelData):
                 data = value.get_data()
                 if data is not None:
                     if np.ndarray(data).shape[0] > min_length:
-                        min_length = np.ndarray(data).shape[0]
-            elif is_scalar(value):
+                        min_length = np.maximum(min_length, np.ndarray(data).shape[0])
+
+            elif param.data_type.is_vector_type and np.squeeze(input_data[param.name]).shape[0] == 3:
                 pass
-            elif isinstance(value, (tuple, list)):
-                min_length = len(value)
-            elif value.shape[0] > min_length:
-                min_length = value.shape[0]
+            elif is_scalar(input_data[param.name]):
+                pass
+            else:
+                if isinstance(value, (tuple, list)):
+                    min_length = np.maximum(min_length, len(value))
+                elif value.shape[0] > min_length:
+                    min_length = np.maximum(min_length, value.shape[0])
 
         return min_length
 

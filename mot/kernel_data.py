@@ -172,14 +172,19 @@ class KernelScalar(KernelData):
 
     def get_struct_init_string(self, name, problem_id_substitute):
         mot_dtype = SimpleCLDataType.from_string(self._ctype)
-        if np.isinf(self._value):
-            assignment = 'INFINITY'
-        elif mot_dtype.is_vector_type:
+
+        if mot_dtype.is_vector_type:
             vector_length = mot_dtype.vector_length
-            values = [str(val) for val in self._value[0]]
+
+            values = np.squeeze(self._value)
+            values = [str(values[ind]) for ind in range(len(values))]
+
             if len(values) < vector_length:
                 values.extend([str(0)] * (vector_length - len(values)))
             assignment = '(' + self._ctype + ')(' + ', '.join(values) + ')'
+
+        elif np.isinf(self._value):
+            assignment = 'INFINITY'
         else:
             assignment = str(self._value)
         return assignment
