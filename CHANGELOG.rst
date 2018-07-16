@@ -2,6 +2,11 @@
 Changelog
 *********
 
+v0.5.3 (2018-07-16)
+===================
+- Small enhancements to the function evaluator.
+
+
 v0.5.2 (2018-07-05)
 ===================
 
