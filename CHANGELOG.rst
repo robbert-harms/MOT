@@ -2,8 +2,22 @@
 Changelog
 *********
 
+v0.5.4 (2018-07-17)
+===================
+
+Changed
+-------
+- Replaced Grako for Tatsu, as Grako was no longer supported.
+- Updated makefile to use twine for uploading to PyPi.
+- Removed the Tatsu as a debian package and updated installation instructions.
+- Removed six as dependency.
+
+
 v0.5.3 (2018-07-16)
 ===================
+
+Changed
+-------
 - Small enhancements to the function evaluator.
 
 
