@@ -1,5 +1,4 @@
 import pyopencl as cl
-from six import string_types
 from .utils import device_supports_double, device_type_from_string
 
 __author__ = 'Robbert Harms'
@@ -177,7 +176,7 @@ class CLEnvironmentFactory(object):
         Returns:
             list of CLEnvironment: List with one element, the CL runtime environment requested.
         """
-        if isinstance(cl_device_type, string_types):
+        if isinstance(cl_device_type, str):
             cl_device_type = device_type_from_string(cl_device_type)
 
         device = None
@@ -221,7 +220,7 @@ class CLEnvironmentFactory(object):
         Returns:
             list of CLEnvironment: List with the CL device environments.
         """
-        if isinstance(cl_device_type, string_types):
+        if isinstance(cl_device_type, str):
             cl_device_type = device_type_from_string(cl_device_type)
 
         runtime_list = []

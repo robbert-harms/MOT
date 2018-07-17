@@ -15,7 +15,6 @@ import time
 import timeit
 import warnings
 import pyopencl as cl
-from six import string_types
 from .utils import device_type_from_string
 
 
@@ -397,7 +396,7 @@ class PreferSingleDeviceType(MetaLoadBalanceStrategy):
         """
         super(PreferSingleDeviceType, self).__init__(lb_strategy)
         self._device_type = device_type or cl.device_type.CPU
-        if isinstance(device_type, string_types):
+        if isinstance(device_type, str):
             self._device_type = device_type_from_string(device_type)
 
     def process(self, workers, nmr_items, run_in_batches=None, single_batch_length=None):

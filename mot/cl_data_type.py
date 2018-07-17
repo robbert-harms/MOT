@@ -1,5 +1,3 @@
-import six
-
 __author__ = 'Robbert Harms'
 __date__ = "2015-03-21"
 __license__ = "LGPL v3"
@@ -132,11 +130,11 @@ class SimpleCLDataType(CLDataType):
                     self._address_space_qualifier, valid_address_spaces))
 
         self.pre_asterisk_qualifiers = pre_asterisk_qualifiers
-        if isinstance(self.pre_asterisk_qualifiers, six.string_types):
+        if isinstance(self.pre_asterisk_qualifiers, str):
             self.pre_asterisk_qualifiers = [self.pre_asterisk_qualifiers]
 
         self.post_asterisk_qualifiers = post_asterisk_qualifiers
-        if isinstance(self.post_asterisk_qualifiers, six.string_types):
+        if isinstance(self.post_asterisk_qualifiers, str):
             self.post_asterisk_qualifiers = [post_asterisk_qualifiers]
 
     @classmethod

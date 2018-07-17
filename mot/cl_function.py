@@ -1,5 +1,4 @@
 from copy import copy
-import six
 from mot.cl_data_type import SimpleCLDataType
 from textwrap import dedent, indent
 from mot.cl_routines.mapping.cl_function_evaluator import CLFunctionEvaluator
@@ -262,7 +261,7 @@ class SimpleCLFunctionParameter(CLFunctionParameter):
         Attributes:
             name (str): The name of this parameter
         """
-        if isinstance(data_type, six.string_types):
+        if isinstance(data_type, str):
             self._data_type = SimpleCLDataType.from_string(data_type)
         else:
             self._data_type = data_type

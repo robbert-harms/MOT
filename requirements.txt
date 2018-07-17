@@ -2,4 +2,3 @@ numpy>=1.9.0
 pyopencl>=2013.1
 grako
 scipy
-six
