@@ -1,3 +1,16 @@
+"""The semantics for the parser.
+
+First generate the Python parser using:
+
+.. code-block:: bash
+
+    tatsu --generate-parser \
+        --name CLDataType \
+        --outfile CLDataType.py \
+        CLDataType.ebnf
+
+Afterwards, this module adds the semantics to it.
+"""
 import re
 from mot.cl_data_type import SimpleCLDataType
 from mot.parsers.cl.CLDataType import CLDataTypeParser, CLDataTypeSemantics
