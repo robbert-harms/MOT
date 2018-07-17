@@ -65,7 +65,8 @@ For Ubuntu >= 16 you can use:
 
 * ``sudo add-apt-repository ppa:robbert-harms/cbclab``
 * ``sudo apt update``
-* ``sudo apt install python3-mot``
+* ``sudo apt install python3-pip python3-mot``
+* ``sudo pip3 install tatsu``
 
 
 For Debian users and Ubuntu < 16 users, install MOT with:
