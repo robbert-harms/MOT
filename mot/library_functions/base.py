@@ -14,10 +14,20 @@ class CLLibrary(CLFunction):
 
 
 class SimpleCLLibrary(CLLibrary, SimpleCLFunction):
-    pass
+
+    def __init__(self, cl_code, dependencies=None, cl_extra=None):
+        func = SimpleCLFunction.from_string(cl_code, dependencies=dependencies, cl_extra=cl_extra)
+        super(SimpleCLLibrary, self).__init__(
+            func.get_return_type(),
+            func.get_cl_function_name(),
+            func.get_parameters(),
+            func.get_cl_body(),
+            dependencies=func.get_dependencies(),
+            cl_extra=func.get_cl_extra()
+        )
 
 
-class SimpleCLLibraryFromFile(SimpleCLLibrary):
+class SimpleCLLibraryFromFile(CLLibrary, SimpleCLFunction):
 
     def __init__(self, return_type, cl_function_name, parameter_list, cl_code_file,
                  var_replace_dict=None, dependencies=()):

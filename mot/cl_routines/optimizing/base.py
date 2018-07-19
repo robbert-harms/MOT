@@ -1,10 +1,11 @@
 import logging
 import numpy as np
 
-from mot.cl_routines.mapping.objective_function_calculator import ObjectiveFunctionCalculator
-from mot.cl_routines.mapping.run_procedure import RunProcedure
+from mot.cl_function import SimpleCLFunction
+from mot.cl_routines.mapping import compute_objective_value
+from mot.cl_routines.base import RunProcedure
 from mot.kernel_data import KernelArray, KernelAllocatedArray
-from ...utils import get_float_type_def, NameFunctionTuple
+from ...utils import get_float_type_def
 from ...cl_routines.base import CLRoutine
 from ...__version__ import __version__
 
@@ -133,8 +134,7 @@ class SimpleOptimizationResult(OptimizationResults):
 
     def get_objective_values(self):
         if self._objective_values is None:
-            self._objective_values = np.nan_to_num(ObjectiveFunctionCalculator().calculate(
-                self._model, self._optimization_results))
+            self._objective_values = np.nan_to_num(compute_objective_value(self._model, self._optimization_results))
         return self._objective_values
 
 
@@ -214,30 +214,28 @@ class AbstractParallelOptimizer(AbstractOptimizer):
             model (mot.model_interfaces.OptimizeModelInterface): the model we are optimizing
 
         Returns:
-            NameFunctionTuple: the optimization function to apply
+            mot.cl_function.CLFunction: the optimization function to apply
         """
         nmr_params = model.get_nmr_parameters()
 
-        kernel_source = ''
-        kernel_source += get_float_type_def(self._cl_runtime_info.double_precision)
+        cl_extra = ''
+        cl_extra += get_float_type_def(self._cl_runtime_info.double_precision)
+        cl_extra += self._get_optimizer_cl_code(model)
 
-        kernel_source += self._get_optimizer_cl_code(model)
-        kernel_source += '''
-            void compute(mot_data_struct* data){
-                mot_float_type x[''' + str(nmr_params) + '''];
-                for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
-                    x[i] = data->_parameters[i];
-                }
-                
-                *data->_return_codes = (char) ''' + self._get_optimizer_call_name() + '(' + \
-                         ', '.join(self._get_optimizer_call_args()) + ''');
-                
-                for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
-                    data->_parameters[i] = x[i];
-                }   
+        body = '''
+            mot_float_type x[''' + str(nmr_params) + '''];
+            for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
+                x[i] = data->_parameters[i];
             }
+            
+            *data->_return_codes = (char) ''' + self._get_optimizer_call_name() + '(' + \
+                     ', '.join(self._get_optimizer_call_args()) + ''');
+            
+            for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
+                data->_parameters[i] = x[i];
+            }   
         '''
-        return NameFunctionTuple('compute', kernel_source)
+        return SimpleCLFunction('void', 'compute', ['mot_data_struct* data'], body, cl_extra=cl_extra)
 
     def _get_optimizer_call_args(self):
         """Get the optimizer calling arguments.

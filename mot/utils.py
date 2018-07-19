@@ -379,38 +379,6 @@ def all_logging_disabled(highest_level=logging.CRITICAL):
         logging.disable(previous_level)
 
 
-class NameFunctionTuple(Sequence):
-
-    def __init__(self, name, function):
-        self._name = name
-        self._function = function
-
-    def get_cl_code(self):
-        """Return the CL function.
-
-        Returns:
-            str: the CL function
-        """
-        return self._function
-
-    def get_cl_function_name(self):
-        """Get the CL name of this function.
-
-        Returns:
-            str: the name of the function
-        """
-        return self._name
-
-    def __repr__(self):
-        return self._function
-
-    def __len__(self):
-        return 2
-
-    def __getitem__(self, index):
-        return (self._name, self._function)[index]
-
-
 def cartesian(arrays, out=None):
     """Generate a cartesian product of input arrays.
 

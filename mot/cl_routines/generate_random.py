@@ -1,8 +1,9 @@
 import numpy as np
-from mot.cl_routines.base import CLRoutine
-from mot.cl_routines.mapping.run_procedure import RunProcedure
+
+from mot.cl_function import SimpleCLFunction
+from mot.cl_routines.base import CLRoutine, RunProcedure
 from mot.library_functions import Rand123
-from mot.utils import NameFunctionTuple, is_scalar
+from mot.utils import is_scalar
 from mot.kernel_data import KernelArray, KernelAllocatedArray
 
 __author__ = 'Robbert Harms'
@@ -102,38 +103,30 @@ class Random123Generator(CLRoutine):
         return kernel_data['samples'].get_data()
 
     def _get_uniform_kernel(self, nmr_samples, ctype):
-        random_library = Rand123()
-        src = random_library.get_cl_code()
-        src += '''
-            void compute(mot_data_struct* data){
-                rand123_data rand123_rng_data = rand123_initialize_data((uint[]){
-                    data->_rng_state[0], data->_rng_state[1], data->_rng_state[2], data->_rng_state[3], 
-                    data->_rng_state[4], data->_rng_state[5], 0});
-                void* rng_data = (void*)&rand123_rng_data;
+        cl_body = '''
+            rand123_data rand123_rng_data = rand123_initialize_data((uint[]){
+                data->_rng_state[0], data->_rng_state[1], data->_rng_state[2], data->_rng_state[3], 
+                data->_rng_state[4], data->_rng_state[5], 0});
+            void* rng_data = (void*)&rand123_rng_data;
 
-                for(uint i = 0; i < ''' + str(nmr_samples) + '''; i++){
-                    double4 randomnr = rand4(rng_data);
-                    data->samples[i] = (''' + ctype + ''')(data->min_val[0] + 
-                                                           randomnr.x * (data->max_val[0] - data->min_val[0]));
-                }
+            for(uint i = 0; i < ''' + str(nmr_samples) + '''; i++){
+                double4 randomnr = rand4(rng_data);
+                data->samples[i] = (''' + ctype + ''')(data->min_val[0] + 
+                                                       randomnr.x * (data->max_val[0] - data->min_val[0]));
             }
         '''
-        return NameFunctionTuple('compute', src)
+        return SimpleCLFunction('void', 'compute', ['mot_data_struct* data'], cl_body, dependencies=[Rand123()])
 
     def _get_gaussian_kernel(self, nmr_samples, ctype):
-        random_library = Rand123()
-        src = random_library.get_cl_code()
-        src += '''
-            void compute(mot_data_struct* data){
-                rand123_data rand123_rng_data = rand123_initialize_data((uint[]){
-                    data->_rng_state[0], data->_rng_state[1], data->_rng_state[2], data->_rng_state[3], 
-                    data->_rng_state[4], data->_rng_state[5], 0});
-                void* rng_data = (void*)&rand123_rng_data;
-                
-                for(uint i = 0; i < ''' + str(nmr_samples) + '''; i++){
-                    double4 randomnr = randn4(rng_data);
-                    data->samples[i] = (''' + ctype + ''')(data->mean[0] + randomnr.x * data->std[0]);
-                }
+        cl_body = '''
+            rand123_data rand123_rng_data = rand123_initialize_data((uint[]){
+                data->_rng_state[0], data->_rng_state[1], data->_rng_state[2], data->_rng_state[3], 
+                data->_rng_state[4], data->_rng_state[5], 0});
+            void* rng_data = (void*)&rand123_rng_data;
+            
+            for(uint i = 0; i < ''' + str(nmr_samples) + '''; i++){
+                double4 randomnr = randn4(rng_data);
+                data->samples[i] = (''' + ctype + ''')(data->mean[0] + randomnr.x * data->std[0]);
             }
         '''
-        return NameFunctionTuple('compute', src)
+        return SimpleCLFunction('void', 'compute', ['mot_data_struct* data'], cl_body, dependencies=[Rand123()])

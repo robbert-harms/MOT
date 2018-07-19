@@ -1,8 +1,38 @@
+import tatsu
+
 __author__ = 'Robbert Harms'
 __date__ = "2015-03-21"
 __license__ = "LGPL v3"
 __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
+
+
+_cl_data_type_parser = tatsu.compile('''
+    result = [address_space] {pre_type_qualifiers}* data_type [{post_type_qualifiers}*];
+
+    address_space = ['__'] ('local' | 'global' | 'constant' | 'private');
+    pre_type_qualifiers = 'const' | 'volatile';
+    
+    data_type = type_specifier [vector_length] [pointer];
+    pointer = '*';
+    vector_length = /[2348(16]/;
+    
+    post_type_qualifiers = 'const' | 'restrict';
+    
+    # match some as regex, to ensure the vector length is taken into account.
+    type_specifier =
+                     ?'mot_float_type'
+                   | 'mot_data_struct'
+                   | 'void'
+                   | ?'bool'
+                   | ?'char' | ?'cl_char' | ?'unsigned char' | ?'uchar' | ?'cl_uchar'
+                   | ?'short' | ?'cl_short' | ?'unsigned short' | ?'ushort'
+                   | ?'int' | ?'unsigned int' | ?'uint'
+                   | ?'long' | ?'unsigned long' | ?'ulong'
+                   | ?'half'
+                   | ?'float'
+                   | ?'double';
+''')
 
 
 class CLDataType(object):
@@ -46,6 +76,8 @@ class CLDataType(object):
     def ctype(self):
         """Get the ctype of this data type.
 
+        For example, if the data type is float4*, we will return float4 here.
+
         Returns:
             str: the full ctype of this data type
         """
@@ -85,13 +117,13 @@ class CLDataType(object):
         Returns:
             str: the data type address space, one of ``global``, ``local``, ``constant`` or ``private``.
         """
+        raise NotImplementedError()
 
 
 class SimpleCLDataType(CLDataType):
 
-    def __init__(self, raw_data_type, is_pointer_type=False, vector_length=None,
-                 address_space_qualifier=None, pre_asterisk_qualifiers=None,
-                 post_asterisk_qualifiers=None):
+    def __init__(self, raw_data_type, is_pointer_type=False, vector_length=None, address_space=None,
+                 pre_type_qualifiers=None, post_type_qualifiers=None):
         """Create a new CL data type container.
 
         The CL type can either be a CL native type (``half``, ``double``, ``int``, ...) or the
@@ -102,12 +134,12 @@ class SimpleCLDataType(CLDataType):
             is_pointer_type (boolean): If this parameter is a pointer type (appended by a ``*``)
             vector_length (int or None): If None this data type is not a CL vector type.
                 If it is an integer it is the vector length of this data type (2, 3, 4, ...)
-            address_space_qualifier (str or None): the address space qualifier or None if not used. One of:
+            address_space (str or None): the address space qualifier or None if not used. One of:
                 {``__local``, ``local``, ``__global``, ``global``,
                 ``__constant``, ``constant``, ``__private``, ``private``} or None.
-            pre_asterisk_qualifiers (list of str or None): the type qualifiers to use before the (optional) asterisk.
+            pre_type_qualifiers (Union[List[str], None]): the type qualifiers to use before the type.
                 One or more of {const, volatile}
-            post_asterisk_qualifiers (list of str or None): the type qualifiers to use after the (optional) asterisk.
+            post_type_qualifiers (Union[List[str], None]): the type qualifiers to use before the type.
                 One or more of {const, restrict}
         """
         self._raw_data_type = str(raw_data_type)
@@ -117,25 +149,25 @@ class SimpleCLDataType(CLDataType):
         if self.vector_length:
             self._vector_length = int(self.vector_length)
 
-        self._address_space_qualifier = address_space_qualifier
+        self._address_space = address_space
 
-        if self._address_space_qualifier is not None:
-            if '__' in self._address_space_qualifier:
-                self._address_space_qualifier = self._address_space_qualifier[2:]
+        if self._address_space is not None:
+            if '__' in self._address_space:
+                self._address_space = self._address_space[2:]
 
             valid_address_spaces = ('global', 'constant', 'local', 'private')
 
-            if self._address_space_qualifier not in valid_address_spaces:
+            if self._address_space not in valid_address_spaces:
                 raise ValueError('The given address space qualifier "{}" is not one of {}.'.format(
-                    self._address_space_qualifier, valid_address_spaces))
+                    self._address_space, valid_address_spaces))
 
-        self.pre_asterisk_qualifiers = pre_asterisk_qualifiers
-        if isinstance(self.pre_asterisk_qualifiers, str):
-            self.pre_asterisk_qualifiers = [self.pre_asterisk_qualifiers]
+        self.pre_type_qualifiers = pre_type_qualifiers
+        if isinstance(self.pre_type_qualifiers, str):
+            self.pre_type_qualifiers = [self.pre_type_qualifiers]
 
-        self.post_asterisk_qualifiers = post_asterisk_qualifiers
-        if isinstance(self.post_asterisk_qualifiers, str):
-            self.post_asterisk_qualifiers = [post_asterisk_qualifiers]
+        self.post_type_qualifiers = post_type_qualifiers
+        if isinstance(self.post_type_qualifiers, str):
+            self.post_type_qualifiers = [post_type_qualifiers]
 
     @classmethod
     def from_string(cls, parameter_declaration):
@@ -145,20 +177,62 @@ class SimpleCLDataType(CLDataType):
             parameter_declaration (str): the CL parameter declaration. Example: ``global const float4*`` const
 
         Returns:
-            mot.cl_data_type.SimpleCLDataType: the CL data type for this parameter declaration
+            SimpleCLDataType: the CL data type for this parameter declaration
         """
-        from mot.parsers.cl.CLDataTypeParser import parse
-        return parse(parameter_declaration)
+        class Semantics(object):
+
+            def __init__(self):
+                self._raw_data_type = None
+                self._is_pointer_type = False
+                self._vector_length = None
+                self._address_space = None
+                self._pre_type_qualifiers = None
+                self._post_type_qualifiers = None
+
+            def result(self, ast):
+                return SimpleCLDataType(
+                    self._raw_data_type,
+                    is_pointer_type=self._is_pointer_type,
+                    vector_length=self._vector_length,
+                    address_space=self._address_space,
+                    pre_type_qualifiers=self._pre_type_qualifiers,
+                    post_type_qualifiers=self._post_type_qualifiers)
+
+            def pointer(self, ast):
+                self._is_pointer_type = True
+                return ast
+
+            def vector_length(self, ast):
+                self._vector_length = int(ast)
+                return ast
+
+            def type_specifier(self, ast):
+                self._raw_data_type = ast
+                return ast
+
+            def address_space(self, ast):
+                self._address_space = ''.join(ast)
+                return ast
+
+            def pre_type_qualifiers(self, ast):
+                self._pre_type_qualifiers = ast
+                return ast
+
+            def post_type_qualifiers(self, ast):
+                self._post_type_qualifiers = ast
+                return ast
+
+        return _cl_data_type_parser.parse(parameter_declaration, semantics=Semantics())
 
     def get_declaration(self):
         declaration = ''
-        if self._address_space_qualifier:
-            declaration += str(self._address_space_qualifier) + ' '
-        if self.pre_asterisk_qualifiers:
-            declaration += str(' '.join(self.pre_asterisk_qualifiers)) + ' '
+        if self._address_space:
+            declaration += str(self._address_space) + ' '
+        if self.pre_type_qualifiers:
+            declaration += str(' '.join(self.pre_type_qualifiers)) + ' '
         declaration += str(self.declaration_type)
-        if self.post_asterisk_qualifiers:
-            declaration += ' ' + str(' '.join(self.post_asterisk_qualifiers)) + ' '
+        if self.post_type_qualifiers:
+            declaration += ' ' + str(' '.join(self.post_type_qualifiers)) + ' '
         return declaration
 
     @property
@@ -197,9 +271,9 @@ class SimpleCLDataType(CLDataType):
 
     @property
     def address_space(self):
-        if self._address_space_qualifier is None:
+        if self._address_space is None:
             return 'private'
-        return self._address_space_qualifier
+        return self._address_space
 
     def __str__(self):
         return self.get_declaration()

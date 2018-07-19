@@ -1,10 +1,10 @@
 import logging
 from contextlib import contextmanager
 
-from mot.cl_routines.base import CLRoutine
-from mot.cl_routines.mapping.run_procedure import RunProcedure
+from mot.cl_function import SimpleCLFunction
+from mot.cl_routines.base import CLRoutine, RunProcedure
 from mot.library_functions import Rand123
-from mot.utils import split_in_batches, get_float_type_def, NameFunctionTuple
+from mot.utils import split_in_batches, get_float_type_def
 from mot.kernel_data import KernelScalar, KernelLocalMemory, KernelArray, \
     KernelAllocatedArray
 import numpy as np
@@ -170,21 +170,15 @@ class AbstractSampler(CLRoutine):
             return_output (boolean): if the kernel should return output
 
         Returns:
-            mot.utils.NameFunctionTuple: the compute function
+            mot.cl_function.CLFunction: the compute function
         """
         kernel_source = '''
-                    #define NMR_OBSERVATIONS ''' + str(self._model.get_nmr_observations()) + '''
-                '''
+            #define NMR_OBSERVATIONS ''' + str(self._model.get_nmr_observations()) + '''
+        '''
         kernel_source += get_float_type_def(self._cl_runtime_info.double_precision)
-        random_library = Rand123()
-        kernel_source += random_library.get_cl_code()
-
-        kernel_source += self._get_log_prior_cl_func()
-        kernel_source += self._get_log_likelihood_cl_func()
-
         kernel_source += self._get_state_update_cl_func(nmr_samples, thinning, return_output)
 
-        kernel_source += '''
+        cl_func = '''
             void compute(mot_data_struct* data){
                 bool is_first_work_item = get_local_id(0) == 0;
     
@@ -210,7 +204,7 @@ class AbstractSampler(CLRoutine):
                 for(ulong i = 0; i < data->_nmr_iterations; i++){
         '''
         if return_output:
-            kernel_source += '''
+            cl_func += '''
                     if(is_first_work_item){
                         if(i % ''' + str(thinning) + ''' == 0){
     
@@ -225,7 +219,7 @@ class AbstractSampler(CLRoutine):
                         }
                     }
         '''
-        kernel_source += '''
+            cl_func += '''
                     _advanceSampler(data, i + data->_iteration_offset, rng_data, 
                                     current_position, &current_likelihood, &current_prior, data->_log_likelihood_tmp);
                 }
@@ -243,7 +237,10 @@ class AbstractSampler(CLRoutine):
                 }
             }
         '''
-        return NameFunctionTuple('compute', kernel_source)
+        return SimpleCLFunction.from_string(
+            cl_func,
+            dependencies=[Rand123(), self._get_log_prior_cl_func(), self._get_log_likelihood_cl_func()],
+            cl_extra=kernel_source)
 
     def _get_state_update_cl_func(self, nmr_samples, thinning, return_output):
         """Get the function that can advance the sampler state.
@@ -276,14 +273,12 @@ class AbstractSampler(CLRoutine):
             str: the compute function for computing the log prior of the model.
         """
         prior_func = self._model.get_log_prior_function(address_space_parameter_vector='local')
-        kernel_source = prior_func.get_cl_code()
-        kernel_source += '''
+        return SimpleCLFunction.from_string('''
             mot_float_type _computeLogPrior(mot_data_struct* data,
                                             local const mot_float_type* const x){
                 return ''' + prior_func.get_cl_function_name() + '''(data, x);
             }
-        '''
-        return kernel_source
+        ''', dependencies=[prior_func])
 
     def _get_log_likelihood_cl_func(self):
         """Get the CL log likelihood compute function.
@@ -295,9 +290,7 @@ class AbstractSampler(CLRoutine):
             str: the CL code for the log likelihood compute func.
         """
         ll_func = self._model.get_log_likelihood_per_observation_function()
-
-        kernel_source = ll_func.get_cl_code()
-        kernel_source += '''
+        return SimpleCLFunction.from_string('''
             void _computeLogLikelihood(mot_data_struct* data,
                                        local mot_float_type* const current_position,
                                        local double* log_likelihood_tmp,
@@ -327,15 +320,14 @@ class AbstractSampler(CLRoutine):
 
                 barrier(CLK_LOCAL_MEM_FENCE);
 
-                if(get_local_id(0) == 0){    
+                if(local_id == 0){    
                     *likelihood_sum = 0;
-                    for(uint i = 0; i < get_local_size(0); i++){
+                    for(uint i = 0; i < workgroup_size; i++){
                         *likelihood_sum += log_likelihood_tmp[i];
                     }
                 }
             }
-        '''
-        return kernel_source
+        ''', dependencies=[ll_func])
 
     @contextmanager
     def _logging(self, nmr_samples, burnin, thinning):

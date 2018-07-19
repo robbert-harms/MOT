@@ -12,26 +12,22 @@ class normal_pdf(SimpleCLLibrary):
 
     def __init__(self):
         """Compute the Probability Density Function of the Gaussian distribution."""
-        super(normal_pdf, self).__init__(
-            'double', 'normal_pdf',
-            [('double', 'x'),
-             ('double', 'mean'),
-             ('double', 'std')],
-            'return exp(-((x - mean) * (x - mean)) / (2 * std * std)) / sqrt(2 * M_PI * std * std);',
-        )
+        super().__init__('''
+            double normal_pdf(double x, double mean, double std){
+                return exp(-((x - mean) * (x - mean)) / (2 * std * std)) / sqrt(2 * M_PI * std * std);
+            }
+        ''')
 
 
 class normal_cdf(SimpleCLLibrary):
 
     def __init__(self):
         """Compute the Cumulative Distribution Function of the Gaussian distribution."""
-        super(normal_cdf, self).__init__(
-            'double', 'normal_cdf',
-            [('double', 'x'),
-             ('double', 'mean'),
-             ('double', 'std')],
-            'return (1 + erf((x - mean) / (std * M_SQRT2))) / 2.0;',
-        )
+        super().__init__('''
+            double normal_cdf(double x, double mean, double std){
+                return (1 + erf((x - mean) / (std * M_SQRT2))) / 2.0;
+            }
+        ''')
 
 
 class normal_ppf(SimpleCLLibrary):
@@ -41,13 +37,10 @@ class normal_ppf(SimpleCLLibrary):
 
         This is the inverse of the Gaussian CDF.
         """
-        super(normal_ppf, self).__init__(
-            'double', 'normal_ppf',
-            [('double', 'y'),
-             ('double', 'mean'),
-             ('double', 'std')],
-            'return _ndtri(y) * std + mean;',
-            dependencies=(_ndtri(),))
+        super().__init__('''
+            double normal_ppf(double y, double mean, double std){
+                return _ndtri(y) * std + mean;
+            }''', dependencies=(_ndtri(),))
 
 
 class _ndtri(SimpleCLLibrary):
@@ -64,9 +57,8 @@ class _ndtri(SimpleCLLibrary):
         and the other for y up to exp(-2).  For larger arguments,
         w = y - 0.5, and  x/sqrt(2pi) = w + w**3 R(w**2)/S(w**2)).
         """
-        super(_ndtri, self).__init__(
-            'double', '_ndtri', [('double', 'y')],
-            '''
+        super(_ndtri, self).__init__('''
+            double _ndtri(double y){
                 /* approximation for 0 <= |y - 0.5| <= 3/8 */
                 double P0[5] = {
                     -5.99633501014107895267E1,
@@ -186,6 +178,6 @@ class _ndtri(SimpleCLLibrary):
                 }
 
                 return (x);
-            ''',
-            dependencies=(polevl(), p1evl()))
+            }
+        ''', dependencies=(polevl(), p1evl()))
 

@@ -25,9 +25,8 @@ class polevl(SimpleCLLibrary):
         coef[0] = C  , ..., coef[N] = C  .
                    N                   0
         """
-        super(polevl, self).__init__(
-            'double', 'polevl', [('double', 'x'), ('double*', 'coef'), ('int', 'N')],
-            '''
+        super().__init__('''
+            double polevl(double x, double* coef, int N){
                 double ans;
                 double *p;
                 int i;
@@ -41,7 +40,8 @@ class polevl(SimpleCLLibrary):
                 while( --i );
 
                 return ans;
-            ''')
+            }
+        ''')
 
 
 class p1evl(SimpleCLLibrary):
@@ -65,9 +65,8 @@ class p1evl(SimpleCLLibrary):
         In contrast to ``polevl``, this function assumes that coef[N] = 1.0 and is omitted from the array.
         Its calling arguments are otherwise the same as polevl().
         """
-        super(p1evl, self).__init__(
-            'double', 'p1evl', [('double', 'x'), ('double*', 'coef'), ('int', 'N')],
-            '''
+        super(p1evl, self).__init__('''
+            double p1evl(double x, double* coef, int N){
                 double ans;
                 double *p;
                 int i;
@@ -81,7 +80,8 @@ class p1evl(SimpleCLLibrary):
                 while( --i );
 
                 return( ans );
-            ''')
+            }
+        ''')
 
 
 class ratevl(SimpleCLLibrary):
@@ -91,14 +91,8 @@ class ratevl(SimpleCLLibrary):
 
         Copied from Scipy (https://github.com/scipy/scipy/blob/master/scipy/special/cephes/polevl.h), 2018-05-07.
         """
-        super(ratevl, self).__init__(
-            'double', 'ratevl',
-            [('double', 'x'),
-             ('double*', 'num'),
-             ('int', 'M'),
-             ('double*', 'denom'),
-             ('int', 'N')],
-            '''
+        super(ratevl, self).__init__('''
+            double ratevl(double x, double* num, int M, double* denom, int N){
                 int i, dir;
                 double y, num_ans, denom_ans;
                 double absx = fabs(x);
@@ -143,5 +137,6 @@ class ratevl(SimpleCLLibrary):
                 } else {
                     return num_ans / denom_ans;
                 }
-            ''')
+            }
+        ''')
 

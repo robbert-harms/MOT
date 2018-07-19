@@ -1,10 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+from mot.cl_function import SimpleCLFunction
 from mot.cl_routines.generate_random import Random123Generator
 from mot.cl_routines.sampling.amwg import AdaptiveMetropolisWithinGibbs
 from mot.model_interfaces import SampleModelInterface
-from mot.utils import NameFunctionTuple, add_include_guards
+from mot.utils import add_include_guards
 from mot.kernel_data import KernelArray
 
 __author__ = 'Robbert Harms'
@@ -52,32 +53,23 @@ class GermanTanks(SampleModelInterface):
 
     def get_log_likelihood_per_observation_function(self):
         """Used in Bayesian sampling."""
-        fname = 'germanTank_logLikelihood'
-
-        func = self._discrete_uniform()
-        func += '''
-            double ''' + fname + '''(mot_data_struct* data, const mot_float_type* const x, 
-                                     uint observation_index){
+        return SimpleCLFunction(
+            'double', 'germanTank_logLikelihood',
+            ['mot_data_struct* data', 'const mot_float_type* const x', 'uint observation_index'],
+            '''
                 uint nmr_tanks = (uint)round(x[0]);
-                return discrete_uniform(data->observed_tanks[observation_index], 1, nmr_tanks); 
-            }
-        '''
-        return NameFunctionTuple(fname, func)
+                return discrete_uniform(data->observed_tanks[observation_index], 1, nmr_tanks);
+            ''', cl_extra=self._discrete_uniform())
 
     def get_log_prior_function(self, address_space_parameter_vector='private'):
         """Used in Bayesian sampling."""
-        fname = 'germanTank_logPrior'
-
-        func = self._discrete_uniform()
-        func += '''
-            double ''' + fname + '''(mot_data_struct* data,
-                    ''' + str(address_space_parameter_vector) + ''' const mot_float_type* const x){
-                
+        return SimpleCLFunction(
+            'double', 'germanTank_logPrior',
+            ['mot_data_struct* data', address_space_parameter_vector + ' const mot_float_type* const x'],
+            '''
                 uint nmr_tanks = (uint)round(x[0]);
                 return discrete_uniform(nmr_tanks, data->lower_bounds[0], data->upper_bounds[0]);
-            }
-        '''
-        return NameFunctionTuple(fname, func)
+            ''', cl_extra=self._discrete_uniform())
 
     def _discrete_uniform(self):
         return add_include_guards('''

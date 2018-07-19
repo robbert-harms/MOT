@@ -1,7 +1,8 @@
 import itertools
 import numpy as np
-from mot.cl_routines.mapping.run_procedure import RunProcedure
-from ...utils import NameFunctionTuple
+
+from mot.cl_function import SimpleCLFunction
+from mot.cl_routines.base import RunProcedure
 from mot.kernel_data import KernelLocalMemory, KernelArray, KernelAllocatedArray
 from ...cl_routines.base import CLRoutine
 from scipy import linalg
@@ -548,10 +549,9 @@ class NumericalHessian(CLRoutine):
 
     def _derivation_kernel(self, model, nmr_params, nmr_steps, step_ratio):
         coords = [(x, y) for x, y in itertools.combinations_with_replacement(range(nmr_params), 2)]
+        func = self._get_compute_functions_cl(model, nmr_params, nmr_steps, step_ratio)
 
-        func = ''
-        func += self._get_compute_functions_cl(model, nmr_params, nmr_steps, step_ratio)
-        func += '''
+        return SimpleCLFunction.from_string('''
             void compute(mot_data_struct* data){
                 mot_float_type x_input[''' + str(nmr_params) + '''];
                 
@@ -569,19 +569,16 @@ class NumericalHessian(CLRoutine):
                                    data->step_evaluates + coord_ind * ''' + str(nmr_steps) + ''');
                 }
             }
-        '''
-        return NameFunctionTuple('compute', func)
+        ''', cl_extra=func)
 
     def _richardson_error_kernel(self, nmr_steps, nmr_convolutions, richardson_coefficients):
-        func = ''
-        func += self._get_error_estimate_functions_cl(nmr_steps, nmr_convolutions, richardson_coefficients)
-        func += '''
+        func = self._get_error_estimate_functions_cl(nmr_steps, nmr_convolutions, richardson_coefficients)
+        return SimpleCLFunction.from_string('''
             void convolute(mot_data_struct* data){
                 _apply_richardson_convolution(data->derivatives, data->richardson_extrapolations);
                 _compute_richardson_errors(data->derivatives, data->richardson_extrapolations, data->errors);
             }
-        '''
-        return NameFunctionTuple('convolute', func)
+        ''', cl_extra=func)
 
     def _wynn_extrapolation_kernel(self, nmr_steps):
         """OpenCL kernel for extrapolating a slowly convergent sequence.
@@ -605,8 +602,7 @@ class NumericalHessian(CLRoutine):
                 Computer Physics Reports Vol. 10, 189 - 371
                 http://arxiv.org/abs/math/0306302v1
         """
-        func = ''
-        func += '''
+        return SimpleCLFunction.from_string('''
             void compute(mot_data_struct* data){
                 double v0, v1, v2; 
                 
@@ -650,5 +646,4 @@ class NumericalHessian(CLRoutine):
                     data->errors[i] = err0 + err1 + (converged ? tol1 * 10 : fabs(result - v2));
                 }
             }
-        '''
-        return NameFunctionTuple('compute', func)
+        ''')

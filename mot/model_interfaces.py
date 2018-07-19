@@ -4,7 +4,7 @@ This encapsulates all the information we need about models to be able to optimiz
 in MOT. These interfaces expose data and modeling code. The data is represented as :class:`mot.utils.KernelInputData`
 instances and the CL code as strings.
 """
-from mot.utils import NameFunctionTuple
+from mot.cl_function import SimpleCLFunction
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-03-14"
@@ -66,7 +66,7 @@ class OptimizeModelInterface(ModelBasicInfoInterface):
         * :meth:`~get_objective_per_observation_function`
 
         Returns:
-            mot.utils.NameFunctionTuple: a named CL function with the following signature:
+            mot.cl_function.CLFunction: a CL function with the following signature:
 
                 .. code-block:: c
 
@@ -74,9 +74,8 @@ class OptimizeModelInterface(ModelBasicInfoInterface):
 
                 Changes may happen in place in the ``x`` parameter.
         """
-        func_name = 'preEvalParameterModifier'
-        func = 'void ' + func_name + '(void* data, mot_float_type* x){}'
-        return NameFunctionTuple(func_name, func)
+        return SimpleCLFunction('void', 'preEvalParameterModifier',
+                                ['mot_data_struct* data', 'mot_float_type* x'], '')
 
     def get_objective_per_observation_function(self):
         """Get the objective function that returns the objective value at a measurement instance.
@@ -85,7 +84,7 @@ class OptimizeModelInterface(ModelBasicInfoInterface):
         complete objective value.
 
         Returns:
-            mot.utils.NameFunctionTuple: A CL function with signature:
+            mot.cl_function.CLFunction: A CL function with signature:
 
                 .. code-block:: c
 
@@ -136,7 +135,7 @@ class SampleModelInterface(ModelBasicInfoInterface):
         This should return the LL's such that when linearly summed they yield the total log likelihood of the model.
 
         Returns:
-            mot.utils.NameFunctionTuple: A function of the kind:
+            mot.cl_function.CLFunction: A function of the kind:
                 .. code-block:: c
 
                     double <fname>(mot_data_struct* data,
@@ -155,7 +154,7 @@ class SampleModelInterface(ModelBasicInfoInterface):
                 by default this is set to ``private``.
 
         Returns:
-            mot.utils.NameFunctionTuple: A function with the signature:
+            mot.cl_function.CLFunction: A function with the signature:
                 .. code-block:: c
 
                     mot_float_type <func_name>(
@@ -179,7 +178,7 @@ class SampleModelInterface(ModelBasicInfoInterface):
         allows changing the proposal before it is put into the model and before it is stored.
 
         Returns:
-            mot.utils.NameFunctionTuple: A function with the signature:
+            mot.cl_function.CLFunction: A function with the signature:
                 .. code-block:: c
 
                     void <func_name>(
@@ -189,13 +188,10 @@ class SampleModelInterface(ModelBasicInfoInterface):
 
             Which is called by the sampling routine to finalize the proposal.
         """
-        fname = 'finalizeProposal'
-        func = '''
-            void ''' + fname + '''(mot_data_struct* data,
-                ''' + str(address_space_parameter_vector) + ''' const mot_float_type* const x){
-            }
-        '''
-        return NameFunctionTuple(fname, func)
+        return SimpleCLFunction(
+            'void', 'finalizeProposal',
+            ['mot_data_struct* data', address_space_parameter_vector + ' const mot_float_type* const x'],
+            '')
 
 
 class NumericalDerivativeInterface(OptimizeModelInterface):
@@ -269,7 +265,7 @@ class NumericalDerivativeInterface(OptimizeModelInterface):
         as those are handled already by the numerical differentiation routine.
 
         Returns:
-            mot.utils.NameFunctionTuple: A function with the signature:
+            mot.cl_function.CLFunction: A function with the signature:
                 .. code-block:: c
 
                     void <func_name>(mot_data_struct* data, mot_float_type* params);

@@ -1,9 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from mot import Powell
+from mot.cl_function import SimpleCLFunction
 from mot.cl_routines.sampling.amwg import AdaptiveMetropolisWithinGibbs
 from mot.model_interfaces import SampleModelInterface, OptimizeModelInterface
-from mot.utils import NameFunctionTuple
 
 __author__ = 'Robbert Harms'
 __date__ = '2018-04-04'
@@ -55,15 +55,13 @@ class Rosenbrock(OptimizeModelInterface, SampleModelInterface):
     ## Methods used for optimization ##
     def get_objective_per_observation_function(self):
         """Used in Maximum Likelihood Estimation."""
-        func_name = 'rosenbrock_MLE_func'
-        func = '''
-            mot_float_type ''' + func_name + '''(mot_data_struct* data, const mot_float_type* const x, 
-                                                 uint observation_index){
+        return SimpleCLFunction(
+            'mot_float_type', 'rosenbrock_MLE_func',
+            ['mot_data_struct* data', 'const mot_float_type* const x', 'uint observation_index'],
+            '''
                 uint i = observation_index;
                 return 100 * pown(x[i + 1] - pown(x[i], 2), 2) + pown(1 - x[i], 2);
-            }
-        '''
-        return NameFunctionTuple(func_name, func)
+            ''')
 
     def get_lower_bounds(self):
         return [-np.inf] * self.nmr_params
@@ -75,32 +73,27 @@ class Rosenbrock(OptimizeModelInterface, SampleModelInterface):
     ## Methods used for sampling ##
     def get_log_likelihood_per_observation_function(self):
         """Used in Bayesian sampling."""
-        fname = 'rosenbrock_logLikelihood'
-        func = '''
-            double ''' + fname + '''(mot_data_struct* data, const mot_float_type* const x, 
-                                     uint observation_index){
+        return SimpleCLFunction(
+            'double', 'rosenbrock_logLikelihood',
+            ['mot_data_struct* data', 'const mot_float_type* const x', 'uint observation_index'],
+            '''
                 uint i = observation_index;
                 return -(100 * pown(x[i + 1] - pown(x[i], 2), 2) + pown(1 - x[i], 2));
-            }
-        '''
-        return NameFunctionTuple(fname, func)
+            ''')
 
     def get_log_prior_function(self, address_space_parameter_vector='private'):
         """Used in Bayesian sampling."""
-        fname = 'rosenbrock_logPrior'
-        func = '''
-            double ''' + fname + '''(mot_data_struct* data,
-                    ''' + str(address_space_parameter_vector) + ''' const mot_float_type* const x){
-                
+        return SimpleCLFunction(
+            'double', 'rosenbrock_logPrior',
+            ['mot_data_struct* data', address_space_parameter_vector + ' const mot_float_type* const x'],
+            '''
                 for(uint i = 0; i < ''' + str(self.nmr_params) + '''; i++){
                     if(x[i] < -10 || x[i] > 10){
                         return log(0.0);
                     }
                 }
                 return log(1.0);
-            }
-        '''
-        return NameFunctionTuple(fname, func)
+            ''')
 
 
 if __name__ == '__main__':

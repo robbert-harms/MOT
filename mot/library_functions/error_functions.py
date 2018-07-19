@@ -1,5 +1,4 @@
 from pkg_resources import resource_filename
-
 from mot.library_functions import SimpleCLLibraryFromFile, SimpleCLLibrary
 
 __author__ = 'Robbert Harms'
@@ -19,11 +18,8 @@ class CerfImWOfX(SimpleCLLibraryFromFile):
 
 class dawson(SimpleCLLibrary):
     def __init__(self):
-        """Calculate the Dawson's integral for a real argument."""
-        super(dawson, self).__init__(
-            'double', 'dawson', [('double', 'x')],
-            '''return (sqrt(M_PI)/2.0) * im_w_of_x(x);''',
-            dependencies=(CerfImWOfX(),))
+        super().__init__('double dawson(double x){ return (sqrt(M_PI)/2.0) * im_w_of_x(x); }',
+                         dependencies=[CerfImWOfX()])
 
 
 class erfi(SimpleCLLibrary):
@@ -32,7 +28,6 @@ class erfi(SimpleCLLibrary):
 
         Compute erfi(x) = -i erf(ix), the imaginary error function.
         """
-        super(erfi, self).__init__('double', 'erfi', [('double', 'x')], '''
-            return x*x > 720 ? (x > 0 ? INFINITY : -INFINITY) : exp(x*x) * im_w_of_x(x);
-        ''', dependencies=(CerfImWOfX(),))
-
+        super().__init__(
+            'double erfi(double x){ return x*x > 720 ? (x > 0 ? INFINITY : -INFINITY) : exp(x*x) * im_w_of_x(x); }',
+            dependencies = [CerfImWOfX()])

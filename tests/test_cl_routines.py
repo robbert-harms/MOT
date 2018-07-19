@@ -10,10 +10,12 @@ Tests for `mot` module.
 
 import unittest
 import numpy as np
+
+from mot.cl_function import SimpleCLFunction
 from mot.cl_routines.optimizing.nmsimplex import NMSimplex
 from mot.cl_routines.optimizing.levenberg_marquardt import LevenbergMarquardt
 from mot.cl_routines.optimizing.powell import Powell
-from mot.utils import NameFunctionTuple, convert_data_to_dtype
+from mot.utils import convert_data_to_dtype
 
 from mot.model_interfaces import OptimizeModelInterface
 
@@ -81,23 +83,14 @@ class Rosenbrock(OptimizeModelInterface):
     def get_nmr_parameters(self):
         return self.n
 
-    def get_pre_eval_parameter_modifier(self):
-        func_name = '_modifyParameters'
-        func = '''
-            void ''' + func_name + '''(void* data, mot_float_type* x){
-            }
-        '''
-        return NameFunctionTuple(func_name, func)
-
     def get_objective_per_observation_function(self):
-        func_name = 'getObjectiveInstanceValue'
-        func = '''
-            mot_float_type ''' + func_name + '''(void* data, const mot_float_type* const x, uint observation_index){
+        return SimpleCLFunction(
+            'mot_float_type', 'getObjectiveInstanceValue',
+            [('mot_data_struct*', 'data'), ('const mot_float_type* const', 'x'), ('uint', 'observation_index')],
+            '''
                 uint i = observation_index;
                 return 100 * pown(x[i + 1] - pown(x[i], 2), 2) + pown(1 - x[i], 2);
-            }
-        '''
-        return NameFunctionTuple(func_name, func)
+            ''')
 
     def get_lower_bounds(self):
         return [-np.inf] * self.n
@@ -136,23 +129,14 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
     def get_nmr_parameters(self):
         return 2
 
-    def get_pre_eval_parameter_modifier(self):
-        func_name = '_modifyParameters'
-        func = '''
-            void ''' + func_name + '''(void* data, mot_float_type* x){
-            }
-        '''
-        return NameFunctionTuple(func_name, func)
-
     def get_objective_per_observation_function(self):
-        func_name = "getObjectiveInstanceValue"
-        func = '''
-            mot_float_type ''' + func_name + '''(void* data, const mot_float_type* const x, uint observation_index){
+        return SimpleCLFunction(
+            'mot_float_type', 'getObjectiveInstanceValue',
+            [('mot_data_struct*', 'data'), ('const mot_float_type* const', 'x'), ('uint', 'observation_index')],
+            '''
                 uint k = observation_index;
                 return pown(2 + 2 * (k+1) - exp((k+1) * x[0]) - exp((k+1) * x[1]), 2);
-            }
-        '''
-        return NameFunctionTuple(func_name, func)
+            ''')
 
     def get_lower_bounds(self):
         return [0, 0]

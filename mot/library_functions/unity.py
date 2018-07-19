@@ -10,30 +10,29 @@ __licence__ = 'LGPL v3'
 class log1pmx(SimpleCLLibrary):
     def __init__(self):
         """log(1 + x) - x"""
-        super(log1pmx, self).__init__(
-            'double', 'log1pmx',
-            [('double', 'x')],
-            '''
-            if (fabs(x) < 0.5) {
-                int n;
-                double xfac = x;
-                double term;
-                double res = 0;
+        super().__init__('''
+            double log1pmx(double x){
+                if (fabs(x) < 0.5) {
+                    int n;
+                    double xfac = x;
+                    double term;
+                    double res = 0;
 
-                for(n = 2; n < 500; n++) {
-                    xfac *= -x;
-                    term = xfac / n;
-                    res += term;
-                    if (fabs(term) < MOT_EPSILON * fabs(res)) {
-                        break;
+                    for(n = 2; n < 500; n++) {
+                        xfac *= -x;
+                        term = xfac / n;
+                        res += term;
+                        if (fabs(term) < MOT_EPSILON * fabs(res)) {
+                            break;
+                        }
                     }
+                    return res;
                 }
-                return res;
+                else {
+                    return log1p(x) - x;
+                }
             }
-            else {
-                return log1p(x) - x;
-            }
-            ''')
+        ''')
 
 
 class lgam1p(SimpleCLLibrary):
@@ -43,10 +42,4 @@ class lgam1p(SimpleCLLibrary):
         This is a simplification of the corresponding function in scipy
         https://github.com/scipy/scipy/blob/master/scipy/special/cephes/unity.c 2018-05-14
         """
-        super(lgam1p, self).__init__(
-            'double', 'lgam1p',
-            [('double', 'x')],
-            '''
-                return lgamma(x + 1);
-            ''')
-
+        super(lgam1p, self).__init__('double lgam1p(double x){return lgamma(x + 1);}')

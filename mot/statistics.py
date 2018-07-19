@@ -1,11 +1,13 @@
-import itertools
 import numpy as np
 import scipy
 from scipy.optimize import minimize
 from scipy.stats import norm
 import scipy.integrate
+
+from mot.cl_function import SimpleCLFunction
+from mot.cl_routines.base import RunProcedure
+from mot.kernel_data import KernelArray, KernelAllocatedArray, KernelScalar
 from mot.utils import is_scalar, multiprocess_mapping
-from mot.cl_routines.mapping.circular_gaussian_fit import CircularGaussianFit
 
 __author__ = 'Robbert Harms'
 __date__ = '2017-11-01'
@@ -27,7 +29,7 @@ def fit_gaussian(samples, ddof=0):
     return np.mean(samples, axis=1), np.std(samples, axis=1, ddof=ddof)
 
 
-def fit_circular_gaussian(samples, high=np.pi, low=0):
+def fit_circular_gaussian(samples, high=np.pi, low=0, cl_runtime_info=None):
     """Compute the circular mean for samples in a range
 
     Args:
@@ -35,11 +37,56 @@ def fit_circular_gaussian(samples, high=np.pi, low=0):
             values. If two dimensional, we fit the Gaussian for every set of samples over the first dimension.
         high (float): The maximum wrap point
         low (float): The minimum wrap point
+        cl_runtime_info (mot.cl_runtime_info.CLRuntimeInfo): the runtime information
     """
+    def get_cl_function():
+        body = '''
+            double cos_mean = 0;
+            double sin_mean = 0;
+            double ang;
+
+            for(uint i = 0; i < data->nmr_samples; i++){
+                ang = (data->samples[i] - data->low)*2*M_PI / (data->high - data->low);
+
+                cos_mean += (cos(ang) - cos_mean) / (i + 1);
+                sin_mean += (sin(ang) - sin_mean) / (i + 1);
+            }
+
+            double R = hypot(cos_mean, sin_mean);
+            if(R > 1){
+                R = 1;
+            }
+
+            double stds = 1/2. * sqrt(-2 * log(R));
+
+            double res = atan2(sin_mean, cos_mean);
+            if(res < 0){
+                 res += 2 * M_PI;
+            }
+
+            *(data->means) = res*(data->high - data->low)/2.0/M_PI + data->low;
+            *(data->stds) = ((data->high - data->low)/2.0/M_PI) * sqrt(-2*log(R));
+        '''
+        return SimpleCLFunction('void', 'compute', [('mot_data_struct*', 'data')], body)
+
+    def run_cl(samples):
+        all_kernel_data = {'samples': KernelArray(samples, 'mot_float_type'),
+                           'means': KernelAllocatedArray(samples.shape[0], 'mot_float_type'),
+                           'stds': KernelAllocatedArray(samples.shape[0], 'mot_float_type'),
+                           'nmr_samples': KernelScalar(samples.shape[1]),
+                           'low': KernelScalar(low),
+                           'high': KernelScalar(high),
+                           }
+
+        runner = RunProcedure(cl_runtime_info)
+        runner.run_procedure(get_cl_function(), all_kernel_data, samples.shape[0])
+
+        return all_kernel_data['means'].get_data(), all_kernel_data['stds'].get_data()
+
     if len(samples.shape) == 1:
-        mean, std = CircularGaussianFit().calculate(samples[None, :], high=high, low=low)
+        mean, std = run_cl(samples[None, :])
         return mean[0], std[0]
-    return CircularGaussianFit().calculate(samples, high=high, low=low)
+    return run_cl(samples)
 
 
 def fit_truncated_gaussian(samples, lower_bounds, upper_bounds):
