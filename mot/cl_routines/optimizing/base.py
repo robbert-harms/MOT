@@ -3,10 +3,8 @@ import numpy as np
 
 from mot.cl_function import SimpleCLFunction
 from mot.cl_routines.mapping import compute_objective_value
-from mot.cl_routines.base import RunProcedure
+from mot.cl_runtime_info import CLRuntimeInfo
 from mot.kernel_data import KernelArray, KernelAllocatedArray
-from ...utils import get_float_type_def
-from ...cl_routines.base import CLRoutine
 from ...__version__ import __version__
 
 __author__ = 'Robbert Harms'
@@ -32,9 +30,9 @@ return_code_labels = {
 }
 
 
-class AbstractOptimizer(CLRoutine):
+class AbstractOptimizer(object):
 
-    def __init__(self, patience=1, optimizer_settings=None, **kwargs):
+    def __init__(self, patience=1, optimizer_settings=None, cl_runtime_info=None, **kwargs):
         """Create a new optimizer that will minimize the given model using the given environments.
 
         If the environment is None, a suitable default environment is created.
@@ -45,7 +43,7 @@ class AbstractOptimizer(CLRoutine):
             optimizer_options (dict): extra options one can set for the optimization routine. These are routine
                 dependent.
         """
-        super(AbstractOptimizer, self).__init__(**kwargs)
+        self._cl_runtime_info = cl_runtime_info or CLRuntimeInfo()
 
         self._optimizer_settings = optimizer_settings or {}
         if not isinstance(self._optimizer_settings, dict):
@@ -56,6 +54,14 @@ class AbstractOptimizer(CLRoutine):
         if 'patience' in self._optimizer_settings:
             self.patience = self._optimizer_settings['patience']
         self._optimizer_settings['patience'] = self.patience
+
+    def set_cl_runtime_info(self, cl_runtime_info):
+        """Update the CL runtime information.
+
+        Args:
+            cl_runtime_info (mot.cl_runtime_info.CLRuntimeInfo): the new runtime information
+        """
+        self._cl_runtime_info = cl_runtime_info
 
     @property
     def optimizer_settings(self):
@@ -108,6 +114,9 @@ class OptimizationResults(object):
             ndarray: (d,) matrix with for every problem d, the objective value
         """
         raise NotImplementedError()
+
+    def __str__(self):
+        return np.array_str(self.get_optimization_result())
 
 
 class SimpleOptimizationResult(OptimizationResults):
@@ -184,10 +193,10 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         self._logger.info('Finished optimization preliminaries')
         self._logger.info('Starting optimization')
 
-        runner = RunProcedure(self._cl_runtime_info)
-        runner.run_procedure(self._get_optimizer_function(model),
-                             all_kernel_data, model.get_nmr_problems(),
-                             use_local_reduction=False)
+        optimizer_func = self._get_optimizer_function(model)
+        optimizer_func.evaluate({'data': all_kernel_data}, nmr_instances=model.get_nmr_problems(),
+                                use_local_reduction=False, cl_runtime_info=self._cl_runtime_info)
+
         parameters = model.finalize_optimized_parameters(all_kernel_data['_parameters'].get_data())
 
         self._logger.info('Finished optimization')
@@ -219,7 +228,6 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         nmr_params = model.get_nmr_parameters()
 
         cl_extra = ''
-        cl_extra += get_float_type_def(self._cl_runtime_info.double_precision)
         cl_extra += self._get_optimizer_cl_code(model)
 
         body = '''

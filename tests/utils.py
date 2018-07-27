@@ -40,49 +40,6 @@ class test_device_supports_double(unittest.TestCase):
                 assert(device_supports_double(device) == has_double)
 
 
-class test_get_float_type_def(unittest.TestCase):
-
-    def test_float(self):
-        known_good_value = '''
-            #if __OPENCL_VERSION__ <= CL_VERSION_1_1
-                #pragma OPENCL EXTENSION cl_khr_fp64 : enable
-            #endif
-
-            #define mot_float_type float
-            #define mot_float_type2 float2
-            #define mot_float_type4 float4
-            #define mot_float_type8 float8
-            #define mot_float_type16 float16
-            #define MOT_EPSILON FLT_EPSILON
-            #define MOT_MIN FLT_MIN
-            #define MOT_MAX FLT_MAX
-            #define MOT_INT_CMP_TYPE int
-        '''
-        value = get_float_type_def(False)
-
-        assert(dedent(value) == dedent(known_good_value))
-
-    def test_double(self):
-        known_good_value = '''
-            #if __OPENCL_VERSION__ <= CL_VERSION_1_1
-                #pragma OPENCL EXTENSION cl_khr_fp64 : enable
-            #endif
-
-            #define mot_float_type double
-            #define mot_float_type2 double2
-            #define mot_float_type4 double4
-            #define mot_float_type8 double8
-            #define mot_float_type16 double16
-            #define MOT_EPSILON DBL_EPSILON
-            #define MOT_MIN DBL_MIN
-            #define MOT_MAX DBL_MAX
-            #define MOT_INT_CMP_TYPE long
-        '''
-        value = get_float_type_def(True)
-
-        assert(dedent(value) == dedent(known_good_value))
-
-
 class test_is_scalar(unittest.TestCase):
 
     def test_is_not_scalar(self):

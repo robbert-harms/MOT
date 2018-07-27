@@ -105,7 +105,9 @@ class LevenbergMarquardt(AbstractParallelOptimizer):
                 v = option_converters[option](v)
             params.update({option.upper(): v})
 
-        body = open(os.path.abspath(resource_filename('mot', 'data/opencl/lmmin.cl')), 'r').read()
+        with open(os.path.abspath(resource_filename('mot', 'data/opencl/lmmin.cl')), 'r') as f:
+            body = f.read()
+
         if params:
             body = body % params
         return body

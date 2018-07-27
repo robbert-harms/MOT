@@ -5,7 +5,6 @@ from scipy.stats import norm
 import scipy.integrate
 
 from mot.cl_function import SimpleCLFunction
-from mot.cl_routines.base import RunProcedure
 from mot.kernel_data import KernelArray, KernelAllocatedArray, KernelScalar
 from mot.utils import is_scalar, multiprocess_mapping
 
@@ -29,7 +28,7 @@ def fit_gaussian(samples, ddof=0):
     return np.mean(samples, axis=1), np.std(samples, axis=1, ddof=ddof)
 
 
-def fit_circular_gaussian(samples, high=np.pi, low=0, cl_runtime_info=None):
+def fit_circular_gaussian(samples, high=np.pi, low=0):
     """Compute the circular mean for samples in a range
 
     Args:
@@ -37,10 +36,9 @@ def fit_circular_gaussian(samples, high=np.pi, low=0, cl_runtime_info=None):
             values. If two dimensional, we fit the Gaussian for every set of samples over the first dimension.
         high (float): The maximum wrap point
         low (float): The minimum wrap point
-        cl_runtime_info (mot.cl_runtime_info.CLRuntimeInfo): the runtime information
     """
-    def get_cl_function():
-        body = '''
+    cl_func = SimpleCLFunction.from_string('''
+        void compute(mot_data_struct* data){
             double cos_mean = 0;
             double sin_mean = 0;
             double ang;
@@ -66,8 +64,8 @@ def fit_circular_gaussian(samples, high=np.pi, low=0, cl_runtime_info=None):
 
             *(data->means) = res*(data->high - data->low)/2.0/M_PI + data->low;
             *(data->stds) = ((data->high - data->low)/2.0/M_PI) * sqrt(-2*log(R));
-        '''
-        return SimpleCLFunction('void', 'compute', [('mot_data_struct*', 'data')], body)
+        }
+    ''')
 
     def run_cl(samples):
         all_kernel_data = {'samples': KernelArray(samples, 'mot_float_type'),
@@ -78,9 +76,7 @@ def fit_circular_gaussian(samples, high=np.pi, low=0, cl_runtime_info=None):
                            'high': KernelScalar(high),
                            }
 
-        runner = RunProcedure(cl_runtime_info)
-        runner.run_procedure(get_cl_function(), all_kernel_data, samples.shape[0])
-
+        cl_func.evaluate({'data': all_kernel_data}, nmr_instances=samples.shape[0])
         return all_kernel_data['means'].get_data(), all_kernel_data['stds'].get_data()
 
     if len(samples.shape) == 1:

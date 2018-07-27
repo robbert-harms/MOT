@@ -60,10 +60,8 @@ class OptimizeModelInterface(ModelBasicInfoInterface):
         This is meant to contain possible parameter transformations that need to be executed only once for a
         given set of parameters. Having this in a separate function gives a speed gain.
 
-        Model optimization routines need to be aware that they need to call this function prior to calling any of:
-
-        * :meth:`~get_model_eval_function`
-        * :meth:`~get_objective_per_observation_function`
+        Model optimization routines need to be aware that they need to call this function prior to calling
+        :meth:`~get_objective_per_observation_function`.
 
         Returns:
             mot.cl_function.CLFunction: a CL function with the following signature:

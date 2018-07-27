@@ -26,6 +26,18 @@ class KernelData(object):
         raise NotImplementedError()
 
     @property
+    def data_length(self):
+        """Get the number of elements per problem instance.
+
+        In the kernels, arrays are loaded as one dimensional arrays per problem instance. This property should return
+        the length of that one dimensional array per problem instance.
+
+        Returns:
+            int: the number of elements per problem instance.
+        """
+        raise NotImplementedError()
+
+    @property
     def is_scalar(self):
         """Check if the implemented input data is a scalar or not.
 
@@ -149,6 +161,10 @@ class KernelScalar(KernelData):
         self._mot_float_dtype = mot_float_dtype
 
     @property
+    def data_length(self):
+        return 1
+
+    @property
     def is_scalar(self):
         return True
 
@@ -212,6 +228,10 @@ class KernelLocalMemory(KernelData):
 
     def set_mot_float_dtype(self, mot_float_dtype):
         self._mot_float_dtype = mot_float_dtype
+
+    @property
+    def data_length(self):
+        return 1
 
     @property
     def is_scalar(self):
@@ -323,14 +343,6 @@ class KernelArray(KernelData):
 
     @property
     def data_length(self):
-        """Get the number of elements per problem instance.
-
-        In the kernels, arrays are loaded as one dimensional arrays per problem instance. This property should return
-        the length of that one dimensional array per problem instance.
-
-        Returns:
-            int: the number of elements per problem instance.
-        """
         return self._data.strides[0] // self._data.itemsize
 
     @property
@@ -442,6 +454,10 @@ class KernelAllocatedArray(KernelData):
         else:
             offset_str = str(self._offset_str)
         return offset_str.replace('{problem_id}', problem_id_substitute)
+
+    @property
+    def data_length(self):
+        return self._data.strides[0] // self._data.itemsize
 
     @property
     def is_scalar(self):

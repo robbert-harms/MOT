@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from mot.cl_function import SimpleCLFunction
-from mot.cl_routines.generate_random import Random123Generator
+from mot.cl_routines.generate_random import randn, rand
 from mot.cl_routines.sampling.amwg import AdaptiveMetropolisWithinGibbs
 from mot.model_interfaces import SampleModelInterface
 from mot.utils import add_include_guards
@@ -111,11 +111,11 @@ def get_simulated_data(nmr_problems):
     nmr_observed_tanks = 10
 
     # Generate some maximum number of tanks. Basically the ground truth of the estimation problem.
-    nmr_tanks_ground_truth = Random123Generator().randn(nmr_problems, 1, mean=250, std=30, ctype='uint')
+    nmr_tanks_ground_truth = randn(nmr_problems, 1, mean=250, std=30, ctype='uint')
 
     # Generate some random tank observations
-    observations = Random123Generator().rand(nmr_problems, nmr_observed_tanks, min_val=0,
-                                             max_val=nmr_tanks_ground_truth, ctype='uint')
+    observations = rand(nmr_problems, nmr_observed_tanks, min_val=0,
+                        max_val=nmr_tanks_ground_truth, ctype='uint')
 
     return observations, nmr_tanks_ground_truth
 

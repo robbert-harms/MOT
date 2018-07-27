@@ -2,9 +2,9 @@ import logging
 from contextlib import contextmanager
 
 from mot.cl_function import SimpleCLFunction
-from mot.cl_routines.base import CLRoutine, RunProcedure
+from mot.cl_runtime_info import CLRuntimeInfo
 from mot.library_functions import Rand123
-from mot.utils import split_in_batches, get_float_type_def
+from mot.utils import split_in_batches
 from mot.kernel_data import KernelScalar, KernelLocalMemory, KernelArray, \
     KernelAllocatedArray
 import numpy as np
@@ -16,9 +16,9 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class AbstractSampler(CLRoutine):
+class AbstractSampler(object):
 
-    def __init__(self, model, starting_positions, **kwargs):
+    def __init__(self, model, starting_positions, cl_runtime_info=None, **kwargs):
         """Abstract base class for sampling routines.
 
         Sampling routines implementing this interface should be stateful objects that, for the given model, keep track
@@ -29,7 +29,7 @@ class AbstractSampler(CLRoutine):
             starting_positions (ndarray): the starting positions for the sampler. Should be a two dimensional matrix
                 with for every modeling instance (first dimension) and every parameter (second dimension) a value.
         """
-        super(AbstractSampler, self).__init__(**kwargs)
+        self._cl_runtime_info = cl_runtime_info or CLRuntimeInfo()
         self._logger = logging.getLogger(__name__)
         self._model = model
         self._starting_positions = starting_positions
@@ -50,6 +50,14 @@ class AbstractSampler(CLRoutine):
         if self._starting_positions.shape[1] != model.get_nmr_parameters():
             raise ValueError('The number of parameters in the model does not match the number of '
                              'starting points given.')
+
+    def set_cl_runtime_info(self, cl_runtime_info):
+        """Update the CL runtime information.
+
+        Args:
+            cl_runtime_info (mot.cl_runtime_info.CLRuntimeInfo): the new runtime information
+        """
+        self._cl_runtime_info = cl_runtime_info
 
     def sample(self, nmr_samples, burnin=0, thinning=1):
         """Take additional samples from the given model using this sampler.
@@ -96,14 +104,11 @@ class AbstractSampler(CLRoutine):
             None or tuple: if ``return_output`` is True three ndarrays as (samples, log_likelihoods, log_priors)
         """
         kernel_data = self._get_kernel_data(nmr_samples, thinning, return_output)
-
-        runner = RunProcedure(self._cl_runtime_info)
-        runner.run_procedure(self._get_compute_func(nmr_samples, thinning, return_output), kernel_data,
-                             self._nmr_problems, use_local_reduction=True)
+        sample_func = self._get_compute_func(nmr_samples, thinning, return_output)
+        sample_func.evaluate({'data': kernel_data}, nmr_instances=self._nmr_problems, use_local_reduction=True,
+                             cl_runtime_info=self._cl_runtime_info)
         self._sampling_index += nmr_samples * thinning
-
         self._readout_kernel_data(kernel_data)
-
         if return_output:
             return (kernel_data['_samples'].get_data(),
                     kernel_data['_log_likelihoods'].get_data(),
@@ -172,11 +177,7 @@ class AbstractSampler(CLRoutine):
         Returns:
             mot.cl_function.CLFunction: the compute function
         """
-        kernel_source = '''
-            #define NMR_OBSERVATIONS ''' + str(self._model.get_nmr_observations()) + '''
-        '''
-        kernel_source += get_float_type_def(self._cl_runtime_info.double_precision)
-        kernel_source += self._get_state_update_cl_func(nmr_samples, thinning, return_output)
+        kernel_source = self._get_state_update_cl_func(nmr_samples, thinning, return_output)
 
         cl_func = '''
             void compute(mot_data_struct* data){
@@ -300,9 +301,11 @@ class AbstractSampler(CLRoutine):
                 ulong local_id = get_local_id(0);
                 log_likelihood_tmp[local_id] = 0;
                 uint workgroup_size = get_local_size(0);
-                uint elements_for_workitem = ceil(NMR_OBSERVATIONS / (mot_float_type)workgroup_size);
+                uint elements_for_workitem = ceil(''' + str(self._model.get_nmr_observations()) + '''
+                                                  / (mot_float_type)workgroup_size);
 
-                if(workgroup_size * (elements_for_workitem - 1) + local_id >= NMR_OBSERVATIONS){
+                if(workgroup_size * (elements_for_workitem - 1) + local_id 
+                        >= ''' + str(self._model.get_nmr_observations()) + '''){
                     elements_for_workitem -= 1;
                 }
 

@@ -1,5 +1,4 @@
 from mot.cl_function import SimpleCLFunction
-from mot.cl_routines.base import RunProcedure
 from mot.kernel_data import KernelArray, KernelAllocatedArray, KernelScalar, KernelLocalMemory
 import numpy as np
 
@@ -39,26 +38,27 @@ def calculate_dependent_parameters(kernel_data, estimated_parameters_list,
         for i, p in enumerate([el[0] for el in dependent_parameter_names]):
             parameter_write_out += 'data->_results[' + str(i) + '] = ' + p + ";\n"
 
-        body = '''
-            mot_float_type x[''' + str(len(estimated_parameters_list)) + '''];
-
-            for(uint i = 0; i < ''' + str(len(estimated_parameters_list)) + '''; i++){
-                x[i] = data->x[i];
+        return SimpleCLFunction.from_string('''
+            void transform(mot_data_struct* data){
+                mot_float_type x[''' + str(len(estimated_parameters_list)) + '''];
+    
+                for(uint i = 0; i < ''' + str(len(estimated_parameters_list)) + '''; i++){
+                    x[i] = data->x[i];
+                }
+                ''' + parameters_listing + '''
+                ''' + parameter_write_out + '''
             }
-            ''' + parameters_listing + '''
-            ''' + parameter_write_out + '''
-        '''
-        return SimpleCLFunction('void', 'transform', ['mot_data_struct* data'], body)
+        ''')
 
-    all_kernel_data = dict(kernel_data)
-    all_kernel_data['x'] = KernelArray(np.dstack(estimated_parameters_list)[0, ...], ctype='mot_float_type')
-    all_kernel_data['_results'] = KernelAllocatedArray(
+    data_strut = dict(kernel_data)
+    data_strut['x'] = KernelArray(np.dstack(estimated_parameters_list)[0, ...], ctype='mot_float_type')
+    data_strut['_results'] = KernelAllocatedArray(
         (estimated_parameters_list[0].shape[0], len(dependent_parameter_names)), 'mot_float_type')
 
-    runner = RunProcedure(cl_runtime_info)
-    runner.run_procedure(get_cl_function(), all_kernel_data, estimated_parameters_list[0].shape[0])
+    get_cl_function().evaluate({'data': data_strut}, nmr_instances=estimated_parameters_list[0].shape[0],
+                               cl_runtime_info=cl_runtime_info)
 
-    return all_kernel_data['_results'].get_data()
+    return data_strut['_results'].get_data()
 
 
 def compute_log_likelihood(model, parameters, cl_runtime_info=None):
@@ -171,8 +171,8 @@ def compute_log_likelihood(model, parameters, cl_runtime_info=None):
             'local_reduction_lls': KernelLocalMemory('double')
         })
 
-    runner = RunProcedure(cl_runtime_info)
-    runner.run_procedure(get_cl_function(), all_kernel_data, parameters.shape[0], use_local_reduction=True)
+    get_cl_function().evaluate({'data': all_kernel_data}, nmr_instances=parameters.shape[0], use_local_reduction=True,
+                               cl_runtime_info=cl_runtime_info)
 
     return all_kernel_data['log_likelihoods'].get_data()
 
@@ -196,8 +196,8 @@ def compute_objective_value(model, parameters, cl_runtime_info=None):
 
         fill_objective_func = SimpleCLFunction.from_string('''
             void _fill_objective_value_tmp(mot_data_struct* data,
-                                          mot_float_type* x,
-                                          local double* objective_value_tmp){
+                                           mot_float_type* x,
+                                           local double* objective_value_tmp){
 
                 ulong observation_ind;
                 ulong local_id = get_local_id(0);
@@ -245,17 +245,15 @@ def compute_objective_value(model, parameters, cl_runtime_info=None):
             }
         ''', dependencies=[fill_objective_func, sum_objective_func])
 
-    shape = parameters.shape
     all_kernel_data = dict(model.get_kernel_data())
     all_kernel_data.update({
         'parameters': KernelArray(parameters),
-        'objective_values': KernelAllocatedArray((shape[0],), 'mot_float_type'),
+        'objective_values': KernelAllocatedArray((parameters.shape[0],), 'mot_float_type'),
         'local_reduction_lls': KernelLocalMemory('double')
     })
 
-    runner = RunProcedure(cl_runtime_info)
-    runner.run_procedure(get_cl_function(), all_kernel_data, parameters.shape[0],
-                         use_local_reduction=True)
+    get_cl_function().evaluate({'data': all_kernel_data}, nmr_instances=parameters.shape[0],
+                               use_local_reduction=True, cl_runtime_info=cl_runtime_info)
 
     return all_kernel_data['objective_values'].get_data()
 

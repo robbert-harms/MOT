@@ -1,10 +1,16 @@
+import collections
+
+import numpy as np
 from copy import copy
 
 import tatsu
 
 from mot.cl_data_type import SimpleCLDataType
 from textwrap import dedent, indent
-from mot.cl_routines.base import CLFunctionEvaluator
+
+from mot.cl_routines.base import apply_cl_function
+from mot.kernel_data import KernelData, KernelScalar, KernelArray
+from mot.utils import is_scalar
 
 __author__ = 'Robbert Harms'
 __date__ = '2017-08-31'
@@ -16,10 +22,10 @@ __licence__ = 'LGPL v3'
 _simple_cl_function_parser = tatsu.compile('''
     result = [address_space] data_type function_name arglist body $;
     address_space = ['__'] ('local' | 'global' | 'constant' | 'private');
-    data_type = /\w+\s*(\*)?/;
+    data_type = /\w+(\s*(\*)?)+/;
     function_name = /\w+/;
-    arglist = '(' @+:arg {',' @+:arg}* ')' ;
-    arg = /[a-zA-Z0-9_ \*]+/;
+    arglist = '(' @+:arg {',' @+:arg}* ')' | '()';
+    arg = /[\w \*]+/;
     body = /\{(?s).*/;
 ''')
 
@@ -83,24 +89,26 @@ class CLFunction(object):
         """
         raise NotImplementedError()
 
-    def evaluate(self, inputs, return_inputs=False, cl_runtime_info=None):
+    def evaluate(self, inputs, nmr_instances=None, use_local_reduction=False, cl_runtime_info=None):
         """Evaluate this function for each set of given parameters.
 
         Given a set of input parameters, this model will be evaluated for every parameter set.
+        This function will convert possible dots in the parameter names to underscores for use in the CL kernel.
 
         Args:
             inputs (dict[str: Union(ndarray, mot.utils.KernelData)]): for each parameter of the function
                 the input data. Each of these input datasets must either be a scalar or be of equal length in the
                 first dimension. The user can either input raw ndarrays or input KernelData objects.
                 If an ndarray is given we will load it read/write by default.
-            return_inputs (boolean): if we are interested in the values of the input arrays after evaluation.
+            nmr_instances (int): the number of parallel processes to run. If not given, we try to autodetect it
+                from the matrix with the largest number of rows (largest 1st dimension).
+            use_local_reduction (boolean): set this to True if you want to use local memory reduction in
+                 evaluating this function. If this is set to True we will multiply the global size
+                 (given by the nmr_instances) by the work group sizes.
             cl_runtime_info (mot.cl_runtime_info.CLRuntimeInfo): the runtime information for execution
 
         Returns:
-            ndarray or tuple(ndarray, dict[str: ndarray]): we always return at least the return values of the function,
-                which can be None if this function has a void return type. If ``return_inputs`` is set to True then
-                we return a tuple with as first element the return value and as second element a dictionary mapping
-                the output state of the parameters.
+            ndarray: the return values of the function, which can be None if this function has a void return type.
         """
         raise NotImplementedError()
 
@@ -163,19 +171,20 @@ class SimpleCLFunction(CLFunction):
                                         dependencies=dependencies, cl_extra=cl_extra)
 
             def address_space(self, ast):
-                self._return_type = ast
+                self._return_type = ast.strip() + ' '
                 return ast
 
             def data_type(self, ast):
-                self._return_type += ' ' + ''.join(ast)
+                self._return_type += ''.join(ast).strip()
                 return ast
 
             def function_name(self, ast):
-                self._function_name = ast
+                self._function_name = ast.strip()
                 return ast
 
             def arglist(self, ast):
-                self._parameter_list = ast
+                if ast != '()':
+                    self._parameter_list = ast
                 return ast
 
             def body(self, ast):
@@ -227,9 +236,70 @@ class SimpleCLFunction(CLFunction):
     def get_cl_extra(self):
         return self._cl_extra
 
-    def evaluate(self, inputs, return_inputs=False, cl_runtime_info=None):
-        return CLFunctionEvaluator(cl_runtime_info=cl_runtime_info).evaluate(
-            self, inputs, return_inputs=return_inputs)
+    def evaluate(self, inputs, nmr_instances=None, use_local_reduction=False, cl_runtime_info=None):
+        def wrap_input_data(input_data, nmr_instances):
+            def get_kernel_data(param):
+                if isinstance(input_data[param.name], KernelData):
+                    return input_data[param.name]
+                elif param.data_type.is_vector_type and np.squeeze(input_data[param.name]).shape[0] == 3:
+                    return KernelScalar(input_data[param.name], ctype=param.data_type.ctype)
+                elif is_scalar(input_data[param.name]) and not param.data_type.is_pointer_type:
+                    return KernelScalar(input_data[param.name])
+                else:
+                    if is_scalar(input_data[param.name]):
+                        data = np.ones(nmr_instances) * input_data[param.name]
+                    else:
+                        data = input_data[param.name]
+
+                    return KernelArray(data, ctype=param.data_type.ctype, is_writable=True, is_readable=True)
+
+            kernel_items = {}
+            for param in self.get_parameters():
+                if param.data_type.raw_data_type == 'mot_data_struct':
+                    kernel_items.update(input_data[param.name])
+                else:
+                    kernel_items[param.name.replace('.', '_')] = get_kernel_data(param)
+
+            return kernel_items
+
+        def get_minimum_data_length(cl_function, input_data):
+            min_length = 1
+
+            for param in cl_function.get_parameters():
+                value = input_data[param.name]
+
+                if isinstance(value, collections.Mapping):
+                    pass
+                elif isinstance(input_data[param.name], KernelData):
+                    data = value.get_data()
+                    if data is not None:
+                        if np.ndarray(data).shape[0] > min_length:
+                            min_length = np.maximum(min_length, np.ndarray(data).shape[0])
+
+                elif param.data_type.is_vector_type and np.squeeze(input_data[param.name]).shape[0] == 3:
+                    pass
+                elif is_scalar(input_data[param.name]):
+                    pass
+                else:
+                    if isinstance(value, (tuple, list)):
+                        min_length = np.maximum(min_length, len(value))
+                    elif value.shape[0] > min_length:
+                        min_length = np.maximum(min_length, value.shape[0])
+
+            return min_length
+
+        for param in self.get_parameters():
+            if param.name not in inputs:
+                names = [param.name for param in self.get_parameters()]
+                missing_names = [name for name in names if name not in inputs]
+                raise ValueError('Some parameters are missing an input value, '
+                                 'required parameters are: {}, missing inputs are: {}'.format(names, missing_names))
+
+        nmr_instances = nmr_instances or get_minimum_data_length(self, inputs)
+        kernel_items = wrap_input_data(inputs, nmr_instances)
+
+        return apply_cl_function(self, kernel_items, nmr_instances,
+                                 use_local_reduction=use_local_reduction, cl_runtime_info=cl_runtime_info)
 
     def get_dependencies(self):
         return self._dependencies
@@ -256,7 +326,8 @@ class SimpleCLFunction(CLFunction):
             code += d.get_cl_code() + "\n"
         return code
 
-    def _resolve_parameters(self, parameter_list):
+    @staticmethod
+    def _resolve_parameters(parameter_list):
         params = []
         for param in parameter_list:
             if isinstance(param, CLFunctionParameter):
@@ -351,8 +422,8 @@ class SimpleCLFunctionParameter(CLFunctionParameter):
         Returns:
             SimpleCLFunctionParameter: an instantiated function parameter object
         """
-        parameter_name = parameter_string.split(' ')[-1]
-        data_type = parameter_string[:-len(parameter_name)]
+        parameter_name = parameter_string.split(' ')[-1].strip()
+        data_type = parameter_string[:-len(parameter_name)].strip()
         return SimpleCLFunctionParameter(data_type, parameter_name)
 
     @property

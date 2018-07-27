@@ -367,7 +367,7 @@ class _igami_impl(SimpleCLLibrary):
         Copied from Scipy (https://github.com/scipy/scipy/blob/master/scipy/special/cephes/igami.c), 05-05-2018.
         """
         super().__init__('''
-            double _igami_impl(double a, double p)
+            double _igami_impl(double a, double p){
                 int i;
                 double x, fac, f_fp, fpp_fp;
     

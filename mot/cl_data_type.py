@@ -13,7 +13,7 @@ _cl_data_type_parser = tatsu.compile('''
     address_space = ['__'] ('local' | 'global' | 'constant' | 'private');
     pre_type_qualifiers = 'const' | 'volatile';
     
-    data_type = type_specifier [vector_length] [pointer];
+    data_type = type_specifier [vector_length] {pointer}*;
     pointer = '*';
     vector_length = /[2348(16]/;
     
@@ -102,6 +102,17 @@ class CLDataType(object):
         raise NotImplementedError()
 
     @property
+    def nmr_pointers(self):
+        """Get the number of asterisks / pointer references of this data type.
+
+        If the data type is float**, we return 2 here.
+
+        Returns:
+            int: the number of pointer asterisks in the data type.
+        """
+        raise NotImplementedError()
+
+    @property
     def vector_length(self):
         """Get the length of this vector, returns None if not a vector type.
 
@@ -122,7 +133,7 @@ class CLDataType(object):
 
 class SimpleCLDataType(CLDataType):
 
-    def __init__(self, raw_data_type, is_pointer_type=False, vector_length=None, address_space=None,
+    def __init__(self, raw_data_type, nmr_pointers=0, vector_length=None, address_space=None,
                  pre_type_qualifiers=None, post_type_qualifiers=None):
         """Create a new CL data type container.
 
@@ -131,7 +142,7 @@ class SimpleCLDataType(CLDataType):
 
         Args:
             raw_data_type (str): the specific data type without the vector number and asterisks
-            is_pointer_type (boolean): If this parameter is a pointer type (appended by a ``*``)
+            nmr_pointers (int): The number of dereferences of this parameter (number of ``*``).
             vector_length (int or None): If None this data type is not a CL vector type.
                 If it is an integer it is the vector length of this data type (2, 3, 4, ...)
             address_space (str or None): the address space qualifier or None if not used. One of:
@@ -143,7 +154,7 @@ class SimpleCLDataType(CLDataType):
                 One or more of {const, restrict}
         """
         self._raw_data_type = str(raw_data_type)
-        self._is_pointer_type = is_pointer_type
+        self._nmr_pointers = nmr_pointers
         self._vector_length = vector_length
 
         if self.vector_length:
@@ -183,7 +194,7 @@ class SimpleCLDataType(CLDataType):
 
             def __init__(self):
                 self._raw_data_type = None
-                self._is_pointer_type = False
+                self._nmr_pointers = 0
                 self._vector_length = None
                 self._address_space = None
                 self._pre_type_qualifiers = None
@@ -192,14 +203,14 @@ class SimpleCLDataType(CLDataType):
             def result(self, ast):
                 return SimpleCLDataType(
                     self._raw_data_type,
-                    is_pointer_type=self._is_pointer_type,
+                    nmr_pointers=self._nmr_pointers,
                     vector_length=self._vector_length,
                     address_space=self._address_space,
                     pre_type_qualifiers=self._pre_type_qualifiers,
                     post_type_qualifiers=self._post_type_qualifiers)
 
             def pointer(self, ast):
-                self._is_pointer_type = True
+                self._nmr_pointers += 1
                 return ast
 
             def vector_length(self, ast):
@@ -243,7 +254,7 @@ class SimpleCLDataType(CLDataType):
             s += str(self.vector_length)
 
         if self.is_pointer_type:
-            s += '*'
+            s += '*' * self._nmr_pointers
 
         return str(s)
 
@@ -253,7 +264,11 @@ class SimpleCLDataType(CLDataType):
 
     @property
     def is_pointer_type(self):
-        return self._is_pointer_type
+        return self._nmr_pointers > 0
+
+    @property
+    def nmr_pointers(self):
+        return self._nmr_pointers
 
     @property
     def vector_length(self):

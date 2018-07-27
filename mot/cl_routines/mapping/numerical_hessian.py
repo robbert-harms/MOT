@@ -2,9 +2,8 @@ import itertools
 import numpy as np
 
 from mot.cl_function import SimpleCLFunction
-from mot.cl_routines.base import RunProcedure
+from mot.cl_runtime_info import CLRuntimeInfo
 from mot.kernel_data import KernelLocalMemory, KernelArray, KernelAllocatedArray
-from ...cl_routines.base import CLRoutine
 from scipy import linalg
 
 
@@ -15,7 +14,23 @@ __email__ = 'robbert.harms@maastrichtuniversity.nl'
 __licence__ = 'LGPL v3'
 
 
-class NumericalHessian(CLRoutine):
+class NumericalHessian(object):
+
+    def __init__(self, cl_runtime_info=None):
+        """Base class for CL routines.
+
+        Args:
+            cl_runtime_info (mot.cl_runtime_info.CLRuntimeInfo): the runtime information
+        """
+        self._cl_runtime_info = cl_runtime_info or CLRuntimeInfo()
+
+    def set_cl_runtime_info(self, cl_runtime_info):
+        """Update the CL runtime information.
+
+        Args:
+            cl_runtime_info (mot.cl_runtime_info.CLRuntimeInfo): the new runtime information
+        """
+        self._cl_runtime_info = cl_runtime_info
 
     def calculate(self, model, parameters, step_ratio=2, nmr_steps=15, step_offset=None):
         """Calculate and return the Hessian of the given function at the given parameters.
@@ -118,9 +133,8 @@ class NumericalHessian(CLRoutine):
             'step_evaluates': KernelAllocatedArray((parameters.shape[0], nmr_derivatives, nmr_steps), 'double'),
         })
 
-        runner = RunProcedure(self._cl_runtime_info)
-        runner.run_procedure(self._derivation_kernel(model, nmr_params, nmr_steps, step_ratio),
-                             all_kernel_data, parameters.shape[0], use_local_reduction=True)
+        self._derivation_kernel(model, nmr_params, nmr_steps, step_ratio).evaluate(
+            {'data': all_kernel_data}, nmr_instances=parameters.shape[0], use_local_reduction=True)
 
         return all_kernel_data['step_evaluates'].get_data()
 
@@ -153,9 +167,9 @@ class NumericalHessian(CLRoutine):
                 (nmr_problems * nmr_derivatives, final_nmr_convolutions), 'double', is_readable=True),
         }
 
-        runner = RunProcedure(self._cl_runtime_info)
-        runner.run_procedure(self._richardson_error_kernel(nmr_steps, nmr_convolutions_needed, richardson_coefficients),
-                             kernel_data, nmr_problems * nmr_derivatives,  use_local_reduction=False)
+        richardson_func = self._richardson_error_kernel(nmr_steps, nmr_convolutions_needed, richardson_coefficients)
+        richardson_func.evaluate({'data': kernel_data}, nmr_instances=nmr_problems * nmr_derivatives,
+                                 use_local_reduction=False, cl_runtime_info=self._cl_runtime_info)
 
         richardson_extrapolations = np.reshape(kernel_data['richardson_extrapolations'].get_data(),
                                                (nmr_problems, nmr_derivatives, nmr_convolutions_needed))
@@ -176,9 +190,9 @@ class NumericalHessian(CLRoutine):
                                            is_readable=True),
         }
 
-        runner = RunProcedure(self._cl_runtime_info)
-        runner.run_procedure(self._wynn_extrapolation_kernel(nmr_steps),
-                             kernel_data, nmr_problems * nmr_derivatives, use_local_reduction=False)
+        wynn_func = self._wynn_extrapolation_kernel(nmr_steps)
+        wynn_func.evaluate({'data': kernel_data}, nmr_instances=nmr_problems * nmr_derivatives,
+                           use_local_reduction=False, cl_runtime_info=self._cl_runtime_info)
 
         extrapolations = np.reshape(kernel_data['extrapolations'].get_data(),
                                     (nmr_problems, nmr_derivatives, nmr_extrapolations))
