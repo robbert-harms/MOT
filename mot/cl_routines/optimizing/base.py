@@ -107,21 +107,13 @@ class OptimizationResults(object):
         """
         raise NotImplementedError()
 
-    def get_objective_values(self):
-        """Get the objective values for each of the problem instances.
-
-        Returns:
-            ndarray: (d,) matrix with for every problem d, the objective value
-        """
-        raise NotImplementedError()
-
     def __str__(self):
         return np.array_str(self.get_optimization_result())
 
 
 class SimpleOptimizationResult(OptimizationResults):
 
-    def __init__(self, model, optimization_results, return_codes):
+    def __init__(self, optimization_results, return_codes):
         """Simple optimization results container which computes some values only when requested.
 
         Args:
@@ -130,21 +122,14 @@ class SimpleOptimizationResult(OptimizationResults):
                 every parameter p
             return_codes (ndarray): the return codes as a (d,) vector for every d problems
         """
-        self._model = model
         self._optimization_results = optimization_results
         self._return_codes = return_codes
-        self._objective_values = None
 
     def get_optimization_result(self):
         return self._optimization_results
 
     def get_return_codes(self):
         return self._return_codes
-
-    def get_objective_values(self):
-        if self._objective_values is None:
-            self._objective_values = np.nan_to_num(compute_objective_value(self._model, self._optimization_results))
-        return self._objective_values
 
 
 class AbstractParallelOptimizer(AbstractOptimizer):
@@ -197,10 +182,9 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         optimizer_func.evaluate({'data': all_kernel_data}, nmr_instances=model.get_nmr_problems(),
                                 use_local_reduction=False, cl_runtime_info=self._cl_runtime_info)
 
-        parameters = model.finalize_optimized_parameters(all_kernel_data['_parameters'].get_data())
-
         self._logger.info('Finished optimization')
-        return SimpleOptimizationResult(model, parameters, all_kernel_data['_return_codes'].get_data())
+        return SimpleOptimizationResult(all_kernel_data['_parameters'].get_data(),
+                                        all_kernel_data['_return_codes'].get_data())
 
     def _get_optimizer_kernel_data(self, model):
         """Get the kernel data specific to the optimization routines.
@@ -230,20 +214,21 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         cl_extra = ''
         cl_extra += self._get_optimizer_cl_code(model)
 
-        body = '''
-            mot_float_type x[''' + str(nmr_params) + '''];
-            for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
-                x[i] = data->_parameters[i];
+        return SimpleCLFunction.from_string('''
+            void compute(mot_data_struct* data){
+                mot_float_type x[''' + str(nmr_params) + '''];
+                for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
+                    x[i] = data->_parameters[i];
+                }
+                
+                *data->_return_codes = (char) ''' + self._get_optimizer_call_name() + '(' + \
+                         ', '.join(self._get_optimizer_call_args()) + ''');
+                
+                for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
+                    data->_parameters[i] = x[i];
+                }   
             }
-            
-            *data->_return_codes = (char) ''' + self._get_optimizer_call_name() + '(' + \
-                     ', '.join(self._get_optimizer_call_args()) + ''');
-            
-            for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
-                data->_parameters[i] = x[i];
-            }   
-        '''
-        return SimpleCLFunction('void', 'compute', ['mot_data_struct* data'], body, cl_extra=cl_extra)
+        ''', cl_extra=cl_extra)
 
     def _get_optimizer_call_args(self):
         """Get the optimizer calling arguments.
@@ -283,32 +268,15 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         Returns:
             str: the evaluation function.
         """
-        nmr_params = model.get_nmr_parameters()
-        nmr_observations = model.get_nmr_observations()
-
-        objective_function = model.get_objective_per_observation_function()
-        param_modifier = model.get_pre_eval_parameter_modifier()
+        objective_function = model.get_objective_function()
 
         kernel_source = ''
         kernel_source += objective_function.get_cl_code()
-        kernel_source += param_modifier.get_cl_code()
+
         kernel_source += '''
             double evaluate(mot_float_type* x, void* data_void){
-
                 mot_data_struct* data = (mot_data_struct*)data_void;
-
-                mot_float_type x_model[''' + str(nmr_params) + '''];
-                for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
-                    x_model[i] = x[i];
-                }
-
-                ''' + param_modifier.get_cl_function_name() + '''(data, x_model);
-
-                double sum = 0;
-                for(uint i = 0; i < ''' + str(nmr_observations) + '''; i++){
-                    sum += ''' + objective_function.get_cl_function_name() + '''(data, x_model, i);
-                }
-                return sum;
+                return ''' + objective_function.get_cl_function_name() + '''(data, x, 0, 0, 0);
             }
         '''
         return kernel_source

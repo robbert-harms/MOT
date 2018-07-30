@@ -53,15 +53,30 @@ class Rosenbrock(OptimizeModelInterface, SampleModelInterface):
 
 
     ## Methods used for optimization ##
-    def get_objective_per_observation_function(self):
+    def get_objective_function(self):
         """Used in Maximum Likelihood Estimation."""
-        return SimpleCLFunction(
-            'mot_float_type', 'rosenbrock_MLE_func',
-            ['mot_data_struct* data', 'const mot_float_type* const x', 'uint observation_index'],
-            '''
-                uint i = observation_index;
-                return 100 * pown(x[i + 1] - pown(x[i], 2), 2) + pown(1 - x[i], 2);
-            ''')
+        return SimpleCLFunction.from_string('''
+            double rosenbrock_MLE_func(mot_data_struct* data, const mot_float_type* const x,
+                                       global mot_float_type* g_objective_list, 
+                                       mot_float_type* p_objective_list,
+                                       local double* objective_value_tmp){
+                
+                double sum = 0;
+                double eval;
+                for(uint i = 0; i < ''' + str(self.get_nmr_observations()) + '''; i++){
+                    eval = 100 * pown(x[i + 1] - pown(x[i], 2), 2) + pown(1 - x[i], 2);
+                    sum += eval;
+                    
+                    if(g_objective_list){
+                        g_objective_list[i] = eval;
+                    }
+                    if(p_objective_list){
+                        p_objective_list[i] = eval;
+                    }
+                }
+                return sum;
+            }
+        ''')
 
     def get_lower_bounds(self):
         return [-np.inf] * self.nmr_params

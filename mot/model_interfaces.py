@@ -54,39 +54,24 @@ class ModelBasicInfoInterface(object):
 
 class OptimizeModelInterface(ModelBasicInfoInterface):
 
-    def get_pre_eval_parameter_modifier(self):
-        """Return code that needs to be run prior to model evaluation or objective function calculation.
+    def get_objective_function(self):
+        """Get the objective function that returns the objective value and optionally, the objectives per observation.
 
-        This is meant to contain possible parameter transformations that need to be executed only once for a
-        given set of parameters. Having this in a separate function gives a speed gain.
-
-        Model optimization routines need to be aware that they need to call this function prior to calling
-        :meth:`~get_objective_per_observation_function`.
-
-        Returns:
-            mot.cl_function.CLFunction: a CL function with the following signature:
-
-                .. code-block:: c
-
-                    void <func_name>(mot_data_struct* data, mot_float_type* x);
-
-                Changes may happen in place in the ``x`` parameter.
-        """
-        return SimpleCLFunction('void', 'preEvalParameterModifier',
-                                ['mot_data_struct* data', 'mot_float_type* x'], '')
-
-    def get_objective_per_observation_function(self):
-        """Get the objective function that returns the objective value at a measurement instance.
-
-        This should return the objective values (of each instance point) as such that when linearly summed, we have the
-        complete objective value.
+        In the case that any of the objective lists are non-null pointers, they should be filled with the
+        objective function values per observation.
 
         Returns:
             mot.cl_function.CLFunction: A CL function with signature:
 
                 .. code-block:: c
 
-                    double <func_name>(mot_data_struct* data, const mot_float_type* const x, uint observation_index);
+                    double <func_name>(mot_data_struct* data, const mot_float_type* const x,
+                                       global mot_float_type* g_objective_list, mot_float_type* p_objective_list,
+                                       local double* objective_value_tmp);
+
+                Where both the global objective list (g_) and the private objective list (p_) need to be filled when
+                the pointers are not null. If ``objective_value_tmp`` is not a null pointer, we should use local
+                the local memory for the summation.
         """
         raise NotImplementedError()
 
@@ -107,22 +92,6 @@ class OptimizeModelInterface(ModelBasicInfoInterface):
                 For infinity use np.inf.
         """
         raise NotImplementedError()
-
-    def finalize_optimized_parameters(self, parameters):
-        """Post optimization modification hook called by the optimization routine to finalize the optimized parameters.
-
-        This can be used to do some automatic post-processing similar to what, for example, the
-        ``get_pre_eval_parameter_modifier`` can do within the kernel.
-
-        Args:
-            parameters (ndarray): the set of parameters after optimization. This method may change this array
-                in place.
-
-        Returns:
-            ndarray: the updated parameters. While changes may be done in place, one must return the parameters
-                one would like to use.
-        """
-        return parameters
 
 
 class SampleModelInterface(ModelBasicInfoInterface):

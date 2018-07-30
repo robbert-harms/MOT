@@ -15,7 +15,6 @@ from mot.cl_function import SimpleCLFunction
 from mot.cl_routines.optimizing.nmsimplex import NMSimplex
 from mot.cl_routines.optimizing.levenberg_marquardt import LevenbergMarquardt
 from mot.cl_routines.optimizing.powell import Powell
-from mot.utils import convert_data_to_dtype
 
 from mot.model_interfaces import OptimizeModelInterface
 
@@ -39,10 +38,6 @@ class TestRosenbrock(CLRoutineTestCase):
             v = output.get_optimization_result()
             for ind in range(2):
                 self.assertAlmostEqual(v[0, ind], 1, places=3)
-
-        def get_initial_parameters(self):
-            params = np.ones((1, self.n)) * 3
-            return convert_data_to_dtype(params, 'double')
 
 
 class TestLSQNonLinExample(CLRoutineTestCase):
@@ -83,23 +78,35 @@ class Rosenbrock(OptimizeModelInterface):
     def get_nmr_parameters(self):
         return self.n
 
-    def get_objective_per_observation_function(self):
-        return SimpleCLFunction(
-            'mot_float_type', 'getObjectiveInstanceValue',
-            [('mot_data_struct*', 'data'), ('const mot_float_type* const', 'x'), ('uint', 'observation_index')],
-            '''
-                uint i = observation_index;
-                return 100 * pown(x[i + 1] - pown(x[i], 2), 2) + pown(1 - x[i], 2);
-            ''')
+    def get_objective_function(self):
+        return SimpleCLFunction.from_string('''
+            double rosenbrock_MLE_func(mot_data_struct* data, const mot_float_type* const x,
+                                       global mot_float_type* g_objective_list, 
+                                       mot_float_type* p_objective_list,
+                                       local double* objective_value_tmp){
+
+                double sum = 0;
+                double eval;
+                for(uint i = 0; i < ''' + str(self.get_nmr_observations()) + '''; i++){
+                    eval = 100 * pown(x[i + 1] - pown(x[i], 2), 2) + pown(1 - x[i], 2);
+                    sum += eval;
+                    
+                    if(g_objective_list){
+                        g_objective_list[i] = eval;
+                    }
+                    if(p_objective_list){
+                        p_objective_list[i] = eval;
+                    }
+                }
+                return sum;
+            }
+        ''')
 
     def get_lower_bounds(self):
         return [-np.inf] * self.n
 
     def get_upper_bounds(self):
         return [np.inf] * self.n
-
-    def finalize_optimized_parameters(self, parameters):
-        return parameters
 
 
 class MatlabLSQNonlinExample(OptimizeModelInterface):
@@ -129,23 +136,35 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
     def get_nmr_parameters(self):
         return 2
 
-    def get_objective_per_observation_function(self):
-        return SimpleCLFunction(
-            'mot_float_type', 'getObjectiveInstanceValue',
-            [('mot_data_struct*', 'data'), ('const mot_float_type* const', 'x'), ('uint', 'observation_index')],
-            '''
-                uint k = observation_index;
-                return pown(2 + 2 * (k+1) - exp((k+1) * x[0]) - exp((k+1) * x[1]), 2);
-            ''')
+    def get_objective_function(self):
+        return SimpleCLFunction.from_string('''
+            double lsqnonlin_example_objective(mot_data_struct* data, const mot_float_type* const x,
+                                               global mot_float_type* g_objective_list, 
+                                               mot_float_type* p_objective_list,
+                                               local double* objective_value_tmp){
+                
+                double sum = 0;
+                double eval;
+                for(uint i = 0; i < ''' + str(self.get_nmr_observations()) + '''; i++){
+                    eval = pown(2 + 2 * (i+1) - exp((i+1) * x[0]) - exp((i+1) * x[1]), 2);
+                    sum += eval;
+                    
+                    if(g_objective_list){
+                        g_objective_list[i] = eval;
+                    }
+                    if(p_objective_list){
+                        p_objective_list[i] = eval;
+                    }
+                }
+                return sum;
+            }
+        ''')
 
     def get_lower_bounds(self):
         return [0, 0]
 
     def get_upper_bounds(self):
         return [np.inf] * 2
-
-    def finalize_optimized_parameters(self, parameters):
-        return parameters
 
 
 if __name__ == '__main__':

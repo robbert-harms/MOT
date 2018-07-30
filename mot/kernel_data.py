@@ -148,6 +148,8 @@ class KernelScalar(KernelData):
     def __init__(self, value, ctype=None):
         """A kernel input scalar.
 
+        This will insert the given value directly into the kernel's source code.
+
         Args:
             value (number): the number to insert into the kernel as a scalar.
             ctype (str): the desired c-type for in use in the kernel, like ``int``, ``float`` or ``mot_float_type``.
@@ -202,7 +204,7 @@ class KernelScalar(KernelData):
         elif np.isinf(self._value):
             assignment = 'INFINITY'
         else:
-            assignment = str(self._value)
+            assignment = str(np.squeeze(self._value))
         return assignment
 
     def get_kernel_inputs(self, cl_context, workgroup_size):
@@ -269,7 +271,8 @@ class KernelLocalMemory(KernelData):
 
 class KernelArray(KernelData):
 
-    def __init__(self, data, ctype=None, offset_str=None, is_writable=False, is_readable=True, ensure_zero_copy=False):
+    def __init__(self, data, ctype=None, offset_str=None, is_writable=False, is_readable=True, ensure_zero_copy=False,
+                 as_scalar=False):
         """Loads the given array as a buffer into the kernel.
 
         By default, this will try to offset the data in the kernel by the stride of the first dimension multiplied
@@ -294,6 +297,8 @@ class KernelArray(KernelData):
             ensure_zero_copy (boolean): only used if ``is_writable`` is set to True. If set, we guarantee that the
                 return values are written to the same input array. This allows the user of this class to user their
                 reference to the underlying data, relieving the user of having to use :meth:`get_data`.
+            as_scalar (boolean): if given and if the data is only a 1d, we will load the value as a scalar in the
+                data struct. As such, one does not need to evaluate as a pointer.
         """
         self._requirements = ['C', 'A', 'O']
         if is_writable:
@@ -303,10 +308,6 @@ class KernelArray(KernelData):
         if ctype and not ctype.startswith('mot_float_type'):
             self._data = convert_data_to_dtype(self._data, ctype)
 
-        if is_writable and ensure_zero_copy and self._data is not data:
-            raise ValueError('Zero copy was set but we had to make '
-                             'a copy to guarantee the "CAOW" requirements and the ctype requirements.')
-
         self._offset_str = offset_str
         self._is_writable = is_writable
         self._is_readable = is_readable
@@ -314,6 +315,14 @@ class KernelArray(KernelData):
         self._mot_float_dtype = None
         self._backup_data_reference = None
         self._ensure_zero_copy = ensure_zero_copy
+        self._as_scalar = as_scalar
+
+        if self._as_scalar and len(np.squeeze(self._data).shape) > 1:
+            raise ValueError('The option "as_scalar" was set, but the data has more than one dimensions.')
+
+        if is_writable and ensure_zero_copy and self._data is not data:
+            raise ValueError('Zero copy was set but we had to make '
+                             'a copy to guarantee the writing and ctype requirements.')
 
     def set_mot_float_dtype(self, mot_float_dtype):
         self._mot_float_dtype = mot_float_dtype
@@ -347,7 +356,7 @@ class KernelArray(KernelData):
 
     @property
     def is_scalar(self):
-        return False
+        return self._as_scalar
 
     @property
     def dtype(self):
@@ -384,13 +393,17 @@ class KernelArray(KernelData):
         return self._is_writable
 
     def get_struct_declaration(self, name):
+        if self._as_scalar:
+            return '{} {};'.format(self._ctype, name)
         return 'global {}* restrict {};'.format(self._ctype, name)
 
     def get_kernel_argument_declaration(self, name):
         return 'global {}* restrict {}'.format(self._ctype, name)
 
     def get_struct_init_string(self, name, problem_id_substitute):
-        return name + ' + ' + self._get_offset_str(problem_id_substitute)
+        if self._as_scalar:
+            return '{}[{}]'.format(name, self._get_offset_str(problem_id_substitute))
+        return '{} + {}'.format(name, self._get_offset_str(problem_id_substitute))
 
     def get_scalar_arg_dtype(self):
         return None

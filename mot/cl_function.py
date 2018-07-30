@@ -20,13 +20,14 @@ __licence__ = 'LGPL v3'
 
 
 _simple_cl_function_parser = tatsu.compile('''
-    result = [address_space] data_type function_name arglist body $;
+    result = [address_space] data_type function_name arglist body;
     address_space = ['__'] ('local' | 'global' | 'constant' | 'private');
     data_type = /\w+(\s*(\*)?)+/;
     function_name = /\w+/;
     arglist = '(' @+:arg {',' @+:arg}* ')' | '()';
     arg = /[\w \*]+/;
-    body = /\{(?s).*/;
+    body = compound_statement;    
+    compound_statement = '{' {[/[^\{\}]*/] [compound_statement]}* '}';
 ''')
 
 
@@ -188,7 +189,15 @@ class SimpleCLFunction(CLFunction):
                 return ast
 
             def body(self, ast):
-                self._cl_body = ast.strip()[1:-1]
+                def join(items):
+                    result = ''
+                    for item in items:
+                        if isinstance(item, str):
+                            result += item
+                        else:
+                            result += join(item)
+                    return result
+                self._cl_body = join(ast).strip()[1:-1]
                 return ast
 
         return _simple_cl_function_parser.parse(cl_function, semantics=Semantics())

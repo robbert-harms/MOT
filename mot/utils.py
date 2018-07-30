@@ -3,15 +3,17 @@ import logging
 import multiprocessing
 import numbers
 import os
-from collections import Sequence, Mapping, OrderedDict
+from collections import Mapping, OrderedDict
 from contextlib import contextmanager
 from functools import reduce
 
 import numpy as np
 import pyopencl as cl
 import pyopencl.array as cl_array
+import tatsu
 
 from mot.cl_data_type import SimpleCLDataType
+
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-05-13"
@@ -705,3 +707,72 @@ def multiprocess_mapping(func, iterable):
     except OSError:
         return list(map(func, iterable))
 
+
+_cl_functions_parser = tatsu.compile('''
+    result = {function}+;
+    function = [address_space] data_type function_name arguments body;
+    address_space = ['__'] ('local' | 'global' | 'constant' | 'private');
+    data_type = /\w+(\s*(\*)?)+/;
+    function_name = /\w+/;
+    arguments = /\([\w,\*\s]+\)/;
+    body = compound_statement;    
+    compound_statement = '{' {[/[^\{\}]*/] [compound_statement]}* '}';
+''')
+
+
+def separate_cl_functions(input_str):
+    """Separate all the OpenCL functions.
+
+    This creates a list of strings, with for each function found the OpenCL code.
+
+    Args:
+        input_str (str): the string containing one or more functions.
+
+    Returns:
+        list: a list of strings, with one string per found CL function.
+    """
+    class Semantics(object):
+
+        def __init__(self):
+            self._functions = []
+
+        def result(self, ast):
+            return self._functions
+
+        def function(self, ast):
+            def join(items):
+                result = ''
+                for item in items:
+                    if isinstance(item, str):
+                        result += item
+                    else:
+                        result += join(item)
+                return result
+
+            self._functions.append(join(ast).strip())
+            return ast
+
+    return _cl_functions_parser.parse(input_str, semantics=Semantics())
+
+
+def parse_cl_function(input_str, dependencies=(), cl_extra=None):
+    """Parse the given OpenCL string to a single SimpleCLFunction.
+
+    If the string contains more than one function, we will return only the last, with all the other added as a
+    dependency.
+
+    Args:
+        input_str (str): the input string containing one or more functions.
+        dependencies (list or tuple of CLLibrary): The list of CL libraries this function depends on
+        cl_extra (str): extra CL code for this function that does not warrant an own function.
+            This is prepended to the function body.
+
+    Returns:
+        mot.cl_function.SimpleCLFunction: the CL function for the last function in the given strings.
+    """
+    from mot.cl_function import SimpleCLFunction
+
+    functions = separate_cl_functions(input_str)
+    return SimpleCLFunction.from_string(functions[-1], dependencies=list(dependencies or []) + [
+        SimpleCLFunction.from_string(s) for s in functions[:-1]
+    ], cl_extra=cl_extra)

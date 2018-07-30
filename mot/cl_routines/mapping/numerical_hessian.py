@@ -343,40 +343,15 @@ class NumericalHessian(object):
         return linalg.pinv(r_matrix(nmr_extrapolations))[0]
 
     def _get_compute_functions_cl(self, model, nmr_params, nmr_steps, step_ratio):
-        ll_function = model.get_objective_per_observation_function()
+        objective_func = model.get_objective_function()
         numdiff_param_transform = model.numdiff_parameter_transformation()
 
-        nmr_observations = model.get_nmr_observations()
-
-        func = ll_function.get_cl_code()
+        func = objective_func.get_cl_code()
         func += numdiff_param_transform.get_cl_code()
 
         return func + '''
             double _calculate_function(mot_data_struct* data, mot_float_type* x){
-                ulong observation_ind;
-                ulong local_id = get_local_id(0);
-                data->local_reduction_lls[local_id] = 0;
-                uint workgroup_size = get_local_size(0);
-                uint elements_for_workitem = ceil(''' + str(nmr_observations) + '''
-                                                  / (mot_float_type)workgroup_size);
-
-                if(workgroup_size * (elements_for_workitem - 1) + local_id >= ''' + str(nmr_observations) + '''){
-                    elements_for_workitem -= 1;
-                }
-
-                for(uint i = 0; i < elements_for_workitem; i++){
-                    observation_ind = i * workgroup_size + local_id;
-                    data->local_reduction_lls[local_id] += ''' + ll_function.get_cl_function_name() + '''(
-                        data, x, observation_ind);
-                }
-
-                barrier(CLK_LOCAL_MEM_FENCE);
-                
-                double ll = 0;
-                for(uint i = 0; i < workgroup_size; i++){
-                    ll += data->local_reduction_lls[i];
-                }
-                return ll;
+                return ''' + objective_func.get_cl_function_name() + '''(data, x, 0, 0, data->local_reduction_lls);
             }
             
             /**

@@ -1,6 +1,5 @@
 from mot.cl_function import SimpleCLFunction
 from mot.kernel_data import KernelArray, KernelAllocatedArray, KernelScalar, KernelLocalMemory
-import numpy as np
 
 
 __author__ = 'Robbert Harms'
@@ -8,57 +7,6 @@ __date__ = "2014-05-21"
 __license__ = "LGPL v3"
 __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
-
-
-def calculate_dependent_parameters(kernel_data, estimated_parameters_list,
-                                   parameters_listing, dependent_parameter_names, cl_runtime_info=None):
-    """Calculate the dependent parameters
-
-    Some of the models may contain parameter dependencies. We would like to return the maps for these parameters
-    as well as all the other maps. Since the dependencies are specified in CL, we have to recourse to CL to
-    calculate these maps.
-
-    This uses the calculated parameters in the results dictionary to run the parameters_listing in CL to obtain
-    the maps for the dependent parameters.
-
-    Args:
-        kernel_data (dict[str: mot.utils.KernelData]): the list of additional data to load
-        estimated_parameters_list (list of ndarray): The list with the one-dimensional
-            ndarray of estimated parameters
-        parameters_listing (str): The parameters listing in CL
-        dependent_parameter_names (list of list of str): Per parameter we would like to obtain the CL name and the
-            result map name. For example: (('Wball_w', 'Wball.w'),)
-        cl_runtime_info (mot.cl_runtime_info.CLRuntimeInfo): the runtime information
-
-    Returns:
-        dict: A dictionary with the calculated maps for the dependent parameters.
-    """
-    def get_cl_function():
-        parameter_write_out = ''
-        for i, p in enumerate([el[0] for el in dependent_parameter_names]):
-            parameter_write_out += 'data->_results[' + str(i) + '] = ' + p + ";\n"
-
-        return SimpleCLFunction.from_string('''
-            void transform(mot_data_struct* data){
-                mot_float_type x[''' + str(len(estimated_parameters_list)) + '''];
-    
-                for(uint i = 0; i < ''' + str(len(estimated_parameters_list)) + '''; i++){
-                    x[i] = data->x[i];
-                }
-                ''' + parameters_listing + '''
-                ''' + parameter_write_out + '''
-            }
-        ''')
-
-    data_strut = dict(kernel_data)
-    data_strut['x'] = KernelArray(np.dstack(estimated_parameters_list)[0, ...], ctype='mot_float_type')
-    data_strut['_results'] = KernelAllocatedArray(
-        (estimated_parameters_list[0].shape[0], len(dependent_parameter_names)), 'mot_float_type')
-
-    get_cl_function().evaluate({'data': data_strut}, nmr_instances=estimated_parameters_list[0].shape[0],
-                               cl_runtime_info=cl_runtime_info)
-
-    return data_strut['_results'].get_data()
 
 
 def compute_log_likelihood(model, parameters, cl_runtime_info=None):
@@ -189,61 +137,24 @@ def compute_objective_value(model, parameters, cl_runtime_info=None):
     Returns:
         ndarray: vector matrix with per problem the objective function value
     """
+    objective_func = model.get_objective_function()
+    nmr_params = parameters.shape[1]
 
-    def get_cl_function():
-        objective_func = model.get_objective_per_observation_function()
-        nmr_params = parameters.shape[1]
-
-        fill_objective_func = SimpleCLFunction.from_string('''
-            void _fill_objective_value_tmp(mot_data_struct* data,
-                                           mot_float_type* x,
-                                           local double* objective_value_tmp){
-
-                ulong observation_ind;
-                ulong local_id = get_local_id(0);
-                objective_value_tmp[local_id] = 0;
-                uint workgroup_size = get_local_size(0);
-                uint elements_for_workitem = ceil(''' + str(model.get_nmr_observations()) + ''' 
-                                                  / (mot_float_type)workgroup_size);
-
-                if(workgroup_size * (elements_for_workitem - 1) + local_id 
-                        >= ''' + str(model.get_nmr_observations()) + '''){
-                    elements_for_workitem -= 1;
-                }
-
-                for(uint i = 0; i < elements_for_workitem; i++){
-                    observation_ind = i * workgroup_size + local_id;
-                    objective_value_tmp[local_id] += ''' + objective_func.get_cl_function_name() + '''(
-                        data, x, observation_ind);
-                }
-
-                barrier(CLK_LOCAL_MEM_FENCE);
+    cl_function = SimpleCLFunction.from_string('''
+        void compute(mot_data_struct* data){
+            mot_float_type x[''' + str(nmr_params) + '''];
+            for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
+                x[i] = data->parameters[i];
             }
-        ''', dependencies=[objective_func])
 
-        sum_objective_func = SimpleCLFunction.from_string('''
-            double _sum_objective_value_tmp(local double* objective_value_tmp){
-                double ll = 0;
-                for(uint i = 0; i < get_local_size(0); i++){
-                    ll += objective_value_tmp[i];
-                }
-                return ll;
+            double objective = ''' + objective_func.get_cl_function_name() + '''(
+                data, x, 0, 0, data->local_reduction_lls);
+
+            if(get_local_id(0) == 0){
+                *(data->objective_values) = objective;
             }
-        ''')
-
-        return SimpleCLFunction.from_string('''
-            void compute(mot_data_struct* data){
-                mot_float_type x[''' + str(nmr_params) + '''];
-                for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
-                    x[i] = data->parameters[i];
-                }
-
-                _fill_objective_value_tmp(data, x, data->local_reduction_lls);
-                if(get_local_id(0) == 0){
-                    *(data->objective_values) = _sum_objective_value_tmp(data->local_reduction_lls);
-                }
-            }
-        ''', dependencies=[fill_objective_func, sum_objective_func])
+       }
+   ''', dependencies=[objective_func])
 
     all_kernel_data = dict(model.get_kernel_data())
     all_kernel_data.update({
@@ -252,8 +163,8 @@ def compute_objective_value(model, parameters, cl_runtime_info=None):
         'local_reduction_lls': KernelLocalMemory('double')
     })
 
-    get_cl_function().evaluate({'data': all_kernel_data}, nmr_instances=parameters.shape[0],
-                               use_local_reduction=True, cl_runtime_info=cl_runtime_info)
+    cl_function.evaluate({'data': all_kernel_data}, nmr_instances=parameters.shape[0],
+                         use_local_reduction=True, cl_runtime_info=cl_runtime_info)
 
     return all_kernel_data['objective_values'].get_data()
 

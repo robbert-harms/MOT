@@ -65,25 +65,18 @@ class LevenbergMarquardt(AbstractParallelOptimizer):
         Returns:
             str: the evaluation function.
         """
-        objective_func = model.get_objective_per_observation_function()
-        param_modifier = model.get_pre_eval_parameter_modifier()
-
+        objective_func = model.get_objective_function()
         kernel_source = ''
         kernel_source += objective_func.get_cl_code()
-        kernel_source += param_modifier.get_cl_code()
         kernel_source += '''
             void evaluate(mot_float_type* x, void* data_void, mot_float_type* result){
                 mot_data_struct* data = (mot_data_struct*)data_void;
                 
-                mot_float_type x_model[''' + str(model.get_nmr_parameters()) + '''];
-                for(uint i = 0; i < ''' + str(model.get_nmr_parameters()) + '''; i++){
-                    x_model[i] = x[i];
-                }
-                ''' + param_modifier.get_cl_function_name() + '''(data, x_model);
+                ''' + objective_func.get_cl_function_name() + '''(data, x, 0, result, 0);
                 
+                // The LM method automatically squares the results, but the model also already does this.
                 for(uint i = 0; i < ''' + str(model.get_nmr_observations()) + '''; i++){
-                    // the model expects the L1 norm, while the LM method takes the L2 norm. Taking square root here.
-                    result[i] = sqrt(fabs(''' + objective_func.get_cl_function_name() + '''(data, x_model, i)));
+                    result[i] = sqrt(fabs(result[i]));
                 }
             }
         '''

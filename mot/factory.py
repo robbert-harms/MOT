@@ -1,5 +1,3 @@
-from mot.cl_routines.optimizing.multi_step_optimizer import MultiStepOptimizer
-from mot.cl_routines.optimizing.random_restart import RandomRestart
 from mot.cl_routines.optimizing.sbplex import SBPlex
 from mot.cl_routines.sampling.amwg import AdaptiveMetropolisWithinGibbs
 from mot.cl_routines.sampling.scam import SingleComponentAdaptiveMetropolis
@@ -15,7 +13,7 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-optimizers = [LevenbergMarquardt, Powell, NMSimplex, SBPlex, MultiStepOptimizer, RandomRestart]
+optimizers = [LevenbergMarquardt, Powell, NMSimplex, SBPlex]
 samplers = [AdaptiveMetropolisWithinGibbs, SingleComponentAdaptiveMetropolis]
 load_balance_strategies = [EvenDistribution, RuntimeLoadBalancing, PreferGPU, PreferCPU, PreferSpecificEnvironment]
 
