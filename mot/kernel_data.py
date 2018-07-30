@@ -153,7 +153,10 @@ class Scalar(KernelData):
             ctype (str): the desired c-type for in use in the kernel, like ``int``, ``float`` or ``mot_float_type``.
                 If None it is implied from the value.
         """
-        self._value = np.array(value)
+        if value == 'INFINITY':
+            self._value = np.inf
+        else:
+            self._value = np.array(value)
         self._ctype = ctype or dtype_to_ctype(self._value.dtype)
         self._mot_float_dtype = None
 
