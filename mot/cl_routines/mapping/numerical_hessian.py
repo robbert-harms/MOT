@@ -350,8 +350,8 @@ class NumericalHessian(object):
         func += numdiff_param_transform.get_cl_code()
 
         return func + '''
-            double _calculate_function(mot_data_struct* data, mot_float_type* x){
-                return ''' + objective_func.get_cl_function_name() + '''(data, x, 0, 0, data->local_reduction_lls);
+            double _calculate_function(mot_data_struct* data, local mot_float_type* x){
+                return ''' + objective_func.get_cl_function_name() + '''(data, x, 0, data->local_reduction_lls);
             }
             
             /**
@@ -368,16 +368,20 @@ class NumericalHessian(object):
              * Returns:
              *  the function evaluated at the parameters plus their perturbation.
              */
-            double _eval_step(mot_data_struct* data, mot_float_type* x_input,
+            double _eval_step(mot_data_struct* data, local mot_float_type* x_input,
                               uint perturb_dim_0, mot_float_type perturb_0,
                               uint perturb_dim_1, mot_float_type perturb_1){
 
-                mot_float_type x_tmp[''' + str(nmr_params) + '''];
-                for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
-                    x_tmp[i] = x_input[i];
+                local mot_float_type x_tmp[''' + str(nmr_params) + '''];
+                
+                if(get_local_id(0) == 0){
+                    for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
+                        x_tmp[i] = x_input[i];
+                    }
+                    x_tmp[perturb_dim_0] += perturb_0;
+                    x_tmp[perturb_dim_1] += perturb_1;
                 }
-                x_tmp[perturb_dim_0] += perturb_0;
-                x_tmp[perturb_dim_1] += perturb_1;
+                mem_fence(CLK_LOCAL_MEM_FENCE);
 
                 ''' + numdiff_param_transform.get_cl_function_name() + '''(data, x_tmp);
                 return _calculate_function(data, x_tmp);
@@ -388,7 +392,7 @@ class NumericalHessian(object):
              * 
              * This uses the initial steps in the data structure, indexed by the parameters to change (px, py).
              */
-            void _compute_steps(mot_data_struct* data, mot_float_type* x_input, mot_float_type f_x_input,
+            void _compute_steps(mot_data_struct* data, local mot_float_type* x_input, mot_float_type f_x_input,
                                 uint px, uint py, global double* step_evaluates){
                 
                 double step_x;
@@ -542,14 +546,18 @@ class NumericalHessian(object):
 
         return SimpleCLFunction.from_string('''
             void compute(mot_data_struct* data){
-                mot_float_type x_input[''' + str(nmr_params) + '''];
+                local mot_float_type x_input[''' + str(nmr_params) + '''];
                 
-                for(uint param_ind = 0; param_ind < ''' + str(nmr_params) + '''; param_ind++){
-                    x_input[param_ind] = data->parameters[param_ind];
+                if(get_local_id(0) == 0){
+                    for(uint param_ind = 0; param_ind < ''' + str(nmr_params) + '''; param_ind++){
+                        x_input[param_ind] = data->parameters[param_ind];
+                    }
                 }
+                mem_fence(CLK_LOCAL_MEM_FENCE);
+                
                 double f_x_input = _calculate_function(data, x_input);
                 
-                uint coords[''' + str(len(coords)) + '''][2] = {
+                constant uint coords[''' + str(len(coords)) + '''][2] = {
                     ''' + ', '.join('{{{}, {}}}'.format(*c) for c in coords)  + '''
                 };
                 

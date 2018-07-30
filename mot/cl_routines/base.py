@@ -140,6 +140,8 @@ class _ProcedureWorker(Worker):
                 if param.data_type.is_pointer_type:
                     if param.data_type.address_space == 'private':
                         func_args.append(param_cl_name + '_private')
+                    elif param.data_type.address_space == 'local':
+                        func_args.append(param_cl_name + '_local')
                     else:
                         func_args.append('data.{}'.format(param_cl_name))
                 else:
@@ -171,6 +173,15 @@ class _ProcedureWorker(Worker):
     
                         for(uint i = 0; i < {nmr_elements}; i++){{
                             {param_name}_private[i] = data.{param_name}[i];
+                        }}
+                    '''.format(ctype=parameter.data_type.ctype, param_name=parameter.name,
+                               nmr_elements=self._kernel_data[parameter.name].data_length)
+                elif parameter.data_type.address_space == 'local':
+                    conversions += '''
+                        local {ctype} {param_name}_local[{nmr_elements}];
+
+                        for(uint i = 0; i < {nmr_elements}; i++){{
+                            {param_name}_local[i] = data.{param_name}[i];
                         }}
                     '''.format(ctype=parameter.data_type.ctype, param_name=parameter.name,
                                nmr_elements=self._kernel_data[parameter.name].data_length)

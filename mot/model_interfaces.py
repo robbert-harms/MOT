@@ -49,13 +49,13 @@ class OptimizeModelInterface(ModelBasicInfoInterface):
 
                 .. code-block:: c
 
-                    double <func_name>(mot_data_struct* data, const mot_float_type* const x,
-                                       global mot_float_type* g_objective_list, mot_float_type* p_objective_list,
+                    double <func_name>(mot_data_struct* data,
+                                       local const mot_float_type* const x,
+                                       local mot_float_type* objective_list,
                                        local double* objective_value_tmp);
 
-                Where both the global objective list (g_) and the private objective list (p_) need to be filled when
-                the pointers are not null. If ``objective_value_tmp`` is not a null pointer, we should use local
-                the local memory for the summation.
+                The objective list needs to be filled when the pointer is not null.
+                This method should use the given local memory for the summation reduction.
         """
         raise NotImplementedError()
 
@@ -80,29 +80,24 @@ class OptimizeModelInterface(ModelBasicInfoInterface):
 
 class SampleModelInterface(ModelBasicInfoInterface):
 
-    def get_log_likelihood_per_observation_function(self):
+    def get_log_likelihood_function(self):
         """Get the (complete) CL Log Likelihood function that evaluates the given instance under a noise model.
-
-        This should return the LL's such that when linearly summed they yield the total log likelihood of the model.
 
         Returns:
             mot.cl_function.CLFunction: A function of the kind:
+
                 .. code-block:: c
 
-                    double <fname>(mot_data_struct* data,
-                                   const mot_float_type* const x,
-                                   uint observation_index);
+                    double <func_name>(mot_data_struct* data,
+                                       local const mot_float_type* const x,
+                                       local double* objective_value_tmp);
         """
         raise NotImplementedError()
 
-    def get_log_prior_function(self, address_space_parameter_vector='private'):
+    def get_log_prior_function(self):
         """Get the prior function that returns the prior information about the given parameters.
 
         The prior function must be in log space.
-
-        Args:
-            address_space_parameter_vector (str): the address space to use for the parameter vector
-                by default this is set to ``private``.
 
         Returns:
             mot.cl_function.CLFunction: A function with the signature:
@@ -110,14 +105,14 @@ class SampleModelInterface(ModelBasicInfoInterface):
 
                     mot_float_type <func_name>(
                         mot_data_struct* data,
-                        <address_space_parameter_vector> const mot_float_type* const x
+                        local const mot_float_type* const x
                     );
 
             Which is called by the sampling routine to calculate the prior probability.
         """
         raise NotImplementedError()
 
-    def get_finalize_proposal_function(self, address_space_parameter_vector='private'):
+    def get_finalize_proposal_function(self):
         """Get a CL function that is called for every new proposal, in order to finalize it.
 
         This allows the model to change a proposal before computing the prior or likelihood probabilities.
@@ -134,14 +129,14 @@ class SampleModelInterface(ModelBasicInfoInterface):
 
                     void <func_name>(
                         mot_data_struct* data,
-                        <address_space_parameter_vector> mot_float_type* x
+                        local mot_float_type* x
                     );
 
             Which is called by the sampling routine to finalize the proposal.
         """
         return SimpleCLFunction(
             'void', 'finalizeProposal',
-            ['mot_data_struct* data', address_space_parameter_vector + ' const mot_float_type* const x'],
+            ['mot_data_struct* data', 'local const mot_float_type* const x'],
             '')
 
 
@@ -219,7 +214,7 @@ class NumericalDerivativeInterface(OptimizeModelInterface):
             mot.cl_function.CLFunction: A function with the signature:
                 .. code-block:: c
 
-                    void <func_name>(mot_data_struct* data, mot_float_type* params);
+                    void <func_name>(mot_data_struct* data, local mot_float_type* params);
 
                 Where the data is the kernel data struct and params is the vector with the suggested parameters and
                 which can be modified in place. Note that this is called two times, one with the parameters plus

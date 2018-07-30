@@ -74,9 +74,9 @@ class Rosenbrock(OptimizeModelInterface):
 
     def get_objective_function(self):
         return SimpleCLFunction.from_string('''
-            double rosenbrock_MLE_func(mot_data_struct* data, const mot_float_type* const x,
-                                       global mot_float_type* g_objective_list, 
-                                       mot_float_type* p_objective_list,
+            double rosenbrock_MLE_func(mot_data_struct* data, 
+                                       local const mot_float_type* const x,
+                                       local mot_float_type* objective_list,
                                        local double* objective_value_tmp){
 
                 double sum = 0;
@@ -85,11 +85,8 @@ class Rosenbrock(OptimizeModelInterface):
                     eval = 100 * pown(x[i + 1] - pown(x[i], 2), 2) + pown(1 - x[i], 2);
                     sum += eval;
                     
-                    if(g_objective_list){
-                        g_objective_list[i] = eval;
-                    }
-                    if(p_objective_list){
-                        p_objective_list[i] = eval;
+                    if(objective_list){
+                        objective_list[i] = eval;
                     }
                 }
                 return sum;
@@ -126,9 +123,9 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
 
     def get_objective_function(self):
         return SimpleCLFunction.from_string('''
-            double lsqnonlin_example_objective(mot_data_struct* data, const mot_float_type* const x,
-                                               global mot_float_type* g_objective_list, 
-                                               mot_float_type* p_objective_list,
+            double lsqnonlin_example_objective(mot_data_struct* data, 
+                                               local const mot_float_type* const x,
+                                               local mot_float_type* objective_list, 
                                                local double* objective_value_tmp){
                 
                 double sum = 0;
@@ -137,11 +134,8 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
                     eval = pown(2 + 2 * (i+1) - exp((i+1) * x[0]) - exp((i+1) * x[1]), 2);
                     sum += eval;
                     
-                    if(g_objective_list){
-                        g_objective_list[i] = eval;
-                    }
-                    if(p_objective_list){
-                        p_objective_list[i] = eval;
+                    if(objective_list){
+                        objective_list[i] = eval;
                     }
                 }
                 return sum;

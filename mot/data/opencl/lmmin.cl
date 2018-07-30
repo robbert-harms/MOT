@@ -34,15 +34,38 @@ EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 /* function declarations. */
-void lm_lmpar( const int n, global mot_float_type * const r, int ldr, const int* const Pivot, mot_float_type *const diag,
-               mot_float_type* const qtb, const mot_float_type delta, mot_float_type * const par, mot_float_type * const x,
-               mot_float_type * const Sdiag, mot_float_type * const aux, mot_float_type * const xdi );
-void lm_qrfac( const int m, const int n, global mot_float_type * const A, int* const Pivot,
-               mot_float_type* const Rdiag, mot_float_type * const Acnorm, mot_float_type* const W );
-void lm_qrsolv( const int n, global mot_float_type * const r, const int ldr, const int * const Pivot, const mot_float_type * const diag,
-                const mot_float_type * const qtb, mot_float_type * const x, mot_float_type * const Sdiag, mot_float_type * const W );
+void lm_lmpar( const int n,
+               global mot_float_type * const r,
+               int ldr,
+               local const int* const Pivot,
+               local mot_float_type *const diag,
+               local mot_float_type* const qtb,
+               const mot_float_type delta,
+               mot_float_type * const par,
+               local mot_float_type * const x,
+               local mot_float_type * const Sdiag,
+               local mot_float_type * const aux,
+               local mot_float_type * const xdi );
 
-double lm_euclidian_norm(const mot_float_type* const x, const int n);
+void lm_qrfac( const int m,
+               const int n,
+               global mot_float_type * const A,
+               local int* const Pivot,
+               local mot_float_type* const Rdiag,
+               local mot_float_type* const Acnorm,
+               local mot_float_type* const W );
+
+void lm_qrsolv( const int n,
+                global mot_float_type * const r,
+                const int ldr,
+                local const int * const Pivot,
+                local const mot_float_type * const diag,
+                local const mot_float_type * const qtb,
+                local mot_float_type * const x,
+                local mot_float_type * const Sdiag,
+                local mot_float_type * const W );
+
+double lm_euclidian_norm(local const mot_float_type* const x, const int n);
 double lm_euclidian_norm_global(global const mot_float_type* const x, const int n);
 
 /*****************************************************************************/
@@ -99,7 +122,7 @@ double lm_euclidian_norm_global(global const mot_float_type* const x, const int 
 /******************************************************************************/
 /*  lmmin (main minimization routine)                                         */
 /******************************************************************************/
-int lmmin(mot_float_type * const x, void* data, global mot_float_type* fjac){
+int lmmin(local mot_float_type * const x, void* data, global mot_float_type* fjac){
 
 	int j, i;
     mot_float_type actred, dirder, fnorm, fnorm1, gnorm, pnorm, prered, ratio, step, temp, temp1, temp2, temp3;
@@ -113,14 +136,14 @@ int lmmin(mot_float_type * const x, void* data, global mot_float_type* fjac){
 	int nfev = 0;
 
 	/***  Allocate work space.  ***/
-    mot_float_type fvec[%(NMR_OBSERVATIONS)s];
-    mot_float_type diag[%(NMR_PARAMS)s];
-    mot_float_type qtf[%(NMR_PARAMS)s];
-    mot_float_type wa1[%(NMR_PARAMS)s];
-    mot_float_type wa2[%(NMR_PARAMS)s];
-    mot_float_type wa3[%(NMR_PARAMS)s];
-    mot_float_type wf[%(NMR_OBSERVATIONS)s];
-    int Pivot[%(NMR_PARAMS)s];
+    local mot_float_type fvec[%(NMR_OBSERVATIONS)s];
+    local mot_float_type diag[%(NMR_PARAMS)s];
+    local mot_float_type qtf[%(NMR_PARAMS)s];
+    local mot_float_type wa1[%(NMR_PARAMS)s];
+    local mot_float_type wa2[%(NMR_PARAMS)s];
+    local mot_float_type wa3[%(NMR_PARAMS)s];
+    local mot_float_type wf[%(NMR_OBSERVATIONS)s];
+    local int Pivot[%(NMR_PARAMS)s];
 
     /* Initialize diag. */
     if (!SCALE_DIAG) {
@@ -224,7 +247,10 @@ int lmmin(mot_float_type * const x, void* data, global mot_float_type* fjac){
             if (SCALE_DIAG) {
                 /* diag := norms of the columns of the initial Jacobian */
                 for (j = 0; j < %(NMR_PARAMS)s; j++){
-                    diag[j] = wa2[j] ? wa2[j] : 1;
+                    diag[j] = 1;
+                    if(wa2[j]){
+                        diag[j] = wa2[j];
+                    }
                 }
                 /* xnorm := || D x || */
                 for (j = 0; j < %(NMR_PARAMS)s; j++){
@@ -302,7 +328,10 @@ int lmmin(mot_float_type * const x, void* data, global mot_float_type* fjac){
             actred = 1 - ((fnorm1/fnorm)*(fnorm1/fnorm));
 
             /* Ratio of actual to predicted reduction */
-            ratio = prered ? actred / prered : 0;
+            ratio = 0;
+            if(prered){
+                ratio = actred / prered;
+            }
 
             /* Update the step bound */
             if( ratio <= 0.25 ) {
@@ -393,15 +422,15 @@ void lm_lmpar(
     const int n,
     global mot_float_type* const r,
     int ldr,
-    const int* const Pivot,
-    mot_float_type* const diag,
-    mot_float_type* const qtb,
+    local const int* const Pivot,
+    local mot_float_type* const diag,
+    local mot_float_type* const qtb,
     const mot_float_type delta,
     mot_float_type* const par,
-    mot_float_type * const x,
-    mot_float_type * const Sdiag,
-    mot_float_type * const aux,
-    mot_float_type * const xdi)
+    local mot_float_type * const x,
+    local mot_float_type * const Sdiag,
+    local mot_float_type * const aux,
+    local mot_float_type * const xdi)
 {
 /*     Given an m by n matrix A, an n by n nonsingular diagonal matrix D,
  *     an m-vector b, and a positive number delta, the problem is to
@@ -626,8 +655,8 @@ void lm_lmpar(
 /*  lm_qrfac (QR factorization, from lapack)                                  */
 /******************************************************************************/
 
-void lm_qrfac(const int m, const int n, global mot_float_type* const A, int* const Pivot,
-              mot_float_type* const Rdiag, mot_float_type* const Acnorm, mot_float_type* const W)
+void lm_qrfac(const int m, const int n, global mot_float_type* const A, local int* const Pivot,
+              local mot_float_type* const Rdiag, local mot_float_type* const Acnorm, local mot_float_type* const W)
 {
 /*
  *     This subroutine uses Householder transformations with column pivoting
@@ -766,12 +795,12 @@ void lm_qrfac(const int m, const int n, global mot_float_type* const A, int* con
 void lm_qrsolv(const int n,
                global mot_float_type* const r,
                const int ldr,
-               const int* const Pivot,
-               const mot_float_type* const diag,
-               const mot_float_type* const qtb,
-	           mot_float_type* const x,
-	           mot_float_type* const Sdiag,
-               mot_float_type* const W)
+               local const int* const Pivot,
+               local const mot_float_type* const diag,
+               local const mot_float_type* const qtb,
+	           local mot_float_type* const x,
+	           local mot_float_type* const Sdiag,
+               local mot_float_type* const W)
 {
 /*
  *     Given an m by n matrix A, an n by n diagonal matrix D, and an
@@ -934,7 +963,7 @@ void lm_qrsolv(const int n,
 /******************************************************************************/
 /*  lm_enorm (Euclidean norm)                                                 */
 /******************************************************************************/
-double lm_euclidian_norm(const mot_float_type* const x, const int n){
+double lm_euclidian_norm(local const mot_float_type* const x, const int n){
 /*     This function calculates the Euclidean norm of an n-vector x.
  *
  *     The Euclidean norm is computed by accumulating the sum of squares

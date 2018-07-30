@@ -191,9 +191,9 @@ class AbstractSampler(object):
                     }
                     current_prior = _computeLogPrior(data, current_position);
                 }
-                barrier(CLK_LOCAL_MEM_FENCE);
+                mem_fence(CLK_LOCAL_MEM_FENCE);
     
-                _computeLogLikelihood(data, current_position, data->_log_likelihood_tmp, &current_likelihood);
+                current_likelihood = _computeLogLikelihood(data, current_position, data->_log_likelihood_tmp);
     
                 for(ulong i = 0; i < data->_nmr_iterations; i++){
         '''
@@ -213,7 +213,7 @@ class AbstractSampler(object):
                         }
                     }
         '''
-            cl_func += '''
+        cl_func += '''
                     _advanceSampler(data, i + data->_iteration_offset, rng_data, 
                                     current_position, &current_likelihood, &current_prior, data->_log_likelihood_tmp);
                 }
@@ -266,7 +266,7 @@ class AbstractSampler(object):
         Returns:
             str: the compute function for computing the log prior of the model.
         """
-        prior_func = self._model.get_log_prior_function(address_space_parameter_vector='local')
+        prior_func = self._model.get_log_prior_function()
         return SimpleCLFunction.from_string('''
             mot_float_type _computeLogPrior(mot_data_struct* data,
                                             local const mot_float_type* const x){
@@ -283,45 +283,13 @@ class AbstractSampler(object):
         Returns:
             str: the CL code for the log likelihood compute func.
         """
-        ll_func = self._model.get_log_likelihood_per_observation_function()
+        ll_func = self._model.get_log_likelihood_function()
         return SimpleCLFunction.from_string('''
-            void _computeLogLikelihood(mot_data_struct* data,
+            double _computeLogLikelihood(mot_data_struct* data,
                                        local mot_float_type* const current_position,
-                                       local double* log_likelihood_tmp,
-                                       local double* likelihood_sum){
-
-                ulong observation_ind;
-                ulong local_id = get_local_id(0);
-                log_likelihood_tmp[local_id] = 0;
-                uint workgroup_size = get_local_size(0);
-                uint elements_for_workitem = ceil(''' + str(self._model.get_nmr_observations()) + '''
-                                                  / (mot_float_type)workgroup_size);
-
-                if(workgroup_size * (elements_for_workitem - 1) + local_id 
-                        >= ''' + str(self._model.get_nmr_observations()) + '''){
-                    elements_for_workitem -= 1;
-                }
-
-                mot_float_type x_private[''' + str(self._nmr_params) + '''];
-                for(uint i = 0; i < ''' + str(self._nmr_params) + '''; i++){
-                    x_private[i] = current_position[i];
-                }
-
-                for(uint i = 0; i < elements_for_workitem; i++){
-                    observation_ind = i * workgroup_size + local_id;
-
-                    log_likelihood_tmp[local_id] += ''' + ll_func.get_cl_function_name() + '''(
-                        data, x_private, observation_ind);
-                }
-
-                barrier(CLK_LOCAL_MEM_FENCE);
-
-                if(local_id == 0){    
-                    *likelihood_sum = 0;
-                    for(uint i = 0; i < workgroup_size; i++){
-                        *likelihood_sum += log_likelihood_tmp[i];
-                    }
-                }
+                                       local double* log_likelihood_tmp){
+                
+                return ''' + ll_func.get_cl_function_name() + '''(data, current_position, log_likelihood_tmp);
             }
         ''', dependencies=[ll_func])
 
@@ -413,7 +381,7 @@ class AbstractRWMSampler(AbstractSampler):
         '''
 
     def _get_state_update_cl_func(self, nmr_samples, thinning, return_output):
-        proposal_finalize_func = self._model.get_finalize_proposal_function('local')
+        proposal_finalize_func = self._model.get_finalize_proposal_function()
 
         kernel_source = self._get_proposal_update_function(nmr_samples, thinning, return_output)
         kernel_source += self._at_acceptance_callback_c_func()
@@ -476,7 +444,7 @@ class AbstractRWMSampler(AbstractSampler):
                     barrier(CLK_LOCAL_MEM_FENCE);
 
                     if(exp(new_prior) > 0){
-                        _computeLogLikelihood(data, new_position, log_likelihood_tmp, &new_likelihood);
+                        new_likelihood = _computeLogLikelihood(data, new_position, log_likelihood_tmp);
 
                         if(is_first_work_item){
                             bayesian_f = exp((new_likelihood + new_prior) - (*current_likelihood + *current_prior));

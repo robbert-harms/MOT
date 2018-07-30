@@ -29,78 +29,40 @@ def compute_log_likelihood(model, parameters, cl_runtime_info=None):
     """
 
     def get_cl_function():
-        ll_func = model.get_log_likelihood_per_observation_function()
+        ll_func = model.get_log_likelihood_function()
         nmr_params = parameters.shape[1]
-
-        ll_tmp_func = SimpleCLFunction.from_string('''
-            void _fill_log_likelihood_tmp(mot_data_struct* data,
-                                          mot_float_type* x,
-                                          local double* log_likelihood_tmp){
-
-                ulong observation_ind;
-                ulong local_id = get_local_id(0);
-                log_likelihood_tmp[local_id] = 0;
-                uint workgroup_size = get_local_size(0);
-                uint elements_for_workitem = ceil(''' + str(model.get_nmr_observations()) + ''' 
-                                                  / (mot_float_type)workgroup_size);
-
-                if(workgroup_size * (elements_for_workitem - 1) + local_id 
-                        >= ''' + str(model.get_nmr_observations()) + '''){
-                    elements_for_workitem -= 1;
-                }
-
-                for(uint i = 0; i < elements_for_workitem; i++){
-                    observation_ind = i * workgroup_size + local_id;
-
-                    log_likelihood_tmp[local_id] += ''' + ll_func.get_cl_function_name() + '''(
-                        data, x, observation_ind);
-                }
-
-                barrier(CLK_LOCAL_MEM_FENCE);
-            }
-        ''', dependencies=[ll_func])
-
-        ll_sum_func = SimpleCLFunction.from_string('''
-            double _sum_log_likelihood_tmp(local double* log_likelihood_tmp){
-                double ll = 0;
-                for(uint i = 0; i < get_local_size(0); i++){
-                    ll += log_likelihood_tmp[i];
-                }
-                return ll;
-            }
-        ''')
 
         if len(parameters.shape) > 2:
             return SimpleCLFunction.from_string('''
                 void compute(mot_data_struct* data){
-                    mot_float_type x[''' + str(nmr_params) + '''];
+                    local mot_float_type x[''' + str(nmr_params) + '''];
 
                     for(uint sample_ind = 0; sample_ind < ''' + str(parameters.shape[2]) + '''; sample_ind++){
                         for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
                             x[i] = data->parameters[i *''' + str(parameters.shape[2]) + ''' + sample_ind];
                         }
-
-                        _fill_log_likelihood_tmp(data, x, data->local_reduction_lls);
+                        
+                        double ll = ''' + ll_func.get_cl_function_name() + '''(data, x, data->local_reduction_lls);
                         if(get_local_id(0) == 0){
-                            data->log_likelihoods[sample_ind] = _sum_log_likelihood_tmp(data->local_reduction_lls);
+                            *(data->log_likelihoods) = ll;
                         }
                     }
                 }
-            ''', dependencies=[ll_tmp_func, ll_sum_func])
+            ''', dependencies=[ll_func])
 
         return SimpleCLFunction.from_string('''
             void compute(mot_data_struct* data){
-                mot_float_type x[''' + str(nmr_params) + '''];
+                local mot_float_type x[''' + str(nmr_params) + '''];
                 for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
                     x[i] = data->parameters[i];
                 }
-
-                _fill_log_likelihood_tmp(data, x, data->local_reduction_lls);
+                
+                double ll = ''' + ll_func.get_cl_function_name() + '''(data, x, data->local_reduction_lls);
                 if(get_local_id(0) == 0){
-                    *(data->log_likelihoods) = _sum_log_likelihood_tmp(data->local_reduction_lls);
+                    *(data->log_likelihoods) = ll;
                 }
             }
-        ''', dependencies=[ll_tmp_func, ll_sum_func])
+        ''', dependencies=[ll_func])
 
     all_kernel_data = dict(model.get_kernel_data())
     all_kernel_data['parameters'] = Array(parameters)
@@ -109,8 +71,6 @@ def compute_log_likelihood(model, parameters, cl_runtime_info=None):
     if len(shape) > 2:
         all_kernel_data.update({
             'log_likelihoods': Zeros((shape[0], shape[2]), 'mot_float_type'),
-            'nmr_params': Scalar(parameters.shape[1]),
-            'nmr_samples': Scalar(parameters.shape[2]),
             'local_reduction_lls': LocalMemory('double')
         })
     else:
@@ -142,13 +102,14 @@ def compute_objective_value(model, parameters, cl_runtime_info=None):
 
     cl_function = SimpleCLFunction.from_string('''
         void compute(mot_data_struct* data){
-            mot_float_type x[''' + str(nmr_params) + '''];
+            local mot_float_type x[''' + str(nmr_params) + '''];
+            
             for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
                 x[i] = data->parameters[i];
             }
 
             double objective = ''' + objective_func.get_cl_function_name() + '''(
-                data, x, 0, 0, data->local_reduction_lls);
+                data, x, 0, data->local_reduction_lls);
 
             if(get_local_id(0) == 0){
                 *(data->objective_values) = objective;

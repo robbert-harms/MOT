@@ -109,7 +109,10 @@ class SBPlex(AbstractParallelOptimizer):
 
         for option, value in self._optimizer_settings.items():
             if option == 'scale':
-                params['INITIAL_SIMPLEX_SCALES'] = '{' + ', '.join([str(value)] * nmr_params) + '}'
+                s = ''
+                for ind in range(nmr_params):
+                    s += 'initial_simplex_scale[{}] = {};'.format(ind, value)
+                params['INITIAL_SIMPLEX_SCALES'] = s
             else:
                 params.update({option.upper(): value})
 

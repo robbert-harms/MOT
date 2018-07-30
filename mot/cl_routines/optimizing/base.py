@@ -3,7 +3,7 @@ import numpy as np
 
 from mot.cl_function import SimpleCLFunction
 from mot.cl_runtime_info import CLRuntimeInfo
-from mot.kernel_data import Array, Zeros
+from mot.kernel_data import Array, Zeros, LocalMemory
 from ...__version__ import __version__
 
 __author__ = 'Robbert Harms'
@@ -168,7 +168,8 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         all_kernel_data = dict(model.get_kernel_data())
         all_kernel_data.update({
             '_parameters': Array(starting_positions, ctype='mot_float_type', is_writable=True, is_readable=True),
-            '_return_codes': Zeros((nmr_problems,), ctype='char', is_readable=False, is_writable=True)
+            '_return_codes': Zeros((nmr_problems,), ctype='char', is_readable=False, is_writable=True),
+            '_tmp_likelihoods': LocalMemory('double')
         })
         all_kernel_data.update(self._get_optimizer_kernel_data(model, nmr_parameters, nmr_problems))
 
@@ -177,7 +178,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
 
         optimizer_func = self._get_optimizer_function(model, nmr_parameters)
         optimizer_func.evaluate({'data': all_kernel_data}, nmr_instances=nmr_problems,
-                                use_local_reduction=False, cl_runtime_info=self._cl_runtime_info)
+                                use_local_reduction=True, cl_runtime_info=self._cl_runtime_info)
 
         self._logger.info('Finished optimization')
         return SimpleOptimizationResult(all_kernel_data['_parameters'].get_data(),
@@ -214,17 +215,25 @@ class AbstractParallelOptimizer(AbstractOptimizer):
 
         return SimpleCLFunction.from_string('''
             void compute(mot_data_struct* data){
-                mot_float_type x[''' + str(nmr_params) + '''];
-                for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
-                    x[i] = data->_parameters[i];
+                local mot_float_type x[''' + str(nmr_params) + '''];
+                
+                if(get_local_id(0) == 0){
+                    for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
+                        x[i] = data->_parameters[i];
+                    }
                 }
+                mem_fence(CLK_LOCAL_MEM_FENCE);
                 
-                *data->_return_codes = (char) ''' + self._get_optimizer_call_name() + '(' + \
+                char return_code = (char)''' + self._get_optimizer_call_name() + '(' + \
                          ', '.join(self._get_optimizer_call_args()) + ''');
-                
-                for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
-                    data->_parameters[i] = x[i];
-                }   
+                    
+                if(get_local_id(0) == 0){
+                    *data->_return_codes = return_code;
+                    
+                    for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
+                        data->_parameters[i] = x[i];
+                    }   
+                }
             }
         ''', cl_extra=cl_extra)
 
@@ -274,9 +283,9 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         kernel_source += objective_function.get_cl_code()
 
         kernel_source += '''
-            double evaluate(mot_float_type* x, void* data_void){
+            double evaluate(local mot_float_type* x, void* data_void){
                 mot_data_struct* data = (mot_data_struct*)data_void;
-                return ''' + objective_function.get_cl_function_name() + '''(data, x, 0, 0, 0);
+                return ''' + objective_function.get_cl_function_name() + '''(data, x, 0, data->_tmp_likelihoods);
             }
         '''
         return kernel_source

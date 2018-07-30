@@ -5,7 +5,6 @@ from mot.cl_function import SimpleCLFunction
 from mot.cl_routines.generate_random import randn, rand
 from mot.cl_routines.sampling.amwg import AdaptiveMetropolisWithinGibbs
 from mot.model_interfaces import SampleModelInterface
-from mot.utils import add_include_guards
 from mot.kernel_data import Array
 
 __author__ = 'Robbert Harms'
@@ -45,28 +44,35 @@ class GermanTanks(SampleModelInterface):
     def get_nmr_observations(self):
         return self.observed_tanks.shape[1]
 
-    def get_log_likelihood_per_observation_function(self):
+    def get_log_likelihood_function(self):
         """Used in Bayesian sampling."""
-        return SimpleCLFunction(
-            'double', 'germanTank_logLikelihood',
-            ['mot_data_struct* data', 'const mot_float_type* const x', 'uint observation_index'],
-            '''
+        return SimpleCLFunction.from_string('''
+            double germanTank_logLikelihood(mot_data_struct* data, 
+                                            local const mot_float_type* const x,
+                                            local double* objective_value_tmp){
+                
                 uint nmr_tanks = (uint)round(x[0]);
-                return discrete_uniform(data->observed_tanks[observation_index], 1, nmr_tanks);
-            ''', cl_extra=self._discrete_uniform())
+                double sum = 0;
+                double eval;
+                for(uint i = 0; i < ''' + str(self.get_nmr_observations()) + ''' - 1; i++){
+                    eval = discrete_uniform(data->observed_tanks[i], 1, nmr_tanks);
+                    sum += eval;
+                }
+                return sum;   
+            }
+            ''', dependencies=[self._discrete_uniform()])
 
-    def get_log_prior_function(self, address_space_parameter_vector='private'):
+    def get_log_prior_function(self):
         """Used in Bayesian sampling."""
-        return SimpleCLFunction(
-            'double', 'germanTank_logPrior',
-            ['mot_data_struct* data', address_space_parameter_vector + ' const mot_float_type* const x'],
-            '''
+        return SimpleCLFunction.from_string('''
+            double germanTank_logPrior(mot_data_struct* data, local const mot_float_type* const x){
                 uint nmr_tanks = (uint)round(x[0]);
                 return discrete_uniform(nmr_tanks, data->lower_bounds[0], data->upper_bounds[0]);
-            ''', cl_extra=self._discrete_uniform())
+            }
+        ''', dependencies=[self._discrete_uniform()])
 
     def _discrete_uniform(self):
-        return add_include_guards('''
+        return SimpleCLFunction.from_string('''
             float discrete_uniform(uint x, uint lower, uint upper){
                 if(x < lower || x > upper){
                     return -INFINITY;

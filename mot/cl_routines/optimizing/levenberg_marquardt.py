@@ -69,15 +69,18 @@ class LevenbergMarquardt(AbstractParallelOptimizer):
         kernel_source = ''
         kernel_source += objective_func.get_cl_code()
         kernel_source += '''
-            void evaluate(mot_float_type* x, void* data_void, mot_float_type* result){
+            void evaluate(local mot_float_type* x, void* data_void, local mot_float_type* result){
                 mot_data_struct* data = (mot_data_struct*)data_void;
                 
-                ''' + objective_func.get_cl_function_name() + '''(data, x, 0, result, 0);
+                ''' + objective_func.get_cl_function_name() + '''(data, x, result, data->_tmp_likelihoods);
                 
                 // The LM method automatically squares the results, but the model also already does this.
-                for(uint i = 0; i < ''' + str(model.get_nmr_observations()) + '''; i++){
-                    result[i] = sqrt(fabs(result[i]));
+                if(get_local_id(0) == 0){
+                    for(uint i = 0; i < ''' + str(model.get_nmr_observations()) + '''; i++){
+                        result[i] = sqrt(fabs(result[i]));
+                    }
                 }
+                mem_fence(CLK_LOCAL_MEM_FENCE);
             }
         '''
         return kernel_source

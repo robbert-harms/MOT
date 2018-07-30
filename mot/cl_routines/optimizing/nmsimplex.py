@@ -86,7 +86,10 @@ class NMSimplex(AbstractParallelOptimizer):
 
         for option, value in self._optimizer_settings.items():
             if option == 'scale':
-                params['INITIAL_SIMPLEX_SCALES'] = '{' + ', '.join([str(value)] * nmr_params) + '}'
+                s = ''
+                for ind in range(nmr_params):
+                    s += 'initial_simplex_scale[{}] = {};'.format(ind, value)
+                params['INITIAL_SIMPLEX_SCALES'] = s
             else:
                 params.update({option.upper(): value})
 
@@ -102,11 +105,14 @@ class NMSimplex(AbstractParallelOptimizer):
         body = lib_nmsimplex.get_cl_code()
 
         body += '''
-            int nmsimplex(mot_float_type* const model_parameters, void* data){
-                mot_float_type initial_simplex_scale[%(NMR_PARAMS)r] = %(INITIAL_SIMPLEX_SCALES)s;
+            int nmsimplex(local mot_float_type* const model_parameters, void* data){
+                local mot_float_type initial_simplex_scale[%(NMR_PARAMS)r];
+                %(INITIAL_SIMPLEX_SCALES)s
+                
                 mot_float_type fdiff;
                 mot_float_type psi = 0;
-                mot_float_type nmsimplex_scratch[%(NMR_PARAMS)r * 2 + (%(NMR_PARAMS)r + 1) * (%(NMR_PARAMS)r + 1)];
+                local mot_float_type nmsimplex_scratch[
+                    %(NMR_PARAMS)r * 2 + (%(NMR_PARAMS)r + 1) * (%(NMR_PARAMS)r + 1)];
 
                 return lib_nmsimplex(%(NMR_PARAMS)r, model_parameters, data, initial_simplex_scale,
                                      &fdiff, psi, (int)(%(PATIENCE)r * (%(NMR_PARAMS)r+1)),

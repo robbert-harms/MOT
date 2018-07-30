@@ -50,22 +50,19 @@ class Rosenbrock(OptimizeModelInterface, SampleModelInterface):
     def get_objective_function(self):
         """Used in Maximum Likelihood Estimation."""
         return SimpleCLFunction.from_string('''
-            double rosenbrock_MLE_func(mot_data_struct* data, const mot_float_type* const x,
-                                       global mot_float_type* g_objective_list, 
-                                       mot_float_type* p_objective_list,
+            double rosenbrock_MLE_func(mot_data_struct* data, 
+                                       local const mot_float_type* const x,
+                                       local mot_float_type* objective_list,
                                        local double* objective_value_tmp){
                 
                 double sum = 0;
                 double eval;
-                for(uint i = 0; i < ''' + str(self.get_nmr_observations()) + '''; i++){
+                for(uint i = 0; i < ''' + str(self.get_nmr_observations()) + ''' - 1; i++){
                     eval = 100 * pown(x[i + 1] - pown(x[i], 2), 2) + pown(1 - x[i], 2);
                     sum += eval;
                     
-                    if(g_objective_list){
-                        g_objective_list[i] = eval;
-                    }
-                    if(p_objective_list){
-                        p_objective_list[i] = eval;
+                    if(objective_list){
+                        objective_list[i] = eval;
                     }
                 }
                 return sum;
@@ -80,29 +77,36 @@ class Rosenbrock(OptimizeModelInterface, SampleModelInterface):
 
 
     ## Methods used for sampling ##
-    def get_log_likelihood_per_observation_function(self):
+    def get_log_likelihood_function(self):
         """Used in Bayesian sampling."""
-        return SimpleCLFunction(
-            'double', 'rosenbrock_logLikelihood',
-            ['mot_data_struct* data', 'const mot_float_type* const x', 'uint observation_index'],
-            '''
-                uint i = observation_index;
-                return -(100 * pown(x[i + 1] - pown(x[i], 2), 2) + pown(1 - x[i], 2));
-            ''')
+        return SimpleCLFunction.from_string('''
+            double rosenbrock_logLikelihood(
+                    mot_data_struct* data, 
+                    local const mot_float_type* const x, 
+                    local double* objective_value_tmp){
+                
+                double sum = 0;
+                double eval;
+                for(uint i = 0; i < ''' + str(self.get_nmr_observations()) + ''' - 1; i++){
+                    eval = -(100 * pown(x[i + 1] - pown(x[i], 2), 2) + pown(1 - x[i], 2));
+                    sum += eval;
+                }
+                return sum;
+            }
+        ''')
 
-    def get_log_prior_function(self, address_space_parameter_vector='private'):
+    def get_log_prior_function(self):
         """Used in Bayesian sampling."""
-        return SimpleCLFunction(
-            'double', 'rosenbrock_logPrior',
-            ['mot_data_struct* data', address_space_parameter_vector + ' const mot_float_type* const x'],
-            '''
+        return SimpleCLFunction.from_string('''
+            double rosenbrock_logPrior(mot_data_struct* data, local const mot_float_type* const x){
                 for(uint i = 0; i < ''' + str(self.nmr_params) + '''; i++){
                     if(x[i] < -10 || x[i] > 10){
                         return log(0.0);
                     }
                 }
                 return log(1.0);
-            ''')
+            }
+        ''')
 
 
 if __name__ == '__main__':
