@@ -1,6 +1,6 @@
 import numpy as np
 from ...cl_routines.sampling.base import AbstractRWMSampler
-from mot.kernel_data import KernelArray
+from mot.kernel_data import Array
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-02-05"
@@ -49,7 +49,7 @@ class AdaptiveMetropolisWithinGibbs(AbstractRWMSampler):
     def _get_kernel_data(self, nmr_samples, thinning, return_output):
         kernel_data = super(AdaptiveMetropolisWithinGibbs, self)._get_kernel_data(nmr_samples, thinning, return_output)
         kernel_data.update({
-            '_acceptance_counter': KernelArray(self._acceptance_counter, is_writable=True, ensure_zero_copy=True)
+            '_acceptance_counter': Array(self._acceptance_counter, is_writable=True, ensure_zero_copy=True)
         })
         return kernel_data
 

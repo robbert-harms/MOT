@@ -5,7 +5,7 @@ from scipy.stats import norm
 import scipy.integrate
 
 from mot.cl_function import SimpleCLFunction
-from mot.kernel_data import KernelArray, KernelAllocatedArray, KernelScalar
+from mot.kernel_data import Array, Zeros, Scalar
 from mot.utils import is_scalar, multiprocess_mapping
 
 __author__ = 'Robbert Harms'
@@ -68,12 +68,12 @@ def fit_circular_gaussian(samples, high=np.pi, low=0):
     ''')
 
     def run_cl(samples):
-        all_kernel_data = {'samples': KernelArray(samples, 'mot_float_type'),
-                           'means': KernelAllocatedArray(samples.shape[0], 'mot_float_type'),
-                           'stds': KernelAllocatedArray(samples.shape[0], 'mot_float_type'),
-                           'nmr_samples': KernelScalar(samples.shape[1]),
-                           'low': KernelScalar(low),
-                           'high': KernelScalar(high),
+        all_kernel_data = {'samples': Array(samples, 'mot_float_type'),
+                           'means': Zeros(samples.shape[0], 'mot_float_type'),
+                           'stds': Zeros(samples.shape[0], 'mot_float_type'),
+                           'nmr_samples': Scalar(samples.shape[1]),
+                           'low': Scalar(low),
+                           'high': Scalar(high),
                            }
 
         cl_func.evaluate({'data': all_kernel_data}, nmr_instances=samples.shape[0])

@@ -28,7 +28,7 @@ class NMSimplex(AbstractParallelOptimizer):
 
                 .. code-block:: python
 
-                    n = model.get_nmr_parameters()
+                    n = <# parameters>
 
                     alpha = 1
                     beta  = 0.75 - 1.0 / (2 * n)
@@ -81,9 +81,7 @@ class NMSimplex(AbstractParallelOptimizer):
 
         super(NMSimplex, self).__init__(patience=patience, optimizer_settings=optimizer_settings, **kwargs)
 
-    def _get_optimization_function(self, model):
-        nmr_params = model.get_nmr_parameters()
-
+    def _get_optimization_function(self, model, nmr_params):
         params = {'NMR_PARAMS': nmr_params, 'PATIENCE': self.patience}
 
         for option, value in self._optimizer_settings.items():

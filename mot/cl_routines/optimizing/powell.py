@@ -45,8 +45,8 @@ class Powell(AbstractParallelOptimizer):
 
         super(Powell, self).__init__(patience=patience, optimizer_settings=optimizer_settings, **kwargs)
 
-    def _get_optimization_function(self, model):
-        params = {'NMR_PARAMS': model.get_nmr_parameters(), 'PATIENCE': self.patience}
+    def _get_optimization_function(self, model, nmr_params):
+        params = {'NMR_PARAMS': nmr_params, 'PATIENCE': self.patience}
 
         for option, value in self._optimizer_settings.items():
             params.update({option.upper(): value})

@@ -2,9 +2,8 @@ import logging
 import numpy as np
 
 from mot.cl_function import SimpleCLFunction
-from mot.cl_routines.mapping import compute_objective_value
 from mot.cl_runtime_info import CLRuntimeInfo
-from mot.kernel_data import KernelArray, KernelAllocatedArray
+from mot.kernel_data import Array, Zeros
 from ...__version__ import __version__
 
 __author__ = 'Robbert Harms'
@@ -144,12 +143,11 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         self._logger = logging.getLogger(__name__)
 
     def minimize(self, model, starting_positions):
-        if starting_positions.shape[0] != model.get_nmr_problems():
-            raise ValueError('The number of problems in the model does not match the number of starting points given.')
+        if len(starting_positions.shape) < 2:
+            starting_positions = starting_positions[..., None]
 
-        if starting_positions.shape[1] != model.get_nmr_parameters():
-            raise ValueError('The number of parameters in the model does not match the number of '
-                             'starting points given.')
+        nmr_problems = starting_positions.shape[0]
+        nmr_parameters = starting_positions.shape[1]
 
         self._logger.info('Entered optimization routine.')
         self._logger.info('Using MOT version {}'.format(__version__))
@@ -169,35 +167,36 @@ class AbstractParallelOptimizer(AbstractOptimizer):
 
         all_kernel_data = dict(model.get_kernel_data())
         all_kernel_data.update({
-            '_parameters': KernelArray(starting_positions, ctype='mot_float_type', is_writable=True, is_readable=True),
-            '_return_codes': KernelAllocatedArray((model.get_nmr_problems(),), ctype='char',
-                                                  is_readable=False, is_writable=True)
+            '_parameters': Array(starting_positions, ctype='mot_float_type', is_writable=True, is_readable=True),
+            '_return_codes': Zeros((nmr_problems,), ctype='char', is_readable=False, is_writable=True)
         })
-        all_kernel_data.update(self._get_optimizer_kernel_data(model))
+        all_kernel_data.update(self._get_optimizer_kernel_data(model, nmr_parameters, nmr_problems))
 
         self._logger.info('Finished optimization preliminaries')
         self._logger.info('Starting optimization')
 
-        optimizer_func = self._get_optimizer_function(model)
-        optimizer_func.evaluate({'data': all_kernel_data}, nmr_instances=model.get_nmr_problems(),
+        optimizer_func = self._get_optimizer_function(model, nmr_parameters)
+        optimizer_func.evaluate({'data': all_kernel_data}, nmr_instances=nmr_problems,
                                 use_local_reduction=False, cl_runtime_info=self._cl_runtime_info)
 
         self._logger.info('Finished optimization')
         return SimpleOptimizationResult(all_kernel_data['_parameters'].get_data(),
                                         all_kernel_data['_return_codes'].get_data())
 
-    def _get_optimizer_kernel_data(self, model):
+    def _get_optimizer_kernel_data(self, model, nmr_params, nmr_problems):
         """Get the kernel data specific to the optimization routines.
 
         Args:
             model (mot.model_interfaces.OptimizeModelInterface): the model we are optimizing
+            nmr_params (int): the number of parameters in the model
+            nmr_problems (int): the number of problem instances
 
         Returns:
             dict: kernel input data elements
         """
         return {}
 
-    def _get_optimizer_function(self, model):
+    def _get_optimizer_function(self, model, nmr_params):
         """Get the optimization kernel function.
 
         By default this returns a full kernel source using information from _get_optimizer_cl_code()
@@ -205,14 +204,13 @@ class AbstractParallelOptimizer(AbstractOptimizer):
 
         Args:
             model (mot.model_interfaces.OptimizeModelInterface): the model we are optimizing
+            nmr_params (int): the number of parameters in the model
 
         Returns:
             mot.cl_function.CLFunction: the optimization function to apply
         """
-        nmr_params = model.get_nmr_parameters()
-
         cl_extra = ''
-        cl_extra += self._get_optimizer_cl_code(model)
+        cl_extra += self._get_optimizer_cl_code(model, nmr_params)
 
         return SimpleCLFunction.from_string('''
             void compute(mot_data_struct* data){
@@ -240,7 +238,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         """
         return ['x', '(void*)data']
 
-    def _get_optimizer_cl_code(self, model):
+    def _get_optimizer_cl_code(self, model, nmr_params):
         """Get the optimization CL code that is called during optimization for each problem.
 
         This is normally called by the default implementation of _get_ll_calculating_kernel().
@@ -249,21 +247,23 @@ class AbstractParallelOptimizer(AbstractOptimizer):
 
         Args:
             model (mot.model_interfaces.OptimizeModelInterface): the model we are optimizing
+            nmr_params (int): the number of parameters in the model
 
         Returns:
             str: The kernel source for the optimization routine.
         """
-        kernel_source = self._get_evaluate_function(model)
-        kernel_source += self._get_optimization_function(model)
+        kernel_source = self._get_evaluate_function(model, nmr_params)
+        kernel_source += self._get_optimization_function(model, nmr_params)
         return kernel_source
 
-    def _get_evaluate_function(self, model):
+    def _get_evaluate_function(self, model, nmr_params):
         """Get the CL code for the evaluation function. This is called from _get_optimizer_cl_code.
 
         Implementing optimizers can change this if desired.
 
         Args:
             model (mot.model_interfaces.OptimizeModelInterface): the model we are optimizing
+            nmr_params (int): the number of parameters in the model
 
         Returns:
             str: the evaluation function.
@@ -281,13 +281,14 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         '''
         return kernel_source
 
-    def _get_optimization_function(self, model):
+    def _get_optimization_function(self, model, nmr_params):
         """Return the optimization function as a CL string for the implementing optimizer.
 
         This is a convenience function to avoid boilerplate in implementing _get_optimizer_cl_code().
 
         Args:
             model (mot.model_interfaces.OptimizeModelInterface): the model we are optimizing
+            nmr_params (int): the number of parameters in the model
 
         Returns:
             str: The optimization routine function

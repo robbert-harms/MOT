@@ -23,14 +23,6 @@ class ModelBasicInfoInterface(object):
         """
         raise NotImplementedError()
 
-    def get_nmr_problems(self):
-        """Get the number of problems we need to analyze.
-
-        Returns:
-            int: A single integer specifying the number of problem instances
-        """
-        raise NotImplementedError()
-
     def get_nmr_observations(self):
         """Get the number of instances/data points per problem.
 
@@ -40,14 +32,6 @@ class ModelBasicInfoInterface(object):
 
         Returns:
             int: the number of instances per problem.
-        """
-        raise NotImplementedError()
-
-    def get_nmr_parameters(self):
-        """Get the number of estimable parameters.
-
-        Returns:
-            int: the number of estimable parameters
         """
         raise NotImplementedError()
 

@@ -69,14 +69,8 @@ class Rosenbrock(OptimizeModelInterface):
     def get_kernel_data(self):
         return {}
 
-    def get_nmr_problems(self):
-        return 1
-
     def get_nmr_observations(self):
         return self.n - 1
-
-    def get_nmr_parameters(self):
-        return self.n
 
     def get_objective_function(self):
         return SimpleCLFunction.from_string('''
@@ -127,14 +121,8 @@ class MatlabLSQNonlinExample(OptimizeModelInterface):
     def get_kernel_data(self):
         return {}
 
-    def get_nmr_problems(self):
-        return 1
-
     def get_nmr_observations(self):
         return 10
-
-    def get_nmr_parameters(self):
-        return 2
 
     def get_objective_function(self):
         return SimpleCLFunction.from_string('''

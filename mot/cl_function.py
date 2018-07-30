@@ -9,7 +9,7 @@ from mot.cl_data_type import SimpleCLDataType
 from textwrap import dedent, indent
 
 from mot.cl_routines.base import apply_cl_function
-from mot.kernel_data import KernelData, KernelScalar, KernelArray
+from mot.kernel_data import KernelData, Scalar, Array
 from mot.utils import is_scalar
 
 __author__ = 'Robbert Harms'
@@ -251,16 +251,16 @@ class SimpleCLFunction(CLFunction):
                 if isinstance(input_data[param.name], KernelData):
                     return input_data[param.name]
                 elif param.data_type.is_vector_type and np.squeeze(input_data[param.name]).shape[0] == 3:
-                    return KernelScalar(input_data[param.name], ctype=param.data_type.ctype)
+                    return Scalar(input_data[param.name], ctype=param.data_type.ctype)
                 elif is_scalar(input_data[param.name]) and not param.data_type.is_pointer_type:
-                    return KernelScalar(input_data[param.name])
+                    return Scalar(input_data[param.name])
                 else:
                     if is_scalar(input_data[param.name]):
                         data = np.ones(nmr_instances) * input_data[param.name]
                     else:
                         data = input_data[param.name]
 
-                    return KernelArray(data, ctype=param.data_type.ctype, is_writable=True, is_readable=True)
+                    return Array(data, ctype=param.data_type.ctype, is_writable=True, is_readable=True)
 
             kernel_items = {}
             for param in self.get_parameters():

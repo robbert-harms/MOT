@@ -1,6 +1,6 @@
 import os
 from pkg_resources import resource_filename
-from mot.kernel_data import KernelAllocatedArray
+from mot.kernel_data import Zeros
 from .base import AbstractParallelOptimizer
 
 __author__ = 'Robbert Harms'
@@ -44,20 +44,20 @@ class LevenbergMarquardt(AbstractParallelOptimizer):
         super(LevenbergMarquardt, self).__init__(patience=patience, optimizer_settings=optimizer_settings, **kwargs)
 
     def minimize(self, model, starting_positions):
-        if model.get_nmr_observations() < model.get_nmr_parameters():
+        if model.get_nmr_observations() < starting_positions.shape[1]:
             raise ValueError('The number of instances per problem must be greater than the number of parameters')
         return super(LevenbergMarquardt, self).minimize(model, starting_positions)
 
-    def _get_optimizer_kernel_data(self, model):
-        return {'_fjac_all': KernelAllocatedArray((model.get_nmr_problems(),
-                                                   model.get_nmr_parameters(),
-                                                   model.get_nmr_observations()), ctype='mot_float_type',
-                                                  is_writable=True, is_readable=True)}
+    def _get_optimizer_kernel_data(self, model, nmr_params, nmr_problems):
+        return {'_fjac_all': Zeros((nmr_problems,
+                                    nmr_params,
+                                    model.get_nmr_observations()), ctype='mot_float_type',
+                                   is_writable=True, is_readable=True)}
 
     def _get_optimizer_call_args(self):
         return super(LevenbergMarquardt, self)._get_optimizer_call_args() + ['data->_fjac_all']
 
-    def _get_evaluate_function(self, model):
+    def _get_evaluate_function(self, model, nmr_params):
         """Get the CL code for the evaluation function. This is called from _get_optimizer_cl_code.
 
         Implementing optimizers can change this if desired.
@@ -82,8 +82,8 @@ class LevenbergMarquardt(AbstractParallelOptimizer):
         '''
         return kernel_source
 
-    def _get_optimization_function(self, model):
-        params = {'NMR_PARAMS': model.get_nmr_parameters(),
+    def _get_optimization_function(self, model, nmr_params):
+        params = {'NMR_PARAMS': nmr_params,
                   'PATIENCE': self.patience,
                   'NMR_OBSERVATIONS': model.get_nmr_observations(),
                   'USER_TOL_MULT': 30}

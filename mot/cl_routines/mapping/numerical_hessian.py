@@ -3,7 +3,7 @@ import numpy as np
 
 from mot.cl_function import SimpleCLFunction
 from mot.cl_runtime_info import CLRuntimeInfo
-from mot.kernel_data import KernelLocalMemory, KernelArray, KernelAllocatedArray
+from mot.kernel_data import LocalMemory, Array, Zeros
 from scipy import linalg
 
 
@@ -126,11 +126,11 @@ class NumericalHessian(object):
 
         all_kernel_data = dict(model.get_kernel_data())
         all_kernel_data.update({
-            'parameters': KernelArray(parameters, ctype='mot_float_type'),
-            'local_reduction_lls': KernelLocalMemory('double'),
-            'parameter_scalings_inv': KernelArray(1. / parameter_scalings, ctype='float', offset_str='0'),
-            'initial_step': KernelArray(initial_step, ctype='float'),
-            'step_evaluates': KernelAllocatedArray((parameters.shape[0], nmr_derivatives, nmr_steps), 'double'),
+            'parameters': Array(parameters, ctype='mot_float_type'),
+            'local_reduction_lls': LocalMemory('double'),
+            'parameter_scalings_inv': Array(1. / parameter_scalings, ctype='float', offset_str='0'),
+            'initial_step': Array(initial_step, ctype='float'),
+            'step_evaluates': Zeros((parameters.shape[0], nmr_derivatives, nmr_steps), 'double'),
         })
 
         self._derivation_kernel(model, nmr_params, nmr_steps, step_ratio).evaluate(
@@ -160,10 +160,10 @@ class NumericalHessian(object):
         final_nmr_convolutions = nmr_convolutions_needed - 1
 
         kernel_data = {
-            'derivatives': KernelArray(derivatives, 'double', offset_str='{problem_id} * ' + str(nmr_steps)),
-            'richardson_extrapolations': KernelAllocatedArray(
+            'derivatives': Array(derivatives, 'double', offset_str='{problem_id} * ' + str(nmr_steps)),
+            'richardson_extrapolations': Zeros(
                 (nmr_problems * nmr_derivatives, nmr_convolutions_needed), 'double', is_readable=True),
-            'errors': KernelAllocatedArray(
+            'errors': Zeros(
                 (nmr_problems * nmr_derivatives, final_nmr_convolutions), 'double', is_readable=True),
         }
 
@@ -183,11 +183,11 @@ class NumericalHessian(object):
         nmr_extrapolations = nmr_steps - 2
 
         kernel_data = {
-            'derivatives': KernelArray(derivatives, 'double', offset_str='{problem_id} * ' + str(nmr_steps)),
-            'extrapolations': KernelAllocatedArray((nmr_problems * nmr_derivatives, nmr_extrapolations),
+            'derivatives': Array(derivatives, 'double', offset_str='{problem_id} * ' + str(nmr_steps)),
+            'extrapolations': Zeros((nmr_problems * nmr_derivatives, nmr_extrapolations),
                                                          'double', is_readable=True),
-            'errors': KernelAllocatedArray((nmr_problems * nmr_derivatives, nmr_extrapolations), 'double',
-                                           is_readable=True),
+            'errors': Zeros((nmr_problems * nmr_derivatives, nmr_extrapolations), 'double',
+                            is_readable=True),
         }
 
         wynn_func = self._wynn_extrapolation_kernel(nmr_steps)

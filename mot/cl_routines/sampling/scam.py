@@ -1,6 +1,6 @@
 import numpy as np
 from ...cl_routines.sampling.base import AbstractRWMSampler
-from mot.kernel_data import KernelArray
+from mot.kernel_data import Array
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-02-05"
@@ -60,12 +60,12 @@ class SingleComponentAdaptiveMetropolis(AbstractRWMSampler):
     def _get_kernel_data(self, nmr_samples, thinning, return_output):
         kernel_data = super(SingleComponentAdaptiveMetropolis, self)._get_kernel_data(nmr_samples, thinning, return_output)
         kernel_data.update({
-            '_parameter_means': KernelArray(self._parameter_means, 'mot_float_type', is_writable=True,
-                                            ensure_zero_copy=True),
-            '_parameter_variances': KernelArray(self._parameter_variances, 'mot_float_type', is_writable=True,
-                                                ensure_zero_copy=True),
-            '_parameter_variance_update_m2s': KernelArray(self._parameter_variance_update_m2s, 'mot_float_type',
-                                                          is_writable=True, ensure_zero_copy=True)
+            '_parameter_means': Array(self._parameter_means, 'mot_float_type', is_writable=True,
+                                      ensure_zero_copy=True),
+            '_parameter_variances': Array(self._parameter_variances, 'mot_float_type', is_writable=True,
+                                          ensure_zero_copy=True),
+            '_parameter_variance_update_m2s': Array(self._parameter_variance_update_m2s, 'mot_float_type',
+                                                    is_writable=True, ensure_zero_copy=True)
         })
         return kernel_data
 

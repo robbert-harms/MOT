@@ -24,7 +24,7 @@ import numpy as np
 from mot.cl_function import SimpleCLFunction
 from mot.library_functions import Rand123
 from mot.utils import is_scalar
-from mot.kernel_data import KernelArray, KernelAllocatedArray
+from mot.kernel_data import Array, Zeros
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-10-29"
@@ -52,8 +52,8 @@ def rand(nmr_distributions, nmr_samples, min_val=0, max_val=1, ctype='float', se
     if is_scalar(max_val):
         max_val = np.ones((nmr_distributions, 1)) * max_val
 
-    kernel_data = {'min_val': KernelArray(min_val),
-                   'max_val': KernelArray(max_val)}
+    kernel_data = {'min_val': Array(min_val),
+                   'max_val': Array(max_val)}
 
     return _generate_samples(_get_uniform_kernel(nmr_samples, ctype), nmr_distributions,
                              nmr_samples, ctype, kernel_data, seed=seed)
@@ -78,8 +78,8 @@ def randn(nmr_distributions, nmr_samples, mean=0, std=1, ctype='float', seed=Non
     if is_scalar(std):
         std = np.ones((nmr_distributions, 1)) * std
 
-    kernel_data = {'mean': KernelArray(mean),
-                   'std': KernelArray(std)}
+    kernel_data = {'mean': Array(mean),
+                   'std': Array(std)}
 
     return _generate_samples(_get_gaussian_kernel(nmr_samples, ctype), nmr_distributions, nmr_samples, ctype,
                              kernel_data, seed=seed)
@@ -90,8 +90,8 @@ def _generate_samples(cl_function, nmr_distributions, nmr_samples, ctype, kernel
     rng_state = np.random.uniform(low=np.iinfo(np.uint32).min, high=np.iinfo(np.uint32).max + 1,
                                   size=(nmr_distributions, 6)).astype(np.uint32)
 
-    kernel_data.update({'samples': KernelAllocatedArray((nmr_distributions, nmr_samples), ctype),
-                        '_rng_state': KernelArray(rng_state, 'uint')})
+    kernel_data.update({'samples': Zeros((nmr_distributions, nmr_samples), ctype),
+                        '_rng_state': Array(rng_state, 'uint')})
     cl_function.evaluate({'data': kernel_data}, nmr_instances=nmr_distributions)
     return kernel_data['samples'].get_data()
 

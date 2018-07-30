@@ -1,5 +1,5 @@
 from mot.cl_function import SimpleCLFunction
-from mot.kernel_data import KernelArray, KernelAllocatedArray, KernelScalar, KernelLocalMemory
+from mot.kernel_data import Array, Zeros, Scalar, LocalMemory
 
 
 __author__ = 'Robbert Harms'
@@ -103,20 +103,20 @@ def compute_log_likelihood(model, parameters, cl_runtime_info=None):
         ''', dependencies=[ll_tmp_func, ll_sum_func])
 
     all_kernel_data = dict(model.get_kernel_data())
-    all_kernel_data['parameters'] = KernelArray(parameters)
+    all_kernel_data['parameters'] = Array(parameters)
 
     shape = parameters.shape
     if len(shape) > 2:
         all_kernel_data.update({
-            'log_likelihoods': KernelAllocatedArray((shape[0], shape[2]), 'mot_float_type'),
-            'nmr_params': KernelScalar(parameters.shape[1]),
-            'nmr_samples': KernelScalar(parameters.shape[2]),
-            'local_reduction_lls': KernelLocalMemory('double')
+            'log_likelihoods': Zeros((shape[0], shape[2]), 'mot_float_type'),
+            'nmr_params': Scalar(parameters.shape[1]),
+            'nmr_samples': Scalar(parameters.shape[2]),
+            'local_reduction_lls': LocalMemory('double')
         })
     else:
         all_kernel_data.update({
-            'log_likelihoods': KernelAllocatedArray((shape[0],), 'mot_float_type'),
-            'local_reduction_lls': KernelLocalMemory('double')
+            'log_likelihoods': Zeros((shape[0],), 'mot_float_type'),
+            'local_reduction_lls': LocalMemory('double')
         })
 
     get_cl_function().evaluate({'data': all_kernel_data}, nmr_instances=parameters.shape[0], use_local_reduction=True,
@@ -158,9 +158,9 @@ def compute_objective_value(model, parameters, cl_runtime_info=None):
 
     all_kernel_data = dict(model.get_kernel_data())
     all_kernel_data.update({
-        'parameters': KernelArray(parameters),
-        'objective_values': KernelAllocatedArray((parameters.shape[0],), 'mot_float_type'),
-        'local_reduction_lls': KernelLocalMemory('double')
+        'parameters': Array(parameters),
+        'objective_values': Zeros((parameters.shape[0],), 'mot_float_type'),
+        'local_reduction_lls': LocalMemory('double')
     })
 
     cl_function.evaluate({'data': all_kernel_data}, nmr_instances=parameters.shape[0],

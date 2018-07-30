@@ -5,8 +5,8 @@ from mot.cl_function import SimpleCLFunction
 from mot.cl_runtime_info import CLRuntimeInfo
 from mot.library_functions import Rand123
 from mot.utils import split_in_batches
-from mot.kernel_data import KernelScalar, KernelLocalMemory, KernelArray, \
-    KernelAllocatedArray
+from mot.kernel_data import Scalar, LocalMemory, Array, \
+    Zeros
 import numpy as np
 
 __author__ = 'Robbert Harms'
@@ -35,7 +35,7 @@ class AbstractSampler(object):
         self._starting_positions = starting_positions
         if len(starting_positions.shape) < 2:
             self._starting_positions = self._starting_positions[..., None]
-        self._nmr_problems = self._model.get_nmr_problems()
+        self._nmr_problems = self._starting_positions.shape[0]
         self._nmr_params = self._starting_positions.shape[1]
         self._sampling_index = 0
         self._current_chain_position = np.require(np.copy(self._starting_positions),
@@ -43,13 +43,6 @@ class AbstractSampler(object):
                                                   dtype=self._cl_runtime_info.mot_float_dtype)
         self._rng_state = np.random.uniform(low=np.iinfo(np.uint32).min, high=np.iinfo(np.uint32).max + 1,
                                             size=(self._nmr_problems, 6)).astype(np.uint32)
-
-        if self._starting_positions.shape[0] != model.get_nmr_problems():
-            raise ValueError('The number of problems in the model does not match the number of starting points given.')
-
-        if self._starting_positions.shape[1] != model.get_nmr_parameters():
-            raise ValueError('The number of parameters in the model does not match the number of '
-                             'starting points given.')
 
     def set_cl_runtime_info(self, cl_runtime_info):
         """Update the CL runtime information.
@@ -141,20 +134,20 @@ class AbstractSampler(object):
         """
         kernel_data = dict(self._model.get_kernel_data())
         kernel_data.update({
-            '_nmr_iterations': KernelScalar(nmr_samples * thinning, ctype='ulong'),
-            '_iteration_offset': KernelScalar(self._sampling_index, ctype='ulong'),
-            '_rng_state': KernelArray(self._rng_state, 'uint', is_writable=True, ensure_zero_copy=True),
-            '_current_chain_position': KernelArray(self._current_chain_position, 'mot_float_type',
-                                                   is_writable=True, ensure_zero_copy=True),
-            '_log_likelihood_tmp': KernelLocalMemory('double')
+            '_nmr_iterations': Scalar(nmr_samples * thinning, ctype='ulong'),
+            '_iteration_offset': Scalar(self._sampling_index, ctype='ulong'),
+            '_rng_state': Array(self._rng_state, 'uint', is_writable=True, ensure_zero_copy=True),
+            '_current_chain_position': Array(self._current_chain_position, 'mot_float_type',
+                                             is_writable=True, ensure_zero_copy=True),
+            '_log_likelihood_tmp': LocalMemory('double')
         })
 
         if return_output:
             kernel_data.update({
-                '_samples': KernelAllocatedArray((self._nmr_problems, self._nmr_params, nmr_samples),
+                '_samples': Zeros((self._nmr_problems, self._nmr_params, nmr_samples),
                                                        'mot_float_type'),
-                '_log_likelihoods': KernelAllocatedArray((self._nmr_problems, nmr_samples), 'mot_float_type'),
-                '_log_priors': KernelAllocatedArray((self._nmr_problems, nmr_samples), 'mot_float_type'),
+                '_log_likelihoods': Zeros((self._nmr_problems, nmr_samples), 'mot_float_type'),
+                '_log_priors': Zeros((self._nmr_problems, nmr_samples), 'mot_float_type'),
             })
         return kernel_data
 
@@ -382,8 +375,8 @@ class AbstractRWMSampler(AbstractSampler):
     def _get_kernel_data(self, nmr_samples, thinning, return_output):
         kernel_data = super(AbstractRWMSampler, self)._get_kernel_data(nmr_samples, thinning, return_output)
         kernel_data.update({
-            '_proposal_stds': KernelArray(self._proposal_stds, 'mot_float_type', is_writable=True,
-                                          ensure_zero_copy=True)
+            '_proposal_stds': Array(self._proposal_stds, 'mot_float_type', is_writable=True,
+                                    ensure_zero_copy=True)
         })
         return kernel_data
 

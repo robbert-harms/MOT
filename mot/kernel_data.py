@@ -38,13 +38,11 @@ class KernelData(object):
         raise NotImplementedError()
 
     @property
-    def is_scalar(self):
-        """Check if the implemented input data is a scalar or not.
-
-        Since scalars are loaded differently as buffers in the kernel, we have to check if this data is a scalar or not.
+    def loaded_as_pointer(self):
+        """Check if this data is loaded as pointer in the ``mot_data_struct``.
 
         Returns:
-            boolean: if the implemented type should be loaded as a scalar or not
+            boolean: If this data is referenced with a pointer in the ``mot_data_struct``.
         """
         raise NotImplementedError()
 
@@ -143,12 +141,12 @@ class KernelData(object):
         raise NotImplementedError()
 
 
-class KernelScalar(KernelData):
+class Scalar(KernelData):
 
     def __init__(self, value, ctype=None):
         """A kernel input scalar.
 
-        This will insert the given value directly into the kernel's source code.
+        This will insert the given value directly into the kernel's source code, and will not load it as a buffer.
 
         Args:
             value (number): the number to insert into the kernel as a scalar.
@@ -167,8 +165,8 @@ class KernelScalar(KernelData):
         return 1
 
     @property
-    def is_scalar(self):
-        return True
+    def loaded_as_pointer(self):
+        return False
 
     @property
     def read_data_back(self):
@@ -214,7 +212,7 @@ class KernelScalar(KernelData):
         return False
 
 
-class KernelLocalMemory(KernelData):
+class LocalMemory(KernelData):
 
     def __init__(self, ctype, size_func=None):
         """Indicates that a local memory array of the indicated size must be loaded as kernel input data.
@@ -236,8 +234,8 @@ class KernelLocalMemory(KernelData):
         return 1
 
     @property
-    def is_scalar(self):
-        return False
+    def loaded_as_pointer(self):
+        return True
 
     @property
     def read_data_back(self):
@@ -269,7 +267,7 @@ class KernelLocalMemory(KernelData):
         return True
 
 
-class KernelArray(KernelData):
+class Array(KernelData):
 
     def __init__(self, data, ctype=None, offset_str=None, is_writable=False, is_readable=True, ensure_zero_copy=False,
                  as_scalar=False):
@@ -355,8 +353,8 @@ class KernelArray(KernelData):
         return self._data.strides[0] // self._data.itemsize
 
     @property
-    def is_scalar(self):
-        return self._as_scalar
+    def loaded_as_pointer(self):
+        return not self._as_scalar
 
     @property
     def dtype(self):
@@ -425,7 +423,7 @@ class KernelArray(KernelData):
         return True
 
 
-class KernelAllocatedArray(KernelData):
+class Zeros(KernelData):
 
     def __init__(self, shape, ctype, offset_str=None, is_writable=True, is_readable=False):
         """Allocate an output buffer of the given shape.
@@ -473,8 +471,8 @@ class KernelAllocatedArray(KernelData):
         return self._data.strides[0] // self._data.itemsize
 
     @property
-    def is_scalar(self):
-        return False
+    def loaded_as_pointer(self):
+        return True
 
     @property
     def dtype(self):

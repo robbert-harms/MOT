@@ -6,7 +6,7 @@ from mot.cl_routines.generate_random import randn, rand
 from mot.cl_routines.sampling.amwg import AdaptiveMetropolisWithinGibbs
 from mot.model_interfaces import SampleModelInterface
 from mot.utils import add_include_guards
-from mot.kernel_data import KernelArray
+from mot.kernel_data import Array
 
 __author__ = 'Robbert Harms'
 __date__ = '2018-04-04'
@@ -38,18 +38,12 @@ class GermanTanks(SampleModelInterface):
         self.upper_bounds = upper_bounds
 
     def get_kernel_data(self):
-        return {'observed_tanks': KernelArray(self.observed_tanks, 'uint'),
-                'lower_bounds': KernelArray(np.max(self.observed_tanks, axis=1), 'uint'),
-                'upper_bounds': KernelArray(self.upper_bounds, 'uint')}
-
-    def get_nmr_problems(self):
-        return self.observed_tanks.shape[0]
+        return {'observed_tanks': Array(self.observed_tanks, 'uint'),
+                'lower_bounds': Array(np.max(self.observed_tanks, axis=1), 'uint'),
+                'upper_bounds': Array(self.upper_bounds, 'uint')}
 
     def get_nmr_observations(self):
         return self.observed_tanks.shape[1]
-
-    def get_nmr_parameters(self):
-        return 1
 
     def get_log_likelihood_per_observation_function(self):
         """Used in Bayesian sampling."""

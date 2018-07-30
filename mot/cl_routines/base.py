@@ -2,7 +2,7 @@ import numpy as np
 import pyopencl as cl
 
 from mot.cl_runtime_info import CLRuntimeInfo
-from mot.kernel_data import KernelAllocatedArray
+from mot.kernel_data import Zeros
 from mot.load_balance_strategies import Worker
 from mot.utils import KernelDataManager, get_float_type_def
 
@@ -34,7 +34,7 @@ def apply_cl_function(cl_function, kernel_data, nmr_instances, use_local_reducti
     cl_runtime_info = cl_runtime_info or CLRuntimeInfo()
 
     if cl_function.get_return_type() != 'void':
-        kernel_data['_results'] = KernelAllocatedArray((nmr_instances,), cl_function.get_return_type())
+        kernel_data['_results'] = Zeros((nmr_instances,), cl_function.get_return_type())
 
     workers = []
     for cl_environment in cl_runtime_info.get_cl_environments():
@@ -136,9 +136,7 @@ class _ProcedureWorker(Worker):
 
             if param.data_type.raw_data_type == 'mot_data_struct':
                 func_args.append('&data')
-            elif self._kernel_data[param_cl_name].is_scalar:
-                func_args.append('data.{}'.format(param_cl_name))
-            else:
+            elif self._kernel_data[param_cl_name].loaded_as_pointer:
                 if param.data_type.is_pointer_type:
                     if param.data_type.address_space == 'private':
                         func_args.append(param_cl_name + '_private')
@@ -146,6 +144,9 @@ class _ProcedureWorker(Worker):
                         func_args.append('data.{}'.format(param_cl_name))
                 else:
                     func_args.append('data.{}[0]'.format(param_cl_name))
+            else:
+                func_args.append('data.{}'.format(param_cl_name))
+
         return func_args
 
     def _get_wrapped_arrays(self):
