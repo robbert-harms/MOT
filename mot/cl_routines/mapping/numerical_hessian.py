@@ -557,7 +557,7 @@ class NumericalHessian(object):
                 
                 double f_x_input = _calculate_function(data, x_input);
                 
-                constant uint coords[''' + str(len(coords)) + '''][2] = {
+                uint coords[''' + str(len(coords)) + '''][2] = {
                     ''' + ', '.join('{{{}, {}}}'.format(*c) for c in coords)  + '''
                 };
                 
