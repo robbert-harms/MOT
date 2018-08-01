@@ -104,7 +104,7 @@ void _sbplex_sort_indices(local const mot_float_type* const values, local int* i
             }
         }
     }
-    mem_fence(CLK_LOCAL_MEM_FENCE);
+    barrier(CLK_LOCAL_MEM_FENCE);
 }
 
 /*

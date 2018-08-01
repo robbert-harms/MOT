@@ -381,7 +381,7 @@ class NumericalHessian(object):
                     x_tmp[perturb_dim_0] += perturb_0;
                     x_tmp[perturb_dim_1] += perturb_1;
                 }
-                mem_fence(CLK_LOCAL_MEM_FENCE);
+                barrier(CLK_LOCAL_MEM_FENCE);
 
                 ''' + numdiff_param_transform.get_cl_function_name() + '''(data, x_tmp);
                 return _calculate_function(data, x_tmp);
@@ -553,7 +553,7 @@ class NumericalHessian(object):
                         x_input[param_ind] = data->parameters[param_ind];
                     }
                 }
-                mem_fence(CLK_LOCAL_MEM_FENCE);
+                barrier(CLK_LOCAL_MEM_FENCE);
                 
                 double f_x_input = _calculate_function(data, x_input);
                 

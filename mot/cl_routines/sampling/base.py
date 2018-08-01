@@ -191,7 +191,7 @@ class AbstractSampler(object):
                     }
                     current_prior = _computeLogPrior(data, current_position);
                 }
-                mem_fence(CLK_LOCAL_MEM_FENCE);
+                barrier(CLK_LOCAL_MEM_FENCE);
     
                 current_likelihood = _computeLogLikelihood(data, current_position, data->_log_likelihood_tmp);
     

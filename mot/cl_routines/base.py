@@ -68,7 +68,7 @@ class _ProcedureWorker(Worker):
             cl.kernel_work_group_info.PREFERRED_WORK_GROUP_SIZE_MULTIPLE,
             self._cl_environment.device)
         if not self._use_local_reduction:
-            self._workgroup_size = None
+            self._workgroup_size = 1
 
         self._kernel_input = self._get_kernel_input()
 

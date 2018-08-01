@@ -80,7 +80,7 @@ class LevenbergMarquardt(AbstractParallelOptimizer):
                         result[i] = sqrt(fabs(result[i]));
                     }
                 }
-                mem_fence(CLK_LOCAL_MEM_FENCE);
+                barrier(CLK_LOCAL_MEM_FENCE);
             }
         '''
         return kernel_source

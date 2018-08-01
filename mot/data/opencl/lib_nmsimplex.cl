@@ -209,7 +209,7 @@ void _libnms_calculate_centroid(
             centroid[j] = tmp/nmr_parameters;
         }
     }
-    mem_fence(CLK_LOCAL_MEM_FENCE);
+    barrier(CLK_LOCAL_MEM_FENCE);
 }
 
 /**
@@ -402,7 +402,7 @@ int lib_nmsimplex(
     if(get_local_id(0) == 0){
 	    _libnms_initialize_simplex(nmr_parameters, vertices, model_parameters, initial_simplex_scale);
 	}
-	mem_fence(CLK_LOCAL_MEM_FENCE);
+	barrier(CLK_LOCAL_MEM_FENCE);
 
     _libnms_initialize_function_values(nmr_parameters, vertices, func_vals, data);
 

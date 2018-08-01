@@ -176,9 +176,11 @@ class AbstractParallelOptimizer(AbstractOptimizer):
         self._logger.info('Finished optimization preliminaries')
         self._logger.info('Starting optimization')
 
+        use_local_reduction = all(env.is_gpu for env in self._cl_runtime_info.cl_environments)
+
         optimizer_func = self._get_optimizer_function(model, nmr_parameters)
         optimizer_func.evaluate({'data': all_kernel_data}, nmr_instances=nmr_problems,
-                                use_local_reduction=True, cl_runtime_info=self._cl_runtime_info)
+                                use_local_reduction=use_local_reduction, cl_runtime_info=self._cl_runtime_info)
 
         self._logger.info('Finished optimization')
         return SimpleOptimizationResult(all_kernel_data['_parameters'].get_data(),
@@ -222,7 +224,7 @@ class AbstractParallelOptimizer(AbstractOptimizer):
                         x[i] = data->_parameters[i];
                     }
                 }
-                mem_fence(CLK_LOCAL_MEM_FENCE);
+                barrier(CLK_LOCAL_MEM_FENCE);
                 
                 char return_code = (char)''' + self._get_optimizer_call_name() + '(' + \
                          ', '.join(self._get_optimizer_call_args()) + ''');

@@ -86,7 +86,7 @@ void powell_init_search_directions(local mot_float_type search_directions[%(NMR_
             }
         }
     }
-    mem_fence(CLK_LOCAL_MEM_FENCE);
+    barrier(CLK_LOCAL_MEM_FENCE);
 }
 
 /**
@@ -151,7 +151,7 @@ mot_float_type powell_find_linear_minimum(
             point_0[j] += point_1[j];
         }
     }
-    mem_fence(CLK_LOCAL_MEM_FENCE);
+    barrier(CLK_LOCAL_MEM_FENCE);
 
     return fval;
 }
@@ -180,7 +180,7 @@ double powell_linear_eval_function(mot_float_type x, void* eval_data){
             xt[j] = f_data.point_0[j] + x * f_data.point_1[j];
         }
     }
-    mem_fence(CLK_LOCAL_MEM_FENCE);
+    barrier(CLK_LOCAL_MEM_FENCE);
 
     return evaluate(xt, f_data.data);
 }
@@ -230,7 +230,7 @@ mot_float_type powell_do_line_searches(
                 search_vector[j] = search_directions[j][i];
             }
         }
-        mem_fence(CLK_LOCAL_MEM_FENCE);
+        barrier(CLK_LOCAL_MEM_FENCE);
 
         fval_previous = fval;
         fval = powell_find_linear_minimum(starting_point, search_vector, data);
@@ -269,7 +269,7 @@ mot_float_type powell_evaluate_extrapolated(local mot_float_type* new_best_point
             tmp[i] = 2.0 * new_best_point[i] - old_point[i];
         }
     }
-    mem_fence(CLK_LOCAL_MEM_FENCE);
+    barrier(CLK_LOCAL_MEM_FENCE);
 
     return evaluate(tmp, data);
 }
@@ -322,7 +322,7 @@ int powell(local mot_float_type* model_parameters, void* data){
                 parameters_at_start_of_iteration[i] = model_parameters[i];
             }
         }
-        mem_fence(CLK_LOCAL_MEM_FENCE);
+        barrier(CLK_LOCAL_MEM_FENCE);
 
         fval = powell_do_line_searches(search_directions, data, fval, model_parameters,
                                        &largest_decrease, &index_largest_decrease);
@@ -367,7 +367,7 @@ int powell(local mot_float_type* model_parameters, void* data){
                     parameters_at_start_of_iteration[i] = model_parameters[i] - parameters_at_start_of_iteration[i];
                 }
             }
-            mem_fence(CLK_LOCAL_MEM_FENCE);
+            barrier(CLK_LOCAL_MEM_FENCE);
             fval = powell_find_linear_minimum(model_parameters, parameters_at_start_of_iteration, data);
         }
     }
