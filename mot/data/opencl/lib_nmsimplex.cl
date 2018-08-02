@@ -160,7 +160,7 @@ void _libnms_find_ordering_indices(int nmr_parameters,
 mot_float_type _libnms_get_variance(local mot_float_type* values, int n){
     /** Online variance algorithm by Welford
      *  B. P. Welford (1962)."Note on a method for calculating corrected sums of squares
-     *      and products". Technometrics 4(3):419–420.
+     *      and products". Technometrics 4(3):419-420.
      *
      * Also studied in:
      * Chan, Tony F.; Golub, Gene H.; LeVeque, Randall J. (1983).
