@@ -4,9 +4,9 @@ from scipy.optimize import minimize
 from scipy.stats import norm
 import scipy.integrate
 
-from mot.cl_function import SimpleCLFunction
-from mot.kernel_data import Array, Zeros, Scalar
-from mot.utils import is_scalar, multiprocess_mapping
+from mot.lib.cl_function import SimpleCLFunction
+from mot.lib.kernel_data import Array, Zeros, Scalar
+from mot.lib.utils import is_scalar, multiprocess_mapping
 
 __author__ = 'Robbert Harms'
 __date__ = '2017-11-01'

@@ -1,17 +1,15 @@
 """Supports hardware level load balancing over multiple CL enabled devices.
 
-This load balancing consists of three players, :class:`~mot.cl_environments.CLEnvironment`, :class:`LoadBalanceStrategy`
-and :class:`~mot.cl_routines.base.CLRoutine`. Every :class:`~mot.cl_routines.base.CLRoutine`
-(such as the Optimizers and Samplers) requires, in order to do computations,
-a list of :class:`~mot.cl_environments.CLEnvironment` and a :class:`LoadBalanceStrategy` implementation.
-The :class:`~mot.cl_environments.CLEnvironment` encapsulate all information needed to run computations on its
-contained device. The :class:`LoadBalanceStrategy` chooses which environments (i.e. devices) to use for
-the computations and how to use them. The load balancing itself is done by appointing subsets of
+This load balancing consists of three players, :class:`~mot.lib.cl_environments.CLEnvironment`,
+:class:`LoadBalanceStrategy` and :class:`~mot.cl_routines.base.CLRoutine`.
+Every :class:`~mot.cl_routines.base.CLRoutine` (such as the Optimizers and Samplers) requires, in order to do
+computations, a list of :class:`~mot.lib.cl_environments.CLEnvironment` and a :class:`LoadBalanceStrategy`
+implementation. The :class:`~mot.lib.cl_environments.CLEnvironment` encapsulate all information needed to run
+computations on its contained device. The :class:`LoadBalanceStrategy` chooses which environments (i.e. devices) to use
+for the computations and how to use them. The load balancing itself is done by appointing subsets of
 problems to specific devices.
 """
-import logging
 import math
-import time
 import timeit
 import warnings
 import pyopencl as cl
@@ -41,7 +39,7 @@ class LoadBalanceStrategy(object):
         and/or by the total number of items to be processed.
 
         Args:
-            workers (Worker): a list of workers
+            workers (List[Worker]): a list of workers
             nmr_items (int): an integer specifying the total number of items to be processed
             run_in_batches (boolean): a implementing class may overwrite run_in_batches with this parameter. If None
                 the value is not used.
@@ -175,7 +173,6 @@ class SimpleLoadBalanceStrategy(LoadBalanceStrategy):
             run_in_batches (boolean); See above.
             single_batch_length (boolean); See above.
         """
-        self._logger = logging.getLogger(__name__)
         self._run_in_batches = run_in_batches
         self._single_batch_length = single_batch_length
 
@@ -229,11 +226,9 @@ class SimpleLoadBalanceStrategy(LoadBalanceStrategy):
         enqueueing the next one.
 
         Args:
-            workers (list of Worker): the workers to use in the processing
+            workers (List[Worker]): the workers to use in the processing
             batches (list of lists): for each worker a list with the batches in format (start, end)
         """
-        self._logger.debug('Preparing to run on {0} device(s)'.format(len(workers)))
-
         total_nmr_problems = 0
         most_nmr_batches = 0
         for workers_batches in batches:
@@ -250,9 +245,6 @@ class SimpleLoadBalanceStrategy(LoadBalanceStrategy):
 
             for worker_ind, worker in enumerate(workers):
                 if batch_nmr < len(batches[worker_ind]):
-                    self._logger.debug('Going to run batch {0} on device {1} with range ({2}, {3})'.format(
-                        batch_nmr, worker_ind, *batches[worker_ind][batch_nmr]))
-
                     worker.calculate(int(batches[worker_ind][batch_nmr][0]), int(batches[worker_ind][batch_nmr][1]))
                     problems_seen += batches[worker_ind][batch_nmr][1] - batches[worker_ind][batch_nmr][0]
 
@@ -265,20 +257,11 @@ class SimpleLoadBalanceStrategy(LoadBalanceStrategy):
 
             for worker_ind, worker in enumerate(workers):
                 if batch_nmr < len(batches[worker_ind]):
-                    self._logger.debug('Post processing batch {0} on device {1} with range ({2}, {3})'.format(
-                            batch_nmr, worker_ind, *batches[worker_ind][batch_nmr]))
                     worker.post_process(int(batches[worker_ind][batch_nmr][0]), int(batches[worker_ind][batch_nmr][1]))
 
             run_time = timeit.default_timer() - start_time
             current_percentage = problems_seen / float(total_nmr_problems)
             remaining_time = (run_time / current_percentage) - run_time
-
-            self._logger.debug('Processing is at {0:.2%}, time spent: {1}, time left: {2} (h:m:s).'.format(
-                current_percentage,
-                time.strftime('%H:%M:%S', time.gmtime(run_time)),
-                time.strftime('%H:%M:%S', time.gmtime(remaining_time))))
-
-        self._logger.debug('Ran all batches.')
 
 
 class MetaLoadBalanceStrategy(SimpleLoadBalanceStrategy):

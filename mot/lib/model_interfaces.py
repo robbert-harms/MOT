@@ -1,10 +1,10 @@
 """The model interfaces.
 
 This encapsulates all the information we need about models to be able to optimize or sample them using the routines
-in MOT. These interfaces expose data and modeling code. The data is represented as :class:`mot.utils.KernelInputData`
+in MOT. These interfaces expose data and modeling code. The data is represented as :class:`mot.lib.utils.KernelInputData`
 instances and the CL code as strings.
 """
-from mot.cl_function import SimpleCLFunction
+from mot.lib.cl_function import SimpleCLFunction
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-03-14"
@@ -19,7 +19,7 @@ class ModelBasicInfoInterface(object):
         """Return a dictionary of input data objects we need to load into the kernel.
 
         Returns:
-            dict[str: mot.utils.KernelData]: the list of data objects we need to load in the kernel
+            dict[str: mot.lib.utils.KernelData]: the list of data objects we need to load in the kernel
         """
         raise NotImplementedError()
 
@@ -45,7 +45,7 @@ class OptimizeModelInterface(ModelBasicInfoInterface):
         objective function values per observation.
 
         Returns:
-            mot.cl_function.CLFunction: A CL function with signature:
+            mot.lib.cl_function.CLFunction: A CL function with signature:
 
                 .. code-block:: c
 
@@ -84,7 +84,7 @@ class SampleModelInterface(ModelBasicInfoInterface):
         """Get the (complete) CL Log Likelihood function that evaluates the given instance under a noise model.
 
         Returns:
-            mot.cl_function.CLFunction: A function of the kind:
+            mot.lib.cl_function.CLFunction: A function of the kind:
 
                 .. code-block:: c
 
@@ -100,7 +100,7 @@ class SampleModelInterface(ModelBasicInfoInterface):
         The prior function must be in log space.
 
         Returns:
-            mot.cl_function.CLFunction: A function with the signature:
+            mot.lib.cl_function.CLFunction: A function with the signature:
                 .. code-block:: c
 
                     mot_float_type <func_name>(
@@ -108,7 +108,7 @@ class SampleModelInterface(ModelBasicInfoInterface):
                         local const mot_float_type* const x
                     );
 
-            Which is called by the sampling routine to calculate the prior probability.
+            Which is called by the sample routine to calculate the prior probability.
         """
         raise NotImplementedError()
 
@@ -117,14 +117,14 @@ class SampleModelInterface(ModelBasicInfoInterface):
 
         This allows the model to change a proposal before computing the prior or likelihood probabilities.
 
-        As an example, suppose you are sampling a polar coordinate :math:`\theta` defined on
+        As an example, suppose you are sample a polar coordinate :math:`\theta` defined on
         :math:`[0, 2\pi]` with a random walk Metropolis proposal distribution. This distribution might propose positions
         outside of the range of :math:`\theta`. Of course the model function could deal with that by taking the modulus
         of the input, but then you have to post-process the chain with the same transformation. Instead, this function
         allows changing the proposal before it is put into the model and before it is stored.
 
         Returns:
-            mot.cl_function.CLFunction: A function with the signature:
+            mot.lib.cl_function.CLFunction: A function with the signature:
                 .. code-block:: c
 
                     void <func_name>(
@@ -132,7 +132,7 @@ class SampleModelInterface(ModelBasicInfoInterface):
                         local mot_float_type* x
                     );
 
-            Which is called by the sampling routine to finalize the proposal.
+            Which is called by the sample routine to finalize the proposal.
         """
         return SimpleCLFunction(
             'void', 'finalizeProposal',
@@ -211,7 +211,7 @@ class NumericalDerivativeInterface(OptimizeModelInterface):
         as those are handled already by the numerical differentiation routine.
 
         Returns:
-            mot.cl_function.CLFunction: A function with the signature:
+            mot.lib.cl_function.CLFunction: A function with the signature:
                 .. code-block:: c
 
                     void <func_name>(mot_data_struct* data, local mot_float_type* params);

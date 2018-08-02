@@ -19,10 +19,10 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 class AbstractSampler(object):
 
     def __init__(self, model, starting_positions, cl_runtime_info=None, **kwargs):
-        """Abstract base class for sampling routines.
+        """Abstract base class for sample routines.
 
         Sampling routines implementing this interface should be stateful objects that, for the given model, keep track
-        of the sampling state over multiple calls to :meth:`sample`.
+        of the sample state over multiple calls to :meth:`sample`.
 
         Args:
             model (SampleModelInterface): the model to sample.
@@ -55,7 +55,7 @@ class AbstractSampler(object):
     def sample(self, nmr_samples, burnin=0, thinning=1):
         """Take additional samples from the given model using this sampler.
 
-        This method can be called multiple times in which the sampling state is stored in between.
+        This method can be called multiple times in which the sample state is stored in between.
 
         Args:
             nmr_samples (int): the number of samples to return
@@ -65,7 +65,7 @@ class AbstractSampler(object):
                     stored is ``nmr_samples``. If set to one or lower we store every sample after the burn in.
 
         Returns:
-            SamplingOutput: the sampling output object
+            SamplingOutput: the sample output object
         """
         if not thinning or thinning < 1:
             thinning = 1
@@ -113,7 +113,7 @@ class AbstractSampler(object):
         By default, this will take the kernel data from the model and add to that the items:
 
         * _nmr_iterations: the number of iterations to sample
-        * _iteration_offset: the current sampling index, that is, the offset to the given number of iterations
+        * _iteration_offset: the current sample index, that is, the offset to the given number of iterations
         * _rng_state: the random number generator state
         * _current_chain_position: the current position of the sampled chain
         * _log_likelihood_tmp: an OpenCL local array for combining the log likelihoods
@@ -295,7 +295,7 @@ class AbstractSampler(object):
 
     @contextmanager
     def _logging(self, nmr_samples, burnin, thinning):
-        self._logger.info('Starting sampling with method {0}'.format(self.__class__.__name__))
+        self._logger.info('Starting sample with method {0}'.format(self.__class__.__name__))
         self._logger.info('We will use a {} precision float type for the calculations.'.format(
             'double' if self._cl_runtime_info.double_precision else 'single'))
 
@@ -315,7 +315,7 @@ class AbstractSampler(object):
         self._logger.info('Total samples drawn: {samples_drawn}, total samples returned: '
                           '{samples_returned} (per problem).'.format(**samples_drawn))
         yield
-        self._logger.info('Finished sampling')
+        self._logger.info('Finished sample')
 
 
 class AbstractRWMSampler(AbstractSampler):
@@ -485,7 +485,7 @@ class AbstractRWMSampler(AbstractSampler):
 class SamplingOutput(object):
 
     def get_samples(self):
-        """Get the matrix containing the sampling results.
+        """Get the matrix containing the sample results.
 
         Returns:
             ndarray: the sampled parameter maps, a (d, p, n) array with for d problems and p parameters n samples.
@@ -513,7 +513,7 @@ class SamplingOutput(object):
 class SimpleSampleOutput(SamplingOutput):
 
     def __init__(self, samples, log_likelihoods, log_priors):
-        """Simple storage container for the sampling output"""
+        """Simple storage container for the sample output"""
         self._samples = samples
         self._log_likelihood = log_likelihoods
         self._log_prior = log_priors

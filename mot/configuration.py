@@ -15,8 +15,8 @@ using :py:func:`config_context`. Example:
 from contextlib import contextmanager
 from copy import copy
 
-from .cl_environments import CLEnvironmentFactory
-from .load_balance_strategies import PreferGPU
+from .lib.cl_environments import CLEnvironmentFactory
+from .lib.load_balance_strategies import PreferGPU
 
 __author__ = 'Robbert Harms'
 __date__ = "2015-07-22"
@@ -123,7 +123,7 @@ def get_compile_flags_to_disable_in_double_precision():
 
 
 def set_default_proposal_update(proposal_update):
-    """Set the default proposal update function to use in sampling.
+    """Set the default proposal update function to use in sample.
 
     Please note that this will change the global configuration, i.e. this is a persistent change. If you do not want
     a persistent state change, consider using :func:`~mot.configuration.config_context` instead.

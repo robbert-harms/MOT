@@ -5,7 +5,7 @@ import numpy as np
 from numpy.testing import assert_allclose
 from mot.library_functions import gamma_pdf
 from mot.library_functions.continuous_distributions.gamma import igamc, igam, gamma_cdf, gamma_ppf
-from mot.utils import cartesian
+from mot.lib.utils import cartesian
 
 
 class test_GammaDistribution(unittest.TestCase):

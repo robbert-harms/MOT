@@ -1,4 +1,4 @@
-"""This module contains some diagnostic functions to diagnose the performance of MCMC sampling.
+"""This module contains some diagnostic functions to diagnose the performance of MCMC sample.
 
 The two most important functions are :func:`multivariate_ess` and :func:`univariate_ess` to calculate the effective
 sample size of your samples.
@@ -10,7 +10,7 @@ from numpy.linalg import det
 from scipy.special import gammaln
 from scipy.stats import chi2
 
-from mot.utils import multiprocess_mapping
+from mot.lib.utils import multiprocess_mapping
 
 __author__ = 'Robbert Harms'
 __date__ = "2017-03-07"
@@ -275,7 +275,7 @@ def minimum_multivariate_ess(nmr_params, alpha=0.05, epsilon=0.05):
             the target distribution.
 
     Returns:
-        float: the minimum multivariate Effective Sample Size that one should aim for in MCMC sampling to
+        float: the minimum multivariate Effective Sample Size that one should aim for in MCMC sample to
             obtain the desired confidence region with the desired precision.
 
     References:
@@ -305,12 +305,12 @@ def multivariate_ess_precision(nmr_params, multi_variate_ess, alpha=0.05):
 
     Args:
         nmr_params (int): the number of free parameters in the model
-        multi_variate_ess (int): the number of iid samples you obtained in your sampling results.
+        multi_variate_ess (int): the number of iid samples you obtained in your sample results.
         alpha (float): the level of confidence of the confidence region. For example, an alpha of 0.05 means
             that we want to be in a 95% confidence region.
 
     Returns:
-        float: the minimum multivariate Effective Sample Size that one should aim for in MCMC sampling to
+        float: the minimum multivariate Effective Sample Size that one should aim for in MCMC sample to
             obtain the desired confidence region with the desired precision.
 
     References:

@@ -31,7 +31,7 @@ mot.cl\_environments module
 mot.cl\_function module
 -----------------------
 
-.. automodule:: mot.cl_function
+.. automodule:: mot.lib.cl_function
     :members:
     :undoc-members:
     :show-inheritance:

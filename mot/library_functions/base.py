@@ -1,6 +1,6 @@
 import os
 from textwrap import indent, dedent
-from mot.cl_function import CLFunction, SimpleCLFunction
+from mot.lib.cl_function import CLFunction, SimpleCLFunction
 
 
 __author__ = 'Robbert Harms'

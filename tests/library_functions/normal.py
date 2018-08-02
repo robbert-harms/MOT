@@ -6,7 +6,7 @@ import numpy as np
 from numpy.testing import assert_allclose
 from mot.library_functions import normal_pdf, normal_cdf, normal_ppf
 from mot.library_functions.continuous_distributions.normal import _ndtri
-from mot.utils import cartesian
+from mot.lib.utils import cartesian
 
 
 class test_NormalDistribution(unittest.TestCase):

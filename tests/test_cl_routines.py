@@ -11,12 +11,10 @@ Tests for `mot` module.
 import unittest
 import numpy as np
 
-from mot.cl_function import SimpleCLFunction
-from mot.cl_routines.optimizing.nmsimplex import NMSimplex
-from mot.cl_routines.optimizing.levenberg_marquardt import LevenbergMarquardt
-from mot.cl_routines.optimizing.powell import Powell
+from mot import minimize
+from mot.lib.cl_function import SimpleCLFunction
 
-from mot.model_interfaces import OptimizeModelInterface
+from mot.lib.model_interfaces import OptimizeModelInterface
 
 
 class CLRoutineTestCase(unittest.TestCase):
@@ -30,14 +28,14 @@ class TestRosenbrock(CLRoutineTestCase):
     def setUp(self):
         super(TestRosenbrock, self).setUp()
         self.model = Rosenbrock(5)
-        self.optimizers = (NMSimplex(), Powell(patience=5))
+        self.methods = {'Nelder-Mead': None, 'Powell': {'patience': 3}}
 
     def test_model(self):
-        for optimizer in self.optimizers:
-            output = optimizer.minimize(self.model, np.array([[3] * 5]))
-            v = output.get_optimization_result()
+        for method, options in self.methods.items():
+            output = minimize(self.model, np.array([[3] * 5]), method=method, options=options)
+            v = output['x']
             for ind in range(2):
-                self.assertAlmostEqual(v[0, ind], 1, places=3)
+                self.assertAlmostEqual(v[0, ind], 1, places=3, msg=method)
 
 
 class TestLSQNonLinExample(CLRoutineTestCase):
@@ -45,14 +43,14 @@ class TestLSQNonLinExample(CLRoutineTestCase):
     def setUp(self):
         super(TestLSQNonLinExample, self).setUp()
         self.model = MatlabLSQNonlinExample()
-        self.optimizers = (LevenbergMarquardt(), Powell(patience_line_search=5), NMSimplex())
+        self.methods = ('Levenberg-Marquardt', 'Powell', 'Nelder-Mead')
 
     def test_model(self):
-        for optimizer in self.optimizers:
-            output = optimizer.minimize(self.model, np.array([[0.3, 0.4]]))
-            v = output.get_optimization_result()
+        for method in self.methods:
+            output = minimize(self.model, np.array([[0.3, 0.4]]), method=method)
+            v = output['x']
             for ind in range(2):
-                self.assertAlmostEqual(v[0, ind], 0.2578, places=3)
+                self.assertAlmostEqual(v[0, ind], 0.2578, places=3, msg=method)
 
 
 class Rosenbrock(OptimizeModelInterface):

@@ -12,8 +12,7 @@ import pyopencl as cl
 import pyopencl.array as cl_array
 import tatsu
 
-from mot.cl_data_type import SimpleCLDataType
-
+from mot.lib.cl_data_type import SimpleCLDataType
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-05-13"
@@ -102,9 +101,9 @@ def convert_data_to_dtype(data, data_type, mot_float_type='float'):
     """Convert the given input data to the correct numpy type.
 
     Args:
-        value (ndarray): The value to convert to the correct numpy type
-        data_type (str or mot.cl_data_type.CLDataType): the data type we need to convert the data to
-        mot_float_type (str or mot.cl_data_type.CLDataType): the data type of the current ``mot_float_type``
+        data (ndarray): The value to convert to the correct numpy type
+        data_type (str or mot.lib.cl_data_type.CLDataType): the data type we need to convert the data to
+        mot_float_type (str or mot.lib.cl_data_type.CLDataType): the data type of the current ``mot_float_type``
 
     Returns:
         ndarray: the input data but then converted to the desired numpy data type
@@ -768,11 +767,12 @@ def parse_cl_function(input_str, dependencies=(), cl_extra=None):
             This is prepended to the function body.
 
     Returns:
-        mot.cl_function.SimpleCLFunction: the CL function for the last function in the given strings.
+        mot.lib.cl_function.SimpleCLFunction: the CL function for the last function in the given strings.
     """
-    from mot.cl_function import SimpleCLFunction
+    from mot.lib.cl_function import SimpleCLFunction
 
     functions = separate_cl_functions(input_str)
     return SimpleCLFunction.from_string(functions[-1], dependencies=list(dependencies or []) + [
         SimpleCLFunction.from_string(s) for s in functions[:-1]
     ], cl_extra=cl_extra)
+

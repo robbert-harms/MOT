@@ -30,4 +30,4 @@ class erfi(SimpleCLLibrary):
         """
         super().__init__(
             'double erfi(double x){ return x*x > 720 ? (x > 0 ? INFINITY : -INFINITY) : exp(x*x) * im_w_of_x(x); }',
-            dependencies = [CerfImWOfX()])
+            dependencies=[CerfImWOfX()])

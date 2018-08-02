@@ -1,10 +1,6 @@
 import logging
 from .__version__ import VERSION, VERSION_STATUS, __version__
-
-from mot.cl_routines.optimizing.levenberg_marquardt import LevenbergMarquardt
-from mot.cl_routines.optimizing.powell import Powell
-from mot.cl_routines.optimizing.nmsimplex import NMSimplex
-
+from .optimize import minimize, get_minimizer_options
 
 try:
     from logging import NullHandler
@@ -21,5 +17,5 @@ def smart_device_selection():
     Returns:
         list of CLEnvironment: List with the CL device environments.
     """
-    from mot.cl_environments import CLEnvironmentFactory
+    from mot.lib.cl_environments import CLEnvironmentFactory
     return CLEnvironmentFactory.smart_device_selection()

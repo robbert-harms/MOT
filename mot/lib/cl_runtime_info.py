@@ -15,7 +15,7 @@ class CLRuntimeInfo(object):
         """All information necessary for applying operations using OpenCL.
 
         Args:
-            cl_environments (list of mot.cl_environments.CLEnvironment): The list of CL environments used by
+            cl_environments (list of mot.lib.cl_environments.CLEnvironment): The list of CL environments used by
                 this routine. If None is given we use the defaults in the current configuration.
             load_balancer (LoadBalancingStrategy): The load balancing strategy to be used by this routine.
                 If None is given we use the defaults in the current configuration.
@@ -76,6 +76,6 @@ class CLRuntimeInfo(object):
         This returns only the CL environments that will be used by the load balancer.
 
         Returns:
-            list of mot.cl_environments.CLEnvironment: a list of CL environments to use
+            list of mot.lib.cl_environments.CLEnvironment: a list of CL environments to use
         """
         return self._load_balancer.get_used_cl_environments(self._cl_environments)

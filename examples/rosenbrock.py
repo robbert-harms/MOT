@@ -1,9 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from mot import Powell
-from mot.cl_function import SimpleCLFunction
-from mot.cl_routines.sampling.amwg import AdaptiveMetropolisWithinGibbs
-from mot.model_interfaces import SampleModelInterface, OptimizeModelInterface
+from mot.optimize import minimize
+from mot.lib.cl_function import SimpleCLFunction
+from mot.sample import AdaptiveMetropolisWithinGibbs
+from mot.lib.model_interfaces import SampleModelInterface, OptimizeModelInterface
 
 __author__ = 'Robbert Harms'
 __date__ = '2018-04-04'
@@ -30,7 +30,7 @@ class Rosenbrock(OptimizeModelInterface, SampleModelInterface):
         When optimized the parameters should all be equal to 1.
 
         Args:
-            nmr_problems (int): the number of parallel optimization or sampling chains
+            nmr_problems (int): the number of parallel optimization or sample chains
             nmr_params (int): the number of Rosenbrock parameters
         """
         super(SampleModelInterface, self).__init__()
@@ -38,7 +38,7 @@ class Rosenbrock(OptimizeModelInterface, SampleModelInterface):
         self.nmr_params = nmr_params
 
 
-    ## Methods used for both optimization and sampling ##
+    ## Methods used for both optimization and sample ##
     def get_kernel_data(self):
         return {}
 
@@ -76,9 +76,9 @@ class Rosenbrock(OptimizeModelInterface, SampleModelInterface):
         return [np.inf] * self.nmr_params
 
 
-    ## Methods used for sampling ##
+    ## Methods used for sample ##
     def get_log_likelihood_function(self):
-        """Used in Bayesian sampling."""
+        """Used in Bayesian sample."""
         return SimpleCLFunction.from_string('''
             double rosenbrock_logLikelihood(
                     mot_data_struct* data, 
@@ -96,7 +96,7 @@ class Rosenbrock(OptimizeModelInterface, SampleModelInterface):
         ''')
 
     def get_log_prior_function(self):
-        """Used in Bayesian sampling."""
+        """Used in Bayesian sample."""
         return SimpleCLFunction.from_string('''
             double rosenbrock_logPrior(mot_data_struct* data, local const mot_float_type* const x){
                 for(uint i = 0; i < ''' + str(self.nmr_params) + '''; i++){
@@ -121,25 +121,22 @@ if __name__ == '__main__':
 
 
     ## Optimization ##
-    # Create an instance of the optimization routine we will use
-    optimizer = Powell(patience=5)
-
     # The optimization starting points
-    starting_points = np.ones((nmr_problems, nmr_params)) * 3
+    x0 = np.ones((nmr_problems, nmr_params)) * 3
 
     # Minimize the parameters of the model given the starting points.
-    opt_output = optimizer.minimize(model, starting_points)
+    opt_output = minimize(model, x0)
 
     # Print the output
-    print(opt_output.get_optimization_result())
+    print(opt_output['x'])
 
 
     ## Sampling ##
     # The initial proposal standard deviations
-    proposal_stds = np.ones_like(starting_points)
+    proposal_stds = np.ones_like(x0)
 
-    # Create an instance of the sampling routine we want to use.
-    sampler = AdaptiveMetropolisWithinGibbs(model, starting_points, proposal_stds)
+    # Create an instance of the sample routine we want to use.
+    sampler = AdaptiveMetropolisWithinGibbs(model, x0, proposal_stds)
 
     # Sample each Rosenbrock instance
     sampling_output = sampler.sample(10000, thinning=1, burnin=0)

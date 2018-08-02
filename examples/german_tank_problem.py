@@ -1,11 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from mot.cl_function import SimpleCLFunction
-from mot.cl_routines.generate_random import randn, rand
-from mot.cl_routines.sampling.amwg import AdaptiveMetropolisWithinGibbs
-from mot.model_interfaces import SampleModelInterface
-from mot.kernel_data import Array
+from mot.lib.cl_function import SimpleCLFunction
+from mot.random import normal, uniform
+from mot.sample import AdaptiveMetropolisWithinGibbs
+from mot.lib.model_interfaces import SampleModelInterface
+from mot.lib.kernel_data import Array
 
 __author__ = 'Robbert Harms'
 __date__ = '2018-04-04'
@@ -27,7 +27,7 @@ class GermanTanks(SampleModelInterface):
 
         Args:
             observed_tanks (ndarray): a two dimensional array as (nmr_problems, nmr_tanks). That is, on the
-                first dimension the number of problem instances (nmr of unique optimization or sampling instances)
+                first dimension the number of problem instances (nmr of unique optimization or sample instances)
                 and on the second dimension the number of observed tanks. Each element is an integer
                 with an observed tank number.
             upper_bounds (ndarray): per problem an estimated upper bound for the number of tanks
@@ -45,7 +45,7 @@ class GermanTanks(SampleModelInterface):
         return self.observed_tanks.shape[1]
 
     def get_log_likelihood_function(self):
-        """Used in Bayesian sampling."""
+        """Used in Bayesian sample."""
         return SimpleCLFunction.from_string('''
             double germanTank_logLikelihood(mot_data_struct* data, 
                                             local const mot_float_type* const x,
@@ -63,7 +63,7 @@ class GermanTanks(SampleModelInterface):
             ''', dependencies=[self._discrete_uniform()])
 
     def get_log_prior_function(self):
-        """Used in Bayesian sampling."""
+        """Used in Bayesian sample."""
         return SimpleCLFunction.from_string('''
             double germanTank_logPrior(mot_data_struct* data, local const mot_float_type* const x){
                 uint nmr_tanks = (uint)round(x[0]);
@@ -111,11 +111,10 @@ def get_simulated_data(nmr_problems):
     nmr_observed_tanks = 10
 
     # Generate some maximum number of tanks. Basically the ground truth of the estimation problem.
-    nmr_tanks_ground_truth = randn(nmr_problems, 1, mean=250, std=30, ctype='uint')
+    nmr_tanks_ground_truth = normal(nmr_problems, 1, mean=250, std=30, ctype='uint')
 
     # Generate some random tank observations
-    observations = rand(nmr_problems, nmr_observed_tanks, min_val=0,
-                        max_val=nmr_tanks_ground_truth, ctype='uint')
+    observations = uniform(nmr_problems, nmr_observed_tanks, low=0, high=nmr_tanks_ground_truth, ctype='uint')
 
     return observations, nmr_tanks_ground_truth
 
@@ -141,7 +140,7 @@ if __name__ == '__main__':
     # The initial proposal standard deviations
     proposal_stds = np.ones_like(starting_points) * 10
 
-    # Create an instance of the sampling routine we want to use.
+    # Create an instance of the sample routine we want to use.
     sampler = AdaptiveMetropolisWithinGibbs(model, starting_points, proposal_stds)
 
     # Sample each instance

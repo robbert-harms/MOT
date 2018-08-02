@@ -27,7 +27,7 @@ requirements_tests = load_requirements('requirements_tests.txt')
 long_description = readme
 if sys.argv and len(sys.argv) > 3 and sys.argv[2] == 'debianize':
     long_description = dedent("""
-        The Multi-threaded Optimization Toolbox contains various optimization and sampling algorithms 
+        The Multi-threaded Optimization Toolbox contains various optimization and sample algorithms 
         implemented in OpenCL. Being GPU/multi-threaded CPU enabled, it allows for high-performance computing in 
         the case of large scale parallelizable problems.
     """).lstrip()
@@ -48,7 +48,7 @@ info_dict = dict(
     install_requires=requirements,
     license="LGPL v3",
     zip_safe=False,
-    keywords='mot, optimization, sampling, opencl, gpu, parallel, computing',
+    keywords='mot, optimization, sample, opencl, gpu, parallel, computing',
     classifiers=[
         'Environment :: Console',
         'Intended Audience :: Developers',

@@ -1,8 +1,8 @@
 import numpy as np
 import pyopencl as cl
 
-from mot.cl_data_type import SimpleCLDataType
-from mot.utils import dtype_to_ctype, ctype_to_dtype, convert_data_to_dtype
+from mot.lib.cl_data_type import SimpleCLDataType
+from mot.lib.utils import dtype_to_ctype, ctype_to_dtype, convert_data_to_dtype
 
 __author__ = 'Robbert Harms'
 __date__ = '2018-04-09'
@@ -60,9 +60,6 @@ class KernelData(object):
 
         If we are inserting scalars in the kernel we need to provide the CL runtime with the correct data type
         of the function.
-
-        Args:
-            mot_float_dtype (dtype): the data type of the mot_float_type
 
         Returns:
             dtype: the numpy data type for this element, or None if this is not a scalar.
@@ -431,7 +428,7 @@ class Zeros(KernelData):
     def __init__(self, shape, ctype, offset_str=None, is_writable=True, is_readable=False):
         """Allocate an output buffer of the given shape.
 
-        This is similar to :class:`~mot.utils.KernelArray` although these objects are not readable but only
+        This is similar to :class:`~mot.lib.utils.KernelArray` although these objects are not readable but only
         writable by default.
 
         This is meant to quickly allocate a buffer large enough to hold the data requested. After running an OpenCL

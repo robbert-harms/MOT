@@ -1,5 +1,5 @@
 import numpy as np
-from mot.sampling.base import AbstractRWMSampler
+from mot.sample.base import AbstractRWMSampler
 from mot.lib.kernel_data import Array
 
 __author__ = 'Robbert Harms'
