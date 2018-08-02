@@ -1,11 +1,11 @@
 import logging
 from contextlib import contextmanager
 
-from mot.cl_function import SimpleCLFunction
-from mot.cl_runtime_info import CLRuntimeInfo
+from mot.lib.cl_function import SimpleCLFunction
+from mot.lib.cl_runtime_info import CLRuntimeInfo
 from mot.library_functions import Rand123
-from mot.utils import split_in_batches
-from mot.kernel_data import Scalar, LocalMemory, Array, \
+from mot.lib.utils import split_in_batches
+from mot.lib.kernel_data import Scalar, LocalMemory, Array, \
     Zeros
 import numpy as np
 
@@ -48,7 +48,7 @@ class AbstractSampler(object):
         """Update the CL runtime information.
 
         Args:
-            cl_runtime_info (mot.cl_runtime_info.CLRuntimeInfo): the new runtime information
+            cl_runtime_info (mot.lib.cl_runtime_info.CLRuntimeInfo): the new runtime information
         """
         self._cl_runtime_info = cl_runtime_info
 
@@ -130,7 +130,7 @@ class AbstractSampler(object):
             return_output (boolean): if the kernel should return output
 
         Returns:
-            dict[str: mot.utils.KernelData]: the kernel input data
+            dict[str: mot.lib.utils.KernelData]: the kernel input data
         """
         kernel_data = dict(self._model.get_kernel_data())
         kernel_data.update({
@@ -155,7 +155,7 @@ class AbstractSampler(object):
         """Readout the kernel data and update the sampler state with the state from the compute device.
 
         Args:
-            kernel_data (dict[str: mot.utils.KernelData]): the kernel data from which to read the output
+            kernel_data (dict[str: mot.lib.utils.KernelData]): the kernel data from which to read the output
         """
         pass
 
@@ -168,7 +168,7 @@ class AbstractSampler(object):
             return_output (boolean): if the kernel should return output
 
         Returns:
-            mot.cl_function.CLFunction: the compute function
+            mot.lib.cl_function.CLFunction: the compute function
         """
         kernel_source = self._get_state_update_cl_func(nmr_samples, thinning, return_output)
 

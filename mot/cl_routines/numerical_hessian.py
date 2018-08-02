@@ -1,9 +1,9 @@
 import itertools
 import numpy as np
 
-from mot.cl_function import SimpleCLFunction
-from mot.cl_runtime_info import CLRuntimeInfo
-from mot.kernel_data import LocalMemory, Array, Zeros
+from mot.lib.cl_function import SimpleCLFunction
+from mot.lib.cl_runtime_info import CLRuntimeInfo
+from mot.lib.kernel_data import LocalMemory, Array, Zeros
 from scipy import linalg
 
 
@@ -20,7 +20,7 @@ class NumericalHessian(object):
         """Base class for CL routines.
 
         Args:
-            cl_runtime_info (mot.cl_runtime_info.CLRuntimeInfo): the runtime information
+            cl_runtime_info (mot.lib.cl_runtime_info.CLRuntimeInfo): the runtime information
         """
         self._cl_runtime_info = cl_runtime_info or CLRuntimeInfo()
 
@@ -28,7 +28,7 @@ class NumericalHessian(object):
         """Update the CL runtime information.
 
         Args:
-            cl_runtime_info (mot.cl_runtime_info.CLRuntimeInfo): the new runtime information
+            cl_runtime_info (mot.lib.cl_runtime_info.CLRuntimeInfo): the new runtime information
         """
         self._cl_runtime_info = cl_runtime_info
 
@@ -60,7 +60,7 @@ class NumericalHessian(object):
         we use a second order Richardson extrapolation.
 
         Args:
-            model (mot.model_interfaces.NumericalDerivativeInterface): the model to use for calculating the
+            model (mot.lib.model_interfaces.NumericalDerivativeInterface): the model to use for calculating the
                 derivative.
             parameters (ndarray): The parameters at which to evaluate the gradient. A (d, p) matrix with d problems,
                 p parameters and n samples.
@@ -245,7 +245,7 @@ class NumericalHessian(object):
 
         Args:
             vectors (ndarray): for every problem (and step size) the 1d vector with results
-            matrices (ndarray): for every problem the 2d square matrix with the results placed in matrix form
+            nmr_params (int): the number of parameters
         """
         matrices = np.zeros(vectors.shape[:-1] + (nmr_params, nmr_params), dtype=vectors.dtype)
 
@@ -267,7 +267,7 @@ class NumericalHessian(object):
         for a parameter given its bounds.
 
         Args:
-            model (mot.model_interfaces.NumericalDerivativeInterface): the model to use for calculating the
+            model (mot.lib.model_interfaces.NumericalDerivativeInterface): the model to use for calculating the
                 derivative.
             parameters (ndarray): The parameters at which to evaluate the gradient. A (d, p) matrix with d problems,
                 p parameters and n samples.
