@@ -56,6 +56,9 @@
  */
 #define USER_TOL_X  30*MOT_EPSILON              /** the precision we break at*/
 
+/** The evaluation function we are expecting. */
+double %(FUNCTION_NAME)s(local mot_float_type* x, void* data_void);
+
 /*
  * Create the initial simplex.
  * This sets x_0 = x_input to allow for proper restarts and set the remaining vertices to the initial simplex scale.
@@ -101,10 +104,10 @@ void _libnms_initialize_function_values(
         int nmr_parameters,
         local mot_float_type* vertices, // [n+1,n],
         local mot_float_type* func_vals, // [n+1]
-        void* data
-){
+        void* data){
+
 	for (int j=0; j < nmr_parameters + 1; j++) {
-		func_vals[j] = %(EVALUATE_FNAME)s(vertices + j * nmr_parameters, data);
+		func_vals[j] = %(FUNCTION_NAME)s(vertices + j * nmr_parameters, data);
 	}
 }
 
@@ -239,17 +242,23 @@ bool _libnms_simplex_reflect(
 
     int j;
 
-    for (j=0; j< nmr_parameters;j++) {
-        tmp_vertex[j] = centroid[j] + alpha * (centroid[j] - vertices[ind_worst * nmr_parameters + j]);
+    if(get_local_id(0) == 0){
+        for (j=0; j< nmr_parameters;j++) {
+            tmp_vertex[j] = centroid[j] + alpha * (centroid[j] - vertices[ind_worst * nmr_parameters + j]);
+        }
     }
+    barrier(CLK_LOCAL_MEM_FENCE);
 
-    *reflection_fval = %(EVALUATE_FNAME)s(tmp_vertex, data);
+    *reflection_fval = %(FUNCTION_NAME)s(tmp_vertex, data);
 
     if(*reflection_fval < func_vals[ind_second_worst] && *reflection_fval >= func_vals[ind_best]){
-        for(j=0; j < nmr_parameters; j++){
-            vertices[ind_worst * nmr_parameters + j] = tmp_vertex[j];
+        if(get_local_id(0) == 0){
+            for(j=0; j < nmr_parameters; j++){
+                vertices[ind_worst * nmr_parameters + j] = tmp_vertex[j];
+            }
+            func_vals[ind_worst] = *reflection_fval;
         }
-        func_vals[ind_worst] = *reflection_fval;
+        barrier(CLK_LOCAL_MEM_FENCE);
         return 1;
     }
     return 0;
@@ -278,20 +287,29 @@ void _libnms_simplex_expand(
     int j;
     mot_float_type expansion_fval;
 
-    for (j=0; j < nmr_parameters; j++) {
-        vertices[ind_worst * nmr_parameters + j] = centroid[j] + gamma * (tmp_vertex[j] - centroid[j]);
+    if(get_local_id(0) == 0){
+        for (j=0; j < nmr_parameters; j++) {
+            vertices[ind_worst * nmr_parameters + j] = centroid[j] + gamma * (tmp_vertex[j] - centroid[j]);
+        }
     }
+    barrier(CLK_LOCAL_MEM_FENCE);
 
-    expansion_fval = %(EVALUATE_FNAME)s(vertices + ind_worst * nmr_parameters, data);
+    expansion_fval = %(FUNCTION_NAME)s(vertices + ind_worst * nmr_parameters, data);
 
     if (expansion_fval < reflection_fval){
-        func_vals[ind_worst] = expansion_fval;
+        if(get_local_id(0) == 0){
+            func_vals[ind_worst] = expansion_fval;
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
     }
     else {
-        for (j=0; j < nmr_parameters; j++) {
-            vertices[ind_worst * nmr_parameters + j] = tmp_vertex[j];
+        if(get_local_id(0) == 0){
+            for (j=0; j < nmr_parameters; j++) {
+                vertices[ind_worst * nmr_parameters + j] = tmp_vertex[j];
+            }
+            func_vals[ind_worst] = reflection_fval;
         }
-        func_vals[ind_worst] = reflection_fval;
+        barrier(CLK_LOCAL_MEM_FENCE);
     }
 }
 
@@ -336,7 +354,7 @@ bool _libnms_simplex_contract(
         }
     }
 
-    contraction_fval = %(EVALUATE_FNAME)s(tmp_vertex, data);
+    contraction_fval = %(FUNCTION_NAME)s(tmp_vertex, data);
 
     if (contraction_fval < func_vals[ind_worst]) {
         for (j=0; j < nmr_parameters; j++) {
@@ -388,7 +406,7 @@ int lib_nmsimplex(
     int i, j;        /** helper variables */
 	int itr;	      /* track the number of iterations */
 	double tmp;
-    double contraction_tolerance; /* used for the subplex convergence check */
+    local double contraction_tolerance; /* used for the subplex convergence check */
 
 	mot_float_type reflection_fval;      /* value of function at reflection point */
 
@@ -412,11 +430,14 @@ int lib_nmsimplex(
          */
         _libnms_find_worst_best_fvals(nmr_parameters, func_vals, &ind_worst, &ind_best);
 
-        for(i = 0; i < nmr_parameters; ++i){
-            contraction_tolerance += pown(vertices[ind_best * nmr_parameters + i]
-                                          - vertices[ind_worst * nmr_parameters + i], 2);
+        if(get_local_id(0) == 0){
+            for(i = 0; i < nmr_parameters; ++i){
+                contraction_tolerance += pown(vertices[ind_best * nmr_parameters + i]
+                                              - vertices[ind_worst * nmr_parameters + i], 2);
+            }
+            contraction_tolerance = sqrt(contraction_tolerance) * psi;
         }
-        contraction_tolerance = sqrt(contraction_tolerance) * psi;
+        barrier(CLK_LOCAL_MEM_FENCE);
     }
 
 	/* begin the main loop of the minimization */
@@ -466,13 +487,22 @@ int lib_nmsimplex(
 		}
 
         /* If we get here none of the other operations were successful, so we apply the shrink operation.*/
+        if(get_local_id(0) == 0){
+            for (i=0; i < nmr_parameters + 1;i++) {
+                if (i != ind_best) {
+                    for (j=0; j < nmr_parameters; j++) {
+                        vertices[i * nmr_parameters + j] =
+                            vertices[ind_best * nmr_parameters + j]
+                                + (vertices[i * nmr_parameters + j]-vertices[ind_best * nmr_parameters + j]) * delta;
+                    }
+                }
+            }
+        }
+	    barrier(CLK_LOCAL_MEM_FENCE);
+
         for (i=0; i < nmr_parameters + 1;i++) {
             if (i != ind_best) {
-                for (j=0; j < nmr_parameters; j++) {
-                    vertices[i * nmr_parameters + j] = vertices[ind_best * nmr_parameters + j] +
-                                    (vertices[i * nmr_parameters + j]-vertices[ind_best * nmr_parameters + j]) * delta;
-                }
-                func_vals[i] = %(EVALUATE_FNAME)s(vertices + i * nmr_parameters, data);
+                func_vals[i] = %(FUNCTION_NAME)s(vertices + i * nmr_parameters, data);
             }
         }
 	}
@@ -482,9 +512,12 @@ int lib_nmsimplex(
 	_libnms_find_worst_best_fvals(nmr_parameters, func_vals, &ind_worst, &ind_best);
 
     /** set the results */
-    for (j=0;j<nmr_parameters;j++) {
-		model_parameters[j] = vertices[ind_best * nmr_parameters + j];
+    if(get_local_id(0) == 0){
+	    for (j=0;j<nmr_parameters;j++) {
+            model_parameters[j] = vertices[ind_best * nmr_parameters + j];
+        }
 	}
+	barrier(CLK_LOCAL_MEM_FENCE);
 
     /* set fdiff to the difference between the largest and smallest vertex */
     *fdiff = func_vals[ind_worst] - func_vals[ind_best];

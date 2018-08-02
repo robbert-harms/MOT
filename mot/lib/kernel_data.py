@@ -447,6 +447,7 @@ class Zeros(KernelData):
 
         self._shape = shape
         self._data = None
+        self._backup_data_reference = None
         self._offset_str = offset_str
         self._is_writable = is_writable
         self._is_readable = is_readable
@@ -454,10 +455,26 @@ class Zeros(KernelData):
         self._mot_float_dtype = None
 
     def set_mot_float_dtype(self, mot_float_dtype):
-        dtype = ctype_to_dtype(self._ctype, mot_float_type=dtype_to_ctype(mot_float_dtype))
         self._mot_float_dtype = mot_float_dtype
-        self._data = np.zeros(self._shape, dtype=dtype)
-        self._data = np.require(self._data, requirements=self._requirements)
+
+        dtype = ctype_to_dtype(self._ctype, mot_float_type=dtype_to_ctype(mot_float_dtype))
+
+        if self._data is None:
+            self._data = np.zeros(self._shape, dtype=dtype)
+            self._data = np.require(self._data, requirements=self._requirements)
+
+        elif self._ctype.startswith('mot_float_type'):
+            if self._backup_data_reference is not None:
+                self._data = self._backup_data_reference
+                self._backup_data_reference = None
+
+            new_data = convert_data_to_dtype(self._data, self._ctype,
+                                             mot_float_type=dtype_to_ctype(mot_float_dtype))
+            new_data = np.require(new_data, requirements=self._requirements)
+
+            if new_data is not self._data:
+                self._backup_data_reference = self._data
+                self._data = new_data
 
     def _get_offset_str(self, problem_id_substitute):
         if self._offset_str is None:

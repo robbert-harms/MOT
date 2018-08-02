@@ -1,11 +1,7 @@
-import os
-
-from pkg_resources import resource_filename
-
 from mot.lib.cl_function import SimpleCLFunction
 from mot.lib.cl_runtime_info import CLRuntimeInfo
 from mot.lib.kernel_data import Array, Zeros, LocalMemory
-from mot.library_functions import LibNMSimplex
+from mot.library_functions import Powell, Subplex, NMSimplex, LevenbergMarquardt
 from mot.optimize.base import OptimizeResults
 
 __author__ = 'Robbert Harms'
@@ -77,8 +73,7 @@ def get_minimizer_options(method):
                 'adaptive_scales': True}
 
     elif method == 'Levenberg-Marquardt':
-        return {'patience': 250,
-                'step_bound': 100.0, 'scale_diag': 1, 'usertol_mult': 30}
+        return {'patience': 250, 'step_bound': 100.0, 'scale_diag': 1, 'usertol_mult': 30}
 
     elif method == 'Subplex':
         return {'patience': 10,
@@ -145,12 +140,7 @@ def _minimize_powell(model, x0, cl_runtime_info, options=None):
             return ''' + objective_function.get_cl_function_name() + '''(data, x, 0, data->_tmp_likelihoods);
         }
     '''
-
-    params = {'NMR_PARAMS': nmr_parameters}
-    for option, value in options.items():
-        params.update({option.upper(): value})
-    params['RESET_METHOD'] = 'POWELL_RESET_METHOD_' + params['RESET_METHOD'].upper()
-    cl_extra += (open(os.path.abspath(resource_filename('mot', 'data/opencl/powell.cl')), 'r').read() % params)
+    cl_extra += Powell('evaluate', nmr_parameters, **options).get_cl_code()
 
     optimizer_func = SimpleCLFunction.from_string('''
         void compute(mot_data_struct* data){
@@ -236,47 +226,12 @@ def _minimize_nmsimplex(model, x0, cl_runtime_info, options=None):
     objective_function = model.get_objective_function()
     cl_extra = objective_function.get_cl_code()
     cl_extra += '''
-            double evaluate(local mot_float_type* x, void* data_void){
-                mot_data_struct* data = (mot_data_struct*)data_void;
-                return ''' + objective_function.get_cl_function_name() + '''(data, x, 0, data->_tmp_likelihoods);
-            }
-        '''
-
-    params = {'NMR_PARAMS': nmr_parameters}
-    for option, value in options.items():
-        if option == 'scale':
-            s = ''
-            for ind in range(nmr_parameters):
-                s += 'initial_simplex_scale[{}] = {};'.format(ind, value)
-            params['INITIAL_SIMPLEX_SCALES'] = s
-        else:
-            params.update({option.upper(): value})
-
-    if options['adaptive_scales']:
-        params.update(
-            {'ALPHA': 1,
-             'BETA': 0.75 - 1.0 / (2 * nmr_parameters),
-             'GAMMA': 1 + 2.0 / nmr_parameters,
-             'DELTA': 1 - 1.0 / nmr_parameters}
-        )
-
-    lib_nmsimplex = LibNMSimplex(evaluate_fname='evaluate')
-    cl_extra += (lib_nmsimplex.get_cl_code() + '''
-        int nmsimplex(local mot_float_type* const model_parameters, void* data){
-            local mot_float_type initial_simplex_scale[%(NMR_PARAMS)r];
-            %(INITIAL_SIMPLEX_SCALES)s
-            
-            mot_float_type fdiff;
-            mot_float_type psi = 0;
-            local mot_float_type nmsimplex_scratch[
-                %(NMR_PARAMS)r * 2 + (%(NMR_PARAMS)r + 1) * (%(NMR_PARAMS)r + 1)];
-
-            return lib_nmsimplex(%(NMR_PARAMS)r, model_parameters, data, initial_simplex_scale,
-                                 &fdiff, psi, (int)(%(PATIENCE)r * (%(NMR_PARAMS)r+1)),
-                                 %(ALPHA)r, %(BETA)r, %(GAMMA)r, %(DELTA)r,
-                                 nmsimplex_scratch);
+        double evaluate(local mot_float_type* x, void* data_void){
+            mot_data_struct* data = (mot_data_struct*)data_void;
+            return ''' + objective_function.get_cl_function_name() + '''(data, x, 0, data->_tmp_likelihoods);
         }
-    ''' % params)
+    '''
+    cl_extra += NMSimplex('evaluate', nmr_parameters, **options).get_cl_code()
 
     optimizer_func = SimpleCLFunction.from_string('''
         void compute(mot_data_struct* data){
@@ -377,27 +332,7 @@ def _minimize_subplex(model, x0, cl_runtime_info, options=None):
             return ''' + objective_function.get_cl_function_name() + '''(data, x, 0, data->_tmp_likelihoods);
         }
     '''
-
-    params = {'NMR_PARAMS': nmr_parameters}
-    for option, value in options.items():
-        if option == 'scale':
-            s = ''
-            for ind in range(nmr_parameters):
-                s += 'initial_simplex_scale[{}] = {};'.format(ind, value)
-            params['INITIAL_SIMPLEX_SCALES'] = s
-        elif option == 'adaptive_scales':
-            params['ADAPTIVE_SCALES'] = int(bool(value))
-        else:
-            params.update({option.upper(): value})
-
-    if options['min_subspace_length'] == 'auto':
-        params.update({'MIN_SUBSPACE_LENGTH': min(2, nmr_parameters)})
-
-    if options['max_subspace_length'] == 'auto':
-        params.update({'MAX_SUBSPACE_LENGTH': min(5, nmr_parameters)})
-
-    cl_extra += (open(os.path.abspath(resource_filename('mot', 'data/opencl/subplex.cl')), 'r').read() % params)
-    cl_extra += LibNMSimplex(evaluate_fname='subspace_evaluate').get_cl_code()
+    cl_extra += Subplex('evaluate', nmr_parameters, **options).get_cl_code()
 
     optimizer_func = SimpleCLFunction.from_string('''
         void compute(mot_data_struct* data){
@@ -467,14 +402,7 @@ def _minimize_levenberg_marquardt(model, x0, cl_runtime_info, options=None):
             barrier(CLK_LOCAL_MEM_FENCE);
         }    
     '''
-
-    params = {'NMR_PARAMS': nmr_parameters, 'NMR_OBSERVATIONS': model.get_nmr_observations()}
-    for option, value in options.items():
-        if option == 'scale_diag':
-            params['SCALE_DIAG'] = int(bool(value))
-        else:
-            params.update({option.upper(): value})
-    cl_extra += (open(os.path.abspath(resource_filename('mot', 'data/opencl/lmmin.cl')), 'r').read() % params)
+    cl_extra += LevenbergMarquardt('evaluate', nmr_parameters, model.get_nmr_observations(), **options).get_cl_code()
 
     optimizer_func = SimpleCLFunction.from_string('''
         void compute(mot_data_struct* data){

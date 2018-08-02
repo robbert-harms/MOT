@@ -43,7 +43,7 @@ class SingleComponentAdaptiveMetropolis(AbstractRWMSampler):
 
         References:
             [1] Haario, H., Saksman, E., & Tamminen, J. (2005). Componentwise adaptation for high dimensional MCMC.
-                Computational Statistics, 20(2), 265–273. https://doi.org/10.1007/BF02789703
+                Computational Statistics, 20(2), 265-273. https://doi.org/10.1007/BF02789703
         """
         super(SingleComponentAdaptiveMetropolis, self).__init__(model, starting_positions, proposal_stds, **kwargs)
         self._waiting_period = waiting_period

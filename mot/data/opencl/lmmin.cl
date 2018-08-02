@@ -33,6 +33,9 @@ EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * Email = robbert.harms@maastrichtuniversity.nl
  */
 
+/** The evaluation function we are expecting. */
+void %(FUNCTION_NAME)s(local mot_float_type* x, void* data_void, local mot_float_type* result);
+
 /* function declarations. */
 void lm_lmpar( const int n,
                global mot_float_type * const r,
@@ -153,7 +156,7 @@ int lmmin(local mot_float_type * const x, void* data, global mot_float_type* fja
 
     /***  Evaluate function at starting point and calculate norm.  ***/
 
-    evaluate(x, data, fvec);
+    %(FUNCTION_NAME)s(x, data, fvec);
     nfev = 1;
     fnorm = lm_euclidian_norm(fvec, %(NMR_OBSERVATIONS)s);
     if (!isfinite(fnorm)) {
@@ -170,7 +173,7 @@ int lmmin(local mot_float_type * const x, void* data, global mot_float_type* fja
             temp = x[j];
             step = max(EPS*EPS, EPS * fabs(temp));
             x[j] += step; /* replace temporarily */
-            evaluate(x, data, wf);
+            %(FUNCTION_NAME)s(x, data, wf);
             ++nfev;
             for (i = 0; i < %(NMR_OBSERVATIONS)s; i++){
                 fjac[j*%(NMR_OBSERVATIONS)s+i] = (wf[i] - fvec[i]) / step;
@@ -315,7 +318,7 @@ int lmmin(local mot_float_type * const x, void* data, global mot_float_type* fja
                 wa2[j] = x[j] - wa1[j];
 			}
 
-            evaluate(wa2, data, wf);
+            %(FUNCTION_NAME)s(wa2, data, wf);
             ++nfev;
             fnorm1 = lm_euclidian_norm(wf, %(NMR_OBSERVATIONS)s);
             if(!isfinite(fnorm1)){

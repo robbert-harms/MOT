@@ -125,7 +125,7 @@ if __name__ == '__main__':
     x0 = np.ones((nmr_problems, nmr_params)) * 3
 
     # Minimize the parameters of the model given the starting points.
-    opt_output = minimize(model, x0)
+    opt_output = minimize(model, x0, options={'patience': 5})
 
     # Print the output
     print(opt_output['x'])

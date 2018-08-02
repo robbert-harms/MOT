@@ -239,8 +239,6 @@ class SimpleLoadBalanceStrategy(LoadBalanceStrategy):
                 total_nmr_problems += batch[1] - batch[0]
         problems_seen = 0
 
-        start_time = timeit.default_timer()
-
         for batch_nmr in range(most_nmr_batches):
 
             for worker_ind, worker in enumerate(workers):
@@ -258,10 +256,6 @@ class SimpleLoadBalanceStrategy(LoadBalanceStrategy):
             for worker_ind, worker in enumerate(workers):
                 if batch_nmr < len(batches[worker_ind]):
                     worker.post_process(int(batches[worker_ind][batch_nmr][0]), int(batches[worker_ind][batch_nmr][1]))
-
-            run_time = timeit.default_timer() - start_time
-            current_percentage = problems_seen / float(total_nmr_problems)
-            remaining_time = (run_time / current_percentage) - run_time
 
 
 class MetaLoadBalanceStrategy(SimpleLoadBalanceStrategy):

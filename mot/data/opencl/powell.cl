@@ -22,7 +22,7 @@
    References:
 
    [1] Powell, M. J. D. (1964). "An efficient method for finding the minimum of a function of several variables
-        without calculating derivatives". Computer Journal. 7 (2): 155–162. doi:10.1093/comjnl/7.2.155.
+        without calculating derivatives". Computer Journal. 7 (2): 155-162. doi:10.1093/comjnl/7.2.155.
    [2] Brent, Richard P. (1973). "Section 7.3: Powell's algorithm". Algorithms for minimization without derivatives.
         Englewood Cliffs, N.J.: Prentice-Hall. ISBN 0-486-41998-3.
 */
@@ -47,7 +47,7 @@
   */
 #define POWELL_RESET_METHOD_RESET_TO_IDENTITY 0 /* Resets the search vectors to the I(nxn) matrix after every cycle of N (N = number of parameters) */
 #define POWELL_RESET_METHOD_EXTRAPOLATED_POINT 1 /* see Numerical Recipes */
-#define POWELL_RESET_METHOD %(RESET_METHOD)s
+#define POWELL_RESET_METHOD POWELL_RESET_METHOD_%(RESET_METHOD)s
 
 
 /**
@@ -60,6 +60,10 @@ typedef struct{
     local const mot_float_type* const point_1;
     void* data;
 } linear_function_data;
+
+
+/** The evaluation function we are expecting. */
+double %(FUNCTION_NAME)s(local mot_float_type* x, void* data_void);
 
 
 void mnbrack(mot_float_type* ax, mot_float_type* bx, mot_float_type* cx,
@@ -182,7 +186,7 @@ double powell_linear_eval_function(mot_float_type x, void* eval_data){
     }
     barrier(CLK_LOCAL_MEM_FENCE);
 
-    return evaluate(xt, f_data.data);
+    return %(FUNCTION_NAME)s(xt, f_data.data);
 }
 
 
@@ -271,7 +275,7 @@ mot_float_type powell_evaluate_extrapolated(local mot_float_type* new_best_point
     }
     barrier(CLK_LOCAL_MEM_FENCE);
 
-    return evaluate(tmp, data);
+    return %(FUNCTION_NAME)s(tmp, data);
 }
 
 /**
@@ -312,7 +316,7 @@ int powell(local mot_float_type* model_parameters, void* data){
     local mot_float_type search_directions[%(NMR_PARAMS)r][%(NMR_PARAMS)r];
 
     powell_init_search_directions(search_directions);
-    mot_float_type fval = evaluate(model_parameters, data);
+    mot_float_type fval = %(FUNCTION_NAME)s(model_parameters, data);
 
     while(iteration++ < POWELL_MAX_ITERATIONS){
         fval_at_start_of_iteration = fval;
@@ -467,7 +471,7 @@ void mnbrack(mot_float_type* ax, mot_float_type* bx, mot_float_type* cx,
  * Line search using Brent's method.
  * Given a function f, and given a bracketing triplet of abscissas ax, bx, cx (such that bx is between ax and cx,
  * and f(bx) is less than both f(ax) and (cx)), this routine isolates the minimum to a fractional precision of about
- * tol using Brent’s method. The abscissa of the minimum is returned as xmin, and the minimum function value is
+ * tol using Brent's method. The abscissa of the minimum is returned as xmin, and the minimum function value is
  * returned as fmin.
  *
  * The return value signifies the return code.
