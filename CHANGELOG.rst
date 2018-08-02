@@ -2,6 +2,13 @@
 Changelog
 *********
 
+v0.5.6 (2018-08-02)
+===================
+- Made the optimizers work better with the local reduction.
+- Removed some non-ascii characters for compatibility.
+- Bugfix to allow using more than one device.
+
+
 v0.5.5 (2018-08-02)
 ===================
 
