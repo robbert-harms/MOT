@@ -2,6 +2,22 @@
 Changelog
 *********
 
+v0.5.5 (2018-08-02)
+===================
+
+Changed
+-------
+- Changed the optimization routines such that they use local memory reduction when evaluating the model. This generally speeds up optimization by 2~5 times.
+- Refactored the model interface such that it has the function get_objective_function, instead of objective per observation.
+- Restructured the methods to follow more the layout of numpy and scipy.
+
+Other
+-----
+- Removed get_nmr_parameters and get_nmr_problems from the model interface. This information is already implicit in the starting points.
+- Removed the multi-step optimizer and the random restart optimizer.
+- Removed NameFunctionTuple, adds parser for CL functions as a string.
+
+
 v0.5.4 (2018-07-17)
 ===================
 
