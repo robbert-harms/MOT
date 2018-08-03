@@ -41,9 +41,6 @@ class GermanTanks(SampleModelInterface):
                 'lower_bounds': Array(np.max(self.observed_tanks, axis=1), 'uint'),
                 'upper_bounds': Array(self.upper_bounds, 'uint')}
 
-    def get_nmr_observations(self):
-        return self.observed_tanks.shape[1]
-
     def get_log_likelihood_function(self):
         """Used in Bayesian sample."""
         return SimpleCLFunction.from_string('''
@@ -54,7 +51,7 @@ class GermanTanks(SampleModelInterface):
                 uint nmr_tanks = (uint)round(x[0]);
                 double sum = 0;
                 double eval;
-                for(uint i = 0; i < ''' + str(self.get_nmr_observations()) + ''' - 1; i++){
+                for(uint i = 0; i < ''' + str(self.observed_tanks.shape[1]) + ''' - 1; i++){
                     eval = discrete_uniform(data->observed_tanks[i], 1, nmr_tanks);
                     sum += eval;
                 }

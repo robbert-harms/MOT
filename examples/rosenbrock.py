@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from mot.optimize import minimize
 from mot.lib.cl_function import SimpleCLFunction
 from mot.sample import AdaptiveMetropolisWithinGibbs
-from mot.lib.model_interfaces import SampleModelInterface, OptimizeModelInterface
+from mot.lib.model_interfaces import SampleModelInterface
 
 __author__ = 'Robbert Harms'
 __date__ = '2018-04-04'
@@ -12,7 +12,7 @@ __email__ = 'robbert.harms@maastrichtuniversity.nl'
 __licence__ = 'LGPL v3'
 
 
-class Rosenbrock(OptimizeModelInterface, SampleModelInterface):
+class Rosenbrock(SampleModelInterface):
 
     def __init__(self, nmr_problems, nmr_params):
         """MOT model definition of the multidimensional generalized Rosenbrock function.
@@ -33,7 +33,7 @@ class Rosenbrock(OptimizeModelInterface, SampleModelInterface):
             nmr_problems (int): the number of parallel optimization or sample chains
             nmr_params (int): the number of Rosenbrock parameters
         """
-        super(SampleModelInterface, self).__init__()
+        super().__init__()
         self.nmr_problems = nmr_problems
         self.nmr_params = nmr_params
 
@@ -41,9 +41,6 @@ class Rosenbrock(OptimizeModelInterface, SampleModelInterface):
     ## Methods used for both optimization and sample ##
     def get_kernel_data(self):
         return {}
-
-    def get_nmr_observations(self):
-        return self.nmr_params
 
 
     ## Methods used for optimization ##
@@ -57,7 +54,7 @@ class Rosenbrock(OptimizeModelInterface, SampleModelInterface):
                 
                 double sum = 0;
                 double eval;
-                for(uint i = 0; i < ''' + str(self.get_nmr_observations()) + ''' - 1; i++){
+                for(uint i = 0; i < ''' + str(self.nmr_params) + ''' - 1; i++){
                     eval = 100 * pown(x[i + 1] - pown(x[i], 2), 2) + pown(1 - x[i], 2);
                     sum += eval;
                     
@@ -68,12 +65,6 @@ class Rosenbrock(OptimizeModelInterface, SampleModelInterface):
                 return sum;
             }
         ''')
-
-    def get_lower_bounds(self):
-        return [-np.inf] * self.nmr_params
-
-    def get_upper_bounds(self):
-        return [np.inf] * self.nmr_params
 
 
     ## Methods used for sample ##
@@ -87,7 +78,7 @@ class Rosenbrock(OptimizeModelInterface, SampleModelInterface):
                 
                 double sum = 0;
                 double eval;
-                for(uint i = 0; i < ''' + str(self.get_nmr_observations()) + ''' - 1; i++){
+                for(uint i = 0; i < ''' + str(self.nmr_params) + ''' - 1; i++){
                     eval = -(100 * pown(x[i + 1] - pown(x[i], 2), 2) + pown(1 - x[i], 2));
                     sum += eval;
                 }
@@ -125,7 +116,7 @@ if __name__ == '__main__':
     x0 = np.ones((nmr_problems, nmr_params)) * 3
 
     # Minimize the parameters of the model given the starting points.
-    opt_output = minimize(model, x0, options={'patience': 5})
+    opt_output = minimize(model.get_objective_function(), x0, options={'patience': 5})
 
     # Print the output
     print(opt_output['x'])

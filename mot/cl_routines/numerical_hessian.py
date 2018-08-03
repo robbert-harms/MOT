@@ -32,7 +32,8 @@ class NumericalHessian(object):
         """
         self._cl_runtime_info = cl_runtime_info
 
-    def calculate(self, model, parameters, step_ratio=2, nmr_steps=15, step_offset=None):
+    def calculate(self, model, parameters, lower_bounds, upper_bounds,
+                  step_ratio=2, nmr_steps=15, step_offset=None):
         """Calculate and return the Hessian of the given function at the given parameters.
 
         This calculates the Hessian using central difference (using a 2nd order Taylor expansion) with a Richardson
@@ -64,6 +65,12 @@ class NumericalHessian(object):
                 derivative.
             parameters (ndarray): The parameters at which to evaluate the gradient. A (d, p) matrix with d problems,
                 p parameters and n samples.
+            lower_bounds (list): a list of length (p,) for p parameters with the lower bounds.
+                Each element of the list can be a scalar or a vector (of the same length as the number of
+                problem instances). For infinity use np.inf.
+            upper_bounds (list): a list of length (p,) for p parameters with the upper bounds.
+                Each element of the list can be a scalar or a vector (of the same length as the number of
+                problem instances). For infinity use np.inf.
             step_ratio (float): the ratio at which the steps diminish.
             nmr_steps (int): the number of steps we will generate. We will calculate the derivative for each of these
                 step sizes and extrapolate the best step size from among them. The minimum number of steps is 2.
@@ -83,7 +90,8 @@ class NumericalHessian(object):
             return self._results_vector_to_matrix(derivatives, nmr_params) \
                    * np.outer(parameter_scalings, parameter_scalings)
 
-        derivatives = self._compute_derivatives(model, parameters, step_ratio, step_offset, nmr_steps)
+        derivatives = self._compute_derivatives(model, parameters, step_ratio, step_offset, nmr_steps,
+                                                lower_bounds, upper_bounds)
 
         if nmr_steps == 1:
             return finalize_derivatives(derivatives[..., 0])
@@ -102,7 +110,8 @@ class NumericalHessian(object):
         derivatives, errors = self._median_outlier_extrapolation(derivatives, errors)
         return finalize_derivatives(derivatives)
 
-    def _compute_derivatives(self, model, parameters, step_ratio, step_offset, nmr_steps):
+    def _compute_derivatives(self, model, parameters, step_ratio, step_offset, nmr_steps,
+                             lower_bounds, upper_bounds):
         """Compute the lower triangular elements of the Hessian using the central difference method.
 
         This will compute the elements of the Hessian multiple times with decreasing step sizes.
@@ -114,13 +123,15 @@ class NumericalHessian(object):
             step_ratio (float): the ratio at which the steps exponentially diminish
             step_offset (int): ignore the first few step sizes by this offset
             nmr_steps (int): the number of steps to compute and return (after the step offset)
+            lower_bounds (list): lower bounds
+            upper_bounds (list): upper bounds
         """
         parameter_scalings = np.array(model.numdiff_get_scaling_factors())
 
         nmr_params = parameters.shape[1]
         nmr_derivatives = (nmr_params ** 2 - nmr_params) // 2 + nmr_params
 
-        initial_step = self._get_initial_step_size(model, parameters)
+        initial_step = self._get_initial_step_size(model, parameters, lower_bounds, upper_bounds)
         if step_offset:
             initial_step *= float(step_ratio) ** -step_offset
 
@@ -260,7 +271,7 @@ class NumericalHessian(object):
                 ltr_ind += 1
         return matrices
 
-    def _get_initial_step_size(self, model, parameters):
+    def _get_initial_step_size(self, model, parameters, lower_bounds, upper_bounds):
         """Get an initial step size to use for every parameter.
 
         This chooses the maximum of the maximum step defined in the model and the minimum step possible
@@ -275,9 +286,6 @@ class NumericalHessian(object):
         Returns:
             ndarray: for every problem instance the vector with the initial step size for each parameter.
         """
-        upper_bounds = model.get_upper_bounds()
-        lower_bounds = model.get_lower_bounds()
-
         max_step = model.numdiff_get_max_step()
 
         initial_step = np.zeros_like(parameters)

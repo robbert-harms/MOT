@@ -23,60 +23,6 @@ class ModelBasicInfoInterface(object):
         """
         raise NotImplementedError()
 
-    def get_nmr_observations(self):
-        """Get the number of instances/data points per problem.
-
-        The minimum is one instance per problem.
-
-        This number represents the number of data points
-
-        Returns:
-            int: the number of instances per problem.
-        """
-        raise NotImplementedError()
-
-
-class OptimizeModelInterface(ModelBasicInfoInterface):
-
-    def get_objective_function(self):
-        """Get the objective function that returns the objective value and optionally, the objectives per observation.
-
-        In the case that any of the objective lists are non-null pointers, they should be filled with the
-        objective function values per observation.
-
-        Returns:
-            mot.lib.cl_function.CLFunction: A CL function with signature:
-
-                .. code-block:: c
-
-                    double <func_name>(mot_data_struct* data,
-                                       local const mot_float_type* const x,
-                                       local mot_float_type* objective_list,
-                                       local double* objective_value_tmp);
-
-                The objective list needs to be filled when the pointer is not null.
-                This method should use the given local memory for the summation reduction.
-        """
-        raise NotImplementedError()
-
-    def get_lower_bounds(self):
-        """Get for each estimable parameter the lower bounds.
-
-        Returns:
-            list: For every estimable parameter a scalar or vector with the the lower bound(s) for that parameter.
-                For infinity use np.inf.
-        """
-        raise NotImplementedError()
-
-    def get_upper_bounds(self):
-        """Get for each estimable parameter the upper bounds.
-
-        Returns:
-            list: For every estimable parameter a scalar or vector with the the upper bound(s) for that parameter.
-                For infinity use np.inf.
-        """
-        raise NotImplementedError()
-
 
 class SampleModelInterface(ModelBasicInfoInterface):
 
@@ -140,13 +86,34 @@ class SampleModelInterface(ModelBasicInfoInterface):
             '')
 
 
-class NumericalDerivativeInterface(OptimizeModelInterface):
+class NumericalDerivativeInterface(ModelBasicInfoInterface):
     """Extends an optimization model for calculating numerical derivatives of the objective function.
 
     For calculating derivatives (gradients / Hessians) numerically, we need a likelihood function and some additional
     information, like the step size for each parameter, a method for checking boundary conditions and possible parameter
     transformations for circular parameters. All these extra elements are represented in this interface.
     """
+
+    def get_objective_function(self):
+        """Get the objective function that returns the objective value and optionally, the objectives per observation.
+
+        In the case that any of the objective lists are non-null pointers, they should be filled with the
+        objective function values per observation.
+
+        Returns:
+            mot.lib.cl_function.CLFunction: A CL function with signature:
+
+                .. code-block:: c
+
+                    double <func_name>(mot_data_struct* data,
+                                       local const mot_float_type* const x,
+                                       local mot_float_type* objective_list,
+                                       local double* objective_value_tmp);
+
+                The objective list needs to be filled when the pointer is not null.
+                This method should use the given local memory for the summation reduction.
+        """
+        raise NotImplementedError()
 
     def numdiff_get_max_step(self):
         """Get for each estimable parameter the maximum step size to use for calculating numerical derivatives.

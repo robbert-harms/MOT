@@ -84,19 +84,30 @@ def compute_log_likelihood(model, parameters, cl_runtime_info=None):
     return all_kernel_data['log_likelihoods'].get_data()
 
 
-def compute_objective_value(model, parameters, cl_runtime_info=None):
+def compute_objective_value(objective_func, parameters, data=None, cl_runtime_info=None):
     """Calculate and return the objective function value of the given model for the given parameters.
 
     Args:
-        model (AbstractModel): The model to calculate the objective function for
+        objective_func (mot.lib.cl_function.CLFunction): A CL function with the signature:
+
+            .. code-block:: c
+
+                double <func_name>(mot_data_struct* data,
+                                   local const mot_float_type* const x,
+                                   local mot_float_type* objective_list,
+                                   local double* objective_value_tmp);
+
+            The objective list needs to be filled when the provided pointer is not null.
+            The objective_value_tmp is provided for local sum reduction and can not be counted on to persist.
         parameters (ndarray): The parameters to use in the evaluation of the model, an (d, p) matrix
             with d problems and p parameters.
+        data (Dict[str, mot.lib.utils.KernelData]): a dictionary of input data objects we need to load into the kernel,
+            can be nested.
         cl_runtime_info (mot.lib.cl_runtime_info.CLRuntimeInfo): the runtime information
 
     Returns:
         ndarray: vector matrix with per problem the objective function value
     """
-    objective_func = model.get_objective_function()
     nmr_params = parameters.shape[1]
 
     cl_function = SimpleCLFunction.from_string('''
@@ -116,7 +127,7 @@ def compute_objective_value(model, parameters, cl_runtime_info=None):
        }
    ''', dependencies=[objective_func])
 
-    all_kernel_data = dict(model.get_kernel_data())
+    all_kernel_data = dict(data or {})
     all_kernel_data.update({
         'parameters': Array(parameters),
         'objective_values': Zeros((parameters.shape[0],), 'mot_float_type'),

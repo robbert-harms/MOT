@@ -11,12 +11,28 @@ __email__ = 'robbert.harms@maastrichtuniversity.nl'
 __licence__ = 'LGPL v3'
 
 
-def minimize(model, x0, method=None, cl_runtime_info=None, options=None):
+def minimize(func, x0, data=None, method=None, nmr_observations=None, cl_runtime_info=None, options=None):
     """Minimization of scalar function of one or more variables.
 
     Args:
-        model (mot.lib.model_interfaces.OptimizeModelInterface): the model we want to optimize
-        x0 (ndarray): Initial guess. Array of real elements of size (n, p), for 'n' problems and 'p' independent variables.
+        func (mot.lib.cl_function.CLFunction): A CL function with the signature:
+
+            .. code-block:: c
+
+                double <func_name>(mot_data_struct* data,
+                                   local const mot_float_type* const x,
+                                   local mot_float_type* objective_list,
+                                   local double* objective_value_tmp);
+
+            The objective list needs to be filled when the provided pointer is not null. It should contain
+            the function values for each observation. This list is used by non-linear least-squares routines,
+            and will be squared by the least-square optimizer. This is only used by the ``Levenberg-Marquardt`` routine.
+            The objective_value_tmp is provided for local sum reduction and can not be counted on to persist.
+
+        x0 (ndarray): Initial guess. Array of real elements of size (n, p), for 'n' problems and 'p'
+            independent variables.
+        data (Dict[str, mot.lib.utils.KernelData]): a dictionary of input data objects we need to load into the kernel,
+            can be nested.
         method (str): Type of solver.  Should be one of:
             - 'Levenberg-Marquardt'
             - 'Nelder-Mead'
@@ -25,6 +41,8 @@ def minimize(model, x0, method=None, cl_runtime_info=None, options=None):
 
             If not given, defaults to 'Powell'.
 
+        nmr_observations (int): the number of observations returned by the optimization function.
+            This is only needed for the ``Levenberg-Marquardt`` method.
         cl_runtime_info (mot.lib.cl_runtime_info.CLRuntimeInfo): the CL runtime information
         options (dict): A dictionary of solver options. All methods accept the following generic options:
                 patience (int): Maximum number of iterations to perform.
@@ -43,13 +61,13 @@ def minimize(model, x0, method=None, cl_runtime_info=None, options=None):
         x0 = x0[..., None]
 
     if method == 'Powell':
-        return _minimize_powell(model, x0, cl_runtime_info, options)
+        return _minimize_powell(func, x0, cl_runtime_info, data, options)
     elif method == 'Nelder-Mead':
-        return _minimize_nmsimplex(model, x0, cl_runtime_info, options)
+        return _minimize_nmsimplex(func, x0, cl_runtime_info, data, options)
     elif method == 'Levenberg-Marquardt':
-        return _minimize_levenberg_marquardt(model, x0, cl_runtime_info, options)
+        return _minimize_levenberg_marquardt(func, x0, nmr_observations, cl_runtime_info, data, options)
     elif method == 'Subplex':
-        return _minimize_subplex(model, x0, cl_runtime_info, options)
+        return _minimize_subplex(func, x0, cl_runtime_info, data, options)
     raise ValueError('Could not find the specified method "{}".'.format(method))
 
 
@@ -112,7 +130,7 @@ def _clean_options(method, provided_options):
     return result
 
 
-def _minimize_powell(model, x0, cl_runtime_info, options=None):
+def _minimize_powell(func, x0, cl_runtime_info, data=None, options=None):
     """
     Options:
         patience (int): Used to set the maximum number of iterations to patience*(number_of_parameters+1)
@@ -125,19 +143,18 @@ def _minimize_powell(model, x0, cl_runtime_info, options=None):
     nmr_problems = x0.shape[0]
     nmr_parameters = x0.shape[1]
 
-    all_kernel_data = dict(model.get_kernel_data())
+    all_kernel_data = dict(data or {})
     all_kernel_data.update({
         '_parameters': Array(x0, ctype='mot_float_type', is_writable=True, is_readable=True),
         '_return_codes': Zeros((nmr_problems,), ctype='char', is_readable=False, is_writable=True),
         '_tmp_likelihoods': LocalMemory('double')
     })
 
-    objective_function = model.get_objective_function()
-    cl_extra = objective_function.get_cl_code()
+    cl_extra = func.get_cl_code()
     cl_extra += '''
         double evaluate(local mot_float_type* x, void* data_void){
             mot_data_struct* data = (mot_data_struct*)data_void;
-            return ''' + objective_function.get_cl_function_name() + '''(data, x, 0, data->_tmp_likelihoods);
+            return ''' + func.get_cl_function_name() + '''(data, x, 0, data->_tmp_likelihoods);
         }
     '''
     cl_extra += Powell('evaluate', nmr_parameters, **options).get_cl_code()
@@ -173,7 +190,7 @@ def _minimize_powell(model, x0, cl_runtime_info, options=None):
                             'status': all_kernel_data['_return_codes'].get_data()})
 
 
-def _minimize_nmsimplex(model, x0, cl_runtime_info, options=None):
+def _minimize_nmsimplex(func, x0, cl_runtime_info, data=None, options=None):
     """Use the Nelder-Mead simplex method to calculate the optimimum.
 
     The scales should satisfy the following constraints:
@@ -216,19 +233,18 @@ def _minimize_nmsimplex(model, x0, cl_runtime_info, options=None):
     nmr_problems = x0.shape[0]
     nmr_parameters = x0.shape[1]
 
-    all_kernel_data = dict(model.get_kernel_data())
+    all_kernel_data = dict(data or {})
     all_kernel_data.update({
         '_parameters': Array(x0, ctype='mot_float_type', is_writable=True, is_readable=True),
         '_return_codes': Zeros((nmr_problems,), ctype='char', is_readable=False, is_writable=True),
         '_tmp_likelihoods': LocalMemory('double')
     })
 
-    objective_function = model.get_objective_function()
-    cl_extra = objective_function.get_cl_code()
+    cl_extra = func.get_cl_code()
     cl_extra += '''
         double evaluate(local mot_float_type* x, void* data_void){
             mot_data_struct* data = (mot_data_struct*)data_void;
-            return ''' + objective_function.get_cl_function_name() + '''(data, x, 0, data->_tmp_likelihoods);
+            return ''' + func.get_cl_function_name() + '''(data, x, 0, data->_tmp_likelihoods);
         }
     '''
     cl_extra += NMSimplex('evaluate', nmr_parameters, **options).get_cl_code()
@@ -264,7 +280,7 @@ def _minimize_nmsimplex(model, x0, cl_runtime_info, options=None):
                             'status': all_kernel_data['_return_codes'].get_data()})
 
 
-def _minimize_subplex(model, x0, cl_runtime_info, options=None):
+def _minimize_subplex(func, x0, cl_runtime_info, data=None, options=None):
     """Variation on the Nelder-Mead Simplex method by Thomas H. Rowan.
 
     This method uses NMSimplex to search subspace regions for the minimum. See Rowan's thesis titled
@@ -317,19 +333,18 @@ def _minimize_subplex(model, x0, cl_runtime_info, options=None):
     nmr_problems = x0.shape[0]
     nmr_parameters = x0.shape[1]
 
-    all_kernel_data = dict(model.get_kernel_data())
+    all_kernel_data = dict(data or {})
     all_kernel_data.update({
         '_parameters': Array(x0, ctype='mot_float_type', is_writable=True, is_readable=True),
         '_return_codes': Zeros((nmr_problems,), ctype='char', is_readable=False, is_writable=True),
         '_tmp_likelihoods': LocalMemory('double')
     })
 
-    objective_function = model.get_objective_function()
-    cl_extra = objective_function.get_cl_code()
+    cl_extra = func.get_cl_code()
     cl_extra += '''
         double evaluate(local mot_float_type* x, void* data_void){
             mot_data_struct* data = (mot_data_struct*)data_void;
-            return ''' + objective_function.get_cl_function_name() + '''(data, x, 0, data->_tmp_likelihoods);
+            return ''' + func.get_cl_function_name() + '''(data, x, 0, data->_tmp_likelihoods);
         }
     '''
     cl_extra += Subplex('evaluate', nmr_parameters, **options).get_cl_code()
@@ -365,44 +380,32 @@ def _minimize_subplex(model, x0, cl_runtime_info, options=None):
                             'status': all_kernel_data['_return_codes'].get_data()})
 
 
-def _minimize_levenberg_marquardt(model, x0, cl_runtime_info, options=None):
+def _minimize_levenberg_marquardt(func, x0, nmr_observations, cl_runtime_info, data=None, options=None):
     options = _clean_options('Levenberg-Marquardt', options)
 
     nmr_problems = x0.shape[0]
     nmr_parameters = x0.shape[1]
 
-    if model.get_nmr_observations() < x0.shape[1]:
+    if nmr_observations < x0.shape[1]:
         raise ValueError('The number of instances per problem must be greater than the number of parameters')
 
-    all_kernel_data = dict(model.get_kernel_data())
+    all_kernel_data = dict(data or {})
     all_kernel_data.update({
         '_parameters': Array(x0, ctype='mot_float_type', is_writable=True, is_readable=True),
         '_return_codes': Zeros((nmr_problems,), ctype='char', is_readable=False, is_writable=True),
         '_tmp_likelihoods': LocalMemory('double'),
-        '_fjac_all': Zeros((nmr_problems,
-                            nmr_parameters,
-                            model.get_nmr_observations()), ctype='mot_float_type',
-                           is_writable=True, is_readable=True)
+        '_fjac_all': Zeros((nmr_problems, nmr_parameters, nmr_observations),
+                           ctype='mot_float_type', is_writable=True, is_readable=True)
     })
 
-    objective_function = model.get_objective_function()
-    cl_extra = objective_function.get_cl_code()
+    cl_extra = func.get_cl_code()
     cl_extra += '''
         void evaluate(local mot_float_type* x, void* data_void, local mot_float_type* result){
             mot_data_struct* data = (mot_data_struct*)data_void;
-            
-            ''' + objective_function.get_cl_function_name() + '''(data, x, result, data->_tmp_likelihoods);
-            
-            // The LM method automatically squares the results, but the model also already does this.
-            if(get_local_id(0) == 0){
-                for(uint i = 0; i < ''' + str(model.get_nmr_observations()) + '''; i++){
-                    result[i] = sqrt(fabs(result[i]));
-                }
-            }
-            barrier(CLK_LOCAL_MEM_FENCE);
+            ''' + func.get_cl_function_name() + '''(data, x, result, data->_tmp_likelihoods);
         }    
     '''
-    cl_extra += LevenbergMarquardt('evaluate', nmr_parameters, model.get_nmr_observations(), **options).get_cl_code()
+    cl_extra += LevenbergMarquardt('evaluate', nmr_parameters, nmr_observations, **options).get_cl_code()
 
     optimizer_func = SimpleCLFunction.from_string('''
         void compute(mot_data_struct* data){
