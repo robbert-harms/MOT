@@ -2,10 +2,10 @@ import logging
 from contextlib import contextmanager
 
 from mot.lib.cl_function import SimpleCLFunction
-from mot.lib.cl_runtime_info import CLRuntimeInfo
+from mot.configuration import CLRuntimeInfo
 from mot.library_functions import Rand123
 from mot.lib.utils import split_in_batches
-from mot.lib.kernel_data import Scalar, LocalMemory, Array, \
+from mot.lib.kernel_data import Scalar, Array, \
     Zeros
 import numpy as np
 
@@ -18,27 +18,44 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class AbstractSampler(object):
 
-    def __init__(self, model, starting_positions, cl_runtime_info=None, **kwargs):
+    def __init__(self, ll_func, log_prior_func, x0, data=None, cl_runtime_info=None, **kwargs):
         """Abstract base class for sample routines.
 
-        Sampling routines implementing this interface should be stateful objects that, for the given model, keep track
-        of the sample state over multiple calls to :meth:`sample`.
+        Sampling routines implementing this interface should be stateful objects that, for the given likelihood
+        and prior, keep track of the sample state over multiple calls to :meth:`sample`.
 
         Args:
-            model (SampleModelInterface): the model to sample.
-            starting_positions (ndarray): the starting positions for the sampler. Should be a two dimensional matrix
+            ll_func (mot.lib.cl_function.CLFunction): The log-likelihood function. A CL function with the signature:
+
+                .. code-block:: c
+
+                        double <func_name>(local const mot_float_type* const x,
+                                           mot_data_struct* data);
+
+            log_prior_func (mot.lib.cl_function.CLFunction): The log-prior function. A CL function with the signature:
+
+                .. code-block:: c
+
+                    mot_float_type <func_name>(local const mot_float_type* const x,
+                                               mot_data_struct* data);
+
+            x0 (ndarray): the starting positions for the sampler. Should be a two dimensional matrix
                 with for every modeling instance (first dimension) and every parameter (second dimension) a value.
+            data (Dict[str, mot.lib.utils.KernelData]): a dictionary of input data objects we need to load into the
+                kernel, can be nested.
         """
         self._cl_runtime_info = cl_runtime_info or CLRuntimeInfo()
         self._logger = logging.getLogger(__name__)
-        self._model = model
-        self._starting_positions = starting_positions
-        if len(starting_positions.shape) < 2:
-            self._starting_positions = self._starting_positions[..., None]
-        self._nmr_problems = self._starting_positions.shape[0]
-        self._nmr_params = self._starting_positions.shape[1]
+        self._ll_func = ll_func
+        self._log_prior_func = log_prior_func
+        self._data = dict(data or {})
+        self._x0 = x0
+        if len(x0.shape) < 2:
+            self._x0 = self._x0[..., None]
+        self._nmr_problems = self._x0.shape[0]
+        self._nmr_params = self._x0.shape[1]
         self._sampling_index = 0
-        self._current_chain_position = np.require(np.copy(self._starting_positions),
+        self._current_chain_position = np.require(np.copy(self._x0),
                                                   requirements=['C', 'A', 'O', 'W'],
                                                   dtype=self._cl_runtime_info.mot_float_dtype)
         self._rng_state = np.random.uniform(low=np.iinfo(np.uint32).min, high=np.iinfo(np.uint32).max + 1,
@@ -48,12 +65,12 @@ class AbstractSampler(object):
         """Update the CL runtime information.
 
         Args:
-            cl_runtime_info (mot.lib.cl_runtime_info.CLRuntimeInfo): the new runtime information
+            cl_runtime_info (mot.configuration.CLRuntimeInfo): the new runtime information
         """
         self._cl_runtime_info = cl_runtime_info
 
     def sample(self, nmr_samples, burnin=0, thinning=1):
-        """Take additional samples from the given model using this sampler.
+        """Take additional samples from the given likelihood and prior, using this sampler.
 
         This method can be called multiple times in which the sample state is stored in between.
 
@@ -110,13 +127,12 @@ class AbstractSampler(object):
     def _get_kernel_data(self, nmr_samples, thinning, return_output):
         """Get the kernel data we will input to the MCMC sampler.
 
-        By default, this will take the kernel data from the model and add to that the items:
+        By default, this will take the provided kernel data and add to that the items:
 
         * _nmr_iterations: the number of iterations to sample
         * _iteration_offset: the current sample index, that is, the offset to the given number of iterations
         * _rng_state: the random number generator state
         * _current_chain_position: the current position of the sampled chain
-        * _log_likelihood_tmp: an OpenCL local array for combining the log likelihoods
 
         Additionally, if ``return_output`` is True, we add to that the arrays:
 
@@ -132,22 +148,21 @@ class AbstractSampler(object):
         Returns:
             dict[str: mot.lib.utils.KernelData]: the kernel input data
         """
-        kernel_data = dict(self._model.get_kernel_data())
+        kernel_data = {}
+        kernel_data.update(self._data)
         kernel_data.update({
             '_nmr_iterations': Scalar(nmr_samples * thinning, ctype='ulong'),
             '_iteration_offset': Scalar(self._sampling_index, ctype='ulong'),
-            '_rng_state': Array(self._rng_state, 'uint', is_writable=True, ensure_zero_copy=True),
+            '_rng_state': Array(self._rng_state, 'uint', mode='rw', ensure_zero_copy=True),
             '_current_chain_position': Array(self._current_chain_position, 'mot_float_type',
-                                             is_writable=True, ensure_zero_copy=True),
-            '_log_likelihood_tmp': LocalMemory('double')
+                                             mode='rw', ensure_zero_copy=True)
         })
 
         if return_output:
             kernel_data.update({
-                '_samples': Zeros((self._nmr_problems, self._nmr_params, nmr_samples),
-                                                       'mot_float_type'),
-                '_log_likelihoods': Zeros((self._nmr_problems, nmr_samples), 'mot_float_type'),
-                '_log_priors': Zeros((self._nmr_problems, nmr_samples), 'mot_float_type'),
+                '_samples': Zeros((self._nmr_problems, self._nmr_params, nmr_samples), ctype='mot_float_type'),
+                '_log_likelihoods': Zeros((self._nmr_problems, nmr_samples), ctype='mot_float_type'),
+                '_log_priors': Zeros((self._nmr_problems, nmr_samples), ctype='mot_float_type'),
             })
         return kernel_data
 
@@ -189,11 +204,11 @@ class AbstractSampler(object):
                     for(uint i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                         current_position[i] = data->_current_chain_position[i];
                     }
-                    current_prior = _computeLogPrior(data, current_position);
+                    current_prior = _computeLogPrior(current_position, data);
                 }
                 barrier(CLK_LOCAL_MEM_FENCE);
     
-                current_likelihood = _computeLogLikelihood(data, current_position, data->_log_likelihood_tmp);
+                current_likelihood = _computeLogLikelihood(current_position, data);
     
                 for(ulong i = 0; i < data->_nmr_iterations; i++){
         '''
@@ -215,7 +230,7 @@ class AbstractSampler(object):
         '''
         cl_func += '''
                     _advanceSampler(data, i + data->_iteration_offset, rng_data, 
-                                    current_position, &current_likelihood, &current_prior, data->_log_likelihood_tmp);
+                                    current_position, &current_likelihood, &current_prior);
                 }
 
                 if(is_first_work_item){
@@ -255,8 +270,7 @@ class AbstractSampler(object):
                                      void* rng_data,
                                      local mot_float_type* current_position,
                                      local double* const current_likelihood,
-                                     local mot_float_type* const current_prior,
-                                     local double* log_likelihood_tmp);
+                                     local mot_float_type* const current_prior);
         """
         raise NotImplementedError()
 
@@ -264,15 +278,14 @@ class AbstractSampler(object):
         """Get the CL log prior compute function.
 
         Returns:
-            str: the compute function for computing the log prior of the model.
+            str: the compute function for computing the log prior.
         """
-        prior_func = self._model.get_log_prior_function()
         return SimpleCLFunction.from_string('''
-            mot_float_type _computeLogPrior(mot_data_struct* data,
-                                            local const mot_float_type* const x){
-                return ''' + prior_func.get_cl_function_name() + '''(data, x);
+            mot_float_type _computeLogPrior(local const mot_float_type* const x, 
+                                            mot_data_struct* data){
+                return ''' + self._log_prior_func.get_cl_function_name() + '''(x, data);
             }
-        ''', dependencies=[prior_func])
+        ''', dependencies=[self._log_prior_func])
 
     def _get_log_likelihood_cl_func(self):
         """Get the CL log likelihood compute function.
@@ -283,15 +296,11 @@ class AbstractSampler(object):
         Returns:
             str: the CL code for the log likelihood compute func.
         """
-        ll_func = self._model.get_log_likelihood_function()
         return SimpleCLFunction.from_string('''
-            double _computeLogLikelihood(mot_data_struct* data,
-                                       local mot_float_type* const current_position,
-                                       local double* log_likelihood_tmp){
-                
-                return ''' + ll_func.get_cl_function_name() + '''(data, current_position, log_likelihood_tmp);
+            double _computeLogLikelihood(local mot_float_type* const current_position, mot_data_struct* data){
+                return ''' + self._ll_func.get_cl_function_name() + '''(current_position, data);
             }
-        ''', dependencies=[ll_func])
+        ''', dependencies=[self._ll_func])
 
     @contextmanager
     def _logging(self, nmr_samples, burnin, thinning):
@@ -320,31 +329,66 @@ class AbstractSampler(object):
 
 class AbstractRWMSampler(AbstractSampler):
 
-    def __init__(self, model, starting_positions, proposal_stds, use_random_scan=False, **kwargs):
+    def __init__(self, ll_func, log_prior_func, x0, proposal_stds, use_random_scan=False,
+                 finalize_proposal_func=None, **kwargs):
         """An abstract basis for Random Walk Metropolis (RWM) samplers.
 
         Random Walk Metropolis (RWM) samplers require for every parameter and every modeling instance an proposal
         standard deviation, used in the random walk.
 
         Args:
-            model (SampleModelInterface): the model to sample.
-            starting_positions (ndarray): the starting positions for the sampler. Should be a two dimensional matrix
+            ll_func (mot.lib.cl_function.CLFunction): The log-likelihood function. A CL function with the signature:
+
+                .. code-block:: c
+
+                        double <func_name>(local const mot_float_type* const x,
+                                           mot_data_struct* data);
+
+            log_prior_func (mot.lib.cl_function.CLFunction): The log-prior function. A CL function with the signature:
+
+                .. code-block:: c
+
+                    mot_float_type <func_name>(local const mot_float_type* const x,
+                                               mot_data_struct* data);
+
+            x0 (ndarray): the starting positions for the sampler. Should be a two dimensional matrix
                 with for every modeling instance (first dimension) and every parameter (second dimension) a value.
             proposal_stds (ndarray): for every parameter and every modeling instance an initial proposal std.
             use_random_scan (boolean): if we iterate over the parameters in a random order or in a linear order
                 at every sample iteration. By default we apply a system scan starting from the first dimension to the
                 last. With a random scan we randomize the indices every iteration.
+            finalize_proposal_func (mot.lib.cl_function.CLFunction): a CL function to finalize every proposal by
+                the sampling routine. This allows the model to change a proposal before computing the
+                prior or likelihood probabilities. If None, we will not use a callback.
+
+                As an example, suppose you are sample a polar coordinate :math:`\theta` defined on
+                :math:`[0, 2\pi]` with a random walk Metropolis proposal distribution. This distribution might propose
+                positions outside of the range of :math:`\theta`. Of course the model function could deal with that by
+                taking the modulus of the input, but then you have to post-process the chain with the same
+                transformation. Instead, this function allows changing the proposal before it is put into the model
+                and before it is stored.
+
+                Please note that this function should return a proposal that is equivalent (but not necessarily equal)
+                to the provided proposal.
+
+                Signature:
+
+                .. code-block:: c
+
+                    void <func_name>(mot_data_struct* data,
+                                     local mot_float_type* x);
         """
-        super(AbstractRWMSampler, self).__init__(model, starting_positions, **kwargs)
+        super(AbstractRWMSampler, self).__init__(ll_func, log_prior_func, x0, **kwargs)
         self._proposal_stds = np.copy(np.require(proposal_stds, requirements='CAOW',
                                                  dtype=self._cl_runtime_info.mot_float_dtype))
         self._use_random_scan = use_random_scan
+        self._finalize_proposal_func = finalize_proposal_func or SimpleCLFunction.from_string(
+            'void finalizeProposal(mot_data_struct* data, local const mot_float_type* const x){}')
 
     def _get_kernel_data(self, nmr_samples, thinning, return_output):
         kernel_data = super(AbstractRWMSampler, self)._get_kernel_data(nmr_samples, thinning, return_output)
         kernel_data.update({
-            '_proposal_stds': Array(self._proposal_stds, 'mot_float_type', is_writable=True,
-                                    ensure_zero_copy=True)
+            '_proposal_stds': Array(self._proposal_stds, 'mot_float_type', mode='rw', ensure_zero_copy=True)
         })
         return kernel_data
 
@@ -381,11 +425,9 @@ class AbstractRWMSampler(AbstractSampler):
         '''
 
     def _get_state_update_cl_func(self, nmr_samples, thinning, return_output):
-        proposal_finalize_func = self._model.get_finalize_proposal_function()
-
         kernel_source = self._get_proposal_update_function(nmr_samples, thinning, return_output)
         kernel_source += self._at_acceptance_callback_c_func()
-        kernel_source += proposal_finalize_func.get_cl_code()
+        kernel_source += self._finalize_proposal_func.get_cl_code()
 
         if self._use_random_scan:
             kernel_source += '''
@@ -409,8 +451,7 @@ class AbstractRWMSampler(AbstractSampler):
                     void* rng_data,
                     local mot_float_type* current_position,
                     local double* const current_likelihood,
-                    local mot_float_type* const current_prior,
-                    local double* log_likelihood_tmp){
+                    local mot_float_type* const current_prior){
 
                 local mot_float_type new_position[''' + str(self._nmr_params) + '''];
                 local mot_float_type new_prior;
@@ -438,13 +479,13 @@ class AbstractRWMSampler(AbstractSampler):
         kernel_source += '''
                     if(is_first_work_item){
                         new_position[k] += frandn(rng_data) * data->_proposal_stds[k];
-                        ''' + proposal_finalize_func.get_cl_function_name() + '''(data, new_position);
-                        new_prior = _computeLogPrior(data, new_position);
+                        ''' + self._finalize_proposal_func.get_cl_function_name() + '''(data, new_position);
+                        new_prior = _computeLogPrior(new_position, data);
                     }
                     barrier(CLK_LOCAL_MEM_FENCE);
 
                     if(exp(new_prior) > 0){
-                        new_likelihood = _computeLogLikelihood(data, new_position, log_likelihood_tmp);
+                        new_likelihood = _computeLogLikelihood(new_position, data);
 
                         if(is_first_work_item){
                             bayesian_f = exp((new_likelihood + new_prior) - (*current_likelihood + *current_prior));

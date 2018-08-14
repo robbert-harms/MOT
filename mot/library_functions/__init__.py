@@ -360,6 +360,7 @@ class LevenbergMarquardt(SimpleCLLibraryFromFile):
         }
 
         super().__init__(
-            'int', 'lmmin', [('local mot_float_type*', 'model_parameters'), ('void*', 'data')],
+            'int', 'lmmin', [('local mot_float_type* const', 'x'), ('void*', 'data'),
+                             ('global mot_float_type*', 'fjac')],
             resource_filename('mot', 'data/opencl/lmmin.cl'),
             var_replace_dict=params)

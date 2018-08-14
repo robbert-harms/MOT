@@ -11,7 +11,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class SingleComponentAdaptiveMetropolis(AbstractRWMSampler):
 
-    def __init__(self, model, starting_positions, proposal_stds, waiting_period=100,
+    def __init__(self, ll_func, log_prior_func, x0, proposal_stds, waiting_period=100,
                  scaling_factor=2.4, epsilon=1e-20, **kwargs):
         r"""An implementation of the Single Component Adaptive Metropolis (SCAM) MCMC algorithm [1].
 
@@ -33,8 +33,9 @@ class SingleComponentAdaptiveMetropolis(AbstractRWMSampler):
         right stationary distribution [1].
 
         Args:
-            model (SampleModelInterface): the model to sample.
-            starting_positions (ndarray): the starting positions for the sampler. Should be a two dimensional matrix
+            ll_func (mot.lib.cl_function.CLFunction): The log-likelihood function. See parent docs.
+            log_prior_func (mot.lib.cl_function.CLFunction): The log-prior function. See parent docs.
+            x0 (ndarray): the starting positions for the sampler. Should be a two dimensional matrix
                 with for every modeling instance (first dimension) and every parameter (second dimension) a value.
             proposal_stds (ndarray): for every parameter and every modeling instance an initial proposal std.
             waiting_period (int): only start updating the proposal std. after this many draws.
@@ -45,7 +46,7 @@ class SingleComponentAdaptiveMetropolis(AbstractRWMSampler):
             [1] Haario, H., Saksman, E., & Tamminen, J. (2005). Componentwise adaptation for high dimensional MCMC.
                 Computational Statistics, 20(2), 265-273. https://doi.org/10.1007/BF02789703
         """
-        super(SingleComponentAdaptiveMetropolis, self).__init__(model, starting_positions, proposal_stds, **kwargs)
+        super(SingleComponentAdaptiveMetropolis, self).__init__(ll_func, log_prior_func, x0, proposal_stds, **kwargs)
         self._waiting_period = waiting_period
         self._scaling_factor = scaling_factor
         self._epsilon = epsilon
@@ -58,14 +59,14 @@ class SingleComponentAdaptiveMetropolis(AbstractRWMSampler):
                                                        dtype=self._cl_runtime_info.mot_float_dtype, order='C')
 
     def _get_kernel_data(self, nmr_samples, thinning, return_output):
-        kernel_data = super(SingleComponentAdaptiveMetropolis, self)._get_kernel_data(nmr_samples, thinning, return_output)
+        kernel_data = super(SingleComponentAdaptiveMetropolis, self)._get_kernel_data(nmr_samples,
+                                                                                      thinning, return_output)
         kernel_data.update({
-            '_parameter_means': Array(self._parameter_means, 'mot_float_type', is_writable=True,
-                                      ensure_zero_copy=True),
-            '_parameter_variances': Array(self._parameter_variances, 'mot_float_type', is_writable=True,
+            '_parameter_means': Array(self._parameter_means, 'mot_float_type', mode='rw', ensure_zero_copy=True),
+            '_parameter_variances': Array(self._parameter_variances, 'mot_float_type', mode='rw',
                                           ensure_zero_copy=True),
             '_parameter_variance_update_m2s': Array(self._parameter_variance_update_m2s, 'mot_float_type',
-                                                    is_writable=True, ensure_zero_copy=True)
+                                                    mode='rw', ensure_zero_copy=True)
         })
         return kernel_data
 

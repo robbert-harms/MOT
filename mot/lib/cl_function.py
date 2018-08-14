@@ -9,7 +9,7 @@ import tatsu
 from mot.lib.cl_data_type import SimpleCLDataType
 from textwrap import dedent, indent
 
-from mot.lib.cl_runtime_info import CLRuntimeInfo
+from mot.configuration import CLRuntimeInfo
 from mot.lib.kernel_data import KernelData, Scalar, Array, Zeros
 from mot.lib.load_balance_strategies import Worker
 from mot.lib.utils import is_scalar, KernelDataManager, get_float_type_def
@@ -108,7 +108,7 @@ class CLFunction(object):
             use_local_reduction (boolean): set this to True if you want to use local memory reduction in
                  evaluating this function. If this is set to True we will multiply the global size
                  (given by the nmr_instances) by the work group sizes.
-            cl_runtime_info (mot.lib.cl_runtime_info.CLRuntimeInfo): the runtime information for execution
+            cl_runtime_info (mot.configuration.CLRuntimeInfo): the runtime information for execution
 
         Returns:
             ndarray: the return values of the function, which can be None if this function has a void return type.
@@ -262,7 +262,7 @@ class SimpleCLFunction(CLFunction):
                     else:
                         data = input_data[param.name]
 
-                    return Array(data, ctype=param.data_type.ctype, is_writable=True, is_readable=True)
+                    return Array(data, ctype=param.data_type.ctype, mode='rw')
 
             kernel_items = {}
             for param in self.get_parameters():
@@ -467,7 +467,7 @@ def apply_cl_function(cl_function, kernel_data, nmr_instances, use_local_reducti
         use_local_reduction (boolean): set this to True if you want to use local memory reduction in
              your CL procedure. If this is set to True we will multiply the global size (given by the nmr_instances)
              by the work group sizes.
-        cl_runtime_info (mot.lib.cl_runtime_info.CLRuntimeInfo): the runtime information
+        cl_runtime_info (mot.configuration.CLRuntimeInfo): the runtime information
     """
     cl_runtime_info = cl_runtime_info or CLRuntimeInfo()
 
@@ -540,7 +540,8 @@ class _ProcedureWorker(Worker):
         kernel_param_names = self._data_struct_manager.get_kernel_arguments()
 
         func_args = self._get_function_call_args()
-        wrapped_arrays = self._get_wrapped_arrays()
+        localized_input = self._get_input_transforms()
+        output_write_back = self._get_output_write_backs()
 
         assignment = ''
         if self._cl_function.get_return_type() != 'void':
@@ -559,9 +560,9 @@ class _ProcedureWorker(Worker):
                 
                 mot_data_struct data = ''' + self._data_struct_manager.get_struct_init_string('gid') + ''';
                 
-                ''' + wrapped_arrays + '''            
+                ''' + localized_input + '''            
                 ''' + assignment + ' ' + self._cl_function.get_cl_function_name() + '(' + ', '.join(func_args) + ');' \
-            + '''
+                + output_write_back + '''
             }
         '''
         return kernel_source
@@ -589,12 +590,12 @@ class _ProcedureWorker(Worker):
 
         return func_args
 
-    def _get_wrapped_arrays(self):
-        """For functions that require private arrays as input, change the address space of the global arrays.
+    def _get_input_transforms(self):
+        """For functions that require private/local pointers as input, change the address space of the global arrays.
 
         This creates a new array in the global address space and fills it with the values of the global array.
 
-        This can be removed at the moment OpenCL 2.0 is supported (by using the generic address space).
+        This can maybe be removed when OpenCL 2.0 is supported (by using the generic address space).
 
         Returns:
             str: converts the address space of the input array from global to private, for those parameters that
@@ -617,10 +618,45 @@ class _ProcedureWorker(Worker):
                 elif parameter.data_type.address_space == 'local':
                     conversions += '''
                         local {ctype} {param_name}_local[{nmr_elements}];
-
-                        for(uint i = 0; i < {nmr_elements}; i++){{
-                            {param_name}_local[i] = data.{param_name}[i];
+                        
+                        if(get_local_id(0) == 0){{
+                            for(uint i = 0; i < {nmr_elements}; i++){{
+                                {param_name}_local[i] = data.{param_name}[i];
+                            }}
                         }}
+                        barrier(CLK_LOCAL_MEM_FENCE);
                     '''.format(ctype=parameter.data_type.ctype, param_name=parameter.name,
                                nmr_elements=self._kernel_data[parameter.name].data_length)
         return conversions
+
+    def _get_output_write_backs(self):
+        """Read back certain parameters which we transformed from global to private/local.
+
+        For kernel data array which specify the data must be read back, we will copy the values in the private/local
+        arrays back into the global array.
+
+        Returns:
+            str: a CL string copying results back from the private/local array to the global array.
+        """
+        write_backs = ''
+        for parameter in self._cl_function.get_parameters():
+            if parameter.data_type.raw_data_type == 'mot_data_struct':
+                pass
+            elif parameter.data_type.is_pointer_type and self._kernel_data[parameter.name].read_data_back:
+                if parameter.data_type.address_space == 'private':
+                    write_backs += '''
+                        for(uint i = 0; i < {nmr_elements}; i++){{
+                            data.{param_name}[i] = {param_name}_private[i];
+                        }}
+                    '''.format(ctype=parameter.data_type.ctype, param_name=parameter.name,
+                               nmr_elements=self._kernel_data[parameter.name].data_length)
+                elif parameter.data_type.address_space == 'local':
+                    write_backs += '''
+                        if(get_local_id(0) == 0){{
+                            for(uint i = 0; i < {nmr_elements}; i++){{
+                                data.{param_name}[i] = {param_name}_local[i];
+                            }}
+                        }}
+                    '''.format(ctype=parameter.data_type.ctype, param_name=parameter.name,
+                               nmr_elements=self._kernel_data[parameter.name].data_length)
+        return write_backs
