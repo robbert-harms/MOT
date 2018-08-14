@@ -131,7 +131,8 @@ int lmmin(local mot_float_type * const x, void* data, global mot_float_type* fja
     mot_float_type actred, dirder, fnorm, fnorm1, gnorm, pnorm, prered, ratio, step, temp, temp1, temp2, temp3;
     double sum;
 
-    bool done_first = false;  /* loop counters, for monitoring */
+    bool outer_done_first = false;  /* loop counters, for monitoring */
+    bool inner_done_first = false;
     bool inner_success; /* flag for loop control */
     mot_float_type lmpar = 0;     /* Levenberg-Marquardt parameter */
     mot_float_type delta = 0;
@@ -246,7 +247,7 @@ int lmmin(local mot_float_type * const x, void* data, global mot_float_type* fja
         }
 
         /** Initialize or update diag and delta. **/
-        if(!done_first){ /* first iteration only */
+        if(!outer_done_first){ /* first iteration only */
             if (SCALE_DIAG) {
                 /* diag := norms of the columns of the initial Jacobian */
                 for (j = 0; j < %(NMR_PARAMS)s; j++){
@@ -283,6 +284,7 @@ int lmmin(local mot_float_type * const x, void* data, global mot_float_type* fja
         }
 
         /** The inner loop. **/
+        inner_done_first = false;
         do {
             /** Determine the Levenberg-Marquardt parameter. **/
             lm_lmpar(%(NMR_PARAMS)s, fjac, %(NMR_OBSERVATIONS)s, Pivot, diag, qtf, delta, &lmpar, wa1, wa2, wf, wa3 );
@@ -309,7 +311,7 @@ int lmmin(local mot_float_type * const x, void* data, global mot_float_type* fja
             dirder = -temp1 + temp2; /* scaled directional derivative */
 
             /* At first call, adjust the initial step bound. */
-            if (!done_first && pnorm < delta ){
+            if (!outer_done_first && !inner_done_first && pnorm < delta ){
                 delta = pnorm;
 			}
 
@@ -321,14 +323,18 @@ int lmmin(local mot_float_type * const x, void* data, global mot_float_type* fja
             %(FUNCTION_NAME)s(wa2, data, wf);
             ++nfev;
             fnorm1 = lm_euclidian_norm(wf, %(NMR_OBSERVATIONS)s);
-            if(!isfinite(fnorm1)){
-                return 10;
-            }
+            // exceptionally, for this norm we do not test for infinity
+            // because we can deal with it without terminating.
+
 
 			/** Evaluate the scaled reduction. **/
 
-			/* Actual scaled reduction */
-            actred = 1 - ((fnorm1/fnorm)*(fnorm1/fnorm));
+            /* actual scaled reduction (supports even the case fnorm1=infty) */
+            if (0.1 * fnorm1 < fnorm)
+		        actred = 1 - ((fnorm1/fnorm) * (fnorm1/fnorm));
+	        else
+		        actred = -1;
+
 
             /* Ratio of actual to predicted reduction */
             ratio = 0;
@@ -337,26 +343,19 @@ int lmmin(local mot_float_type * const x, void* data, global mot_float_type* fja
             }
 
             /* Update the step bound */
-            if( ratio <= 0.25 ) {
-                if( actred >= 0 ){
-                    temp = 0.5;
-                }
-                else if ( actred > -99 ){ /* -99 = 1-1/0.1^2 */
-                    temp = max( dirder / (2*dirder + actred), (mot_float_type) 0.1 );
-                }
-                else{
+            if (ratio <= 0.25) {
+		        if (actred >= 0)
+		            temp = 0.5;
+		        else
+		            temp = 0.5 * dirder / (dirder + 0.5 * actred);
+                if (0.1 * fnorm1 >= fnorm || temp < 0.1)
                     temp = 0.1;
-                }
-                delta = temp * min(delta, (mot_float_type)(pnorm / 0.1));
+                delta = temp * min(delta, pnorm / 0.1);
                 lmpar /= temp;
-            }
-            else if ( ratio >= 0.75 ) {
-                delta = 2*pnorm;
+	        } else if (lmpar == 0 || ratio >= 0.75) {
+                delta = 2 * pnorm;
                 lmpar *= 0.5;
-            }
-            else if ( !lmpar ) {
-                delta = 2*pnorm;
-            }
+	        }
 
             /**  On success, update solution, and test for convergence. **/
 			inner_success = ratio >= 1e-4;
@@ -410,9 +409,10 @@ int lmmin(local mot_float_type * const x, void* data, global mot_float_type* fja
             }
 
 			/** End of the inner loop. Repeat if iteration unsuccessful. **/
+			inner_done_first = true;
         } while ( !inner_success );
 
-        done_first = true;
+        outer_done_first = true;
     };/***  End of the loop. ***/
 } /*** lmmin. ***/
 
