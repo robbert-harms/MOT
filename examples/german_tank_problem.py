@@ -1,10 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
-
 from mot.lib.cl_function import SimpleCLFunction
 from mot.random import normal, uniform
 from mot.sample import AdaptiveMetropolisWithinGibbs
-from mot.lib.model_interfaces import SampleModelInterface
 from mot.lib.kernel_data import Array
 
 __author__ = 'Robbert Harms'
@@ -12,71 +10,6 @@ __date__ = '2018-04-04'
 __maintainer__ = 'Robbert Harms'
 __email__ = 'robbert.harms@maastrichtuniversity.nl'
 __licence__ = 'LGPL v3'
-
-
-class GermanTanks(SampleModelInterface):
-
-    def __init__(self, observed_tanks, upper_bounds):
-        """Create the MOT model for the German Tank problem.
-
-        The German Tank problem is an univariate parameter estimation problem in which we try to get a best estimate on
-        the number of manufactured tanks, given that we observed some serial numbers on some tanks.
-
-        For more information, see http://matatat.org/sampyl/examples/german_tank_problem.html or
-        https://en.wikipedia.org/wiki/German_tank_problem
-
-        Args:
-            observed_tanks (ndarray): a two dimensional array as (nmr_problems, nmr_tanks). That is, on the
-                first dimension the number of problem instances (nmr of unique optimization or sample instances)
-                and on the second dimension the number of observed tanks. Each element is an integer
-                with an observed tank number.
-            upper_bounds (ndarray): per problem an estimated upper bound for the number of tanks
-        """
-        super(SampleModelInterface, self).__init__()
-        self.observed_tanks = observed_tanks
-        self.upper_bounds = upper_bounds
-
-    def get_kernel_data(self):
-        return {'observed_tanks': Array(self.observed_tanks, 'uint'),
-                'lower_bounds': Array(np.max(self.observed_tanks, axis=1), 'uint'),
-                'upper_bounds': Array(self.upper_bounds, 'uint')}
-
-    def get_log_likelihood_function(self):
-        """Used in Bayesian sample."""
-        return SimpleCLFunction.from_string('''
-            double germanTank_logLikelihood(mot_data_struct* data, 
-                                            local const mot_float_type* const x,
-                                            local double* objective_value_tmp){
-                
-                uint nmr_tanks = (uint)round(x[0]);
-                double sum = 0;
-                double eval;
-                for(uint i = 0; i < ''' + str(self.observed_tanks.shape[1]) + ''' - 1; i++){
-                    eval = discrete_uniform(data->observed_tanks[i], 1, nmr_tanks);
-                    sum += eval;
-                }
-                return sum;   
-            }
-            ''', dependencies=[self._discrete_uniform()])
-
-    def get_log_prior_function(self):
-        """Used in Bayesian sample."""
-        return SimpleCLFunction.from_string('''
-            double germanTank_logPrior(mot_data_struct* data, local const mot_float_type* const x){
-                uint nmr_tanks = (uint)round(x[0]);
-                return discrete_uniform(nmr_tanks, data->lower_bounds[0], data->upper_bounds[0]);
-            }
-        ''', dependencies=[self._discrete_uniform()])
-
-    def _discrete_uniform(self):
-        return SimpleCLFunction.from_string('''
-            float discrete_uniform(uint x, uint lower, uint upper){
-                if(x < lower || x > upper){
-                    return -INFINITY;
-                }
-                return -log((float)(upper-lower));
-            }
-        ''')
 
 
 def get_historical_data(nmr_problems):
@@ -116,29 +49,74 @@ def get_simulated_data(nmr_problems):
     return observations, nmr_tanks_ground_truth
 
 
+def get_log_likelihood_function(nmr_observed_tanks):
+    return SimpleCLFunction.from_string('''
+        double germanTank_logLikelihood(local const mot_float_type* const x,
+                                        mot_data_struct* data){
+
+            uint nmr_tanks = (uint)round(x[0]);
+            double sum = 0;
+            double eval;
+            for(uint i = 0; i < ''' + str(nmr_observed_tanks) + ''' - 1; i++){
+                eval = discrete_uniform(data->observed_tanks[i], 1, nmr_tanks);
+                sum += eval;
+            }
+            return sum;   
+        }
+        ''', dependencies=[discrete_uniform_func()])
+
+
+def get_log_prior_function():
+    return SimpleCLFunction.from_string('''
+        double germanTank_logPrior(local const mot_float_type* const x, mot_data_struct* data){
+            uint nmr_tanks = (uint)round(x[0]);
+            return discrete_uniform(nmr_tanks, data->lower_bounds[0], data->upper_bounds[0]);
+        }
+    ''', dependencies=[discrete_uniform_func()])
+
+
+def discrete_uniform_func():
+    return SimpleCLFunction.from_string('''
+        float discrete_uniform(uint x, uint lower, uint upper){
+            if(x < lower || x > upper){
+                return -INFINITY;
+            }
+            return -log((float)(upper-lower));
+        }
+    ''')
+
+
 if __name__ == '__main__':
+    """Runs the German Tank problem.
+
+    The German Tank problem is an univariate parameter estimation problem in which we try to get a best estimate on
+    the number of manufactured tanks, given that we observed some serial numbers on some tanks.
+
+    For more information, see http://matatat.org/sampyl/examples/german_tank_problem.html or
+    https://en.wikipedia.org/wiki/German_tank_problem
+    """
+
     # The number of problems
     nmr_problems = 10000
 
     # The data we would like to use
-    # observations, nmr_tanks_ground_truth = get_simulated_data(nmr_problems)
     observations, nmr_tanks_ground_truth = get_historical_data(nmr_problems)
+    # observations, nmr_tanks_ground_truth = get_simulated_data(nmr_problems)
+
 
     ## Sample ##
-    # Estimation upper bound
-    upper_bounds = np.ones((nmr_problems,)) * 1000
-
-    # Create the model with the observations and upper bounds
-    model = GermanTanks(observations, upper_bounds)
-
-    # The starting points
-    starting_points = np.max(observations, axis=1)
-
-    # The initial proposal standard deviations
-    proposal_stds = np.ones_like(starting_points) * 10
+    # The additional data we need
+    kernel_data = {'observed_tanks': Array(observations, 'uint'),
+                   'lower_bounds': Array(np.max(observations, axis=1), 'uint'),
+                   'upper_bounds': Array(np.ones((nmr_problems,)) * 1000, 'uint')}
 
     # Create an instance of the sample routine we want to use.
-    sampler = AdaptiveMetropolisWithinGibbs(model, starting_points, proposal_stds)
+    sampler = AdaptiveMetropolisWithinGibbs(
+        get_log_likelihood_function(observations.shape[1]),
+        get_log_prior_function(),
+        np.max(observations, axis=1),  # starting position
+        np.ones(nmr_problems) * 10,  # initial proposal standard deviations
+        data=kernel_data)
 
     # Sample each instance
     sampling_output = sampler.sample(10000, thinning=1, burnin=0)

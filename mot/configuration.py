@@ -15,6 +15,8 @@ using :py:func:`config_context`. Example:
 from contextlib import contextmanager
 from copy import copy
 
+import numpy as np
+
 from .lib.cl_environments import CLEnvironmentFactory
 from .lib.load_balance_strategies import PreferGPU
 
@@ -210,6 +212,24 @@ class SimpleConfigAction(ConfigAction):
         """Implement this function add apply() logic after this class saves the current config."""
 
 
+class CLRuntimeAction(SimpleConfigAction):
+
+    def __init__(self, cl_runtime_info):
+        """Set the current configuration to use the information in the given configuration action.
+
+        Args:
+            cl_runtime_info (CLRuntimeInfo): the runtime info with the configuration options
+        """
+        super().__init__()
+        self._cl_runtime_info = cl_runtime_info
+
+    def _apply(self):
+        set_cl_environments(self._cl_runtime_info.cl_environments)
+        set_load_balancer(self._cl_runtime_info.load_balancer)
+        set_compile_flags(self._cl_runtime_info._compile_flags)
+        set_use_double_precision(self._cl_runtime_info.double_precision)
+
+
 class RuntimeConfigurationAction(SimpleConfigAction):
 
     def __init__(self, cl_environments=None, load_balancer=None, compile_flags=None, double_precision=None):
@@ -221,7 +241,7 @@ class RuntimeConfigurationAction(SimpleConfigAction):
             compile_flags (list): the list of compile flags to use during analysis.
             double_precision (boolean): if we compute in double precision or not
         """
-        super(RuntimeConfigurationAction, self).__init__()
+        super().__init__()
         self._cl_environments = cl_environments
         self._load_balancer = load_balancer
         self._compile_flags = compile_flags
@@ -247,3 +267,80 @@ class VoidConfigurationAction(ConfigAction):
         """Does nothing, useful as a default config action.
         """
         super(VoidConfigurationAction, self).__init__()
+
+
+class CLRuntimeInfo(object):
+
+    def __init__(self, cl_environments=None, load_balancer=None, compile_flags=None, double_precision=None):
+        """All information necessary for applying operations using OpenCL.
+
+        Args:
+            cl_environments (list of mot.lib.cl_environments.CLEnvironment): The list of CL environments used by
+                this routine. If None is given we use the defaults in the current configuration.
+            load_balancer (LoadBalancingStrategy): The load balancing strategy to be used by this routine.
+                If None is given we use the defaults in the current configuration.
+            compile_flags (list): the list of compile flags to use during analysis.
+            double_precision (boolean): if we apply the computations in double precision or in single float precision.
+                By default we go for single float precision.
+        """
+        self._cl_environments = cl_environments
+        self._load_balancer = load_balancer
+        self._compile_flags = compile_flags
+        self._double_precision = double_precision
+
+        if self._cl_environments is None:
+            self._cl_environments = get_cl_environments()
+
+        if self._load_balancer is None:
+            self._load_balancer = get_load_balancer()
+
+        if self._compile_flags is None:
+            self._compile_flags = get_compile_flags()
+
+        if self._double_precision is None:
+            self._double_precision = use_double_precision()
+
+    @property
+    def cl_environments(self):
+        return self._cl_environments
+
+    @property
+    def mot_float_dtype(self):
+        if self._double_precision:
+            return np.float64
+        return np.float32
+
+    @property
+    def load_balancer(self):
+        return self._load_balancer
+
+    @property
+    def double_precision(self):
+        return self._double_precision
+
+    @property
+    def compile_flags(self):
+        """Get all defined compile flags."""
+        return self._compile_flags
+
+    def get_compile_flags(self):
+        """Get a list of the applicable compile flags.
+
+        Returns:
+            list: the list of enabled compile flags.
+        """
+        elements = list(self._compile_flags)
+        if self._double_precision:
+            elements_to_remove = get_compile_flags_to_disable_in_double_precision()
+            elements = list(filter(lambda e: e not in elements_to_remove, elements))
+        return elements
+
+    def get_cl_environments(self):
+        """Get a list of the cl environments to use.
+
+        This returns only the CL environments that will be used by the load balancer.
+
+        Returns:
+            list of mot.lib.cl_environments.CLEnvironment: a list of CL environments to use
+        """
+        return self._load_balancer.get_used_cl_environments(self._cl_environments)

@@ -50,8 +50,40 @@ class KernelData(object):
     def read_data_back(self):
         """Check if this input data should be read back after kernel execution.
 
+        Please note, that if this is set, the property ``is_writable`` must be true as well, but the converse is not
+        necessarily true.
+
+        If set, this will do two things. First, after evaluating the user's CL function, it will copy memory back
+        from private/local to the global array. Second, it will map the data back into host memory space.
+
         Returns:
-            boolean: if, after kernel launch, the data should be mapped from the compute device back to host memory.
+            boolean: if we should read the data back
+        """
+        raise NotImplementedError()
+
+    @property
+    def is_readable(self):
+        """If this kernel input data must be readable by the kernel.
+
+        This is used in conjunction with :meth:`is_writable` when loading the data in the kernel.
+
+        Returns:
+            boolean: if this data must be made readable by the kernel function
+        """
+        raise NotImplementedError()
+
+    @property
+    def is_writable(self):
+        """Check if this kernel input data will write data back.
+
+        This is used in conjunction with :meth:`is_readable` when loading the data in the kernel.
+
+        If this returns true the kernel function must ensure that the data is loaded with at least write permissions.
+        This flag will also ensure that the data will be read back from the device after kernel execution, overwriting
+        the current data.
+
+        Returns:
+            boolean: if this data must be made writable and be read back after function execution.
         """
         raise NotImplementedError()
 
@@ -172,6 +204,14 @@ class Scalar(KernelData):
     def read_data_back(self):
         return False
 
+    @property
+    def is_readable(self):
+        return False
+
+    @property
+    def is_writable(self):
+        return False
+
     def get_scalar_arg_dtype(self):
         if self._ctype.startswith('mot_float_type'):
             return self._mot_float_dtype
@@ -241,6 +281,14 @@ class LocalMemory(KernelData):
     def read_data_back(self):
         return False
 
+    @property
+    def is_readable(self):
+        return False
+
+    @property
+    def is_writable(self):
+        return False
+
     def get_scalar_arg_dtype(self):
         return None
 
@@ -269,8 +317,7 @@ class LocalMemory(KernelData):
 
 class Array(KernelData):
 
-    def __init__(self, data, ctype=None, offset_str=None, is_writable=False, is_readable=True, ensure_zero_copy=False,
-                 as_scalar=False):
+    def __init__(self, data, ctype=None, mode='r', offset_str=None, ensure_zero_copy=False, as_scalar=False):
         """Loads the given array as a buffer into the kernel.
 
         By default, this will try to offset the data in the kernel by the stride of the first dimension multiplied
@@ -288,18 +335,21 @@ class Array(KernelData):
             data (ndarray): the data to load in the kernel
             ctype (str): the desired c-type for in use in the kernel, like ``int``, ``float`` or ``mot_float_type``.
                 If None it is implied from the provided data.
+            mode (str): one of 'r', 'w' or 'rw', for respectively read, write or read and write. This sets the
+                mode of how the data is loaded into the compute device's memory.
             offset_str (str): the offset definition, can use ``{problem_id}`` for multiplication purposes. Set to 0
                 for no offset.
-            is_writable (boolean): if the data must be loaded writable or not, defaults to False
-            is_readable (boolean): if this data must be made readable
             ensure_zero_copy (boolean): only used if ``is_writable`` is set to True. If set, we guarantee that the
                 return values are written to the same input array. This allows the user of this class to user their
                 reference to the underlying data, relieving the user of having to use :meth:`get_data`.
             as_scalar (boolean): if given and if the data is only a 1d, we will load the value as a scalar in the
                 data struct. As such, one does not need to evaluate as a pointer.
         """
+        self._is_readable = 'r' in mode
+        self._is_writable = 'w' in mode
+
         self._requirements = ['C', 'A', 'O']
-        if is_writable:
+        if self._is_writable:
             self._requirements.append('W')
 
         self._data = np.require(data, requirements=self._requirements)
@@ -307,8 +357,6 @@ class Array(KernelData):
             self._data = convert_data_to_dtype(self._data, ctype)
 
         self._offset_str = offset_str
-        self._is_writable = is_writable
-        self._is_readable = is_readable
         self._ctype = ctype or dtype_to_ctype(data.dtype)
         self._mot_float_dtype = None
         self._backup_data_reference = None
@@ -318,7 +366,7 @@ class Array(KernelData):
         if self._as_scalar and len(np.squeeze(self._data).shape) > 1:
             raise ValueError('The option "as_scalar" was set, but the data has more than one dimensions.')
 
-        if is_writable and ensure_zero_copy and self._data is not data:
+        if self._is_writable and self._ensure_zero_copy and self._data is not data:
             raise ValueError('Zero copy was set but we had to make '
                              'a copy to guarantee the writing and ctype requirements.')
 
@@ -366,28 +414,10 @@ class Array(KernelData):
 
     @property
     def is_readable(self):
-        """If this kernel input data must be readable by the kernel.
-
-        This is used in conjunction with :meth:`is_writable` when loading the data in the kernel.
-
-        Returns:
-            boolean: if this data must be made readable by the kernel function
-        """
         return self._is_readable
 
     @property
     def is_writable(self):
-        """Check if this kernel input data will write data back.
-
-        This is used in conjunction with :meth:`is_readable` when loading the data in the kernel.
-
-        If this returns true the kernel function must ensure that the data is loaded with at least write permissions.
-        This flag will also ensure that the data will be read back from the device after kernel execution, overwriting
-        the current data.
-
-        Returns:
-            boolean: if this data must be made writable and be read back after function execution.
-        """
         return self._is_writable
 
     def get_struct_declaration(self, name):
@@ -425,7 +455,7 @@ class Array(KernelData):
 
 class Zeros(KernelData):
 
-    def __init__(self, shape, ctype, offset_str=None, is_writable=True, is_readable=False):
+    def __init__(self, shape, ctype, offset_str=None, mode='w'):
         """Allocate an output buffer of the given shape.
 
         This is similar to :class:`~mot.lib.utils.KernelArray` although these objects are not readable but only
@@ -438,19 +468,20 @@ class Zeros(KernelData):
             shape (tuple): the shape of the output array
             offset_str (str): the offset definition, can use ``{problem_id}`` for multiplication purposes. Set to 0
                 for no offset.
-            is_writable (boolean): if the data must be loaded writable or not, defaults to True
-            is_readable (boolean): if this data must be made readable, defaults to False
+            mode (str): one of 'r', 'w' or 'rw', for respectively read, write or read and write. This sets the
+                mode of how the data is loaded into the compute device's memory.
         """
+        self._is_readable = 'r' in mode
+        self._is_writable = 'w' in mode
+
         self._requirements = ['C', 'A', 'O']
-        if is_writable:
+        if self._is_writable:
             self._requirements.append('W')
 
         self._shape = shape
         self._data = None
         self._backup_data_reference = None
         self._offset_str = offset_str
-        self._is_writable = is_writable
-        self._is_readable = is_readable
         self._ctype = ctype
         self._mot_float_dtype = None
 
@@ -501,28 +532,10 @@ class Zeros(KernelData):
 
     @property
     def is_readable(self):
-        """If this kernel input data must be readable by the kernel.
-
-        This is used in conjunction with :meth:`is_writable` when loading the data in the kernel.
-
-        Returns:
-            boolean: if this data must be made readable by the kernel function
-        """
         return self._is_readable
 
     @property
     def is_writable(self):
-        """Check if this kernel input data will write data back.
-
-        This is used in conjunction with :meth:`is_readable` when loading the data in the kernel.
-
-        If this returns true the kernel function must ensure that the data is loaded with at least write permissions.
-        This flag will also ensure that the data will be read back from the device after kernel execution, overwriting
-        the current data.
-
-        Returns:
-            boolean: if this data must be made writable and be read back after function execution.
-        """
         return self._is_writable
 
     def get_struct_declaration(self, name):

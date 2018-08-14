@@ -29,10 +29,9 @@ class TestRosenbrock(CLRoutineTestCase):
         self.methods = {'Nelder-Mead': None, 'Powell': {'patience': 3}}
         self._nmr_observations = self.n - 1
         self._objective_func = SimpleCLFunction.from_string('''
-            double rosenbrock_MLE_func(mot_data_struct* data, 
-                                       local const mot_float_type* const x,
-                                       local mot_float_type* objective_list,
-                                       local double* objective_value_tmp){
+            double rosenbrock_MLE_func(local const mot_float_type* const x,
+                                       mot_data_struct* data, 
+                                       local mot_float_type* objective_list){
 
                 double sum = 0;
                 double eval;
@@ -63,13 +62,12 @@ class TestLSQNonLinExample(CLRoutineTestCase):
         super(TestLSQNonLinExample, self).setUp()
         self._nmr_observations = 10
         self._objective_func = SimpleCLFunction.from_string('''
-            double lsqnonlin_example_objective(mot_data_struct* data, 
-                                               local const mot_float_type* const x,
-                                               local mot_float_type* objective_list, 
-                                               local double* objective_value_tmp){
+            double lsqnonlin_example_objective(local const mot_float_type* const x,
+                                               mot_data_struct* data, 
+                                               local mot_float_type* objective_list){
                 
                 double sum = 0;
-                double eval;
+                double eval;        
                 for(uint i = 0; i < ''' + str(self._nmr_observations) + '''; i++){
                     eval = pown(2 + 2 * (i+1) - exp((i+1) * x[0]) - exp((i+1) * x[1]), 2);
                     sum += eval;

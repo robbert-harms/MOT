@@ -11,7 +11,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class AdaptiveMetropolisWithinGibbs(AbstractRWMSampler):
 
-    def __init__(self, model, starting_positions, proposal_stds, target_acceptance_rate=0.44,
+    def __init__(self, ll_func, log_prior_func, x0, proposal_stds, target_acceptance_rate=0.44,
                  batch_size=50, damping_factor=1, min_val=1e-15, max_val=1e3, **kwargs):
         r"""An implementation of the Adaptive Metropolis-Within-Gibbs (AMWG) MCMC algorithm [1].
 
@@ -24,8 +24,9 @@ class AdaptiveMetropolisWithinGibbs(AbstractRWMSampler):
         That is when delta gets close enough to zero to no longer influence the proposals.
 
         Args:
-            model (SampleModelInterface): the model to sample.
-            starting_positions (ndarray): the starting positions for the sampler. Should be a two dimensional matrix
+            ll_func (mot.lib.cl_function.CLFunction): The log-likelihood function. See parent docs.
+            log_prior_func (mot.lib.cl_function.CLFunction): The log-prior function. See parent docs.
+            x0 (ndarray): the starting positions for the sampler. Should be a two dimensional matrix
                 with for every modeling instance (first dimension) and every parameter (second dimension) a value.
             proposal_stds (ndarray): for every parameter and every modeling instance an initial proposal std.
             target_acceptance_rate (float): the target acceptance rate between 0 and 1.
@@ -38,7 +39,7 @@ class AdaptiveMetropolisWithinGibbs(AbstractRWMSampler):
             [1] Roberts GO, Rosenthal JS. Examples of adaptive MCMC. J Comput Graph Stat. 2009;18(2):349-367.
                 doi:10.1198/jcgs.2009.06134.
         """
-        super(AdaptiveMetropolisWithinGibbs, self).__init__(model, starting_positions, proposal_stds, **kwargs)
+        super(AdaptiveMetropolisWithinGibbs, self).__init__(ll_func, log_prior_func, x0, proposal_stds, **kwargs)
         self._target_acceptance_rate = target_acceptance_rate
         self._batch_size = batch_size
         self._damping_factor = damping_factor
@@ -49,7 +50,7 @@ class AdaptiveMetropolisWithinGibbs(AbstractRWMSampler):
     def _get_kernel_data(self, nmr_samples, thinning, return_output):
         kernel_data = super(AdaptiveMetropolisWithinGibbs, self)._get_kernel_data(nmr_samples, thinning, return_output)
         kernel_data.update({
-            '_acceptance_counter': Array(self._acceptance_counter, is_writable=True, ensure_zero_copy=True)
+            '_acceptance_counter': Array(self._acceptance_counter, mode='rw', ensure_zero_copy=True)
         })
         return kernel_data
 
