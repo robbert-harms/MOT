@@ -405,7 +405,8 @@ class AbstractRWMSampler(AbstractSampler):
                                               local mot_float_type* current_position);
         """
         return '''
-            void _updateProposalState(mot_data_struct* data, ulong current_iteration){}
+            void _updateProposalState(mot_data_struct* data, ulong current_iteration,
+                                      local mot_float_type* current_position){}
         '''
 
     def _at_acceptance_callback_c_func(self):
