@@ -14,7 +14,7 @@ __licence__ = 'LGPL v3'
 class test_ErrorFunctions(unittest.TestCase):
 
     def __init__(self, *args, **kwargs):
-        super(test_ErrorFunctions, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     def test_erfi(self):
         x = np.linspace(-3, 3)

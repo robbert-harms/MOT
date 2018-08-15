@@ -17,7 +17,7 @@ class SimpleCLLibrary(CLLibrary, SimpleCLFunction):
 
     def __init__(self, cl_code, dependencies=None, cl_extra=None):
         func = SimpleCLFunction.from_string(cl_code, dependencies=dependencies, cl_extra=cl_extra)
-        super(SimpleCLLibrary, self).__init__(
+        super().__init__(
             func.get_return_type(),
             func.get_cl_function_name(),
             func.get_parameters(),
@@ -48,7 +48,7 @@ class SimpleCLLibraryFromFile(CLLibrary, SimpleCLFunction):
         if var_replace_dict is not None:
             code = code % var_replace_dict
 
-        super(SimpleCLLibraryFromFile, self).__init__(return_type, cl_function_name, parameter_list, code,
+        super().__init__(return_type, cl_function_name, parameter_list, code,
                                                       dependencies=dependencies)
         self._code = code
 

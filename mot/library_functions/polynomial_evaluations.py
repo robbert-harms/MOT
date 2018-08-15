@@ -65,7 +65,7 @@ class p1evl(SimpleCLLibrary):
         In contrast to ``polevl``, this function assumes that coef[N] = 1.0 and is omitted from the array.
         Its calling arguments are otherwise the same as polevl().
         """
-        super(p1evl, self).__init__('''
+        super().__init__('''
             double p1evl(double x, double* coef, int N){
                 double ans;
                 double *p;
@@ -91,7 +91,7 @@ class ratevl(SimpleCLLibrary):
 
         Copied from Scipy (https://github.com/scipy/scipy/blob/master/scipy/special/cephes/polevl.h), 2018-05-07.
         """
-        super(ratevl, self).__init__('''
+        super().__init__('''
             double ratevl(double x, double* num, int M, double* denom, int N){
                 int i, dir;
                 double y, num_ans, denom_ans;

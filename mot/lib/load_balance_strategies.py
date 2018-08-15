@@ -266,7 +266,7 @@ class MetaLoadBalanceStrategy(SimpleLoadBalanceStrategy):
         Args:
             lb_strategy (SimpleLoadBalanceStrategy): The load balance strategy this class uses.
         """
-        super(MetaLoadBalanceStrategy, self).__init__()
+        super().__init__()
         self._lb_strategy = lb_strategy or EvenDistribution()
 
     def process(self, workers, nmr_items, run_in_batches=None, single_batch_length=None):
@@ -322,7 +322,7 @@ class RuntimeLoadBalancing(SimpleLoadBalanceStrategy):
         Args:
             test_percentage (float): The total percentage of items to use for the run time duration test
         """
-        super(RuntimeLoadBalancing, self).__init__(run_in_batches=run_in_batches,
+        super().__init__(run_in_batches=run_in_batches,
                                                    single_batch_length=single_batch_length)
         self.test_percentage = test_percentage
 
@@ -371,7 +371,7 @@ class PreferSingleDeviceType(MetaLoadBalanceStrategy):
             device_type (str or cl.device_type): either a cl device type or a string like ('gpu', 'cpu' or 'apu').
                 This variable indicates the type of device we want to use.
         """
-        super(PreferSingleDeviceType, self).__init__(lb_strategy)
+        super().__init__(lb_strategy)
         self._device_type = device_type or cl.device_type.CPU
         if isinstance(device_type, str):
             self._device_type = device_type_from_string(device_type)
@@ -403,7 +403,7 @@ class PreferGPU(PreferSingleDeviceType):
         Args:
             lb_strategy (SimpleLoadBalanceStrategy): The strategy this class uses in the background.
         """
-        super(PreferGPU, self).__init__(device_type='GPU', lb_strategy=lb_strategy)
+        super().__init__(device_type='GPU', lb_strategy=lb_strategy)
 
 
 class PreferCPU(PreferSingleDeviceType):
@@ -414,7 +414,7 @@ class PreferCPU(PreferSingleDeviceType):
         Args:
             lb_strategy (SimpleLoadBalanceStrategy): The strategy this class uses in the background.
         """
-        super(PreferCPU, self).__init__(device_type='CPU', lb_strategy=lb_strategy)
+        super().__init__(device_type='CPU', lb_strategy=lb_strategy)
 
 
 class PreferSpecificEnvironment(MetaLoadBalanceStrategy):
@@ -429,7 +429,7 @@ class PreferSpecificEnvironment(MetaLoadBalanceStrategy):
             lb_strategy (SimpleLoadBalanceStrategy): The strategy this class uses in the background.
             environment_nmr (int): the specific environment to use in the list of CL environments
         """
-        super(PreferSpecificEnvironment, self).__init__(lb_strategy)
+        super().__init__(lb_strategy)
         self.environment_nmr = environment_nmr
 
     def process(self, workers, nmr_items, run_in_batches=None, single_batch_length=None):

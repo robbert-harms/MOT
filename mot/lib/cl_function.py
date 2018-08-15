@@ -140,7 +140,7 @@ class SimpleCLFunction(CLFunction):
             cl_extra (str): extra CL code for this function that does not warrant an own function.
                 This is prepended to the function body.
         """
-        super(SimpleCLFunction, self).__init__()
+        super().__init__()
         self._return_type = return_type
         self._function_name = cl_function_name
         self._parameter_list = self._resolve_parameters(parameter_list)
@@ -490,7 +490,7 @@ class _ProcedureWorker(Worker):
 
     def __init__(self, cl_environment, compile_flags, cl_function,
                  kernel_data, double_precision, use_local_reduction):
-        super(_ProcedureWorker, self).__init__(cl_environment)
+        super().__init__(cl_environment)
         self._cl_function = cl_function
         self._kernel_data = kernel_data
         self._double_precision = double_precision

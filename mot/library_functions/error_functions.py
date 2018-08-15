@@ -11,7 +11,7 @@ __licence__ = 'LGPL v3'
 class CerfImWOfX(SimpleCLLibraryFromFile):
     def __init__(self):
         """Calculate the cerf."""
-        super(CerfImWOfX, self).__init__(
+        super().__init__(
             'void', 'cerf', [],
             resource_filename('mot', 'data/opencl/cerf/im_w_of_x.cl'))
 

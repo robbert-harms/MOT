@@ -11,7 +11,7 @@ from mot.lib.utils import cartesian
 class test_GammaDistribution(unittest.TestCase):
 
     def __init__(self, *args, **kwargs):
-        super(test_GammaDistribution, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     def test_pdf(self):
         shapes = np.arange(0.01, 20, 0.5)

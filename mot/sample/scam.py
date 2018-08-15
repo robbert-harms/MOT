@@ -46,7 +46,7 @@ class SingleComponentAdaptiveMetropolis(AbstractRWMSampler):
             [1] Haario, H., Saksman, E., & Tamminen, J. (2005). Componentwise adaptation for high dimensional MCMC.
                 Computational Statistics, 20(2), 265-273. https://doi.org/10.1007/BF02789703
         """
-        super(SingleComponentAdaptiveMetropolis, self).__init__(ll_func, log_prior_func, x0, proposal_stds, **kwargs)
+        super().__init__(ll_func, log_prior_func, x0, proposal_stds, **kwargs)
         self._waiting_period = waiting_period
         self._scaling_factor = scaling_factor
         self._epsilon = epsilon
@@ -59,7 +59,7 @@ class SingleComponentAdaptiveMetropolis(AbstractRWMSampler):
                                                        dtype=self._cl_runtime_info.mot_float_dtype, order='C')
 
     def _get_kernel_data(self, nmr_samples, thinning, return_output):
-        kernel_data = super(SingleComponentAdaptiveMetropolis, self)._get_kernel_data(nmr_samples,
+        kernel_data = super()._get_kernel_data(nmr_samples,
                                                                                       thinning, return_output)
         kernel_data.update({
             '_parameter_means': Array(self._parameter_means, 'mot_float_type', mode='rw', ensure_zero_copy=True),

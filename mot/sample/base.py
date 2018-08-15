@@ -378,7 +378,7 @@ class AbstractRWMSampler(AbstractSampler):
                     void <func_name>(mot_data_struct* data,
                                      local mot_float_type* x);
         """
-        super(AbstractRWMSampler, self).__init__(ll_func, log_prior_func, x0, **kwargs)
+        super().__init__(ll_func, log_prior_func, x0, **kwargs)
         self._proposal_stds = np.copy(np.require(proposal_stds, requirements='CAOW',
                                                  dtype=self._cl_runtime_info.mot_float_dtype))
         self._use_random_scan = use_random_scan
@@ -386,7 +386,7 @@ class AbstractRWMSampler(AbstractSampler):
             'void finalizeProposal(mot_data_struct* data, local const mot_float_type* const x){}')
 
     def _get_kernel_data(self, nmr_samples, thinning, return_output):
-        kernel_data = super(AbstractRWMSampler, self)._get_kernel_data(nmr_samples, thinning, return_output)
+        kernel_data = super()._get_kernel_data(nmr_samples, thinning, return_output)
         kernel_data.update({
             '_proposal_stds': Array(self._proposal_stds, 'mot_float_type', mode='rw', ensure_zero_copy=True)
         })

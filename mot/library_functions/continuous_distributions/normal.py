@@ -57,7 +57,7 @@ class _ndtri(SimpleCLLibrary):
         and the other for y up to exp(-2).  For larger arguments,
         w = y - 0.5, and  x/sqrt(2pi) = w + w**3 R(w**2)/S(w**2)).
         """
-        super(_ndtri, self).__init__('''
+        super().__init__('''
             double _ndtri(double y){
                 /* approximation for 0 <= |y - 0.5| <= 3/8 */
                 double P0[5] = {

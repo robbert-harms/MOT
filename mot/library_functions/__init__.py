@@ -42,7 +42,7 @@ class FirstLegendreTerm(SimpleCLLibrary):
 
         The return value is Pn(x) if n is a nonnegative integer.  If n is negative, 0 is returned.
         """
-        super(FirstLegendreTerm, self).__init__('''
+        super().__init__('''
             double firstLegendreTerm(double x, int n){
                 if (n < 0){
                     return 0.0;
@@ -167,7 +167,7 @@ class EuclidianNormFunction(SimpleCLLibraryFromFile):
             memspace (str): The memory space of the memtyped array (private, constant, global).
             memtype (str): the memory type to use, double, float, mot_float_type, ...
         """
-        super(EuclidianNormFunction, self).__init__(
+        super().__init__(
             memtype,
             self.__class__.__name__ + '_' + memspace + '_' + memtype,
             [],

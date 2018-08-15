@@ -42,4 +42,4 @@ class lgam1p(SimpleCLLibrary):
         This is a simplification of the corresponding function in scipy
         https://github.com/scipy/scipy/blob/master/scipy/special/cephes/unity.c 2018-05-14
         """
-        super(lgam1p, self).__init__('double lgam1p(double x){return lgamma(x + 1);}')
+        super().__init__('double lgam1p(double x){return lgamma(x + 1);}')

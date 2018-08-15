@@ -18,13 +18,13 @@ from mot.lib.cl_function import SimpleCLFunction
 class CLRoutineTestCase(unittest.TestCase):
 
     def __init__(self, *args, **kwargs):
-        super(CLRoutineTestCase, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
 
 class TestRosenbrock(CLRoutineTestCase):
 
     def setUp(self):
-        super(TestRosenbrock, self).setUp()
+        super().setUp()
         self.n = 5
         self.methods = {'Nelder-Mead': None, 'Powell': {'patience': 3}}
         self._nmr_observations = self.n - 1
@@ -59,7 +59,7 @@ class TestRosenbrock(CLRoutineTestCase):
 class TestLSQNonLinExample(CLRoutineTestCase):
 
     def setUp(self):
-        super(TestLSQNonLinExample, self).setUp()
+        super().setUp()
         self._nmr_observations = 10
         self._objective_func = SimpleCLFunction.from_string('''
             double lsqnonlin_example_objective(local const mot_float_type* const x,

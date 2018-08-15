@@ -12,7 +12,7 @@ from mot.lib.utils import cartesian
 class test_NormalDistribution(unittest.TestCase):
 
     def __init__(self, *args, **kwargs):
-        super(test_NormalDistribution, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         xs = np.arange(-10, 10, 0.5)
         ys = np.arange(0.01, 0.99, 0.1)

@@ -195,7 +195,7 @@ class SimpleConfigAction(ConfigAction):
         For developers, it is easiest to implement ``_apply()`` such that you do not manually need to store the old
         configuraration.
         """
-        super(SimpleConfigAction, self).__init__()
+        super().__init__()
         self._old_config = {}
 
     def apply(self):
@@ -266,7 +266,7 @@ class VoidConfigurationAction(ConfigAction):
     def __init__(self):
         """Does nothing, useful as a default config action.
         """
-        super(VoidConfigurationAction, self).__init__()
+        super().__init__()
 
 
 class CLRuntimeInfo(object):

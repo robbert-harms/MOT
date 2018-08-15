@@ -39,7 +39,7 @@ class AdaptiveMetropolisWithinGibbs(AbstractRWMSampler):
             [1] Roberts GO, Rosenthal JS. Examples of adaptive MCMC. J Comput Graph Stat. 2009;18(2):349-367.
                 doi:10.1198/jcgs.2009.06134.
         """
-        super(AdaptiveMetropolisWithinGibbs, self).__init__(ll_func, log_prior_func, x0, proposal_stds, **kwargs)
+        super().__init__(ll_func, log_prior_func, x0, proposal_stds, **kwargs)
         self._target_acceptance_rate = target_acceptance_rate
         self._batch_size = batch_size
         self._damping_factor = damping_factor
@@ -48,7 +48,7 @@ class AdaptiveMetropolisWithinGibbs(AbstractRWMSampler):
         self._acceptance_counter = np.zeros((self._nmr_problems, self._nmr_params), dtype=np.uint64, order='C')
 
     def _get_kernel_data(self, nmr_samples, thinning, return_output):
-        kernel_data = super(AdaptiveMetropolisWithinGibbs, self)._get_kernel_data(nmr_samples, thinning, return_output)
+        kernel_data = super()._get_kernel_data(nmr_samples, thinning, return_output)
         kernel_data.update({
             '_acceptance_counter': Array(self._acceptance_counter, mode='rw', ensure_zero_copy=True)
         })

@@ -115,7 +115,7 @@ class _didonato_SN(SimpleCLLibrary):
 
         Copied from Scipy (https://github.com/scipy/scipy/blob/master/scipy/special/cephes/igami.c), 05-05-2018.
         """
-        super(_didonato_SN, self).__init__('''
+        super().__init__('''
             double _didonato_SN(double a, double x, uint N, double tolerance){ 
                 double sum = 1.0;
             
@@ -503,7 +503,7 @@ class igam(SimpleCLLibrary):
 
         Copied from Scipy (https://github.com/scipy/scipy/blob/master/scipy/special/cephes/igam.c), 05-05-2018.
         """
-        super(igam, self).__init__('''
+        super().__init__('''
             double igam(double a, double x){
                 int MAXITER = 2000;
                 int IGAM = 1;
@@ -590,7 +590,7 @@ class igamc(SimpleCLLibrary):
 
         Copied from Scipy (https://github.com/scipy/scipy/blob/master/scipy/special/cephes/igam.c), 05-05-2018.
         """
-        super(igamc, self).__init__('''
+        super().__init__('''
             double igamc(double a, double x){
                 int MAXITER = 2000;
                 int IGAM = 1;
@@ -649,7 +649,7 @@ class igam_fac(SimpleCLLibrary):
 
         Copied from Scipy (https://github.com/scipy/scipy/blob/master/scipy/special/cephes/igam.c), 05-05-2018.
         """
-        super(igam_fac, self).__init__('''
+        super().__init__('''
             double igam_fac(double a, double x){
                 double ax, fac, res, num;
     
@@ -785,7 +785,7 @@ class igamc_series(SimpleCLLibrary):
 
         Copied from Scipy (https://github.com/scipy/scipy/blob/master/scipy/special/cephes/igam.c), 05-05-2018.
         """
-        super(igamc_series, self).__init__('''
+        super().__init__('''
             double igamc_series(double a, double x){
                 int MAXITER = 500;
     
