@@ -80,7 +80,7 @@ def get_minimizer_options(method):
     """
     if method == 'Powell':
         return {'patience': 2,
-                'patience_line_search': 5,
+                'patience_line_search': None,
                 'reset_method': 'EXTRAPOLATED_POINT'}
 
     elif method == 'Nelder-Mead':
@@ -162,7 +162,7 @@ def _minimize_powell(func, x0, cl_runtime_info, data=None, options=None):
     
     return_code = optimizer_func.evaluate(
         kernel_data, nmr_instances=nmr_problems,
-        use_local_reduction=all(env.is_gpu for env in cl_runtime_info.cl_environments),
+        use_local_reduction=all(env.is_gpu for env in cl_runtime_info.get_cl_environments()),
         cl_runtime_info=cl_runtime_info)
 
     return OptimizeResults({'x': kernel_data['x'].get_data(),
@@ -233,7 +233,7 @@ def _minimize_nmsimplex(func, x0, cl_runtime_info, data=None, options=None):
 
     return_code = optimizer_func.evaluate(
         kernel_data, nmr_instances=nmr_problems,
-        use_local_reduction=all(env.is_gpu for env in cl_runtime_info.cl_environments),
+        use_local_reduction=all(env.is_gpu for env in cl_runtime_info.get_cl_environments()),
         cl_runtime_info=cl_runtime_info)
 
     return OptimizeResults({'x': kernel_data['x'].get_data(),
@@ -314,7 +314,7 @@ def _minimize_subplex(func, x0, cl_runtime_info, data=None, options=None):
 
     return_code = optimizer_func.evaluate(
         kernel_data, nmr_instances=nmr_problems,
-        use_local_reduction=all(env.is_gpu for env in cl_runtime_info.cl_environments),
+        use_local_reduction=all(env.is_gpu for env in cl_runtime_info.get_cl_environments()),
         cl_runtime_info=cl_runtime_info)
 
     return OptimizeResults({'x': kernel_data['x'].get_data(),
@@ -353,7 +353,7 @@ def _minimize_levenberg_marquardt(func, x0, nmr_observations, cl_runtime_info, d
 
     return_code = optimizer_func.evaluate(
         kernel_data, nmr_instances=nmr_problems,
-        use_local_reduction=all(env.is_gpu for env in cl_runtime_info.cl_environments),
+        use_local_reduction=all(env.is_gpu for env in cl_runtime_info.get_cl_environments()),
         cl_runtime_info=cl_runtime_info)
 
     return OptimizeResults({'x': kernel_data['x'].get_data(),

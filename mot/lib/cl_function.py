@@ -505,6 +505,7 @@ class _ProcedureWorker(Worker):
         self._workgroup_size = self._kernel.run_procedure.get_work_group_info(
             cl.kernel_work_group_info.PREFERRED_WORK_GROUP_SIZE_MULTIPLE,
             self._cl_environment.device)
+
         if not self._use_local_reduction:
             self._workgroup_size = 1
 

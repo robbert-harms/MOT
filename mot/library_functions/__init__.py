@@ -242,7 +242,7 @@ class NMSimplex(SimpleCLLibrary):
 
 class Powell(SimpleCLLibraryFromFile):
 
-    def __init__(self, function_name, nmr_parameters, patience=2, patience_line_search=5,
+    def __init__(self, function_name, nmr_parameters, patience=2, patience_line_search=None,
                  reset_method='EXTRAPOLATED_POINT'):
         """The Powell CL implementation.
 
@@ -251,7 +251,8 @@ class Powell(SimpleCLLibraryFromFile):
                 powell method. Should be of signature: ``double evaluate(local mot_float_type* x, void* data_void);``
             nmr_parameters (int): the number of parameters in the model, this will be hardcoded in the method
             patience (int): the patience of the Powell algorithm
-            patience_line_search (int): the patience of the line search algorithm
+            patience_line_search (int): the patience of the line search algorithm. If None, we set it equal to the
+                patience.
             reset_method (str): one of ``RESET_TO_IDENTITY`` or ``EXTRAPOLATED_POINT``. The method used to
                 reset the search directions every iteration.
         """
@@ -260,9 +261,8 @@ class Powell(SimpleCLLibraryFromFile):
             'NMR_PARAMS': nmr_parameters,
             'RESET_METHOD': reset_method.upper(),
             'PATIENCE': patience,
-            'PATIENCE_LINE_SEARCH': patience_line_search
+            'PATIENCE_LINE_SEARCH': patience if patience_line_search is None else patience_line_search
         }
-
         super().__init__(
             'int', 'powell', [('local mot_float_type*', 'model_parameters'), ('void*', 'data')],
             resource_filename('mot', 'data/opencl/powell.cl'),
