@@ -2,6 +2,19 @@
 Changelog
 *********
 
+v0.5.7 (2018-08-17)
+===================
+
+Changed
+-------
+- Updated lmmin to version 7.0 of http://apps.jcns.fz-juelich.de/doku/sc/lmfit.
+
+Other
+-----
+- Removed redundant super arguments.
+- Simplified the optimization API.
+
+
 v0.5.6 (2018-08-02)
 ===================
 - Made the optimizers work better with the local reduction.
