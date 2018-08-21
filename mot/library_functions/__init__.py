@@ -199,7 +199,12 @@ class LibNMSimplex(SimpleCLLibraryFromFile):
 class NMSimplex(SimpleCLLibrary):
 
     def __init__(self, function_name, nmr_parameters, patience=200, alpha=1.0, beta=0.5,
-                 gamma=2.0, delta=0.5, scale=1.0, adaptive_scales=True):
+                 gamma=2.0, delta=0.5, scale=1.0, adaptive_scales=True, **kwargs):
+
+        if 'dependencies' in kwargs:
+            kwargs['dependencies'] = list(kwargs['dependencies']) + [LibNMSimplex(function_name)]
+        else:
+            kwargs['dependencies'] = [LibNMSimplex(function_name)]
 
         params = {'NMR_PARAMS': nmr_parameters,
                   'PATIENCE': patience,
@@ -237,13 +242,13 @@ class NMSimplex(SimpleCLLibrary):
                                      %(ALPHA)r, %(BETA)r, %(GAMMA)r, %(DELTA)r,
                                      nmsimplex_scratch);
             }
-        ''' % params, dependencies=[LibNMSimplex(function_name)])
+        ''' % params, **kwargs)
 
 
 class Powell(SimpleCLLibraryFromFile):
 
     def __init__(self, function_name, nmr_parameters, patience=2, patience_line_search=None,
-                 reset_method='EXTRAPOLATED_POINT'):
+                 reset_method='EXTRAPOLATED_POINT', **kwargs):
         """The Powell CL implementation.
 
         Args:
@@ -266,14 +271,14 @@ class Powell(SimpleCLLibraryFromFile):
         super().__init__(
             'int', 'powell', [('local mot_float_type*', 'model_parameters'), ('void*', 'data')],
             resource_filename('mot', 'data/opencl/powell.cl'),
-            var_replace_dict=params)
+            var_replace_dict=params, **kwargs)
 
 
 class Subplex(SimpleCLLibraryFromFile):
 
     def __init__(self, function_name, nmr_parameters, patience=10,
                  patience_nmsimplex=100, alpha=1.0, beta=0.5, gamma=2.0, delta=0.5, scale=1.0, psi=0.001, omega=0.01,
-                 adaptive_scales=True, min_subspace_length='auto', max_subspace_length='auto'):
+                 adaptive_scales=True, min_subspace_length='auto', max_subspace_length='auto', **kwargs):
         """The Subplex optimization routines.
 
         Args:
@@ -306,6 +311,11 @@ class Subplex(SimpleCLLibraryFromFile):
                     gamma = 1 + 2.0 / n
                     delta = 1 - 1.0 / n
         """
+        if 'dependencies' in kwargs:
+            kwargs['dependencies'] = list(kwargs['dependencies']) + [LibNMSimplex('subspace_evaluate')]
+        else:
+            kwargs['dependencies'] = [LibNMSimplex('subspace_evaluate')]
+
         params = {
             'FUNCTION_NAME': function_name,
             'PATIENCE': patience,
@@ -329,14 +339,13 @@ class Subplex(SimpleCLLibraryFromFile):
 
         super().__init__(
             'int', 'subplex', [('local mot_float_type* const', 'model_parameters'), ('void*', 'data')],
-            resource_filename('mot', 'data/opencl/subplex.cl'),
-            var_replace_dict=params, dependencies=[LibNMSimplex('subspace_evaluate')])
+            resource_filename('mot', 'data/opencl/subplex.cl'), var_replace_dict=params, **kwargs)
 
 
 class LevenbergMarquardt(SimpleCLLibraryFromFile):
 
     def __init__(self, function_name, nmr_parameters, nmr_observations, patience=250, step_bound=100.0, scale_diag=1,
-                 usertol_mult=30):
+                 usertol_mult=30, **kwargs):
         """The Powell CL implementation.
 
         Args:
@@ -360,7 +369,8 @@ class LevenbergMarquardt(SimpleCLLibraryFromFile):
         }
 
         super().__init__(
-            'int', 'lmmin', [('local mot_float_type* const', 'x'), ('void*', 'data'),
+            'int', 'lmmin', [('local mot_float_type* const', 'model_parameters'),
+                             ('void*', 'data'),
                              ('global mot_float_type*', 'fjac')],
             resource_filename('mot', 'data/opencl/lmmin.cl'),
-            var_replace_dict=params)
+            var_replace_dict=params, **kwargs)

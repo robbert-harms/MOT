@@ -30,7 +30,7 @@ class TestRosenbrock(CLRoutineTestCase):
         self._nmr_observations = self.n - 1
         self._objective_func = SimpleCLFunction.from_string('''
             double rosenbrock_MLE_func(local const mot_float_type* const x,
-                                       mot_data_struct* data, 
+                                       void* data, 
                                        local mot_float_type* objective_list){
 
                 double sum = 0;
@@ -63,7 +63,7 @@ class TestLSQNonLinExample(CLRoutineTestCase):
         self._nmr_observations = 10
         self._objective_func = SimpleCLFunction.from_string('''
             double lsqnonlin_example_objective(local const mot_float_type* const x,
-                                               mot_data_struct* data, 
+                                               void* data, 
                                                local mot_float_type* objective_list){
                 
                 double sum = 0;

@@ -125,7 +125,7 @@ double lm_euclidian_norm_global(global const mot_float_type* const x, const int 
 /******************************************************************************/
 /*  lmmin (main minimization routine)                                         */
 /******************************************************************************/
-int lmmin(local mot_float_type * const x, void* data, global mot_float_type* fjac){
+int lmmin(local mot_float_type * const model_parameters, void* data, global mot_float_type* fjac){
 
     int j, i;
 
@@ -170,7 +170,7 @@ int lmmin(local mot_float_type * const x, void* data, global mot_float_type* fja
 
     /***  Evaluate function at starting point and calculate norm.  ***/
 
-    %(FUNCTION_NAME)s(x, data, fvec);
+    %(FUNCTION_NAME)s(model_parameters, data, fvec);
 
     if(get_local_id(0) == 0){
         nfev = 1;
@@ -190,20 +190,20 @@ int lmmin(local mot_float_type * const x, void* data, global mot_float_type* fja
         /** Calculate the Jacobian. **/
         for (j = 0; j < %(NMR_PARAMS)s; j++) {
             if(get_local_id(0) == 0){
-                temp = x[j];
+                temp = model_parameters[j];
                 step = max(EPS*EPS, EPS * fabs(temp));
-                x[j] += step; /* replace temporarily */
+                model_parameters[j] += step; /* replace temporarily */
             }
             barrier(CLK_LOCAL_MEM_FENCE);
 
-            %(FUNCTION_NAME)s(x, data, wf);
+            %(FUNCTION_NAME)s(model_parameters, data, wf);
 
             if(get_local_id(0) == 0){
                 ++nfev;
                 for (i = 0; i < %(NMR_OBSERVATIONS)s; i++){
                     fjac[j*%(NMR_OBSERVATIONS)s+i] = (wf[i] - fvec[i]) / step;
                 }
-                x[j] = temp; /* restore */
+                model_parameters[j] = temp; /* restore */
             }
             barrier(CLK_LOCAL_MEM_FENCE);
         }
@@ -287,11 +287,11 @@ int lmmin(local mot_float_type * const x, void* data, global mot_float_type* fja
                     }
                     /* xnorm := || D x || */
                     for (j = 0; j < %(NMR_PARAMS)s; j++){
-                        wa3[j] = diag[j] * x[j];
+                        wa3[j] = diag[j] * model_parameters[j];
                     }
                     xnorm = lm_euclidian_norm(wa3, %(NMR_PARAMS)s);
                 } else {
-                    xnorm = lm_euclidian_norm(x, %(NMR_PARAMS)s);
+                    xnorm = lm_euclidian_norm(model_parameters, %(NMR_PARAMS)s);
                 }
             }
             barrier(CLK_LOCAL_MEM_FENCE);
@@ -369,7 +369,7 @@ int lmmin(local mot_float_type * const x, void* data, global mot_float_type* fja
 
                 /** Evaluate the function at x + p. **/
                 for (j = 0; j < %(NMR_PARAMS)s; j++){
-                    wa2[j] = x[j] - wa1[j];
+                    wa2[j] = model_parameters[j] - wa1[j];
                 }
             }
             barrier(CLK_LOCAL_MEM_FENCE);
@@ -425,12 +425,12 @@ int lmmin(local mot_float_type * const x, void* data, global mot_float_type* fja
                     /* Update x, fvec, and their norms */
                     if (SCALE_DIAG) {
                         for (j = 0; j < %(NMR_PARAMS)s; j++) {
-                            x[j] = wa2[j];
-                            wa2[j] = diag[j] * x[j];
+                            model_parameters[j] = wa2[j];
+                            wa2[j] = diag[j] * model_parameters[j];
                         }
                     } else {
                         for (j = 0; j < %(NMR_PARAMS)s; j++){
-                            x[j] = wa2[j];
+                            model_parameters[j] = wa2[j];
                         }
                     }
                     for (i = 0; i < %(NMR_OBSERVATIONS)s; i++){

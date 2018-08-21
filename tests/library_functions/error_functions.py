@@ -20,7 +20,7 @@ class test_ErrorFunctions(unittest.TestCase):
         x = np.linspace(-3, 3)
 
         python_results = scipy.special.erfi(x)
-        opencl_results = erfi().evaluate({'x': x})
+        opencl_results = erfi().evaluate({'x': x}, x.shape[0])
 
         assert_allclose(opencl_results, python_results, atol=1e-5, rtol=1e-5)
 
@@ -28,6 +28,6 @@ class test_ErrorFunctions(unittest.TestCase):
         x = np.linspace(-15, 15, num=1000)
 
         python_results = scipy.special.dawsn(x)
-        opencl_results = dawson().evaluate({'x': x})
+        opencl_results = dawson().evaluate({'x': x}, x.shape[0])
 
         assert_allclose(opencl_results, python_results, atol=1e-5, rtol=1e-5)

@@ -1,3 +1,5 @@
+from collections import OrderedDict, Mapping
+
 import numpy as np
 import pyopencl as cl
 
@@ -16,8 +18,7 @@ class KernelData(object):
     def set_mot_float_dtype(self, mot_float_dtype):
         """Set the numpy data type corresponding to the ``mot_float_type`` ctype.
 
-        This is set by the kernel input data manager and is meant to update the state of the input data according
-        to this setting.
+        This is set just prior to using this kernel data in the kernel.
 
         Args:
             mot_float_dtype (dtype): the numpy data type that is to correspond with the ``mot_float_type`` used in the
@@ -25,149 +26,296 @@ class KernelData(object):
         """
         raise NotImplementedError()
 
-    @property
-    def data_length(self):
-        """Get the number of elements per problem instance.
-
-        In the kernels, arrays are loaded as one dimensional arrays per problem instance. This property should return
-        the length of that one dimensional array per problem instance.
+    def get_data(self):
+        """Get the underlying data of this kernel data object.
 
         Returns:
-            int: the number of elements per problem instance.
+            dict, ndarray, scalar: the underlying data object, can return None if this input data has no actual data.
         """
         raise NotImplementedError()
 
-    @property
-    def loaded_as_pointer(self):
-        """Check if this data is loaded as pointer in the ``mot_data_struct``.
-
-        Returns:
-            boolean: If this data is referenced with a pointer in the ``mot_data_struct``.
-        """
-        raise NotImplementedError()
-
-    @property
-    def read_data_back(self):
-        """Check if this input data should be read back after kernel execution.
-
-        Please note, that if this is set, the property ``is_writable`` must be true as well, but the converse is not
-        necessarily true.
-
-        If set, this will do two things. First, after evaluating the user's CL function, it will copy memory back
-        from private/local to the global array. Second, it will map the data back into host memory space.
-
-        Returns:
-            boolean: if we should read the data back
-        """
-        raise NotImplementedError()
-
-    @property
-    def is_readable(self):
-        """If this kernel input data must be readable by the kernel.
-
-        This is used in conjunction with :meth:`is_writable` when loading the data in the kernel.
-
-        Returns:
-            boolean: if this data must be made readable by the kernel function
-        """
-        raise NotImplementedError()
-
-    @property
-    def is_writable(self):
-        """Check if this kernel input data will write data back.
-
-        This is used in conjunction with :meth:`is_readable` when loading the data in the kernel.
-
-        If this returns true the kernel function must ensure that the data is loaded with at least write permissions.
-        This flag will also ensure that the data will be read back from the device after kernel execution, overwriting
-        the current data.
-
-        Returns:
-            boolean: if this data must be made writable and be read back after function execution.
-        """
-        raise NotImplementedError()
-
-    def get_scalar_arg_dtype(self):
-        """Get the numpy data type we should report in the kernel call for this input element.
+    def get_scalar_arg_dtypes(self):
+        """Get the numpy data types we should report in the kernel call for scalar elements.
 
         If we are inserting scalars in the kernel we need to provide the CL runtime with the correct data type
-        of the function.
+        of the function. If the kernel parameter is not a scalar, we should return None. If the kernel data does not
+        require a kernel input parameter, return an empty list.
+
+        This list should match the list of parameters of :meth:`get_kernel_parameters`.
 
         Returns:
-            dtype: the numpy data type for this element, or None if this is not a scalar.
+            List[Union[dtype, None]]: the numpy data type for this element, or None if this is not a scalar.
         """
         raise NotImplementedError()
 
-    def get_data(self):
-        """Get the underlying data.
+    def enqueue_readouts(self, queue, buffers, range_start, range_end):
+        """Enqueue readouts for this kernel input data object.
 
-        This should return the current state of the data object.
+        This should add non-blocking readouts to the given queue.
+
+        Args:
+            queue (opencl queue): the queue on which to add the unmap buffer command
+            buffers (List[pyopencl._cl.Buffer.Buffer]): the list of buffers corresponding to this kernel data.
+                These buffers are obtained earlier from the method :meth:`get_kernel_inputs`.
+            range_start (int): the start of the range to read out (in the first dimension)
+            range_end (int): the end of the range to read out (in the first dimension)
+        """
+        raise NotImplementedError()
+
+    def get_type_definitions(self):
+        """Get possible type definitions needed to load this data into the kernel.
+
+        These types are defined at the head of the CL script, before any functions.
 
         Returns:
-            the underlying data object, make sure this is of your desired data type. Can return None if
-                this input data has no actual data.
+            str: a CL compatible type declaration. This can for example be used for defining struct types.
+                If no extra types are needed, this function should return the empty string.
+        """
+        raise NotImplementedError()
+
+    def initialize_variable(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        """Initialize the variable inside the kernel function.
+
+        This should initialize the variable as such that we can use it when calling the function acting on this data.
+
+        Args:
+             variable_name (str): the name for this variable
+             kernel_param_name (str): the kernel parameter name (given in :meth:`get_kernel_parameters`).
+             problem_id_substitute (str): the substitute for the ``{problem_id}`` in the kernel data info elements.
+             address_space (str): the desired address space for this variable, defined by the parameter of the called
+                function.
+
+        Returns:
+            str: the necessary CL code to initialize this variable
+        """
+        raise NotImplementedError()
+
+    def get_function_call_input(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        """How this kernel data is used as input to the function that operates on the data.
+
+        Args:
+            variable_name (str): the name for this variable
+            kernel_param_name (str): the kernel parameter name (given in :meth:`get_kernel_parameters`).
+            problem_id_substitute (str): the substitute for the ``{problem_id}`` in the kernel data info elements.
+            address_space (str): the desired address space for this variable, defined by the parameter of the called
+                function.
+
+        Returns:
+            str: a single string representing how this kernel data is used as input to the function we are applying
+        """
+        raise NotImplementedError()
+
+    def post_function_callback(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        """A callback to update or change data after the function has been applied
+
+        Args:
+            variable_name (str): the name for this variable
+            kernel_param_name (str): the kernel parameter name (given in :meth:`get_kernel_parameters`).
+            problem_id_substitute (str): the substitute for the ``{problem_id}`` in the kernel data info elements.
+            address_space (str): the desired address space for this variable, defined by the parameter of the called
+                function.
+
+        Returns:
+            str: CL code that needs to be run after the function has been applied.
         """
         raise NotImplementedError()
 
     def get_struct_declaration(self, name):
-        """Get the declaration of this input data in the ``mot_data_struct`` object.
+        """Get the variable declaration of this data object for use in a Struct.
 
         Args:
-            name (str): the name for this data, i.e. how it is represented in the kernel.
+            name (str): the name for this data
 
         Returns:
-            str: the declaration of this input data in the kernel data struct
+            str: the variable declaration of this kernel data object
         """
         raise NotImplementedError()
 
-    def get_kernel_argument_declaration(self, name):
-        """Get the kernel argument declaration of this parameter.
+    def get_struct_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
+        """Initialize the variable inside a struct.
+
+        This should initialize the variable for use in a struct (should correspond to :meth:`get_struct_declaration`).
 
         Args:
-            name (str): the name for this data, i.e. how it is represented in the kernel.
+             variable_name (str): the name for this variable
+             kernel_param_name (str): the kernel parameter name (given in :meth:`get_kernel_parameters`).
+             problem_id_substitute (str): the substitute for the ``{problem_id}`` in the kernel data info elements.
+             address_space (str): the desired address space for this variable, defined by the parameter of the called
+                function.
 
         Returns:
-            str: the kernel argument declaration
+            str: the necessary CL code to initialize this variable
         """
         raise NotImplementedError()
 
-    def get_struct_init_string(self, name, problem_id_substitute):
-        """Create the structure initialization string.
+    def get_kernel_parameters(self, kernel_param_name):
+        """Get the kernel argument declarations for this kernel data.
 
         Args:
-            name (str): the name of this data in the kernel
-            problem_id_substitute (str): the substitute for the ``{problem_id}`` in the kernel data info elements.
+            kernel_param_name (str): the parameter name for the parameter in the kernel function call
 
         Returns:
-            str: the instantiation string for the data struct of this input data
+            List[str]: a list of kernel parameter declarations, or an empty list
         """
         raise NotImplementedError()
 
     def get_kernel_inputs(self, cl_context, workgroup_size):
-        """Get the kernel CL input object.
+        """Get the kernel input data matching the list of parameters of :meth:`get_kernel_parameters`.
 
         Since the kernels follow the map/unmap paradigm make sure to use the ``USE_HOST_PTR`` when making
         writable data objects.
 
         Args:
             cl_context (pyopencl.Context): the CL context in which we are working.
-            workgroup_size (int or None): the workgroup size the kernel will use. If None, we are not using any
-                local reduction.
+            workgroup_size (int): the workgroup size the kernel will use.
 
         Returns:
-            a buffer, a local memory object, a scalars, etc., anything that can be loaded into the kernel.
+            List: a list of buffers, local memory objects, scalars, etc., anything that can be loaded into the kernel.
+                If no data should be entered, return an empty list.
         """
         raise NotImplementedError()
 
-    def include_in_kernel_call(self):
-        """Check if this data needs to be included in the kernel arguments.
+    def get_nmr_kernel_inputs(self):
+        """Get the number of kernel inputs this input data object has.
 
         Returns:
-            boolean: if the corresponding data needs to be included in the kernel call arguments. If set to False
-                we typically expect the data to be inlined in the kernel. If set to True, we add the data to the
-                kernel arguments.
+            int: the number of kernel inputs
         """
         raise NotImplementedError()
+
+
+class Struct(KernelData):
+
+    def __init__(self, elements, ctype, anonymous=False):
+        """A kernel data element for structs.
+
+        Please be aware that structs will always be passed as a pointer to the calling function.
+
+        Args:
+            ctype (str): the name of this structure
+            elements (Dict[str, Union[Dict, KernelData]]): the kernel data elements to load into the kernel
+                Can be a nested dictionary, in which case we load the nested elements as anonymous structs.
+                Alternatively, you can nest Structs in Structs, yielding named structs.
+            anonymous (boolean): if this struct is to be loaded anonymously, this is only meant for nested Structs.
+        """
+        self._elements = OrderedDict(sorted(elements.items()))
+
+        for key in list(self._elements):
+            value = self._elements[key]
+            if isinstance(value, Mapping):
+                self._elements[key] = Struct(value, key, anonymous=True)
+
+        self._ctype = ctype
+        self._anonymous = anonymous
+
+    def set_mot_float_dtype(self, mot_float_dtype):
+        for element in self._elements.values():
+            element.set_mot_float_dtype(mot_float_dtype)
+
+    def get_data(self):
+        data = {}
+        for name, value in self._elements.items():
+            data[name] = value.get_data()
+        return data
+
+    def get_scalar_arg_dtypes(self):
+        dtypes = []
+        for d in self._elements.values():
+            dtypes.extend(d.get_scalar_arg_dtypes())
+        return dtypes
+
+    def enqueue_readouts(self, queue, buffers, range_start, range_end):
+        buffer_ind = 0
+
+        for d in self._elements.values():
+            if d.get_nmr_kernel_inputs():
+                d.enqueue_readouts(queue, buffers[buffer_ind:buffer_ind + d.get_nmr_kernel_inputs()],
+                                   range_start, range_end)
+                buffer_ind += d.get_nmr_kernel_inputs()
+
+    def get_type_definitions(self):
+        other_structs = '\n'.join(element.get_type_definitions() for element in self._elements.values())
+
+        if self._anonymous:
+            return other_structs
+
+        return other_structs + '''
+            typedef struct {ctype}{{
+                {definitions}
+            }} {ctype};
+        '''.format(ctype=self._ctype,
+                   definitions='\n'.join(data.get_struct_declaration(name) for name, data in self._elements.items()))
+
+    def initialize_variable(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        return_str = ''
+        for name, data in self._elements.items():
+            return_str += data.initialize_variable('{}_{}'.format(variable_name, name),
+                                                   '{}_{}'.format(kernel_param_name, name),
+                                                   problem_id_substitute, 'global')
+
+        inits = [data.get_struct_initialization(
+            '{}_{}'.format(variable_name, name),
+            '{}_{}'.format(kernel_param_name, name), problem_id_substitute) for name, data in self._elements.items()]
+
+        if self._anonymous:
+            return return_str + '''
+                struct {ctype}{{
+                    {definitions}
+                }};
+                struct {ctype} {v_name} = {{ {inits} }};
+            '''.format(ctype=self._ctype, v_name=variable_name, inits=', '.join(inits),
+                       definitions='\n'.join(data.get_struct_declaration(name)
+                                             for name, data in self._elements.items()))
+
+        return return_str + '''
+            {ctype} {v_name} = {{ {inits} }};
+        '''.format(ctype=self._ctype, v_name=variable_name, inits=', '.join(inits))
+
+    def get_function_call_input(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        return '&' + variable_name
+
+    def post_function_callback(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        return ''
+
+    def get_struct_declaration(self, name):
+        if self._anonymous:
+            return '''
+                struct {{
+                    {definitions}
+                }}* {name};
+            '''.format(
+                name=name,
+                definitions='\n'.join(data.get_struct_declaration(name) for name, data in self._elements.items()))
+        return '{}* {};'.format(self._ctype, name)
+
+    def get_struct_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
+        if self._anonymous:
+            return '(void*)(&{})'.format(variable_name)
+        return '&' + variable_name
+
+    def get_kernel_parameters(self, kernel_param_name):
+        parameters = []
+        for name, d in self._elements.items():
+            parameters.extend(d.get_kernel_parameters('{}_{}'.format(kernel_param_name, name)))
+        return parameters
+
+    def get_kernel_inputs(self, cl_context, workgroup_size):
+        data = []
+        for d in self._elements.values():
+            data.extend(d.get_kernel_inputs(cl_context, workgroup_size))
+        return data
+
+    def get_nmr_kernel_inputs(self):
+        return sum(element.get_nmr_kernel_inputs() for element in self._elements.values())
+
+    def __getitem__(self, key):
+        return self._elements[key]
+
+    def __contains__(self, key):
+        return key in self._elements
+
+    def __len__(self):
+        return len(self._elements)
 
 
 class Scalar(KernelData):
@@ -189,44 +337,42 @@ class Scalar(KernelData):
         self._ctype = ctype or dtype_to_ctype(self._value.dtype)
         self._mot_float_dtype = None
 
-    def set_mot_float_dtype(self, mot_float_dtype):
-        self._mot_float_dtype = mot_float_dtype
-
-    @property
-    def data_length(self):
-        return 1
-
-    @property
-    def loaded_as_pointer(self):
-        return False
-
-    @property
-    def read_data_back(self):
-        return False
-
-    @property
-    def is_readable(self):
-        return False
-
-    @property
-    def is_writable(self):
-        return False
-
-    def get_scalar_arg_dtype(self):
-        if self._ctype.startswith('mot_float_type'):
-            return self._mot_float_dtype
-        return self._value.dtype
-
     def get_data(self):
-        return self._value.astype(self.get_scalar_arg_dtype())
+        if self._ctype.startswith('mot_float_type'):
+            return np.asscalar(self._value.astype(self._mot_float_dtype))
+        return np.asscalar(self._value)
+
+    def get_scalar_arg_dtypes(self):
+        return []
+
+    def enqueue_readouts(self, queue, buffers, range_start, range_end):
+        pass
+
+    def get_type_definitions(self):
+        return ''
 
     def get_struct_declaration(self, name):
         return '{} {};'.format(self._ctype, name)
 
-    def get_kernel_argument_declaration(self, name):
-        return '{} {}'.format(self._ctype, name)
+    def get_struct_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
+        return self.get_function_call_input(variable_name, kernel_param_name, problem_id_substitute, 'private')
 
-    def get_struct_init_string(self, name, problem_id_substitute):
+    def get_kernel_parameters(self, kernel_param_name):
+        return []
+
+    def get_kernel_inputs(self, cl_context, workgroup_size):
+        return []
+
+    def get_nmr_kernel_inputs(self):
+        return 0
+
+    def set_mot_float_dtype(self, mot_float_dtype):
+        self._mot_float_dtype = mot_float_dtype
+
+    def initialize_variable(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        return ''
+
+    def get_function_call_input(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
         mot_dtype = SimpleCLDataType.from_string(self._ctype)
 
         if mot_dtype.is_vector_type:
@@ -245,11 +391,8 @@ class Scalar(KernelData):
             assignment = str(np.squeeze(self._value))
         return assignment
 
-    def get_kernel_inputs(self, cl_context, workgroup_size):
-        return self.get_data()
-
-    def include_in_kernel_call(self):
-        return False
+    def post_function_callback(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        return ''
 
 
 class LocalMemory(KernelData):
@@ -257,10 +400,12 @@ class LocalMemory(KernelData):
     def __init__(self, ctype, size_func=None):
         """Indicates that a local memory array of the indicated size must be loaded as kernel input data.
 
+        By default, this will create a local memory object the size of the local work group.
+
         Args:
             ctype (str): the desired c-type for this local memory object, like ``int``, ``float`` or ``mot_float_type``.
-            size_func (Function): the function that can calculate the required local memory size (in number of bytes),
-                given the workgroup size and numpy dtype in use by the kernel.
+            size_func (Callable[[int, dtype], int]): a function that can calculate the required local memory size
+                (in number of bytes), given the workgroup size and numpy dtype used by the kernel.
         """
         self._ctype = ctype
         self._size_func = size_func or (lambda workgroup_size, dtype: workgroup_size * np.dtype(dtype).itemsize)
@@ -269,50 +414,42 @@ class LocalMemory(KernelData):
     def set_mot_float_dtype(self, mot_float_dtype):
         self._mot_float_dtype = mot_float_dtype
 
-    @property
-    def data_length(self):
-        return 1
-
-    @property
-    def loaded_as_pointer(self):
-        return True
-
-    @property
-    def read_data_back(self):
-        return False
-
-    @property
-    def is_readable(self):
-        return False
-
-    @property
-    def is_writable(self):
-        return False
-
-    def get_scalar_arg_dtype(self):
-        return None
-
     def get_data(self):
         return None
+
+    def get_scalar_arg_dtypes(self):
+        return [None]
+
+    def enqueue_readouts(self, queue, buffers, range_start, range_end):
+        pass
+
+    def get_type_definitions(self):
+        return ''
+
+    def initialize_variable(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        return ''
+
+    def get_function_call_input(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        return kernel_param_name
+
+    def post_function_callback(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        return ''
 
     def get_struct_declaration(self, name):
         return 'local {}* restrict {};'.format(self._ctype, name)
 
-    def get_kernel_argument_declaration(self, name):
-        return 'local {}* restrict {}'.format(self._ctype, name)
+    def get_struct_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
+        return self.get_function_call_input(variable_name, kernel_param_name, problem_id_substitute, '')
 
-    def get_struct_init_string(self, name, problem_id_substitute):
-        return name
+    def get_kernel_parameters(self, kernel_param_name):
+        return ['local {}* restrict {}'.format(self._ctype, kernel_param_name)]
 
     def get_kernel_inputs(self, cl_context, workgroup_size):
-        if workgroup_size is None:
-            raise ValueError("Can not initialize the local memory kernel data, the workgroup_size is None.")
+        return [cl.LocalMemory(self._size_func(
+            workgroup_size, ctype_to_dtype(self._ctype, dtype_to_ctype(self._mot_float_dtype))))]
 
-        return cl.LocalMemory(self._size_func(
-            workgroup_size, ctype_to_dtype(self._ctype, dtype_to_ctype(self._mot_float_dtype))))
-
-    def include_in_kernel_call(self):
-        return True
+    def get_nmr_kernel_inputs(self):
+        return 1
 
 
 class Array(KernelData):
@@ -362,6 +499,7 @@ class Array(KernelData):
         self._backup_data_reference = None
         self._ensure_zero_copy = ensure_zero_copy
         self._as_scalar = as_scalar
+        self._data_length = self._data.strides[0] // self._data.itemsize
 
         if self._as_scalar and len(np.squeeze(self._data).shape) > 1:
             raise ValueError('The option "as_scalar" was set, but the data has more than one dimensions.')
@@ -389,6 +527,109 @@ class Array(KernelData):
                 if self._is_writable and self._ensure_zero_copy:
                     raise ValueError('We had to make a copy of the data while zero copy was set to True.')
 
+    def get_data(self):
+        return self._data
+
+    def get_scalar_arg_dtypes(self):
+        return [None]
+
+    def enqueue_readouts(self, queue, buffers, range_start, range_end):
+        if self._is_writable:
+            nmr_problems = range_end - range_start
+            cl.enqueue_map_buffer(
+                queue, buffers[0], cl.map_flags.READ,
+                range_start * self._data.strides[0],
+                (nmr_problems,) + self._data.shape[1:], self._data.dtype,
+                order="C", wait_for=None, is_blocking=False)
+
+    def get_type_definitions(self):
+        return ''
+
+    def initialize_variable(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        if not self._as_scalar:
+            if address_space == 'private':
+                return '''
+                    private {ctype} {v_name}[{nmr_elements}];
+
+                    for(uint i = 0; i < {nmr_elements}; i++){{
+                        {v_name}[i] = {k_name}[{offset} + i];
+                    }}
+                '''.format(ctype=self._ctype, v_name=variable_name, k_name=kernel_param_name,
+                           nmr_elements=self._data_length,
+                           offset=self._get_offset_str(problem_id_substitute))
+            elif address_space == 'local':
+                return '''
+                    local {ctype} {v_name}[{nmr_elements}];
+
+                    if(get_local_id(0) == 0){{
+                        for(uint i = 0; i < {nmr_elements}; i++){{
+                            {v_name}[i] = {k_name}[{offset} + i];
+                        }}
+                    }}
+                    barrier(CLK_LOCAL_MEM_FENCE);
+                '''.format(ctype=self._ctype, v_name=variable_name, k_name=kernel_param_name,
+                           nmr_elements=self._data_length,
+                           offset=self._get_offset_str(problem_id_substitute))
+        return ''
+
+    def get_function_call_input(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        if self._as_scalar:
+            return '{}[{}]'.format(kernel_param_name, self._get_offset_str(problem_id_substitute))
+        else:
+            if address_space == 'global':
+                return '{} + {}'.format(kernel_param_name, self._get_offset_str(problem_id_substitute))
+            elif address_space == 'private':
+                return variable_name
+            elif address_space == 'local':
+                return variable_name
+
+    def post_function_callback(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        if self._is_writable:
+            if not self._as_scalar:
+                if address_space == 'private':
+                    return '''
+                        for(uint i = 0; i < {nmr_elements}; i++){{
+                            {k_name}[{offset} + i] = {v_name}[i];
+                        }}
+                    '''.format(v_name=variable_name, k_name=kernel_param_name,
+                               nmr_elements=self._data_length, offset=self._get_offset_str(problem_id_substitute))
+                elif address_space == 'local':
+                    return '''
+                        if(get_local_id(0) == 0){{
+                            for(uint i = 0; i < {nmr_elements}; i++){{
+                                {k_name}[{offset} + i] = {v_name}[i];
+                            }}
+                        }}
+                    '''.format(v_name=variable_name, k_name=kernel_param_name,
+                               nmr_elements=self._data_length,
+                               offset=self._get_offset_str(problem_id_substitute))
+        return ''
+
+    def get_struct_declaration(self, name):
+        if self._as_scalar:
+            return '{} {};'.format(self._ctype, name)
+        return 'global {}* restrict {};'.format(self._ctype, name)
+
+    def get_struct_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
+        return self.get_function_call_input(variable_name, kernel_param_name, problem_id_substitute, 'global')
+
+    def get_kernel_parameters(self, kernel_param_name):
+        return ['global {}* restrict {}'.format(self._ctype, kernel_param_name)]
+
+    def get_kernel_inputs(self, cl_context, workgroup_size):
+        if self._is_writable:
+            if self._is_readable:
+                flags = cl.mem_flags.READ_WRITE
+            else:
+                flags = cl.mem_flags.WRITE_ONLY
+        else:
+            flags = cl.mem_flags.READ_ONLY
+
+        return [cl.Buffer(cl_context, flags | cl.mem_flags.USE_HOST_PTR, hostbuf=self._data)]
+
+    def get_nmr_kernel_inputs(self):
+        return 1
+
     def _get_offset_str(self, problem_id_substitute):
         if self._offset_str is None:
             offset_str = str(self._data.strides[0] // self._data.itemsize) + ' * {problem_id}'
@@ -396,70 +637,11 @@ class Array(KernelData):
             offset_str = str(self._offset_str)
         return offset_str.replace('{problem_id}', problem_id_substitute)
 
-    @property
-    def data_length(self):
-        return self._data.strides[0] // self._data.itemsize
 
-    @property
-    def loaded_as_pointer(self):
-        return not self._as_scalar
-
-    @property
-    def dtype(self):
-        return self._data.dtype
-
-    @property
-    def read_data_back(self):
-        return self._is_writable
-
-    @property
-    def is_readable(self):
-        return self._is_readable
-
-    @property
-    def is_writable(self):
-        return self._is_writable
-
-    def get_struct_declaration(self, name):
-        if self._as_scalar:
-            return '{} {};'.format(self._ctype, name)
-        return 'global {}* restrict {};'.format(self._ctype, name)
-
-    def get_kernel_argument_declaration(self, name):
-        return 'global {}* restrict {}'.format(self._ctype, name)
-
-    def get_struct_init_string(self, name, problem_id_substitute):
-        if self._as_scalar:
-            return '{}[{}]'.format(name, self._get_offset_str(problem_id_substitute))
-        return '{} + {}'.format(name, self._get_offset_str(problem_id_substitute))
-
-    def get_scalar_arg_dtype(self):
-        return None
-
-    def get_data(self):
-        return self._data
-
-    def get_kernel_inputs(self, cl_context, workgroup_size):
-        if self._is_writable:
-            if self._is_readable:
-                flags = cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR
-            else:
-                flags = cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR
-        else:
-            flags = cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR
-        return cl.Buffer(cl_context, flags, hostbuf=self._data)
-
-    def include_in_kernel_call(self):
-        return True
-
-
-class Zeros(KernelData):
+class Zeros(Array):
 
     def __init__(self, shape, ctype, offset_str=None, mode='w'):
         """Allocate an output buffer of the given shape.
-
-        This is similar to :class:`~mot.lib.utils.KernelArray` although these objects are not readable but only
-        writable by default.
 
         This is meant to quickly allocate a buffer large enough to hold the data requested. After running an OpenCL
         kernel you can get the written data using the method :meth:`get_data`.
@@ -471,97 +653,5 @@ class Zeros(KernelData):
             mode (str): one of 'r', 'w' or 'rw', for respectively read, write or read and write. This sets the
                 mode of how the data is loaded into the compute device's memory.
         """
-        self._is_readable = 'r' in mode
-        self._is_writable = 'w' in mode
-
-        self._requirements = ['C', 'A', 'O']
-        if self._is_writable:
-            self._requirements.append('W')
-
-        self._shape = shape
-        self._data = None
-        self._backup_data_reference = None
-        self._offset_str = offset_str
-        self._ctype = ctype
-        self._mot_float_dtype = None
-
-    def set_mot_float_dtype(self, mot_float_dtype):
-        self._mot_float_dtype = mot_float_dtype
-
-        dtype = ctype_to_dtype(self._ctype, mot_float_type=dtype_to_ctype(mot_float_dtype))
-
-        if self._data is None:
-            self._data = np.zeros(self._shape, dtype=dtype)
-            self._data = np.require(self._data, requirements=self._requirements)
-
-        elif self._ctype.startswith('mot_float_type'):
-            if self._backup_data_reference is not None:
-                self._data = self._backup_data_reference
-                self._backup_data_reference = None
-
-            new_data = convert_data_to_dtype(self._data, self._ctype,
-                                             mot_float_type=dtype_to_ctype(mot_float_dtype))
-            new_data = np.require(new_data, requirements=self._requirements)
-
-            if new_data is not self._data:
-                self._backup_data_reference = self._data
-                self._data = new_data
-
-    def _get_offset_str(self, problem_id_substitute):
-        if self._offset_str is None:
-            offset_str = str(self._data.strides[0] // self._data.itemsize) + ' * {problem_id}'
-        else:
-            offset_str = str(self._offset_str)
-        return offset_str.replace('{problem_id}', problem_id_substitute)
-
-    @property
-    def data_length(self):
-        return self._data.strides[0] // self._data.itemsize
-
-    @property
-    def loaded_as_pointer(self):
-        return True
-
-    @property
-    def dtype(self):
-        return self._data.dtype
-
-    @property
-    def read_data_back(self):
-        return self._is_writable
-
-    @property
-    def is_readable(self):
-        return self._is_readable
-
-    @property
-    def is_writable(self):
-        return self._is_writable
-
-    def get_struct_declaration(self, name):
-        return 'global {}* restrict {};'.format(self._ctype, name)
-
-    def get_kernel_argument_declaration(self, name):
-        return 'global {}* restrict {}'.format(self._ctype, name)
-
-    def get_struct_init_string(self, name, problem_id_substitute):
-        return name + ' + ' + self._get_offset_str(problem_id_substitute)
-
-    def get_scalar_arg_dtype(self):
-        return None
-
-    def get_data(self):
-        return self._data
-
-    def get_kernel_inputs(self, cl_context, workgroup_size):
-        if self._is_writable:
-            if self._is_readable:
-                flags = cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR
-            else:
-                flags = cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR
-        else:
-            flags = cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR
-        return cl.Buffer(cl_context, flags, hostbuf=self._data)
-
-    def include_in_kernel_call(self):
-        return True
+        super().__init__(np.zeros(shape, dtype=ctype_to_dtype(ctype)), ctype, offset_str=offset_str,
+                         mode=mode, as_scalar=False)

@@ -34,7 +34,7 @@ class test_NormalDistribution(unittest.TestCase):
         opencl_results = normal_pdf().evaluate({
             'x': self.distribution_test_params[:, 0],
             'mean': self.distribution_test_params[:, 1],
-            'std': self.distribution_test_params[..., 2]})
+            'std': self.distribution_test_params[..., 2]}, self.distribution_test_params.shape[0])
 
         assert_allclose(opencl_results, python_results, atol=1e-5, rtol=1e-5)
 
@@ -50,7 +50,7 @@ class test_NormalDistribution(unittest.TestCase):
         opencl_results = normal_cdf().evaluate({
             'x': self.distribution_test_params[:, 0],
             'mean': self.distribution_test_params[:, 1],
-            'std': self.distribution_test_params[..., 2]})
+            'std': self.distribution_test_params[..., 2]}, self.distribution_test_params.shape[0])
 
         assert_allclose(opencl_results, python_results, atol=1e-5, rtol=1e-5)
 
@@ -66,7 +66,7 @@ class test_NormalDistribution(unittest.TestCase):
         opencl_results = normal_ppf().evaluate({
             'y': self.quantile_test_params[:, 0],
             'mean': self.quantile_test_params[:, 1],
-            'std': self.quantile_test_params[..., 2]})
+            'std': self.quantile_test_params[..., 2]}, self.quantile_test_params.shape[0])
 
         assert_allclose(opencl_results, python_results, atol=1e-5, rtol=1e-5)
 
@@ -74,6 +74,6 @@ class test_NormalDistribution(unittest.TestCase):
         test_params = np.arange(0.01, 0.99, 0.01)
 
         python_results = ndtri(test_params.astype(np.float64))
-        cl_results = _ndtri().evaluate({'y': test_params})
+        cl_results = _ndtri().evaluate({'y': test_params}, test_params.shape[0])
 
         assert_allclose(np.nan_to_num(python_results), np.nan_to_num(cl_results), atol=1e-5, rtol=1e-5)

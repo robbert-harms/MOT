@@ -31,7 +31,7 @@ class test_GammaDistribution(unittest.TestCase):
         opencl_results = gamma_pdf().evaluate({
             'x': test_params[:, 0],
             'shape': test_params[:, 1],
-            'scale': test_params[..., 2]})
+            'scale': test_params[..., 2]}, test_params.shape[0])
 
         assert_allclose(opencl_results, python_results, atol=1e-7, rtol=1e-7)
 
@@ -44,7 +44,7 @@ class test_GammaDistribution(unittest.TestCase):
         for ind in range(test_params.shape[0]):
             python_results[ind] = gammaincc(test_params[ind, 0], test_params[ind, 1])
 
-        opencl_results = igamc().evaluate({'a': test_params[:, 0], 'x': test_params[:, 1]})
+        opencl_results = igamc().evaluate({'a': test_params[:, 0], 'x': test_params[:, 1]}, test_params.shape[0])
 
         assert_allclose(opencl_results, python_results, atol=1e-8, rtol=1e-8)
 
@@ -57,7 +57,7 @@ class test_GammaDistribution(unittest.TestCase):
         for ind in range(test_params.shape[0]):
             python_results[ind] = gammainc(test_params[ind, 0], test_params[ind, 1])
 
-        opencl_results = igam().evaluate({'a': test_params[:, 0], 'x': test_params[:, 1]})
+        opencl_results = igam().evaluate({'a': test_params[:, 0], 'x': test_params[:, 1]}, test_params.shape[0])
 
         assert_allclose(opencl_results, python_results, atol=1e-8, rtol=1e-8)
 
@@ -79,7 +79,7 @@ class test_GammaDistribution(unittest.TestCase):
         opencl_results = gamma_cdf().evaluate({
             'x': test_params[:, 0],
             'shape': test_params[:, 1],
-            'scale': test_params[:, 2]})
+            'scale': test_params[:, 2]}, test_params.shape[0])
 
         assert_allclose(opencl_results, python_results, atol=1e-8, rtol=1e-8)
 
@@ -101,7 +101,7 @@ class test_GammaDistribution(unittest.TestCase):
         opencl_results = gamma_ppf().evaluate({
             'y': test_params[:, 0],
             'shape': test_params[:, 1],
-            'scale': test_params[:, 2]})
+            'scale': test_params[:, 2]}, test_params.shape[0])
 
         assert_allclose(opencl_results, python_results, atol=1e-7, rtol=1e-7)
 

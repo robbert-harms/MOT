@@ -12,9 +12,8 @@ __maintainer__ = 'Robbert Harms'
 __email__ = 'robbert.harms@maastrichtuniversity.nl'
 __licence__ = 'LGPL v3'
 
+
 # todo: refactor out the model class
-
-
 def numerical_hessian(model, objective_func,
                       parameters, lower_bounds, upper_bounds,
                       step_ratio=2, nmr_steps=15, data=None,
@@ -54,7 +53,7 @@ def numerical_hessian(model, objective_func,
             .. code-block:: c
 
                 double <func_name>(local const mot_float_type* const x,
-                                   mot_data_struct* data,
+                                   void* data,
                                    local mot_float_type* objective_list);
 
             The objective function has the same signature as the minimization function in MOT. For the numerical
@@ -71,8 +70,7 @@ def numerical_hessian(model, objective_func,
         step_ratio (float): the ratio at which the steps diminish.
         nmr_steps (int): the number of steps we will generate. We will calculate the derivative for each of these
             step sizes and extrapolate the best step size from among them. The minimum number of steps is 2.
-        data (Dict[str, mot.lib.utils.KernelData]): a dictionary of input data objects we need to load into the kernel,
-            can be nested.
+        data (mot.lib.kernel_data.KernelData): the user provided data for the ``void* data`` pointer.
         step_offset (the offset in the steps, if set we start the steps from the given offset.
         cl_runtime_info (mot.configuration.CLRuntimeInfo): the runtime information
 
@@ -126,8 +124,7 @@ def _compute_derivatives(model, objective_func, parameters, step_ratio, step_off
         nmr_steps (int): the number of steps to compute and return (after the step offset)
         lower_bounds (list): lower bounds
         upper_bounds (list): upper bounds
-        data (Dict[str, mot.lib.utils.KernelData]): a dictionary of input data objects we need to load into the kernel,
-            can be nested.
+        data (mot.lib.kernel_data.KernelData): the user provided data for the ``void* data`` pointer.
     """
     parameter_scalings = np.array(model.numdiff_get_scaling_factors())
 
@@ -138,19 +135,18 @@ def _compute_derivatives(model, objective_func, parameters, step_ratio, step_off
     if step_offset:
         initial_step *= float(step_ratio) ** -step_offset
 
-    all_kernel_data = {}
-    all_kernel_data.update(dict(data or {}))
-    all_kernel_data.update({
+    kernel_data = {
+        'data': data,
         'parameters': Array(parameters, ctype='mot_float_type'),
         'parameter_scalings_inv': Array(1. / parameter_scalings, ctype='float', offset_str='0'),
         'initial_step': Array(initial_step, ctype='float'),
         'step_evaluates': Zeros((parameters.shape[0], nmr_derivatives, nmr_steps), 'double'),
-    })
+    }
 
     _derivation_kernel(model, objective_func, nmr_params, nmr_steps, step_ratio).evaluate(
-        {'data': all_kernel_data}, nmr_instances=parameters.shape[0], use_local_reduction=True)
+        kernel_data, parameters.shape[0], use_local_reduction=True)
 
-    return all_kernel_data['step_evaluates'].get_data()
+    return kernel_data['step_evaluates'].get_data()
 
 
 def _richardson_extrapolation(derivatives, step_ratio):
@@ -183,7 +179,7 @@ def _richardson_extrapolation(derivatives, step_ratio):
     }
 
     richardson_func = _richardson_error_kernel(nmr_steps, nmr_convolutions_needed, richardson_coefficients)
-    richardson_func.evaluate({'data': kernel_data}, nmr_instances=nmr_problems * nmr_derivatives,
+    richardson_func.evaluate(kernel_data, nmr_problems * nmr_derivatives,
                              use_local_reduction=False)
 
     richardson_extrapolations = np.reshape(kernel_data['richardson_extrapolations'].get_data(),
@@ -205,7 +201,7 @@ def _wynn_extrapolate(derivatives):
     }
 
     wynn_func = _wynn_extrapolation_kernel(nmr_steps)
-    wynn_func.evaluate({'data': kernel_data}, nmr_instances=nmr_problems * nmr_derivatives,
+    wynn_func.evaluate(kernel_data, nmr_problems * nmr_derivatives,
                        use_local_reduction=False)
 
     extrapolations = np.reshape(kernel_data['extrapolations'].get_data(),
@@ -365,7 +361,7 @@ def _get_compute_functions_cl(model, objective_func, nmr_params, nmr_steps, step
     func += numdiff_param_transform.get_cl_code()
 
     return func + '''
-        double _calculate_function(mot_data_struct* data, local mot_float_type* x){
+        double _calculate_function(void* data, local mot_float_type* x){
             return ''' + objective_func.get_cl_function_name() + '''(x, data, 0);
         }
         
@@ -383,7 +379,7 @@ def _get_compute_functions_cl(model, objective_func, nmr_params, nmr_steps, step
          * Returns:
          *  the function evaluated at the parameters plus their perturbation.
          */
-        double _eval_step(mot_data_struct* data, local mot_float_type* x_input,
+        double _eval_step(void* data, local mot_float_type* x_input,
                           uint perturb_dim_0, mot_float_type perturb_0,
                           uint perturb_dim_1, mot_float_type perturb_1){
 
@@ -407,8 +403,10 @@ def _get_compute_functions_cl(model, objective_func, nmr_params, nmr_steps, step
          * 
          * This uses the initial steps in the data structure, indexed by the parameters to change (px, py).
          */
-        void _compute_steps(mot_data_struct* data, local mot_float_type* x_input, mot_float_type f_x_input,
-                            uint px, uint py, global double* step_evaluates){
+        void _compute_steps(void* data, local mot_float_type* x_input, mot_float_type f_x_input,
+                            uint px, uint py, global double* step_evaluates, 
+                            global float* parameter_scalings_inv,
+                            global float* initial_step){
             
             double step_x;
             double step_y;
@@ -417,14 +415,14 @@ def _get_compute_functions_cl(model, objective_func, nmr_params, nmr_steps, step
             
             if(px == py){
                 for(uint step_ind = 0; step_ind < ''' + str(nmr_steps) + '''; step_ind++){
-                    step_x = data->initial_step[px] / pown(''' + str(float(step_ratio)) + ''', step_ind);
+                    step_x = initial_step[px] / pown(''' + str(float(step_ratio)) + ''', step_ind);
                     
                     tmp = (
                           _eval_step(data, x_input,
-                                     px, 2 * (step_x * data->parameter_scalings_inv[px]),
+                                     px, 2 * (step_x * parameter_scalings_inv[px]),
                                      0, 0)
                         + _eval_step(data, x_input,
-                                     px, -2 * (step_x * data->parameter_scalings_inv[px]),
+                                     px, -2 * (step_x * parameter_scalings_inv[px]),
                                      0, 0)
                         - 2 * f_x_input
                     ) / (4 * step_x * step_x);
@@ -436,22 +434,22 @@ def _get_compute_functions_cl(model, objective_func, nmr_params, nmr_steps, step
             }
             else{
                 for(uint step_ind = 0; step_ind < ''' + str(nmr_steps) + '''; step_ind++){
-                    step_x = data->initial_step[px] / pown(''' + str(float(step_ratio)) + ''', step_ind);
-                    step_y = data->initial_step[py] / pown(''' + str(float(step_ratio)) + ''', step_ind);
+                    step_x = initial_step[px] / pown(''' + str(float(step_ratio)) + ''', step_ind);
+                    step_y = initial_step[py] / pown(''' + str(float(step_ratio)) + ''', step_ind);
                     
                     tmp = (
                           _eval_step(data, x_input,
-                                     px, step_x * data->parameter_scalings_inv[px],
-                                     py, step_y * data->parameter_scalings_inv[py])
+                                     px, step_x * parameter_scalings_inv[px],
+                                     py, step_y * parameter_scalings_inv[py])
                         - _eval_step(data, x_input,
-                                     px, step_x * data->parameter_scalings_inv[px],
-                                     py, -step_y * data->parameter_scalings_inv[py])
+                                     px, step_x * parameter_scalings_inv[px],
+                                     py, -step_y * parameter_scalings_inv[py])
                         - _eval_step(data, x_input,
-                                     px, -step_x * data->parameter_scalings_inv[px],
-                                     py, step_y * data->parameter_scalings_inv[py])
+                                     px, -step_x * parameter_scalings_inv[px],
+                                     py, step_y * parameter_scalings_inv[py])
                         + _eval_step(data, x_input,
-                                     px, -step_x * data->parameter_scalings_inv[px],
-                                     py, -step_y * data->parameter_scalings_inv[py])
+                                     px, -step_x * parameter_scalings_inv[px],
+                                     py, -step_y * parameter_scalings_inv[py])
                     ) / (4 * step_x * step_y);
 
                     if(is_first_workitem){
@@ -562,25 +560,22 @@ def _derivation_kernel(model, objective_func, nmr_params, nmr_steps, step_ratio)
     func = _get_compute_functions_cl(model, objective_func, nmr_params, nmr_steps, step_ratio)
 
     return SimpleCLFunction.from_string('''
-        void compute(mot_data_struct* data){
-            local mot_float_type x_input[''' + str(nmr_params) + '''];
-            
-            if(get_local_id(0) == 0){
-                for(uint param_ind = 0; param_ind < ''' + str(nmr_params) + '''; param_ind++){
-                    x_input[param_ind] = data->parameters[param_ind];
-                }
-            }
-            barrier(CLK_LOCAL_MEM_FENCE);
-            
-            double f_x_input = _calculate_function(data, x_input);
+        void compute(local mot_float_type* parameters,
+                     global float* parameter_scalings_inv,
+                     global float* initial_step,
+                     global double* step_evaluates,
+                     void* data){
+                                 
+            double f_x_input = _calculate_function(data, parameters);
             
             uint coords[''' + str(len(coords)) + '''][2] = {
                 ''' + ', '.join('{{{}, {}}}'.format(*c) for c in coords)  + '''
             };
             
             for(uint coord_ind = 0; coord_ind < ''' + str(len(coords)) + '''; coord_ind++){
-                _compute_steps(data, x_input, f_x_input, coords[coord_ind][0], coords[coord_ind][1], 
-                               data->step_evaluates + coord_ind * ''' + str(nmr_steps) + ''');
+                _compute_steps(data, parameters, f_x_input, coords[coord_ind][0], coords[coord_ind][1], 
+                               step_evaluates + coord_ind * ''' + str(nmr_steps) + ''', parameter_scalings_inv,
+                               initial_step);
             }
         }
     ''', cl_extra=func)
@@ -588,10 +583,11 @@ def _derivation_kernel(model, objective_func, nmr_params, nmr_steps, step_ratio)
 
 def _richardson_error_kernel(nmr_steps, nmr_convolutions, richardson_coefficients):
     func = _get_error_estimate_functions_cl(nmr_steps, nmr_convolutions, richardson_coefficients)
+
     return SimpleCLFunction.from_string('''
-        void convolute(mot_data_struct* data){
-            _apply_richardson_convolution(data->derivatives, data->richardson_extrapolations);
-            _compute_richardson_errors(data->derivatives, data->richardson_extrapolations, data->errors);
+        void convolute(global double* derivatives, global double* richardson_extrapolations, global double* errors){
+            _apply_richardson_convolution(derivatives, richardson_extrapolations);
+            _compute_richardson_errors(derivatives, richardson_extrapolations, errors);
         }
     ''', cl_extra=func)
 
@@ -619,7 +615,7 @@ def _wynn_extrapolation_kernel(nmr_steps):
             http://arxiv.org/abs/math/0306302v1
     """
     return SimpleCLFunction.from_string('''
-        void compute(mot_data_struct* data){
+        void compute(global double* derivatives, global double* extrapolations, global double* errors){
             double v0, v1, v2; 
             
             double delta0, delta1; 
@@ -632,9 +628,9 @@ def _wynn_extrapolation_kernel(nmr_steps):
             double result;
             
             for(uint i = 0; i < ''' + str(nmr_steps - 2) + '''; i++){
-                v0 = data->derivatives[i];
-                v1 = data->derivatives[i + 1];
-                v2 = data->derivatives[i + 2];
+                v0 = derivatives[i];
+                v1 = derivatives[i + 1];
+                v2 = derivatives[i + 2];
                 
                 delta0 = v1 - v0;
                 delta1 = v2 - v1;
@@ -658,8 +654,8 @@ def _wynn_extrapolation_kernel(nmr_steps):
                 
                 result = (converged ? v2 : v1 + 1.0/ss);
                 
-                data->extrapolations[i] = result;
-                data->errors[i] = err0 + err1 + (converged ? tol1 * 10 : fabs(result - v2));
+                extrapolations[i] = result;
+                errors[i] = err0 + err1 + (converged ? tol1 * 10 : fabs(result - v2));
             }
         }
     ''')
@@ -739,7 +735,7 @@ class NumericalDerivativeInterface(object):
             mot.lib.cl_function.CLFunction: A function with the signature:
                 .. code-block:: c
 
-                    void <func_name>(mot_data_struct* data, local mot_float_type* params);
+                    void <func_name>(void* data, local mot_float_type* params);
 
                 Where the data is the kernel data struct and params is the vector with the suggested parameters and
                 which can be modified in place. Note that this is called two times, one with the parameters plus

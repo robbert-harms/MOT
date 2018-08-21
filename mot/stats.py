@@ -38,13 +38,19 @@ def fit_circular_gaussian(samples, high=np.pi, low=0):
         low (float): The minimum wrap point
     """
     cl_func = SimpleCLFunction.from_string('''
-        void compute(mot_data_struct* data){
+        void compute(global mot_float_type* samples,
+                     global mot_float_type* means,
+                     global mot_float_type* stds,
+                     int nmr_samples,
+                     int low,
+                     int high){ 
+        
             double cos_mean = 0;
             double sin_mean = 0;
             double ang;
 
-            for(uint i = 0; i < data->nmr_samples; i++){
-                ang = (data->samples[i] - data->low)*2*M_PI / (data->high - data->low);
+            for(uint i = 0; i < nmr_samples; i++){
+                ang = (samples[i] - low)*2*M_PI / (high - low);
 
                 cos_mean += (cos(ang) - cos_mean) / (i + 1);
                 sin_mean += (sin(ang) - sin_mean) / (i + 1);
@@ -62,22 +68,22 @@ def fit_circular_gaussian(samples, high=np.pi, low=0):
                  res += 2 * M_PI;
             }
 
-            *(data->means) = res*(data->high - data->low)/2.0/M_PI + data->low;
-            *(data->stds) = ((data->high - data->low)/2.0/M_PI) * sqrt(-2*log(R));
+            *(means) = res*(high - low)/2.0/M_PI + low;
+            *(stds) = ((high - low)/2.0/M_PI) * sqrt(-2*log(R));
         }
     ''')
 
     def run_cl(samples):
-        all_kernel_data = {'samples': Array(samples, 'mot_float_type'),
-                           'means': Zeros(samples.shape[0], 'mot_float_type'),
-                           'stds': Zeros(samples.shape[0], 'mot_float_type'),
-                           'nmr_samples': Scalar(samples.shape[1]),
-                           'low': Scalar(low),
-                           'high': Scalar(high),
-                           }
+        data = {'samples': Array(samples, 'mot_float_type'),
+                'means': Zeros(samples.shape[0], 'mot_float_type'),
+                'stds': Zeros(samples.shape[0], 'mot_float_type'),
+                'nmr_samples': Scalar(samples.shape[1]),
+                'low': Scalar(low),
+                'high': Scalar(high),
+                }
 
-        cl_func.evaluate({'data': all_kernel_data}, nmr_instances=samples.shape[0])
-        return all_kernel_data['means'].get_data(), all_kernel_data['stds'].get_data()
+        cl_func.evaluate(data, samples.shape[0])
+        return data['means'].get_data(), data['stds'].get_data()
 
     if len(samples.shape) == 1:
         mean, std = run_cl(samples[None, :])

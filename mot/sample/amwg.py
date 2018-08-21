@@ -47,23 +47,23 @@ class AdaptiveMetropolisWithinGibbs(AbstractRWMSampler):
         self._max_val = max_val
         self._acceptance_counter = np.zeros((self._nmr_problems, self._nmr_params), dtype=np.uint64, order='C')
 
-    def _get_kernel_data(self, nmr_samples, thinning, return_output):
-        kernel_data = super()._get_kernel_data(nmr_samples, thinning, return_output)
+    def _get_mcmc_method_kernel_data_elements(self):
+        kernel_data = super()._get_mcmc_method_kernel_data_elements()
         kernel_data.update({
-            '_acceptance_counter': Array(self._acceptance_counter, mode='rw', ensure_zero_copy=True)
+            'acceptance_counter': Array(self._acceptance_counter, mode='rw', ensure_zero_copy=True)
         })
         return kernel_data
 
     def _at_acceptance_callback_c_func(self):
         return '''
-            void _sampleAccepted(mot_data_struct* data, ulong current_iteration, uint parameter_ind){
-                data->_acceptance_counter[parameter_ind]++;
+            void _sampleAccepted(_mcmc_method_data* method_data, ulong current_iteration, uint parameter_ind){
+                method_data->acceptance_counter[parameter_ind]++;
             }
         '''
 
     def _get_proposal_update_function(self, nmr_samples, thinning, return_output):
         kernel_source = '''
-            void _updateProposalState(mot_data_struct* data, ulong current_iteration,
+            void _updateProposalState(_mcmc_method_data* method_data, ulong current_iteration,
                                       local mot_float_type* current_position){    
                 if(current_iteration > 0 && current_iteration % ''' + str(self._batch_size) + ''' == 0){
                     mot_float_type delta = sqrt(1.0/
@@ -71,19 +71,19 @@ class AdaptiveMetropolisWithinGibbs(AbstractRWMSampler):
                             (current_iteration / ''' + str(self._batch_size) + ''')));
                             
                     for(uint k = 0; k < ''' + str(self._nmr_params) + '''; k++){
-                        if(data->_acceptance_counter[k] / (mot_float_type)''' + str(self._batch_size) + ''' 
+                        if(method_data->acceptance_counter[k] / (mot_float_type)''' + str(self._batch_size) + ''' 
                                 > ''' + str(self._target_acceptance_rate) + '''){
-                            data->_proposal_stds[k] *= exp(delta);
+                            method_data->proposal_stds[k] *= exp(delta);
                         }
                         else{
-                            data->_proposal_stds[k] /= exp(delta);
+                            method_data->proposal_stds[k] /= exp(delta);
                         }
         
-                        data->_proposal_stds[k] = clamp(data->_proposal_stds[k], 
+                        method_data->proposal_stds[k] = clamp(method_data->proposal_stds[k], 
                                                         (mot_float_type)''' + str(self._min_val) + ''', 
                                                         (mot_float_type)''' + str(self._max_val) + ''');
         
-                        data->_acceptance_counter[k] = 0;
+                        method_data->acceptance_counter[k] = 0;
                     }
                 }             
             }

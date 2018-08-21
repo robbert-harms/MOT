@@ -52,20 +52,20 @@ def uniform(nmr_distributions, nmr_samples, low=0, high=1, ctype='float', seed=N
     if is_scalar(high):
         high = np.ones((nmr_distributions, 1)) * high
 
-    kernel_data = {'min_val': Array(low),
-                   'max_val': Array(high)}
+    kernel_data = {'low': Array(low, as_scalar=True),
+                   'high': Array(high, as_scalar=True)}
 
     kernel = SimpleCLFunction.from_string('''
-        void compute(mot_data_struct* data){
+        void compute(double low, double high, global uint* rng_state, global ''' + ctype + '''* samples){
+        
             rand123_data rand123_rng_data = rand123_initialize_data((uint[]){
-                data->_rng_state[0], data->_rng_state[1], data->_rng_state[2], data->_rng_state[3], 
-                data->_rng_state[4], data->_rng_state[5], 0});
+                rng_state[0], rng_state[1], rng_state[2], rng_state[3], 
+                rng_state[4], rng_state[5], 0});
             void* rng_data = (void*)&rand123_rng_data;
 
             for(uint i = 0; i < ''' + str(nmr_samples) + '''; i++){
                 double4 randomnr = rand4(rng_data);
-                data->samples[i] = (''' + ctype + ''')(data->min_val[0] + 
-                                                       randomnr.x * (data->max_val[0] - data->min_val[0]));
+                samples[i] = (''' + ctype + ''')(low + randomnr.x * (high - low));
             }
         }
     ''', dependencies=[Rand123()])
@@ -92,19 +92,19 @@ def normal(nmr_distributions, nmr_samples, mean=0, std=1, ctype='float', seed=No
     if is_scalar(std):
         std = np.ones((nmr_distributions, 1)) * std
 
-    kernel_data = {'mean': Array(mean),
-                   'std': Array(std)}
+    kernel_data = {'mean': Array(mean, as_scalar=True),
+                   'std': Array(std, as_scalar=True)}
 
     kernel = SimpleCLFunction.from_string('''
-        void compute(mot_data_struct* data){
+        void compute(double mean, double std, global uint* rng_state, global ''' + ctype + '''* samples){
             rand123_data rand123_rng_data = rand123_initialize_data((uint[]){
-                data->_rng_state[0], data->_rng_state[1], data->_rng_state[2], data->_rng_state[3], 
-                data->_rng_state[4], data->_rng_state[5], 0});
+                rng_state[0], rng_state[1], rng_state[2], rng_state[3], 
+                rng_state[4], rng_state[5], 0});
             void* rng_data = (void*)&rand123_rng_data;
 
             for(uint i = 0; i < ''' + str(nmr_samples) + '''; i++){
                 double4 randomnr = randn4(rng_data);
-                data->samples[i] = (''' + ctype + ''')(data->mean[0] + randomnr.x * data->std[0]);
+                samples[i] = (''' + ctype + ''')(mean + randomnr.x * std);
             }
         }
     ''', dependencies=[Rand123()])
@@ -118,6 +118,7 @@ def _generate_samples(cl_function, nmr_distributions, nmr_samples, ctype, kernel
                                   size=(nmr_distributions, 6)).astype(np.uint32)
 
     kernel_data.update({'samples': Zeros((nmr_distributions, nmr_samples), ctype),
-                        '_rng_state': Array(rng_state, 'uint')})
-    cl_function.evaluate({'data': kernel_data}, nmr_instances=nmr_distributions)
+                        'rng_state': Array(rng_state, 'uint')})
+
+    cl_function.evaluate(kernel_data, nmr_distributions)
     return kernel_data['samples'].get_data()

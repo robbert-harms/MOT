@@ -20,7 +20,7 @@ def minimize(func, x0, data=None, method=None, nmr_observations=None, cl_runtime
             .. code-block:: c
 
                 double <func_name>(local const mot_float_type* const x,
-                                   mot_data_struct* data,
+                                   void* data,
                                    local mot_float_type* objective_list);
 
             The objective list needs to be filled when the provided pointer is not null. It should contain
@@ -29,8 +29,8 @@ def minimize(func, x0, data=None, method=None, nmr_observations=None, cl_runtime
 
         x0 (ndarray): Initial guess. Array of real elements of size (n, p), for 'n' problems and 'p'
             independent variables.
-        data (Dict[str, mot.lib.utils.KernelData]): a dictionary of input data objects we need to load into the kernel,
-            can be nested.
+        data (mot.lib.kernel_data.KernelData): the kernel data we will load. This is returned to the likelihood function
+            as the ``void* data`` pointer.
         method (str): Type of solver.  Should be one of:
             - 'Levenberg-Marquardt'
             - 'Nelder-Mead'
@@ -141,31 +141,23 @@ def _minimize_powell(func, x0, cl_runtime_info, data=None, options=None):
     nmr_problems = x0.shape[0]
     nmr_parameters = x0.shape[1]
 
-    data_struct = dict(data or {})
-    kernel_data = {'data': data_struct,
-                   'x': Array(x0, ctype='mot_float_type', mode='rw')}
+    kernel_data = {'model_parameters': Array(x0, ctype='mot_float_type', mode='rw'),
+                   'data': data}
 
-    cl_extra = func.get_cl_code()
-    cl_extra += '''
-        double evaluate(local mot_float_type* x, void* data_void){
-            mot_data_struct* data = (mot_data_struct*)data_void;
+    eval_func = SimpleCLFunction.from_string('''
+        double evaluate(local mot_float_type* x, void* data){
             return ''' + func.get_cl_function_name() + '''(x, data, 0);
         }
-    '''
-    cl_extra += Powell('evaluate', nmr_parameters, **options).get_cl_code()
+    ''', dependencies=[func])
 
-    optimizer_func = SimpleCLFunction.from_string('''
-        char compute(local mot_float_type* x, mot_data_struct* data){
-            return (char) powell(x, (void*)data);
-        }
-    ''', cl_extra=cl_extra)
-    
+    optimizer_func = Powell('evaluate', nmr_parameters, dependencies=[eval_func], **options)
+
     return_code = optimizer_func.evaluate(
-        kernel_data, nmr_instances=nmr_problems,
+        kernel_data, nmr_problems,
         use_local_reduction=all(env.is_gpu for env in cl_runtime_info.get_cl_environments()),
         cl_runtime_info=cl_runtime_info)
 
-    return OptimizeResults({'x': kernel_data['x'].get_data(),
+    return OptimizeResults({'x': kernel_data['model_parameters'].get_data(),
                             'status': return_code})
 
 
@@ -212,31 +204,23 @@ def _minimize_nmsimplex(func, x0, cl_runtime_info, data=None, options=None):
     nmr_problems = x0.shape[0]
     nmr_parameters = x0.shape[1]
 
-    data_struct = dict(data or {})
-    kernel_data = {'data': data_struct,
-                   'x': Array(x0, ctype='mot_float_type', mode='rw')}
+    kernel_data = {'model_parameters': Array(x0, ctype='mot_float_type', mode='rw'),
+                   'data': data}
 
-    cl_extra = func.get_cl_code()
-    cl_extra += '''
-        double evaluate(local mot_float_type* x, void* data_void){
-            mot_data_struct* data = (mot_data_struct*)data_void;
+    eval_func = SimpleCLFunction.from_string('''
+        double evaluate(local mot_float_type* x, void* data){
             return ''' + func.get_cl_function_name() + '''(x, data, 0);
         }
-    '''
-    cl_extra += NMSimplex('evaluate', nmr_parameters, **options).get_cl_code()
+    ''', dependencies=[func])
 
-    optimizer_func = SimpleCLFunction.from_string('''
-        char compute(local mot_float_type* x, mot_data_struct* data){
-            return (char) nmsimplex(x, (void*)data);
-        }
-    ''', cl_extra=cl_extra)
+    optimizer_func = NMSimplex('evaluate', nmr_parameters, dependencies=[eval_func], **options)
 
     return_code = optimizer_func.evaluate(
-        kernel_data, nmr_instances=nmr_problems,
+        kernel_data, nmr_problems,
         use_local_reduction=all(env.is_gpu for env in cl_runtime_info.get_cl_environments()),
         cl_runtime_info=cl_runtime_info)
 
-    return OptimizeResults({'x': kernel_data['x'].get_data(),
+    return OptimizeResults({'x': kernel_data['model_parameters'].get_data(),
                             'status': return_code})
 
 
@@ -293,31 +277,23 @@ def _minimize_subplex(func, x0, cl_runtime_info, data=None, options=None):
     nmr_problems = x0.shape[0]
     nmr_parameters = x0.shape[1]
 
-    data_struct = dict(data or {})
-    kernel_data = {'data': data_struct,
-                   'x': Array(x0, ctype='mot_float_type', mode='rw')}
+    kernel_data = {'model_parameters': Array(x0, ctype='mot_float_type', mode='rw'),
+                   'data': data}
 
-    cl_extra = func.get_cl_code()
-    cl_extra += '''
-        double evaluate(local mot_float_type* x, void* data_void){
-            mot_data_struct* data = (mot_data_struct*)data_void;
+    eval_func = SimpleCLFunction.from_string('''
+        double evaluate(local mot_float_type* x, void* data){
             return ''' + func.get_cl_function_name() + '''(x, data, 0);
         }
-    '''
-    cl_extra += Subplex('evaluate', nmr_parameters, **options).get_cl_code()
+    ''', dependencies=[func])
 
-    optimizer_func = SimpleCLFunction.from_string('''
-        char compute(local mot_float_type* x, mot_data_struct* data){
-            return (char) subplex(x, (void*)data);
-        }
-    ''', cl_extra=cl_extra)
+    optimizer_func = Subplex('evaluate', nmr_parameters, dependencies=[eval_func], **options)
 
     return_code = optimizer_func.evaluate(
-        kernel_data, nmr_instances=nmr_problems,
+        kernel_data, nmr_problems,
         use_local_reduction=all(env.is_gpu for env in cl_runtime_info.get_cl_environments()),
         cl_runtime_info=cl_runtime_info)
 
-    return OptimizeResults({'x': kernel_data['x'].get_data(),
+    return OptimizeResults({'x': kernel_data['model_parameters'].get_data(),
                             'status': return_code})
 
 
@@ -330,31 +306,24 @@ def _minimize_levenberg_marquardt(func, x0, nmr_observations, cl_runtime_info, d
     if nmr_observations < x0.shape[1]:
         raise ValueError('The number of instances per problem must be greater than the number of parameters')
 
-    data_struct = dict(data or {})
-    kernel_data = {'data': data_struct,
-                   'x': Array(x0, ctype='mot_float_type', mode='rw'),
+    kernel_data = {'model_parameters': Array(x0, ctype='mot_float_type', mode='rw'),
+                   'data': data,
                    'fjac': Zeros((nmr_problems, nmr_parameters, nmr_observations), ctype='mot_float_type',
                                  mode='rw')}
 
-    cl_extra = func.get_cl_code()
-    cl_extra += '''
-        void evaluate(local mot_float_type* x, void* data_void, local mot_float_type* result){
-            mot_data_struct* data = (mot_data_struct*)data_void;
+    eval_func = SimpleCLFunction.from_string('''
+        void evaluate(local mot_float_type* x, void* data, local mot_float_type* result){
             ''' + func.get_cl_function_name() + '''(x, data, result);
-        }    
-    '''
-    cl_extra += LevenbergMarquardt('evaluate', nmr_parameters, nmr_observations, **options).get_cl_code()
-
-    optimizer_func = SimpleCLFunction.from_string('''
-        char compute(local mot_float_type* x, mot_data_struct* data, global mot_float_type* fjac){
-            return (char) lmmin(x, (void*)data, fjac);
         }
-        ''', cl_extra=cl_extra)
+    ''', dependencies=[func])
+
+    optimizer_func = LevenbergMarquardt('evaluate', nmr_parameters, nmr_observations,
+                                        dependencies=[eval_func], **options)
 
     return_code = optimizer_func.evaluate(
-        kernel_data, nmr_instances=nmr_problems,
+        kernel_data, nmr_problems,
         use_local_reduction=all(env.is_gpu for env in cl_runtime_info.get_cl_environments()),
         cl_runtime_info=cl_runtime_info)
 
-    return OptimizeResults({'x': kernel_data['x'].get_data(),
+    return OptimizeResults({'x': kernel_data['model_parameters'].get_data(),
                             'status': return_code})

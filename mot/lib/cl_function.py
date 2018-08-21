@@ -1,4 +1,5 @@
-import collections
+import warnings
+from collections.__init__ import OrderedDict
 
 import numpy as np
 from copy import copy
@@ -12,7 +13,7 @@ from textwrap import dedent, indent
 from mot.configuration import CLRuntimeInfo
 from mot.lib.kernel_data import KernelData, Scalar, Array, Zeros
 from mot.lib.load_balance_strategies import Worker
-from mot.lib.utils import is_scalar, KernelDataManager, get_float_type_def
+from mot.lib.utils import is_scalar, get_float_type_def
 
 __author__ = 'Robbert Harms'
 __date__ = '2017-08-31'
@@ -92,19 +93,18 @@ class CLFunction(object):
         """
         raise NotImplementedError()
 
-    def evaluate(self, inputs, nmr_instances=None, use_local_reduction=False, cl_runtime_info=None):
+    def evaluate(self, inputs, nmr_instances, use_local_reduction=False, cl_runtime_info=None):
         """Evaluate this function for each set of given parameters.
 
         Given a set of input parameters, this model will be evaluated for every parameter set.
         This function will convert possible dots in the parameter names to underscores for use in the CL kernel.
 
         Args:
-            inputs (dict[str: Union(ndarray, mot.lib.utils.KernelData)]): for each parameter of the function
+            inputs (dict[str: Union(ndarray, mot.lib.kernel_data.KernelData)]): for each parameter of the function
                 the input data. Each of these input datasets must either be a scalar or be of equal length in the
                 first dimension. The user can either input raw ndarrays or input KernelData objects.
                 If an ndarray is given we will load it read/write by default.
-            nmr_instances (int): the number of parallel processes to run. If not given, we try to autodetect it
-                from the matrix with the largest number of rows (largest 1st dimension).
+            nmr_instances (int): the number of parallel processes to run.
             use_local_reduction (boolean): set this to True if you want to use local memory reduction in
                  evaluating this function. If this is set to True we will multiply the global size
                  (given by the nmr_instances) by the work group sizes.
@@ -247,10 +247,12 @@ class SimpleCLFunction(CLFunction):
     def get_cl_extra(self):
         return self._cl_extra
 
-    def evaluate(self, inputs, nmr_instances=None, use_local_reduction=False, cl_runtime_info=None):
-        def wrap_input_data(input_data, nmr_instances):
-            def get_kernel_data(param):
-                if isinstance(input_data[param.name], KernelData):
+    def evaluate(self, inputs, nmr_instances, use_local_reduction=False, cl_runtime_info=None):
+        def wrap_input_data(input_data):
+            def get_data_object(param):
+                if input_data[param.name] is None:
+                    return Scalar(0)
+                elif isinstance(input_data[param.name], KernelData):
                     return input_data[param.name]
                 elif param.data_type.is_vector_type and np.squeeze(input_data[param.name]).shape[0] == 3:
                     return Scalar(input_data[param.name], ctype=param.data_type.ctype)
@@ -264,40 +266,7 @@ class SimpleCLFunction(CLFunction):
 
                     return Array(data, ctype=param.data_type.ctype, mode='rw')
 
-            kernel_items = {}
-            for param in self.get_parameters():
-                if param.data_type.raw_data_type == 'mot_data_struct':
-                    kernel_items.update(input_data[param.name])
-                else:
-                    kernel_items[param.name.replace('.', '_')] = get_kernel_data(param)
-
-            return kernel_items
-
-        def get_minimum_data_length(cl_function, input_data):
-            min_length = 1
-
-            for param in cl_function.get_parameters():
-                value = input_data[param.name]
-
-                if isinstance(value, collections.Mapping):
-                    pass
-                elif isinstance(input_data[param.name], KernelData):
-                    data = value.get_data()
-                    if data is not None:
-                        if np.ndarray(data).shape[0] > min_length:
-                            min_length = np.maximum(min_length, np.ndarray(data).shape[0])
-
-                elif param.data_type.is_vector_type and np.squeeze(input_data[param.name]).shape[0] == 3:
-                    pass
-                elif is_scalar(input_data[param.name]):
-                    pass
-                else:
-                    if isinstance(value, (tuple, list)):
-                        min_length = np.maximum(min_length, len(value))
-                    elif value.shape[0] > min_length:
-                        min_length = np.maximum(min_length, value.shape[0])
-
-            return min_length
+            return {param.name.replace('.', '_'): get_data_object(param) for param in self.get_parameters()}
 
         for param in self.get_parameters():
             if param.name not in inputs:
@@ -306,10 +275,7 @@ class SimpleCLFunction(CLFunction):
                 raise ValueError('Some parameters are missing an input value, '
                                  'required parameters are: {}, missing inputs are: {}'.format(names, missing_names))
 
-        nmr_instances = nmr_instances or get_minimum_data_length(self, inputs)
-        kernel_items = wrap_input_data(inputs, nmr_instances)
-
-        return apply_cl_function(self, kernel_items, nmr_instances,
+        return apply_cl_function(self, wrap_input_data(inputs), nmr_instances,
                                  use_local_reduction=use_local_reduction, cl_runtime_info=cl_runtime_info)
 
     def get_dependencies(self):
@@ -461,8 +427,7 @@ def apply_cl_function(cl_function, kernel_data, nmr_instances, use_local_reducti
     Args:
         cl_function (mot.lib.cl_function.CLFunction): the function to
             run on the datasets. Either a name function tuple or an actual CLFunction object.
-        kernel_data (dict[str: mot.lib.utils.KernelData]): the data to use as input to the function
-            all the data will be wrapped in a single ``mot_data_struct``.
+        kernel_data (dict[str: mot.lib.kernel_data.KernelData]): the data to use as input to the function.
         nmr_instances (int): the number of parallel threads to run (used as ``global_size``)
         use_local_reduction (boolean): set this to True if you want to use local memory reduction in
              your CL procedure. If this is set to True we will multiply the global size (given by the nmr_instances)
@@ -470,6 +435,13 @@ def apply_cl_function(cl_function, kernel_data, nmr_instances, use_local_reducti
         cl_runtime_info (mot.configuration.CLRuntimeInfo): the runtime information
     """
     cl_runtime_info = cl_runtime_info or CLRuntimeInfo()
+
+    for param in cl_function.get_parameters():
+        if param.name not in kernel_data:
+            names = [param.name for param in cl_function.get_parameters()]
+            missing_names = [name for name in names if name not in kernel_data]
+            raise ValueError('Some parameters are missing an input value, '
+                             'required parameters are: {}, missing inputs are: {}'.format(names, missing_names))
 
     if cl_function.get_return_type() != 'void':
         kernel_data['_results'] = Zeros((nmr_instances,), cl_function.get_return_type())
@@ -492,172 +464,116 @@ class _ProcedureWorker(Worker):
                  kernel_data, double_precision, use_local_reduction):
         super().__init__(cl_environment)
         self._cl_function = cl_function
-        self._kernel_data = kernel_data
+        self._kernel_data = OrderedDict(sorted(kernel_data.items()))
         self._double_precision = double_precision
         self._use_local_reduction = use_local_reduction
 
-        mot_float_dtype = np.float32
+        self._mot_float_dtype = np.float32
         if double_precision:
-            mot_float_dtype = np.float64
+            self._mot_float_dtype = np.float64
 
-        self._data_struct_manager = KernelDataManager(self._kernel_data, mot_float_dtype)
+        for data in self._kernel_data.values():
+            data.set_mot_float_dtype(self._mot_float_dtype)
+
         self._kernel = self._build_kernel(self._get_kernel_source(), compile_flags)
+
         self._workgroup_size = self._kernel.run_procedure.get_work_group_info(
             cl.kernel_work_group_info.PREFERRED_WORK_GROUP_SIZE_MULTIPLE,
             self._cl_environment.device)
-
         if not self._use_local_reduction:
             self._workgroup_size = 1
 
-        self._kernel_input = self._get_kernel_input()
-
-    def _get_kernel_input(self):
-        return self._data_struct_manager.get_kernel_inputs(self._cl_context, self._workgroup_size)
+        self._kernel_inputs = {name: data.get_kernel_inputs(self._cl_context, self._workgroup_size)
+                               for name, data in self._kernel_data.items()}
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
 
         func = self._kernel.run_procedure
-        func.set_scalar_arg_dtypes(self._data_struct_manager.get_scalar_arg_dtypes())
+        func.set_scalar_arg_dtypes(self.get_scalar_arg_dtypes())
 
-        if self._workgroup_size is None:
-            func(self._cl_queue,
-                 (int(nmr_problems),),
-                 None,
-                 *self._kernel_input,
-                 global_offset=(int(range_start),))
-        else:
-            func(self._cl_queue,
-                 (int(nmr_problems * self._workgroup_size),),
-                 (int(self._workgroup_size),),
-                 *self._kernel_input,
-                 global_offset=(int(range_start * self._workgroup_size),))
+        kernel_inputs_list = []
+        for inputs in [self._kernel_inputs[name] for name in self._kernel_data]:
+            kernel_inputs_list.extend(inputs)
 
-        for ind, name in self._data_struct_manager.get_items_to_write_out():
-            self._enqueue_readout(self._kernel_input[ind], self._kernel_data[name].get_data(),
-                                  range_start, range_end)
+        func(self._cl_queue,
+             (int(nmr_problems * self._workgroup_size),),
+             (int(self._workgroup_size),),
+             *kernel_inputs_list,
+             global_offset=(int(range_start * self._workgroup_size),))
+
+        for name, data in self._kernel_data.items():
+            data.enqueue_readouts(self._cl_queue, self._kernel_inputs[name], range_start, range_end)
+
+    def _build_kernel(self, kernel_source, compile_flags=()):
+        """Convenience function for building the kernel for this worker.
+
+        Args:
+            kernel_source (str): the kernel source to use for building the kernel
+
+        Returns:
+            cl.Program: a compiled CL kernel
+        """
+        from mot import configuration
+        if configuration.should_ignore_kernel_compile_warnings():
+            warnings.simplefilter("ignore")
+        return cl.Program(self._cl_context, kernel_source).build(' '.join(compile_flags))
 
     def _get_kernel_source(self):
-        kernel_param_names = self._data_struct_manager.get_kernel_arguments()
-
-        func_args = self._get_function_call_args()
-        localized_input = self._get_input_transforms()
-        output_write_back = self._get_output_write_backs()
-
         assignment = ''
         if self._cl_function.get_return_type() != 'void':
-            assignment = '*(data._results) = '
+            assignment = '__results[gid] = '
+
+        variable_inits = []
+        function_call_inputs = []
+        post_function_callbacks = []
+        for parameter in self._cl_function.get_parameters():
+            data = self._kernel_data[parameter.name]
+            call_args = (parameter.name, '_' + parameter.name, 'gid', parameter.data_type.address_space)
+
+            variable_inits.append(data.initialize_variable(*call_args))
+            function_call_inputs.append(data.get_function_call_input(*call_args))
+            post_function_callbacks.append(data.post_function_callback(*call_args))
 
         kernel_source = ''
         kernel_source += get_float_type_def(self._double_precision)
-        kernel_source += self._data_struct_manager.get_struct_definition()
+        kernel_source += '\n'.join(data.get_type_definitions() for data in self._kernel_data.values())
         kernel_source += self._cl_function.get_cl_code()
         kernel_source += '''
-            __kernel void run_procedure(
-                    ''' + ",\n".join(kernel_param_names) + '''){
-
-                ulong gid = ''' + ('(ulong)(get_global_id(0) / get_local_size(0));'
-                                   if self._use_local_reduction else 'get_global_id(0)') + ''';
+            __kernel void run_procedure(''' + ",\n".join(self._get_kernel_arguments()) + '''){
+                ulong gid = (ulong)(get_global_id(0) / get_local_size(0));
                 
-                mot_data_struct data = ''' + self._data_struct_manager.get_struct_init_string('gid') + ''';
+                ''' + '\n'.join(variable_inits) + '''     
                 
-                ''' + localized_input + '''            
-                ''' + assignment + ' ' + self._cl_function.get_cl_function_name() + '(' + ', '.join(func_args) + ');' \
-                + output_write_back + '''
+                ''' + assignment + ' ' + self._cl_function.get_cl_function_name() + '(' + \
+                         ', '.join(function_call_inputs) + ''');
+                
+                ''' + '\n'.join(post_function_callbacks) + '''
             }
         '''
         return kernel_source
 
-    def _get_function_call_args(self):
-        """Get the call arguments for calling the function we are wrapping in a kernel."""
-        func_args = []
-        for param in self._cl_function.get_parameters():
-            param_cl_name = param.name.replace('.', '_')
+    def _get_kernel_arguments(self):
+        """Get the list of kernel arguments for loading the kernel data elements into the kernel.
 
-            if param.data_type.raw_data_type == 'mot_data_struct':
-                func_args.append('&data')
-            elif self._kernel_data[param_cl_name].loaded_as_pointer:
-                if param.data_type.is_pointer_type:
-                    if param.data_type.address_space == 'private':
-                        func_args.append(param_cl_name + '_private')
-                    elif param.data_type.address_space == 'local':
-                        func_args.append(param_cl_name + '_local')
-                    else:
-                        func_args.append('data.{}'.format(param_cl_name))
-                else:
-                    func_args.append('data.{}[0]'.format(param_cl_name))
-            else:
-                func_args.append('data.{}'.format(param_cl_name))
-
-        return func_args
-
-    def _get_input_transforms(self):
-        """For functions that require private/local pointers as input, change the address space of the global arrays.
-
-        This creates a new array in the global address space and fills it with the values of the global array.
-
-        This can maybe be removed when OpenCL 2.0 is supported (by using the generic address space).
+        This will use the sorted keys for looping through the kernel input items.
 
         Returns:
-            str: converts the address space of the input array from global to private, for those parameters that
-                require it.
+            list of str: the list of parameter definitions
         """
-        conversions = ''
-        for parameter in self._cl_function.get_parameters():
-            if parameter.data_type.raw_data_type == 'mot_data_struct':
-                pass
-            elif parameter.data_type.is_pointer_type:
-                if parameter.data_type.address_space == 'private':
-                    conversions += '''
-                        {ctype} {param_name}_private[{nmr_elements}];
-    
-                        for(uint i = 0; i < {nmr_elements}; i++){{
-                            {param_name}_private[i] = data.{param_name}[i];
-                        }}
-                    '''.format(ctype=parameter.data_type.ctype, param_name=parameter.name,
-                               nmr_elements=self._kernel_data[parameter.name].data_length)
-                elif parameter.data_type.address_space == 'local':
-                    conversions += '''
-                        local {ctype} {param_name}_local[{nmr_elements}];
-                        
-                        if(get_local_id(0) == 0){{
-                            for(uint i = 0; i < {nmr_elements}; i++){{
-                                {param_name}_local[i] = data.{param_name}[i];
-                            }}
-                        }}
-                        barrier(CLK_LOCAL_MEM_FENCE);
-                    '''.format(ctype=parameter.data_type.ctype, param_name=parameter.name,
-                               nmr_elements=self._kernel_data[parameter.name].data_length)
-        return conversions
+        declarations = []
+        for name, data in self._kernel_data.items():
+            declarations.extend(data.get_kernel_parameters('_' + name))
+        return declarations
 
-    def _get_output_write_backs(self):
-        """Read back certain parameters which we transformed from global to private/local.
-
-        For kernel data array which specify the data must be read back, we will copy the values in the private/local
-        arrays back into the global array.
+    def get_scalar_arg_dtypes(self):
+        """Get the location and types of the input scalars.
 
         Returns:
-            str: a CL string copying results back from the private/local array to the global array.
+            list: for every kernel input element either None if the data is a buffer or the numpy data type if
+                if is a scalar.
         """
-        write_backs = ''
-        for parameter in self._cl_function.get_parameters():
-            if parameter.data_type.raw_data_type == 'mot_data_struct':
-                pass
-            elif parameter.data_type.is_pointer_type and self._kernel_data[parameter.name].read_data_back:
-                if parameter.data_type.address_space == 'private':
-                    write_backs += '''
-                        for(uint i = 0; i < {nmr_elements}; i++){{
-                            data.{param_name}[i] = {param_name}_private[i];
-                        }}
-                    '''.format(ctype=parameter.data_type.ctype, param_name=parameter.name,
-                               nmr_elements=self._kernel_data[parameter.name].data_length)
-                elif parameter.data_type.address_space == 'local':
-                    write_backs += '''
-                        if(get_local_id(0) == 0){{
-                            for(uint i = 0; i < {nmr_elements}; i++){{
-                                data.{param_name}[i] = {param_name}_local[i];
-                            }}
-                        }}
-                    '''.format(ctype=parameter.data_type.ctype, param_name=parameter.name,
-                               nmr_elements=self._kernel_data[parameter.name].data_length)
-        return write_backs
+        dtypes = []
+        for name, data in self._kernel_data.items():
+            dtypes.extend(data.get_scalar_arg_dtypes())
+        return dtypes

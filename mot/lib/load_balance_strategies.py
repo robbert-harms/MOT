@@ -90,15 +90,16 @@ class Worker(object):
         """
         return self._cl_environment
 
-    def get_used_queues(self):
-        """Get the queues this worker is using for its GPU computations.
+    @property
+    def cl_queue(self):
+        """Get the queue this worker is using for its GPU computations.
 
-        The load balancing routine will use these queues to flush and finish the computations.
+        The load balancing routine will use this queue to flush and finish the computations.
 
         Returns:
-            list of pyopencl queues: the list of queues
+            pyopencl queues: the queue used by this worker
         """
-        return [self._cl_queue]
+        return self._cl_queue
 
     def calculate(self, range_start, range_end):
         """Calculate for this problem the given range.
@@ -110,53 +111,6 @@ class Worker(object):
             range_end (int): The end of the processing range
         """
         raise NotImplementedError()
-
-    def post_process(self, range_start, range_end):
-        """Apply post processing at the end of the calculation.
-
-        This is called after event.wait() has finished for every worker working per batch. One can use this function
-        to post-process data after kernel execution.
-
-        Args:
-            range_start (int): The start of the processing range
-            range_end (int): The end of the processing range
-        """
-
-    def _build_kernel(self, kernel_source, compile_flags=()):
-        """Convenience function for building the kernel for this worker.
-
-        Args:
-            kernel_source (str): the kernel source to use for building the kernel
-
-        Returns:
-            cl.Program: a compiled CL kernel
-        """
-        from mot import configuration
-        if configuration.should_ignore_kernel_compile_warnings():
-            warnings.simplefilter("ignore")
-        return cl.Program(self._cl_context, kernel_source).build(' '.join(compile_flags))
-
-    def _enqueue_readout(self, buffer, host_array, range_start, range_end, wait_for=None, is_blocking=False):
-        """Enqueue a readout for a buffer created with use_host_ptr.
-
-        This encapsulates all the low level details needed to readout the given range of values.
-
-        Args:
-            buffer: the buffer on the device
-            host_array (ndarray): the host side array of the given buffer
-            range_start (int): the start of the range to read out (in the first dimension)
-            range_end (int): the end of the range to read out (in the first dimension)
-            wait_for (list of event): the list of events to wait for
-            is_blocking (boolean): if this is supposed to be a blocking call or not
-
-        Returns:
-            event: the event of the readout
-        """
-        nmr_problems = range_end - range_start
-        return cl.enqueue_map_buffer(
-            self._cl_queue, buffer, cl.map_flags.READ, range_start * host_array.strides[0],
-            (nmr_problems, ) + host_array.shape[1:], host_array.dtype, order="C", wait_for=wait_for,
-            is_blocking=is_blocking)[1]
 
 
 class SimpleLoadBalanceStrategy(LoadBalanceStrategy):
@@ -245,17 +199,10 @@ class SimpleLoadBalanceStrategy(LoadBalanceStrategy):
                 if batch_nmr < len(batches[worker_ind]):
                     worker.calculate(int(batches[worker_ind][batch_nmr][0]), int(batches[worker_ind][batch_nmr][1]))
                     problems_seen += batches[worker_ind][batch_nmr][1] - batches[worker_ind][batch_nmr][0]
-
-                    for queue in worker.get_used_queues():
-                        queue.flush()
+                    worker.cl_queue.flush()
 
             for worker in workers:
-                for queue in worker.get_used_queues():
-                    queue.finish()
-
-            for worker_ind, worker in enumerate(workers):
-                if batch_nmr < len(batches[worker_ind]):
-                    worker.post_process(int(batches[worker_ind][batch_nmr][0]), int(batches[worker_ind][batch_nmr][1]))
+                worker.cl_queue.finish()
 
 
 class MetaLoadBalanceStrategy(SimpleLoadBalanceStrategy):

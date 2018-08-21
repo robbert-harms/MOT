@@ -22,7 +22,6 @@ _cl_data_type_parser = tatsu.compile('''
     # match some as regex, to ensure the vector length is taken into account.
     type_specifier =
                      ?'mot_float_type'
-                   | 'mot_data_struct'
                    | 'void'
                    | ?'bool'
                    | ?'char' | ?'cl_char' | ?'unsigned char' | ?'uchar' | ?'cl_uchar'

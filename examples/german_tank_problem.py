@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from mot.lib.cl_function import SimpleCLFunction
 from mot.random import normal, uniform
 from mot.sample import AdaptiveMetropolisWithinGibbs
-from mot.lib.kernel_data import Array
+from mot.lib.kernel_data import Array, Struct
 
 __author__ = 'Robbert Harms'
 __date__ = '2018-04-04'
@@ -51,14 +51,13 @@ def get_simulated_data(nmr_problems):
 
 def get_log_likelihood_function(nmr_observed_tanks):
     return SimpleCLFunction.from_string('''
-        double germanTank_logLikelihood(local const mot_float_type* const x,
-                                        mot_data_struct* data){
+        double germanTank_logLikelihood(local const mot_float_type* const x, void* data){
 
             uint nmr_tanks = (uint)round(x[0]);
             double sum = 0;
             double eval;
             for(uint i = 0; i < ''' + str(nmr_observed_tanks) + ''' - 1; i++){
-                eval = discrete_uniform(data->observed_tanks[i], 1, nmr_tanks);
+                eval = discrete_uniform(((_model_data*)data)->observed_tanks[i], 1, nmr_tanks);
                 sum += eval;
             }
             return sum;   
@@ -68,9 +67,10 @@ def get_log_likelihood_function(nmr_observed_tanks):
 
 def get_log_prior_function():
     return SimpleCLFunction.from_string('''
-        double germanTank_logPrior(local const mot_float_type* const x, mot_data_struct* data){
+        double germanTank_logPrior(local const mot_float_type* const x, void* data){
             uint nmr_tanks = (uint)round(x[0]);
-            return discrete_uniform(nmr_tanks, data->lower_bounds[0], data->upper_bounds[0]);
+            return discrete_uniform(
+                nmr_tanks, ((_model_data*)data)->lower_bounds[0], ((_model_data*)data)->upper_bounds[0]);
         }
     ''', dependencies=[discrete_uniform_func()])
 
@@ -106,9 +106,9 @@ if __name__ == '__main__':
 
     ## Sample ##
     # The additional data we need
-    kernel_data = {'observed_tanks': Array(observations, 'uint'),
-                   'lower_bounds': Array(np.max(observations, axis=1), 'uint'),
-                   'upper_bounds': Array(np.ones((nmr_problems,)) * 1000, 'uint')}
+    kernel_data = Struct({'observed_tanks': Array(observations, 'uint'),
+                          'lower_bounds': Array(np.max(observations, axis=1), 'uint'),
+                          'upper_bounds': Array(np.ones((nmr_problems,)) * 1000, 'uint')}, '_model_data')
 
     # Create an instance of the sample routine we want to use.
     sampler = AdaptiveMetropolisWithinGibbs(

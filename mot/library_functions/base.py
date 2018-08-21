@@ -15,8 +15,8 @@ class CLLibrary(CLFunction):
 
 class SimpleCLLibrary(CLLibrary, SimpleCLFunction):
 
-    def __init__(self, cl_code, dependencies=None, cl_extra=None):
-        func = SimpleCLFunction.from_string(cl_code, dependencies=dependencies, cl_extra=cl_extra)
+    def __init__(self, cl_code, **kwargs):
+        func = SimpleCLFunction.from_string(cl_code, **kwargs)
         super().__init__(
             func.get_return_type(),
             func.get_cl_function_name(),
@@ -30,7 +30,7 @@ class SimpleCLLibrary(CLLibrary, SimpleCLFunction):
 class SimpleCLLibraryFromFile(CLLibrary, SimpleCLFunction):
 
     def __init__(self, return_type, cl_function_name, parameter_list, cl_code_file,
-                 var_replace_dict=None, dependencies=()):
+                 var_replace_dict=None, **kwargs):
         """Create a CL function for a library function.
 
         These functions are not meant to be optimized, but can be used a helper functions in models.
@@ -40,7 +40,6 @@ class SimpleCLLibraryFromFile(CLLibrary, SimpleCLFunction):
             cl_code_file (str): The location of the code file
             var_replace_dict (dict): In the cl_code file these replacements will be made
                 (using the % format function of Python)
-            dependencies (list or tuple of CLLibrary): The list of cl libraries this function depends on
         """
         with open(os.path.abspath(cl_code_file), 'r') as f:
             code = f.read()
@@ -48,8 +47,7 @@ class SimpleCLLibraryFromFile(CLLibrary, SimpleCLFunction):
         if var_replace_dict is not None:
             code = code % var_replace_dict
 
-        super().__init__(return_type, cl_function_name, parameter_list, code,
-                                                      dependencies=dependencies)
+        super().__init__(return_type, cl_function_name, parameter_list, code, **kwargs)
         self._code = code
 
     def get_cl_code(self):
