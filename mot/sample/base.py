@@ -112,7 +112,8 @@ class AbstractSampler(object):
         """
         kernel_data = self._get_kernel_data(nmr_samples, thinning, return_output)
         sample_func = self._get_compute_func(nmr_samples, thinning, return_output)
-        sample_func.evaluate(kernel_data, self._nmr_problems, use_local_reduction=True,
+        sample_func.evaluate(kernel_data, self._nmr_problems,
+                             use_local_reduction=all(env.is_gpu for env in self._cl_runtime_info.get_cl_environments()),
                              cl_runtime_info=self._cl_runtime_info)
         self._sampling_index += nmr_samples * thinning
         self._readout_kernel_data(kernel_data)
