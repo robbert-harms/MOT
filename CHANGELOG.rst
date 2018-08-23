@@ -2,6 +2,15 @@
 Changelog
 *********
 
+v0.6.0 (2018-08-23)
+===================
+
+Changed
+-------
+- Removed the mot_data_struct system and replaced it with a Struct KernelData object.
+- Refactored the numerical hessian API.
+
+
 v0.5.7 (2018-08-17)
 ===================
 
@@ -17,6 +26,10 @@ Other
 
 v0.5.6 (2018-08-02)
 ===================
+This version is significantly faster than previous versions when ran using a GPU.
+
+Changed
+-------
 - Made the optimizers work better with the local reduction.
 - Removed some non-ascii characters for compatibility.
 - Bugfix to allow using more than one device.
