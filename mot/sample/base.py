@@ -364,7 +364,7 @@ class AbstractRWMSampler(AbstractSampler):
                 the sampling routine. This allows the model to change a proposal before computing the
                 prior or likelihood probabilities. If None, we will not use a callback.
 
-                As an example, suppose you are sample a polar coordinate :math:`\theta` defined on
+                As an example, suppose you are sampling a polar coordinate :math:`\theta` defined on
                 :math:`[0, 2\pi]` with a random walk Metropolis proposal distribution. This distribution might propose
                 positions outside of the range of :math:`\theta`. Of course the model function could deal with that by
                 taking the modulus of the input, but then you have to post-process the chain with the same

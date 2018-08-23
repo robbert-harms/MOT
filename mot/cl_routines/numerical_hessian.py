@@ -15,39 +15,11 @@ __email__ = 'robbert.harms@maastrichtuniversity.nl'
 __licence__ = 'LGPL v3'
 
 
-class NumericalDerivativeInterface(object):
-    """Extends an optimization model for calculating numerical derivatives of the objective function.
-
-    For calculating derivatives (gradients / Hessians) numerically, we need a likelihood function and some additional
-    information, like the step size for each parameter, a method for checking boundary conditions and possible parameter
-    transformations for circular parameters. All these extra elements are represented in this interface.
-    """
-
-    def numdiff_parameter_transformation(self):
-        """A transformation that can prepare the parameter +/- the proposed step for evaluation in the model function.
-
-        Some parameters require for example a modulus operation before the proposed step can be used in the model
-        This is the place to define them. Please note that this function does not need to incorporate boundary checks
-        as those are handled already by the numerical differentiation routine.
-
-        Returns:
-            mot.lib.cl_function.CLFunction: A function with the signature:
-                .. code-block:: c
-
-                    void <func_name>(void* data, local mot_float_type* params);
-
-                Where the data is the kernel data struct and params is the vector with the suggested parameters and
-                which can be modified in place. Note that this is called two times, one with the parameters plus
-                the step and one time without.
-        """
-        raise NotImplementedError()
-
-
-# todo: refactor out the model class
-def numerical_hessian(model, objective_func,
-                      parameters, lower_bounds, upper_bounds,
+def numerical_hessian(objective_func, parameters,
+                      lower_bounds=None, upper_bounds=None,
                       step_ratio=2, nmr_steps=15, data=None,
-                      max_step_sizes=None, scaling_factors=None, step_offset=None,
+                      max_step_sizes=None, scaling_factors=None,
+                      step_offset=None, parameter_transform_func=None,
                       cl_runtime_info=None):
     """Calculate and return the Hessian of the given function at the given parameters.
 
@@ -79,8 +51,6 @@ def numerical_hessian(model, objective_func,
     numerical errors and localization of the derivative.
 
     Args:
-        model (mot.cl_routines.numerical_hessian.NumericalDerivativeInterface): the model to use for calculating the
-            derivative.
         objective_func (mot.lib.cl_function.CLFunction): The function we want to differentiate.
             A CL function with the signature:
 
@@ -95,14 +65,12 @@ def numerical_hessian(model, objective_func,
 
         parameters (ndarray): The parameters at which to evaluate the gradient. A (d, p) matrix with d problems,
             and p parameters
-        lower_bounds (list): a list of length (p,) for p parameters with the lower bounds.
-            Each element of the list can be a scalar or a vector (of the same length as the number of
-            problem instances). For infinity use np.inf. If for a given parameter no lower bound should be used,
-            set the lower bound to None.
-        upper_bounds (list): a list of length (p,) for p parameters with the upper bounds.
-            Each element of the list can be a scalar or a vector (of the same length as the number of
-            problem instances). For infinity use np.inf. If for a given parameter no lower bound should be used,
-            set the lower bound to None.
+        lower_bounds (list or None): a list of length (p,) for p parameters with the lower bounds.
+            Each element of the list can be a scalar, a vector (of the same length as the number of problem instances),
+            or None. For infinity use np.inf, for boundless use None.
+        upper_bounds (list or None): a list of length (p,) for p parameters with the upper bounds.
+            Each element of the list can be a scalar, a vector (of the same length as the number of problem instances),
+            or None. For infinity use np.inf, for boundless use None.
         step_ratio (float): the ratio at which the steps diminish.
         nmr_steps (int): the number of steps we will generate. We will calculate the derivative for each of these
             step sizes and extrapolate the best step size from among them. The minimum number of steps is 2.
@@ -118,6 +86,22 @@ def numerical_hessian(model, objective_func,
             the parameters to a unitary range instead of changing the step sizes for the parameters.
             This vector should contain scaling factors such that when the parameter is multiplied with this value,
             the order of magnitude of the parameter is about one.
+
+        parameter_transform_func (mot.lib.cl_function.CLFunction or None): A transformation that can prepare the
+            parameter plus/minus the proposed step before evaluation.
+
+            As an example, suppose we are taking the derivative of a a polar coordinate :math:`\theta` defined on
+            :math:`[0, 2\pi]`. While taking the derivative, the function might propose positions outside of the range
+            of :math:`\theta`. This function allows changing the parameter vector before it is put into the model.
+
+            Please note that this function should return a parameter vector that is equivalent (but not necessarily
+            equal) to the provided proposal.
+
+            Signature:
+
+            .. code-block:: c
+
+                void <func_name>(void* data, local mot_float_type* x);
 
         cl_runtime_info (mot.configuration.CLRuntimeInfo): the runtime information
 
@@ -145,8 +129,9 @@ def numerical_hessian(model, objective_func,
         return _results_vector_to_matrix(derivatives, nmr_params) * np.outer(scaling_factors, scaling_factors)
 
     with config_context(CLRuntimeAction(cl_runtime_info or CLRuntimeInfo())):
-        derivatives = _compute_derivatives(model, objective_func, parameters, step_ratio, step_offset, nmr_steps,
-                                           lower_bounds, upper_bounds, max_step_sizes, scaling_factors, data=data)
+        derivatives = _compute_derivatives(objective_func, parameters, step_ratio, step_offset, nmr_steps,
+                                           lower_bounds, upper_bounds, max_step_sizes, scaling_factors, data=data,
+                                           parameter_transform_func=parameter_transform_func)
 
         if nmr_steps == 1:
             return finalize_derivatives(derivatives[..., 0])
@@ -166,8 +151,9 @@ def numerical_hessian(model, objective_func,
         return finalize_derivatives(derivatives)
 
 
-def _compute_derivatives(model, objective_func, parameters, step_ratio, step_offset, nmr_steps,
-                         lower_bounds, upper_bounds, max_step_sizes, scaling_factors, data=None):
+def _compute_derivatives(objective_func, parameters, step_ratio, step_offset, nmr_steps,
+                         lower_bounds, upper_bounds, max_step_sizes, scaling_factors, data=None,
+                         parameter_transform_func=None):
     """Compute the lower triangular elements of the Hessian using the central difference method.
 
     This will compute the elements of the Hessian multiple times with decreasing step sizes.
@@ -185,9 +171,21 @@ def _compute_derivatives(model, objective_func, parameters, step_ratio, step_off
         scaling_factors (ndarray): per estimable parameter a single float with the parameter scaling for that parameter.
             Use 1 as identity.
         data (mot.lib.kernel_data.KernelData): the user provided data for the ``void* data`` pointer.
+        parameter_transform_func (mot.lib.cl_function.CLFunction): A transformation that can prepare the parameter plus/
+            minus the proposed step before evaluation.
+
+            Signature:
+
+            .. code-block:: c
+
+                void <func_name>(void* data, local mot_float_type* x);
     """
     nmr_params = parameters.shape[1]
     nmr_derivatives = (nmr_params ** 2 - nmr_params) // 2 + nmr_params
+
+    if parameter_transform_func is None:
+        parameter_transform_func = SimpleCLFunction.from_string(
+            'void voidTransform(void* data, local mot_float_type* x){}')
 
     initial_step = _get_initial_step_size(parameters, lower_bounds, upper_bounds, max_step_sizes, scaling_factors)
     if step_offset:
@@ -201,7 +199,7 @@ def _compute_derivatives(model, objective_func, parameters, step_ratio, step_off
         'step_evaluates': Zeros((parameters.shape[0], nmr_derivatives, nmr_steps), 'double'),
     }
 
-    _derivation_kernel(model, objective_func, nmr_params, nmr_steps, step_ratio).evaluate(
+    _derivation_kernel(objective_func, nmr_params, nmr_steps, step_ratio, parameter_transform_func).evaluate(
         kernel_data, parameters.shape[0], use_local_reduction=True)
 
     return kernel_data['step_evaluates'].get_data()
@@ -348,6 +346,9 @@ def _get_initial_step_size(parameters, lower_bounds, upper_bounds, max_step_size
     Returns:
         ndarray: for every problem instance the vector with the initial step size for each parameter.
     """
+    if lower_bounds is None and upper_bounds is None:
+        return np.repeat(max_step_sizes[None, :], parameters.shape[0], axis=0)
+
     initial_step = np.zeros_like(parameters)
 
     for ind in range(parameters.shape[1]):
@@ -409,11 +410,9 @@ def _get_richardson_coefficients(step_ratio, nmr_extrapolations):
     return linalg.pinv(r_matrix(nmr_extrapolations))[0]
 
 
-def _get_compute_functions_cl(model, objective_func, nmr_params, nmr_steps, step_ratio):
-    numdiff_param_transform = model.numdiff_parameter_transformation()
-
+def _get_compute_functions_cl(objective_func, nmr_params, nmr_steps, step_ratio, parameter_transform_func):
     func = objective_func.get_cl_code()
-    func += numdiff_param_transform.get_cl_code()
+    func += parameter_transform_func.get_cl_code()
 
     return func + '''
         double _calculate_function(void* data, local mot_float_type* x){
@@ -449,7 +448,7 @@ def _get_compute_functions_cl(model, objective_func, nmr_params, nmr_steps, step
             }
             barrier(CLK_LOCAL_MEM_FENCE);
 
-            ''' + numdiff_param_transform.get_cl_function_name() + '''(data, x_tmp);
+            ''' + parameter_transform_func.get_cl_function_name() + '''(data, x_tmp);
             return _calculate_function(data, x_tmp);
         }
         
@@ -610,9 +609,9 @@ def _get_error_estimate_functions_cl(nmr_steps, nmr_convolutions,
     return func
 
 
-def _derivation_kernel(model, objective_func, nmr_params, nmr_steps, step_ratio):
+def _derivation_kernel(objective_func, nmr_params, nmr_steps, step_ratio, parameter_transform_func):
     coords = [(x, y) for x, y in itertools.combinations_with_replacement(range(nmr_params), 2)]
-    func = _get_compute_functions_cl(model, objective_func, nmr_params, nmr_steps, step_ratio)
+    func = _get_compute_functions_cl(objective_func, nmr_params, nmr_steps, step_ratio, parameter_transform_func)
 
     return SimpleCLFunction.from_string('''
         void compute(local mot_float_type* parameters,
