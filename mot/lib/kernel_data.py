@@ -499,7 +499,7 @@ class Array(KernelData):
         self._backup_data_reference = None
         self._ensure_zero_copy = ensure_zero_copy
         self._as_scalar = as_scalar
-        self._data_length = self._data.strides[0] // self._data.itemsize
+        self._data_length = 1 if not len(self._data.shape) else self._data.strides[0] // self._data.itemsize
 
         if self._as_scalar and len(np.squeeze(self._data).shape) > 1:
             raise ValueError('The option "as_scalar" was set, but the data has more than one dimensions.')
@@ -632,7 +632,7 @@ class Array(KernelData):
 
     def _get_offset_str(self, problem_id_substitute):
         if self._offset_str is None:
-            offset_str = str(self._data.strides[0] // self._data.itemsize) + ' * {problem_id}'
+            offset_str = str(self._data_length) + ' * {problem_id}'
         else:
             offset_str = str(self._offset_str)
         return offset_str.replace('{problem_id}', problem_id_substitute)
