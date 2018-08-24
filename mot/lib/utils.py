@@ -188,11 +188,14 @@ def get_float_type_def(double_precision):
     '''
 
     if double_precision:
-        return '''
+        return '''            
             #if __OPENCL_VERSION__ <= CL_VERSION_1_1
                 #pragma OPENCL EXTENSION cl_khr_fp64 : enable
             #endif
-
+            
+            #define PYOPENCL_DEFINE_CDOUBLE
+            #include <pyopencl-complex.h>
+        
             #define mot_float_type double
             #define mot_float_type2 double2
             #define mot_float_type4 double4
@@ -208,7 +211,9 @@ def get_float_type_def(double_precision):
             #if __OPENCL_VERSION__ <= CL_VERSION_1_1
                 #pragma OPENCL EXTENSION cl_khr_fp64 : enable
             #endif
-
+            
+            #include <pyopencl-complex.h>
+            
             #define mot_float_type float
             #define mot_float_type2 float2
             #define mot_float_type4 float4
