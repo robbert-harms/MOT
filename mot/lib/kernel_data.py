@@ -489,17 +489,22 @@ class Array(KernelData):
         if self._is_writable:
             self._requirements.append('W')
 
-        self._data = np.require(data, requirements=self._requirements)
+        self._data = np.require(np.array(data), requirements=self._requirements)
         if ctype and not ctype.startswith('mot_float_type'):
             self._data = convert_data_to_dtype(self._data, ctype)
 
         self._offset_str = offset_str
-        self._ctype = ctype or dtype_to_ctype(data.dtype)
+        self._ctype = ctype or dtype_to_ctype(self._data.dtype)
         self._mot_float_dtype = None
         self._backup_data_reference = None
         self._ensure_zero_copy = ensure_zero_copy
         self._as_scalar = as_scalar
-        self._data_length = 1 if not len(self._data.shape) else self._data.strides[0] // self._data.itemsize
+
+        self._data_length = 1
+        if len(self._data.shape):
+            self._data_length = self._data.strides[0] // self._data.itemsize
+        if self._offset_str == '0' or self._offset_str == 0:
+            self._data_length = self._data.size
 
         if self._as_scalar and len(np.squeeze(self._data).shape) > 1:
             raise ValueError('The option "as_scalar" was set, but the data has more than one dimensions.')
