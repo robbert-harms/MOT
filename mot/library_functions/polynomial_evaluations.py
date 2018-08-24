@@ -14,16 +14,16 @@ class polevl(SimpleCLLibrary):
 
         Copied from Scipy (https://github.com/scipy/scipy/blob/master/scipy/special/cephes/polevl.h), 05-05-2018.
 
-        Evaluates polynomial of degree N:
+        Evaluates polynomial of degree N::
 
-                            2          N
-        y  =  C  + C x + C x  +...+ C x
-               0      1     2          N
+                                2          N
+            y  =  C  + C x + C x  +...+ C x
+                   0      1     2          N
 
-        Coefficients are stored in reverse order:
+        Coefficients are stored in reverse order::
 
-        coef[0] = C  , ..., coef[N] = C  .
-                   N                   0
+            coef[0] = C  , ..., coef[N] = C  .
+                       N                   0
         """
         super().__init__('''
             double polevl(double x, double* coef, int N){
@@ -51,16 +51,16 @@ class p1evl(SimpleCLLibrary):
 
         Copied from Scipy (https://github.com/scipy/scipy/blob/master/scipy/special/cephes/polevl.h), 05-05-2018.
 
-        Evaluates polynomial of degree N:
+        Evaluates polynomial of degree N::
 
-                            2          N
-        y  =  C  + C x + C x  +...+ C x
-               0      1     2          N
+                                2          N
+            y  =  C  + C x + C x  +...+ C x
+                   0      1     2          N
 
-        Coefficients are stored in reverse order:
+        Coefficients are stored in reverse order::
 
-        coef[0] = C  , ..., coef[N] = C  .
-                   N                   0
+            coef[0] = C  , ..., coef[N] = C  .
+                       N                   0
 
         In contrast to ``polevl``, this function assumes that coef[N] = 1.0 and is omitted from the array.
         Its calling arguments are otherwise the same as polevl().

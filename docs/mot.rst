@@ -7,34 +7,13 @@ Subpackages
 .. toctree::
 
     mot.cl_routines
-    mot.parsers
+    mot.lib
+    mot.library_functions
+    mot.optimize
+    mot.sample
 
 Submodules
 ----------
-
-mot.cl\_data\_type module
--------------------------
-
-.. automodule:: mot.cl_data_type
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-mot.cl\_environments module
----------------------------
-
-.. automodule:: mot.cl_environments
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-mot.cl\_function module
------------------------
-
-.. automodule:: mot.lib.cl_function
-    :members:
-    :undoc-members:
-    :show-inheritance:
 
 mot.configuration module
 ------------------------
@@ -44,66 +23,26 @@ mot.configuration module
     :undoc-members:
     :show-inheritance:
 
-mot.factory module
-------------------
-
-.. automodule:: mot.factory
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-mot.kernel\_input\_data module
-------------------------------
-
-.. automodule:: mot.kernel_input_data
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-mot.library\_functions module
------------------------------
-
-.. automodule:: mot.library_functions
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-mot.load\_balance\_strategies module
-------------------------------------
-
-.. automodule:: mot.load_balance_strategies
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-mot.mcmc\_diagnostics module
-----------------------------
+mot.mcmc_diagnostics module
+---------------------------
 
 .. automodule:: mot.mcmc_diagnostics
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot.model\_interfaces module
-----------------------------
+mot.random module
+-----------------
 
-.. automodule:: mot.model_interfaces
+.. automodule:: mot.random
     :members:
     :undoc-members:
     :show-inheritance:
 
-mot.statistics module
----------------------
-
-.. automodule:: mot.statistics
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-mot.utils module
+mot.stats module
 ----------------
 
-.. automodule:: mot.utils
+.. automodule:: mot.stats
     :members:
     :undoc-members:
     :show-inheritance:

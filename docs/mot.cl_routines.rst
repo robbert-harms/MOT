@@ -1,31 +1,13 @@
-mot.cl\_routines package
-========================
-
-Subpackages
------------
-
-.. toctree::
-
-    mot.cl_routines.filters
-    mot.cl_routines.mapping
-    mot.cl_routines.optimizing
-    mot.cl_routines.sampling
+mot.cl_routines package
+=======================
 
 Submodules
 ----------
 
-mot.cl\_routines.base module
-----------------------------
-
-.. automodule:: mot.cl_routines.base
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-mot.cl\_routines.generate\_random module
+mot.cl_routines.numerical_hessian module
 ----------------------------------------
 
-.. automodule:: mot.cl_routines.generate_random
+.. automodule:: mot.cl_routines.numerical_hessian
     :members:
     :undoc-members:
     :show-inheritance:

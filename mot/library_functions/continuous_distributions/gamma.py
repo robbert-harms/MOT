@@ -12,11 +12,16 @@ __licence__ = 'LGPL v3'
 
 class gamma_pdf(SimpleCLLibrary):
     def __init__(self):
-        """Computes the Gamma probability density function using the shape and scale parameterization.
+        r"""Computes the Gamma probability density function using the shape and scale parameterization.
 
-        This computes the gamma PDF as: :math:`{\frac {1}{\Gamma (k)\theta ^{k}}}x^{k-1}e^{-{\frac {x}{\theta }}}`
+        This computes the gamma PDF as:
 
-        With x the desired position, :math:`k` the shape and :math:`\theta` the scale.
+        .. math::
+
+            {\frac{1}{\Gamma (k)\theta ^{k}}}x^{k-1}e^{-{\frac {x}{\theta }}}
+
+
+        With :math:`x` the desired position, :math:`k` the shape and :math:`\theta` the scale.
         """
         super().__init__('''
             double gamma_pdf(double x, double shape, double scale){
@@ -27,9 +32,9 @@ class gamma_pdf(SimpleCLLibrary):
 
 class gamma_cdf(SimpleCLLibrary):
     def __init__(self):
-        """Calculate the Cumulative Distribution Function of the Gamma function.
+        r"""Calculate the Cumulative Distribution Function of the Gamma function.
 
-        This computes: lower_incomplete_gamma(k, x/theta) / gamma(k)
+        This computes: ``lower_incomplete_gamma(k, x/theta) / gamma(k)``
 
         With k the shape parameter, theta the scale parameter, lower_incomplete_gamma the lower incomplete gamma
         function and gamma the complete gamma function.
@@ -38,6 +43,7 @@ class gamma_cdf(SimpleCLLibrary):
 
          * shape: the shape parameter of the gamma distribution (often denoted :math:`k`)
          * scale: the scale parameter of the gamma distribution (often denoted :math:`\theta`)
+
         """
         super().__init__('''
             double gamma_cdf(double x, double shape, double scale){
@@ -68,16 +74,18 @@ class gamma_ppf(SimpleCLLibrary):
 class _find_inverse_s(SimpleCLLibrary):
     def __init__(self):
         """Helper function to computing the inverse gamma
-        /*
-         * Computation of the Incomplete Gamma Function Ratios and their Inverse
-         * ARMIDO R. DIDONATO and ALFRED H. MORRIS, JR.
-         * ACM Transactions on Mathematical Software, Vol. 12, No. 4,
-         * December 1986, Pages 377-393.
-         *
-         * See equation 32.
-         */
 
-        Copied from Scipy (https://github.com/scipy/scipy/blob/master/scipy/special/cephes/igami.c), 05-05-2018.
+        Copied from Scipy (https://github.com/scipy/scipy/blob/master/scipy/special/cephes/igami.c), 05-05-2018::
+
+            /*
+             * Computation of the Incomplete Gamma Function Ratios and their Inverse
+             * ARMIDO R. DIDONATO and ALFRED H. MORRIS, JR.
+             * ACM Transactions on Mathematical Software, Vol. 12, No. 4,
+             * December 1986, Pages 377-393.
+             *
+             * See equation 32.
+             */
+
         """
         super().__init__('''
             double _find_inverse_s(double p, double q){
@@ -461,47 +469,47 @@ class igam(SimpleCLLibrary):
     def __init__(self):
         """Complemented incomplete Gamma integral
 
-        Also known as the regularized lower incomplete gamma function
+        Also known as the regularized lower incomplete gamma function.
+        Copied from Scipy (https://github.com/scipy/scipy/blob/master/scipy/special/cephes/igam.c), 05-05-2018::
 
-        /*                                                     igam.c
-         *
-         *     Incomplete Gamma integral
-         *
-         *
-         *
-         * SYNOPSIS:
-         *
-         * double a, x, y, igam();
-         *
-         * y = igam( a, x );
-         *
-         * DESCRIPTION:
-         *
-         * The function is defined by
-         *
-         *                           x
-         *                            -
-         *                   1       | |  -t  a-1
-         *  igam(a,x)  =   -----     |   e   t   dt.
-         *                  -      | |
-         *                 | (a)    -
-         *                           0
-         *
-         *
-         * In this implementation both arguments must be positive.
-         * The integral is evaluated by either a power series or
-         * continued fraction expansion, depending on the relative
-         * values of a and x.
-         *
-         * ACCURACY:
-         *
-         *                      Relative error:
-         * arithmetic   domain     # trials      peak         rms
-         *    IEEE      0,30       200000       3.6e-14     2.9e-15
-         *    IEEE      0,100      300000       9.9e-14     1.5e-14
-         */
+            /*                                                     igam.c
+             *
+             *     Incomplete Gamma integral
+             *
+             *
+             *
+             * SYNOPSIS:
+             *
+             * double a, x, y, igam();
+             *
+             * y = igam( a, x );
+             *
+             * DESCRIPTION:
+             *
+             * The function is defined by
+             *
+             *                           x
+             *                            -
+             *                   1       | |  -t  a-1
+             *  igam(a,x)  =   -----     |   e   t   dt.
+             *                  -      | |
+             *                 | (a)    -
+             *                           0
+             *
+             *
+             * In this implementation both arguments must be positive.
+             * The integral is evaluated by either a power series or
+             * continued fraction expansion, depending on the relative
+             * values of a and x.
+             *
+             * ACCURACY:
+             *
+             *                      Relative error:
+             * arithmetic   domain     # trials      peak         rms
+             *    IEEE      0,30       200000       3.6e-14     2.9e-15
+             *    IEEE      0,100      300000       9.9e-14     1.5e-14
+             */
 
-        Copied from Scipy (https://github.com/scipy/scipy/blob/master/scipy/special/cephes/igam.c), 05-05-2018.
         """
         super().__init__('''
             double igam(double a, double x){
@@ -545,50 +553,50 @@ class igamc(SimpleCLLibrary):
         """Complemented incomplete Gamma integral
 
         Also known as the regularized upper incomplete gamma function.
+        Copied from Scipy (https://github.com/scipy/scipy/blob/master/scipy/special/cephes/igam.c), 05-05-2018::
 
-        /*							igamc()
-         *
-         *	Complemented incomplete Gamma integral
-         *
-         *
-         *
-         * SYNOPSIS:
-         *
-         * double a, x, y, igamc();
-         *
-         * y = igamc( a, x );
-         *
-         * DESCRIPTION:
-         *
-         * The function is defined by
-         *
-         *
-         *  igamc(a,x)   =   1 - igam(a,x)
-         *
-         *                            inf.
-         *                              -
-         *                     1       | |  -t  a-1
-         *               =   -----     |   e   t   dt.
-         *                    -      | |
-         *                   | (a)    -
-         *                             x
-         *
-         *
-         * In this implementation both arguments must be positive.
-         * The integral is evaluated by either a power series or
-         * continued fraction expansion, depending on the relative
-         * values of a and x.
-         *
-         * ACCURACY:
-         *
-         * Tested at random a, x.
-         *                a         x                      Relative error:
-         * arithmetic   domain   domain     # trials      peak         rms
-         *    IEEE     0.5,100   0,100      200000       1.9e-14     1.7e-15
-         *    IEEE     0.01,0.5  0,100      200000       1.4e-13     1.6e-15
-         */
+            /*							igamc()
+             *
+             *	Complemented incomplete Gamma integral
+             *
+             *
+             *
+             * SYNOPSIS:
+             *
+             * double a, x, y, igamc();
+             *
+             * y = igamc( a, x );
+             *
+             * DESCRIPTION:
+             *
+             * The function is defined by
+             *
+             *
+             *  igamc(a,x)   =   1 - igam(a,x)
+             *
+             *                            inf.
+             *                              -
+             *                     1       | |  -t  a-1
+             *               =   -----     |   e   t   dt.
+             *                    -      | |
+             *                   | (a)    -
+             *                             x
+             *
+             *
+             * In this implementation both arguments must be positive.
+             * The integral is evaluated by either a power series or
+             * continued fraction expansion, depending on the relative
+             * values of a and x.
+             *
+             * ACCURACY:
+             *
+             * Tested at random a, x.
+             *                a         x                      Relative error:
+             * arithmetic   domain   domain     # trials      peak         rms
+             *    IEEE     0.5,100   0,100      200000       1.9e-14     1.7e-15
+             *    IEEE     0.01,0.5  0,100      200000       1.4e-13     1.6e-15
+             */
 
-        Copied from Scipy (https://github.com/scipy/scipy/blob/master/scipy/special/cephes/igam.c), 05-05-2018.
         """
         super().__init__('''
             double igamc(double a, double x){
