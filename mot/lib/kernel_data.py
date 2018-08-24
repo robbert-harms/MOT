@@ -489,7 +489,7 @@ class Array(KernelData):
         if self._is_writable:
             self._requirements.append('W')
 
-        self._data = np.require(np.array(data), requirements=self._requirements)
+        self._data = np.require(data, requirements=self._requirements)
         if ctype and not ctype.startswith('mot_float_type'):
             self._data = convert_data_to_dtype(self._data, ctype)
 
