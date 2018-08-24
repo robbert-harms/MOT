@@ -2,6 +2,11 @@
 Changelog
 *********
 
+v0.6.2 (2018-08-24)
+===================
+- Small regression fix in the Array class, only applicable when using the ``offset_str`` argument.
+
+
 v0.6.1 (2018-08-24)
 ===================
 
