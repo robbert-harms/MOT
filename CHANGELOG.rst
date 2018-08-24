@@ -2,6 +2,18 @@
 Changelog
 *********
 
+v0.6.1 (2018-08-24)
+===================
+
+Added
+-----
+- Adds complex number support using the PyOpenCL complex numbers.
+
+Other
+-----
+- Small fix to allow scalars in the Array class.
+
+
 v0.6.0 (2018-08-23)
 ===================
 
