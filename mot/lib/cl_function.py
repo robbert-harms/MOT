@@ -1,4 +1,5 @@
 import warnings
+from collections import Iterable, Mapping
 from collections.__init__ import OrderedDict
 
 import numpy as np
@@ -100,10 +101,12 @@ class CLFunction(object):
         This function will convert possible dots in the parameter names to underscores for use in the CL kernel.
 
         Args:
-            inputs (dict[str: Union(ndarray, mot.lib.kernel_data.KernelData)]): for each parameter of the function
+            inputs (Iterable[Union(ndarray, mot.lib.utils.KernelData)]
+                    or Mapping[str: Union(ndarray, mot.lib.utils.KernelData)]): for each CL function parameter
                 the input data. Each of these input datasets must either be a scalar or be of equal length in the
-                first dimension. The user can either input raw ndarrays or input KernelData objects.
-                If an ndarray is given we will load it read/write by default.
+                first dimension. The elements can either be raw ndarrays or KernelData objects.
+                If an ndarray is given we will load it read/write by default. You can provide either an iterable
+                with one value per parameter, or a mapping with for every parameter a corresponding value.
             nmr_instances (int): the number of parallel processes to run.
             use_local_reduction (boolean): set this to True if you want to use local memory reduction in
                  evaluating this function. If this is set to True we will multiply the global size
@@ -267,6 +270,15 @@ class SimpleCLFunction(CLFunction):
                     return Array(data, ctype=param.data_type.ctype, mode='rw')
 
             return {param.name.replace('.', '_'): get_data_object(param) for param in self.get_parameters()}
+
+        if isinstance(inputs, Iterable) and not isinstance(inputs, Mapping):
+            inputs = list(inputs)
+            if len(inputs) != len(self.get_parameters()):
+                raise ValueError('The length of the input list ({}), does not equal '
+                                 'the number of parameters ({})'.format(len(inputs), len(self.get_parameters())))
+
+            param_names = [param.name for param in self.get_parameters()]
+            inputs = dict(zip(param_names, inputs))
 
         for param in self.get_parameters():
             if param.name not in inputs:
