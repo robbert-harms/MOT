@@ -7,7 +7,6 @@ __email__ = 'robbert.harms@maastrichtuniversity.nl'
 __licence__ = 'LGPL v3'
 
 
-
 class solve_cubic_pol_real(SimpleCLLibrary):
 
     def __init__(self):
@@ -17,6 +16,9 @@ class solve_cubic_pol_real(SimpleCLLibrary):
         using the algebraic method.
 
         The coefficients and the roots may point to the same address space to save memory.
+
+        This code is an OpenCL translation from the Python code to be found at:
+        https://github.com/shril/CubicEquationSolver/blob/master/CubicEquationSolver.py
 
         Args:
             coefficients: array of length 4, with the coefficients (a, b, c, d)
@@ -49,7 +51,12 @@ class solve_cubic_pol_real(SimpleCLLibrary):
                         roots[1] = (-c - D) / (2.0 * b);
                         return 2;
                     }
+                    /* // Imaginary roots, not returned 
+                    D = sqrt(-D);
+                    roots[0] = (-c + D * 1j) / (2.0 * b);
+                    roots[1] = (-c - D * 1j) / (2.0 * b);
                     return 0;
+                    */
                 }
                 
                 double f = ((3.0 * c / a) - ((b *b) / (a * a))) / 3.0;
@@ -101,10 +108,13 @@ class solve_cubic_pol_real(SimpleCLLibrary):
                 }
                 
                 roots[0] = (S + U) - (b / (3.0 * a));
+                /* //Imaginary roots, not returned
+                roots[1] = -(S + U) / 2 - (b / (3.0 * a)) + (S - U) * sqrt(3) * 0.5j;
+                roots[2] = -(S + U) / 2 - (b / (3.0 * a)) - (S - U) * sqrt(3) * 0.5j;
+                */
                 return 1;
             }
         ''')
-
 
 
 class polevl(SimpleCLLibrary):
