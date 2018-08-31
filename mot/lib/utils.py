@@ -5,11 +5,11 @@ import numbers
 import os
 from contextlib import contextmanager
 from functools import reduce
-
 import numpy as np
 import pyopencl as cl
 import pyopencl.array as cl_array
 import tatsu
+from pkg_resources import resource_filename
 
 from mot.lib.cl_data_type import SimpleCLDataType
 
@@ -168,18 +168,23 @@ def device_supports_double(cl_device):
     return cl_device.get_info(cl.device_info.DOUBLE_FP_CONFIG) == 63
 
 
-def get_float_type_def(double_precision):
+def get_float_type_def(double_precision, include_complex=True):
     """Get the model floating point type definition.
-
-    The MOT_INT_CMP_TYPE is meant for the select() function where you need a long in the case of double precision.
 
     Args:
         double_precision (boolean): if True we will use the double type for the mot_float_type type.
             Else, we will use the single precision float type for the mot_float_type type.
+        include_complex (boolean): if we include support for complex numbers
 
     Returns:
         str: defines the mot_float_type types, the epsilon and the MIN and MAX values.
     """
+    if include_complex:
+        with open(os.path.abspath(resource_filename('pyopencl', 'cl/pyopencl-complex.h')), 'r') as f:
+            complex_number_support = f.read()
+    else:
+        complex_number_support = ''
+
     scipy_constants = '''
         #define MACHEP DBL_EPSILON
         #define MAXLOG log(DBL_MAX)
@@ -194,36 +199,33 @@ def get_float_type_def(double_precision):
             #endif
             
             #define PYOPENCL_DEFINE_CDOUBLE
-            #include <pyopencl-complex.h>
-        
-            #define mot_float_type double
-            #define mot_float_type2 double2
-            #define mot_float_type4 double4
-            #define mot_float_type8 double8
-            #define mot_float_type16 double16
+            
+            typedef double mot_float_type;
+            typedef double2 mot_float_type2;
+            typedef double4 mot_float_type4;
+            typedef double8 mot_float_type8;
+            typedef double16 mot_float_type16;
+            
             #define MOT_EPSILON DBL_EPSILON
             #define MOT_MIN DBL_MIN
             #define MOT_MAX DBL_MAX
-            #define MOT_INT_CMP_TYPE long
-        ''' + scipy_constants
+        ''' + scipy_constants + complex_number_support
     else:
         return '''
             #if __OPENCL_VERSION__ <= CL_VERSION_1_1
                 #pragma OPENCL EXTENSION cl_khr_fp64 : enable
             #endif
             
-            #include <pyopencl-complex.h>
+            typedef float mot_float_type;
+            typedef float2 mot_float_type2;
+            typedef float4 mot_float_type4;
+            typedef float8 mot_float_type8;
+            typedef float16 mot_float_type16;
             
-            #define mot_float_type float
-            #define mot_float_type2 float2
-            #define mot_float_type4 float4
-            #define mot_float_type8 float8
-            #define mot_float_type16 float16
             #define MOT_EPSILON FLT_EPSILON
             #define MOT_MIN FLT_MIN
             #define MOT_MAX FLT_MAX
-            #define MOT_INT_CMP_TYPE int
-        ''' + scipy_constants
+        ''' + scipy_constants + complex_number_support
 
 
 def topological_sort(data):
@@ -553,49 +555,14 @@ _cl_functions_parser = tatsu.compile('''
 ''')
 
 
-def separate_cl_functions(input_str):
-    """Separate all the OpenCL functions.
-
-    This creates a list of strings, with for each function found the OpenCL code.
-
-    Args:
-        input_str (str): the string containing one or more functions.
-
-    Returns:
-        list: a list of strings, with one string per found CL function.
-    """
-    class Semantics(object):
-
-        def __init__(self):
-            self._functions = []
-
-        def result(self, ast):
-            return self._functions
-
-        def function(self, ast):
-            def join(items):
-                result = ''
-                for item in items:
-                    if isinstance(item, str):
-                        result += item
-                    else:
-                        result += join(item)
-                return result
-
-            self._functions.append(join(ast).strip())
-            return ast
-
-    return _cl_functions_parser.parse(input_str, semantics=Semantics())
-
-
-def parse_cl_function(input_str, dependencies=(), cl_extra=None):
+def parse_cl_function(cl_code, dependencies=(), cl_extra=None):
     """Parse the given OpenCL string to a single SimpleCLFunction.
 
     If the string contains more than one function, we will return only the last, with all the other added as a
     dependency.
 
     Args:
-        input_str (str): the input string containing one or more functions.
+        cl_code (str): the input string containing one or more functions.
         dependencies (list or tuple of CLLibrary): The list of CL libraries this function depends on
         cl_extra (str): extra CL code for this function that does not warrant an own function.
             This is prepended to the function body.
@@ -605,8 +572,41 @@ def parse_cl_function(input_str, dependencies=(), cl_extra=None):
     """
     from mot.lib.cl_function import SimpleCLFunction
 
-    functions = separate_cl_functions(input_str)
+    def separate_cl_functions(input_str):
+        """Separate all the OpenCL functions.
+
+        This creates a list of strings, with for each function found the OpenCL code.
+
+        Args:
+            input_str (str): the string containing one or more functions.
+
+        Returns:
+            list: a list of strings, with one string per found CL function.
+        """
+        class Semantics(object):
+
+            def __init__(self):
+                self._functions = []
+
+            def result(self, ast):
+                return self._functions
+
+            def function(self, ast):
+                def join(items):
+                    result = ''
+                    for item in items:
+                        if isinstance(item, str):
+                            result += item
+                        else:
+                            result += join(item)
+                    return result
+
+                self._functions.append(join(ast).strip())
+                return ast
+
+        return _cl_functions_parser.parse(input_str, semantics=Semantics())
+
+    functions = separate_cl_functions(cl_code)
     return SimpleCLFunction.from_string(functions[-1], dependencies=list(dependencies or []) + [
         SimpleCLFunction.from_string(s) for s in functions[:-1]
     ], cl_extra=cl_extra)
-

@@ -4,7 +4,7 @@ import numpy as np
 import pyopencl as cl
 
 from mot.lib.cl_data_type import SimpleCLDataType
-from mot.lib.utils import dtype_to_ctype, ctype_to_dtype, convert_data_to_dtype
+from mot.lib.utils import dtype_to_ctype, ctype_to_dtype, convert_data_to_dtype, is_scalar
 
 __author__ = 'Robbert Harms'
 __date__ = '2018-04-09'
@@ -330,7 +330,7 @@ class Scalar(KernelData):
             ctype (str): the desired c-type for in use in the kernel, like ``int``, ``float`` or ``mot_float_type``.
                 If None it is implied from the value.
         """
-        if value == 'INFINITY':
+        if isinstance(value, str) and value == 'INFINITY':
             self._value = np.inf
         else:
             self._value = np.array(value)
@@ -652,7 +652,7 @@ class Zeros(Array):
         kernel you can get the written data using the method :meth:`get_data`.
 
         Args:
-            shape (tuple): the shape of the output array
+            shape (int or tuple): the shape of the output array
             offset_str (str): the offset definition, can use ``{problem_id}`` for multiplication purposes. Set to 0
                 for no offset.
             mode (str): one of 'r', 'w' or 'rw', for respectively read, write or read and write. This sets the
