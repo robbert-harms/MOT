@@ -13,7 +13,7 @@ __email__ = 'robbert.harms@maastrichtuniversity.nl'
 __licence__ = 'LGPL v3'
 
 
-class KernelData(object):
+class KernelData:
 
     def set_mot_float_dtype(self, mot_float_dtype):
         """Set the numpy data type corresponding to the ``mot_float_type`` ctype.

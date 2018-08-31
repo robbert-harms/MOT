@@ -34,7 +34,7 @@ _cl_data_type_parser = tatsu.compile('''
 ''')
 
 
-class CLDataType(object):
+class CLDataType:
     """Interface for CL data type containers.
 
     Basically this encapsulates the type and its qualifiers that define a variable in CL.
@@ -189,7 +189,7 @@ class SimpleCLDataType(CLDataType):
         Returns:
             SimpleCLDataType: the CL data type for this parameter declaration
         """
-        class Semantics(object):
+        class Semantics:
 
             def __init__(self):
                 self._raw_data_type = None

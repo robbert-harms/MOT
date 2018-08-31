@@ -583,7 +583,7 @@ def parse_cl_function(cl_code, dependencies=(), cl_extra=None):
         Returns:
             list: a list of strings, with one string per found CL function.
         """
-        class Semantics(object):
+        class Semantics:
 
             def __init__(self):
                 self._functions = []

@@ -35,7 +35,7 @@ def mock_decorator(*args, **kwargs):
     return _called_decorator
 
 
-class MockClass(object):
+class MockClass:
     """Mocked class needed in the case we need to mock a class type"""
     @classmethod
     def __getattr__(cls, name):

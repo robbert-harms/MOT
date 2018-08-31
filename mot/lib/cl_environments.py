@@ -11,7 +11,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 _context_cache = {}
 
 
-class CLEnvironment(object):
+class CLEnvironment:
 
     def __init__(self, platform, device):
         """Storage unit for an OpenCL environment.
@@ -158,7 +158,7 @@ class CLEnvironment(object):
         return False
 
 
-class CLEnvironmentFactory(object):
+class CLEnvironmentFactory:
 
     @staticmethod
     def single_device(cl_device_type='GPU', platform=None, fallback_to_any_device_type=False):

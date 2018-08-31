@@ -23,7 +23,7 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class LoadBalanceStrategy(object):
+class LoadBalanceStrategy:
     """Basic interface of a load balancing strategy.
 
     Every load balancer has the option to run the calculations in batches. The advantage of batches is that it is
@@ -66,7 +66,7 @@ class LoadBalanceStrategy(object):
         raise NotImplementedError()
 
 
-class Worker(object):
+class Worker:
 
     def __init__(self, cl_environment):
         """Create a new worker.

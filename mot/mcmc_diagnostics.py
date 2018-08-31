@@ -37,7 +37,7 @@ def multivariate_ess(samples, batch_size_generator=None):
     return np.array(multiprocess_mapping(_MultivariateESSMultiProcessing(batch_size_generator), samples_generator()))
 
 
-class _MultivariateESSMultiProcessing(object):
+class _MultivariateESSMultiProcessing:
 
     def __init__(self, batch_size_generator):
         """Used in the function :func:`multivariate_ess` to estimate the multivariate ESS using multiprocessing."""
@@ -82,7 +82,7 @@ def univariate_ess(samples, method='standard_error', **kwargs):
     return np.array(multiprocess_mapping(_UnivariateESSMultiProcessing(method, **kwargs), samples_generator()))
 
 
-class _UnivariateESSMultiProcessing(object):
+class _UnivariateESSMultiProcessing:
 
     def __init__(self, method, **kwargs):
         """Used in the function :func:`univariate_ess` to estimate the univariate ESS using multiprocessing."""
@@ -462,7 +462,7 @@ def monte_carlo_standard_error(chain, batch_size_generator=None, compute_method=
     return np.min(list(compute_method.compute_standard_error(chain, b) for b in batch_sizes))
 
 
-class MultiVariateESSBatchSizeGenerator(object):
+class MultiVariateESSBatchSizeGenerator:
     """Objects of this class are used as input to the multivariate ESS function.
 
     The multivariate ESS function needs to have at least one batch size to use during the computations. More batch
@@ -484,7 +484,7 @@ class MultiVariateESSBatchSizeGenerator(object):
         """
 
 
-class UniVariateESSBatchSizeGenerator(object):
+class UniVariateESSBatchSizeGenerator:
     """Objects of this class are used as input to the univariate ESS function that uses the batch means.
 
     The univariate batch means ESS function needs to have at least one batch size to use during the computations.
@@ -552,7 +552,7 @@ class LinearSpacedBatchSizes(MultiVariateESSBatchSizeGenerator):
         return list(np.unique(np.round(np.exp(np.linspace(np.log(b_min), np.log(b_max), self._nmr_batches)))))
 
 
-class ComputeMonteCarloStandardError(object):
+class ComputeMonteCarloStandardError:
     """Method to compute the Monte Carlo Standard error."""
 
     def compute_standard_error(self, chain, batch_size):

@@ -16,7 +16,7 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-class AbstractSampler(object):
+class AbstractSampler:
 
     def __init__(self, ll_func, log_prior_func, x0, data=None, cl_runtime_info=None, **kwargs):
         """Abstract base class for sample routines.
@@ -527,7 +527,7 @@ class AbstractRWMSampler(AbstractSampler):
         return kernel_source
 
 
-class SamplingOutput(object):
+class SamplingOutput:
 
     def get_samples(self):
         """Get the matrix containing the sample results.

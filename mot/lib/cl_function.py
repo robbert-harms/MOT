@@ -35,7 +35,7 @@ _simple_cl_function_parser = tatsu.compile('''
 ''')
 
 
-class CLFunction(object):
+class CLFunction:
     """Interface for a basic CL function."""
 
     def get_return_type(self):
@@ -164,7 +164,7 @@ class SimpleCLFunction(CLFunction):
         Returns:
             SimpleCLFunction: the CL data type for this parameter declaration
         """
-        class Semantics(object):
+        class Semantics:
 
             def __init__(self):
                 self._return_type = ''
@@ -347,7 +347,7 @@ class SimpleCLFunction(CLFunction):
         return type(self) != type(other)
 
 
-class CLFunctionParameter(object):
+class CLFunctionParameter:
 
     @property
     def name(self):

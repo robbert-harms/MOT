@@ -239,7 +239,7 @@ def deviance_information_criterions(mean_posterior_lls, ll_per_sample):
             'DIC_Ando_2011': np.nan_to_num(mean_deviance + 2 * pd_2002)}
 
 
-class _ComputeGaussianOverlap(object):
+class _ComputeGaussianOverlap:
 
     def __init__(self, lower, upper):
         """Helper routine for :func:`gaussian_overlapping_coefficient`.
@@ -267,7 +267,7 @@ class _ComputeGaussianOverlap(object):
         return scipy.integrate.quad(overlap_func, self.lower, self.upper)[0]
 
 
-class _TruncatedNormalFitter(object):
+class _TruncatedNormalFitter:
 
     def __call__(self, item):
         """Fit the mean and std of the truncated normal to the given samples.

@@ -167,7 +167,7 @@ def config_context(config_action):
     config_action.unapply()
 
 
-class ConfigAction(object):
+class ConfigAction:
 
     def __init__(self):
         """Defines a configuration action for use in a configuration context.
@@ -269,7 +269,7 @@ class VoidConfigurationAction(ConfigAction):
         super().__init__()
 
 
-class CLRuntimeInfo(object):
+class CLRuntimeInfo:
 
     def __init__(self, cl_environments=None, load_balancer=None, compile_flags=None, double_precision=None):
         """All information necessary for applying operations using OpenCL.
