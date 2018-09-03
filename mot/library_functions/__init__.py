@@ -1,4 +1,6 @@
 import os
+
+from mot.lib.cl_function import SimpleCLFunction
 from mot.library_functions.base import SimpleCLLibrary, SimpleCLLibraryFromFile, CLLibrary
 from pkg_resources import resource_filename
 from mot.library_functions.unity import log1pmx
@@ -247,13 +249,13 @@ class NMSimplex(SimpleCLLibrary):
 
 class Powell(SimpleCLLibraryFromFile):
 
-    def __init__(self, function_name, nmr_parameters, patience=2, patience_line_search=None,
+    def __init__(self, eval_func, nmr_parameters, patience=2, patience_line_search=None,
                  reset_method='EXTRAPOLATED_POINT', **kwargs):
         """The Powell CL implementation.
 
         Args:
-            function_name (str): the name of the function we want to optimize, this will be hardcoded in the
-                powell method. Should be of signature: ``double evaluate(local mot_float_type* x, void* data_void);``
+            eval_func (mot.lib.cl_function.CLFunction): the function we want to optimize, Should be of signature:
+                ``double evaluate(local mot_float_type* x, void* data_void);``
             nmr_parameters (int): the number of parameters in the model, this will be hardcoded in the method
             patience (int): the patience of the Powell algorithm
             patience_line_search (int): the patience of the line search algorithm. If None, we set it equal to the
@@ -261,8 +263,12 @@ class Powell(SimpleCLLibraryFromFile):
             reset_method (str): one of ``RESET_TO_IDENTITY`` or ``EXTRAPOLATED_POINT``. The method used to
                 reset the search directions every iteration.
         """
+        dependencies = list(kwargs.get('dependencies', []))
+        dependencies.append(eval_func)
+        kwargs['dependencies'] = dependencies
+
         params = {
-            'FUNCTION_NAME': function_name,
+            'FUNCTION_NAME': eval_func.get_cl_function_name(),
             'NMR_PARAMS': nmr_parameters,
             'RESET_METHOD': reset_method.upper(),
             'PATIENCE': patience,
@@ -276,14 +282,14 @@ class Powell(SimpleCLLibraryFromFile):
 
 class Subplex(SimpleCLLibraryFromFile):
 
-    def __init__(self, function_name, nmr_parameters, patience=10,
+    def __init__(self, eval_func, nmr_parameters, patience=10,
                  patience_nmsimplex=100, alpha=1.0, beta=0.5, gamma=2.0, delta=0.5, scale=1.0, psi=0.001, omega=0.01,
                  adaptive_scales=True, min_subspace_length='auto', max_subspace_length='auto', **kwargs):
         """The Subplex optimization routines.
 
         Args:
-            function_name (str): the name of the function we want to optimize, this will be hardcoded in the
-                powell method. Should be of signature: ``double evaluate(local mot_float_type* x, void* data_void);``
+            eval_func (mot.lib.cl_function.CLFunction): the function we want to optimize, Should be of signature:
+                ``double evaluate(local mot_float_type* x, void* data_void);``
             nmr_parameters (int): the number of parameters in the model, this will be hardcoded in the method
             patience (int): the patience of the Powell algorithm
             patience_nmsimplex (int): the patience of the Nelder-Mead simplex routine
@@ -311,13 +317,13 @@ class Subplex(SimpleCLLibraryFromFile):
                     gamma = 1 + 2.0 / n
                     delta = 1 - 1.0 / n
         """
-        if 'dependencies' in kwargs:
-            kwargs['dependencies'] = list(kwargs['dependencies']) + [LibNMSimplex('subspace_evaluate')]
-        else:
-            kwargs['dependencies'] = [LibNMSimplex('subspace_evaluate')]
+        dependencies = list(kwargs.get('dependencies', []))
+        dependencies.append(eval_func)
+        dependencies.append(LibNMSimplex('subspace_evaluate'))
+        kwargs['dependencies'] = dependencies
 
         params = {
-            'FUNCTION_NAME': function_name,
+            'FUNCTION_NAME': eval_func.get_cl_function_name(),
             'PATIENCE': patience,
             'PATIENCE_NMSIMPLEX': patience_nmsimplex,
             'ALPHA': alpha,
@@ -344,22 +350,32 @@ class Subplex(SimpleCLLibraryFromFile):
 
 class LevenbergMarquardt(SimpleCLLibraryFromFile):
 
-    def __init__(self, function_name, nmr_parameters, nmr_observations, patience=250, step_bound=100.0, scale_diag=1,
-                 usertol_mult=30, **kwargs):
+    def __init__(self, eval_func, nmr_parameters, nmr_observations, patience=250,
+                 step_bound=100.0, scale_diag=1, usertol_mult=30, jacobian_func=None, **kwargs):
         """The Powell CL implementation.
 
         Args:
-            function_name (str): the name of the function we want to optimize, this will be hardcoded in the
-                powell method. Should be of signature:
+            eval_func (mot.lib.cl_function.CLFunction): the function we want to optimize, Should be of signature:
                 ``void evaluate(local mot_float_type* x, void* data_void, local mot_float_type* result);``
             nmr_parameters (int): the number of parameters in the model, this will be hardcoded in the method
             patience (int): the patience of the Powell algorithm
             patience_line_search (int): the patience of the line search algorithm
             reset_method (str): one of ``RESET_TO_IDENTITY`` or ``EXTRAPOLATED_POINT``. The method used to
                 reset the search directions every iteration.
+            jacobian_func (mot.lib.cl_function.CLFunction or None): the function used to compute the Jacobian.
+                If not given, we will use a numerical differentiation
         """
-        params = {
-            'FUNCTION_NAME': function_name,
+        if not jacobian_func:
+            jacobian_func = self._get_numerical_jacobian_func(eval_func.get_cl_function_name(),
+                                                              nmr_parameters, nmr_observations)
+        dependencies = list(kwargs.get('dependencies', []))
+        dependencies.append(eval_func)
+        dependencies.append(jacobian_func)
+        kwargs['dependencies'] = dependencies
+
+        var_replace_dict = {
+            'FUNCTION_NAME': eval_func.get_cl_function_name(),
+            'JACOBIAN_FUNCTION_NAME': jacobian_func.get_cl_function_name(),
             'NMR_PARAMS': nmr_parameters,
             'PATIENCE': patience,
             'NMR_OBSERVATIONS': nmr_observations,
@@ -373,4 +389,50 @@ class LevenbergMarquardt(SimpleCLLibraryFromFile):
                              ('void*', 'data'),
                              ('global mot_float_type*', 'fjac')],
             resource_filename('mot', 'data/opencl/lmmin.cl'),
-            var_replace_dict=params, **kwargs)
+            var_replace_dict=var_replace_dict, **kwargs)
+
+    def _get_numerical_jacobian_func(self, function_name, nmr_params, nmr_observations):
+        return SimpleCLFunction.from_string(r'''
+            void compute_jacobian(local mot_float_type* model_parameters,
+                                  void* data,
+                                  local mot_float_type* fvec,
+                                  global mot_float_type* const fjac,
+                                  local mot_float_type* scratch){
+                /**
+                 * Compute the Jacobian for use in the LM method.
+                 *
+                 * This should place the output in the ``fjac`` matrix.
+                 *
+                 * Parameters:
+                 *
+                 *   model_parameters: (nmr_params,) the current point around which we want to know the Jacobian
+                 *   data: the current modeling data, used by the objective function
+                 *   fvec: (nmr_observations,), the current set of function values, corresponding to the given model parameters
+                 *   fjac: (nmr_parameters, nmr_observations), the memory location for the Jacobian
+                 *   scratch: (nmr_observations,), temporary storage array for one row of the Jacobian.
+                 */
+                int i, j;
+                local mot_float_type temp, step;
+                
+                mot_float_type EPS = 30 * MOT_EPSILON;
+                
+                for (j = 0; j < %(NMR_PARAMS)s; j++) {
+                    if(get_local_id(0) == 0){
+                        temp = model_parameters[j];
+                        step = max(EPS*EPS, EPS * fabs(temp));
+                        model_parameters[j] += step; /* replace temporarily */
+                    }
+                    barrier(CLK_LOCAL_MEM_FENCE);
+    
+                    %(FUNCTION_NAME)s(model_parameters, data, scratch);
+    
+                    if(get_local_id(0) == 0){
+                        for (i = 0; i < %(NMR_OBSERVATIONS)s; i++){
+                            fjac[j*%(NMR_OBSERVATIONS)s+i] = (scratch[i] - fvec[i]) / step;
+                        }
+                        model_parameters[j] = temp; /* restore */
+                    }
+                    barrier(CLK_LOCAL_MEM_FENCE);
+                }
+            }
+        ''' % dict(FUNCTION_NAME=function_name, NMR_PARAMS=nmr_params, NMR_OBSERVATIONS=nmr_observations))

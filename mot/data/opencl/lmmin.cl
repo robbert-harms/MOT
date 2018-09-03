@@ -93,9 +93,6 @@ double lm_euclidian_norm_global(global const mot_float_type* const x, const int 
                              Termination occurs when the cosine of the angle
                              between fvec and any column of the Jacobian is at
                              most gtol in absolute value. */
-#define EPSILON LM_USERTOL   /* Step used to calculate the Jacobian, should be
-                             slightly larger than the relative error in the
-                             user-supplied functions. */
 #define STEP_BOUND %(STEP_BOUND)r     /* Used in determining the initial step bound. This
                              bound is set to the product of stepbound and the
                              Euclidean norm of diag*x if nonzero, or else to
@@ -107,7 +104,6 @@ double lm_euclidian_norm_global(global const mot_float_type* const x, const int 
 #define SCALE_DIAG %(SCALE_DIAG)r  /* If 1, the variables will be rescaled internally.
                              Recommended value is 1. */
 #define MAXFEV (PATIENCE * (%(NMR_PARAMS)s+1)) /** the maximum number of evaluations */
-#define EPS ((mot_float_type)sqrt(max(EPSILON, LM_MACHEP))) /* for forward differences */
 
 #define LM_ENORM_SQRT_GIANT LM_SQRT_GIANT /* square should not overflow */
 #define LM_ENORM_SQRT_DWARF LM_SQRT_DWARF /* square should not underflow */
@@ -122,14 +118,15 @@ double lm_euclidian_norm_global(global const mot_float_type* const x, const int 
  * SCALE_DIAG == 0 || SCALE_DIAG == 1
  */
 
+
 /******************************************************************************/
 /*  lmmin (main minimization routine)                                         */
 /******************************************************************************/
-int lmmin(local mot_float_type * const model_parameters, void* data, global mot_float_type* fjac){
+int lmmin(local mot_float_type * const model_parameters, void* data, global mot_float_type* const fjac){
 
     int j, i;
 
-    local mot_float_type actred, step, dirder, prered, ratio, temp, temp1, temp2, temp3;
+    local mot_float_type actred, dirder, prered, ratio, temp, temp1, temp2, temp3;
     local mot_float_type xnorm, pnorm, fnorm, fnorm1, gnorm;
     local double sum;
     local mot_float_type lmpar;     /* Levenberg-Marquardt parameter */
@@ -150,7 +147,7 @@ int lmmin(local mot_float_type * const model_parameters, void* data, global mot_
     barrier(CLK_LOCAL_MEM_FENCE);
 
 	/***  Allocate work space.  ***/
-    local mot_float_type fvec[%(NMR_OBSERVATIONS)s];
+    local mot_float_type fvec[%(NMR_OBSERVATIONS)s];  // objective function value per observation
     local mot_float_type diag[%(NMR_PARAMS)s];
     local mot_float_type qtf[%(NMR_PARAMS)s];
     local mot_float_type wa1[%(NMR_PARAMS)s];
@@ -188,25 +185,7 @@ int lmmin(local mot_float_type * const model_parameters, void* data, global mot_
 
     while(true){
         /** Calculate the Jacobian. **/
-        for (j = 0; j < %(NMR_PARAMS)s; j++) {
-            if(get_local_id(0) == 0){
-                temp = model_parameters[j];
-                step = max(EPS*EPS, EPS * fabs(temp));
-                model_parameters[j] += step; /* replace temporarily */
-            }
-            barrier(CLK_LOCAL_MEM_FENCE);
-
-            %(FUNCTION_NAME)s(model_parameters, data, wf);
-
-            if(get_local_id(0) == 0){
-                ++nfev;
-                for (i = 0; i < %(NMR_OBSERVATIONS)s; i++){
-                    fjac[j*%(NMR_OBSERVATIONS)s+i] = (wf[i] - fvec[i]) / step;
-                }
-                model_parameters[j] = temp; /* restore */
-            }
-            barrier(CLK_LOCAL_MEM_FENCE);
-        }
+        %(JACOBIAN_FUNCTION_NAME)s(model_parameters, data, fvec, fjac, wf);
 
         /** Compute the QR factorization of the Jacobian. **/
 
@@ -1179,12 +1158,10 @@ double lm_euclidian_norm_global(global const mot_float_type* const x, const int 
 #undef FTOL
 #undef XTOL
 #undef GTOL
-#undef EPSILON
 #undef STEP_BOUND
 #undef PATIENCE
 #undef SCALE_DIAG
 #undef MAXFEV
-#undef EPS
 #undef LM_ENORM_SQRT_GIANT
 #undef LM_ENORM_SQRT_DWARF
 

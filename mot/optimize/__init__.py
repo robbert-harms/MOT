@@ -150,7 +150,7 @@ def _minimize_powell(func, x0, cl_runtime_info, data=None, options=None):
         }
     ''', dependencies=[func])
 
-    optimizer_func = Powell('evaluate', nmr_parameters, dependencies=[eval_func], **options)
+    optimizer_func = Powell(eval_func, nmr_parameters, **options)
 
     return_code = optimizer_func.evaluate(
         kernel_data, nmr_problems,
@@ -286,7 +286,7 @@ def _minimize_subplex(func, x0, cl_runtime_info, data=None, options=None):
         }
     ''', dependencies=[func])
 
-    optimizer_func = Subplex('evaluate', nmr_parameters, dependencies=[eval_func], **options)
+    optimizer_func = Subplex(eval_func, nmr_parameters, **options)
 
     return_code = optimizer_func.evaluate(
         kernel_data, nmr_problems,
@@ -317,8 +317,7 @@ def _minimize_levenberg_marquardt(func, x0, nmr_observations, cl_runtime_info, d
         }
     ''', dependencies=[func])
 
-    optimizer_func = LevenbergMarquardt('evaluate', nmr_parameters, nmr_observations,
-                                        dependencies=[eval_func], **options)
+    optimizer_func = LevenbergMarquardt(eval_func, nmr_parameters, nmr_observations, jacobian_func=None, **options)
 
     return_code = optimizer_func.evaluate(
         kernel_data, nmr_problems,
