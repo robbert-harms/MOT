@@ -4,7 +4,7 @@ Changelog
 
 v0.6.4 (2018-08-28)
 ===================
-- Adds cubic polynomial evaluation method for real roots.
+- Adds cubic polynomial root finding method for real roots.
 
 
 v0.6.3 (2018-08-24)

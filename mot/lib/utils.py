@@ -531,7 +531,7 @@ def multiprocess_mapping(func, iterable):
         func (func): the function to apply
         iterable (iterable): the iterable with the elements we want to apply the function on
     """
-    if os.name == 'nt': # In Windows there is no fork.
+    if os.name == 'nt':  # In Windows there is no fork.
         return list(map(func, iterable))
     try:
         p = multiprocessing.Pool()
