@@ -2,6 +2,15 @@
 Changelog
 *********
 
+v0.6.5 (2018-09-10)
+===================
+
+Changed
+-------
+- Removed (object) declaration from the class declarations, it is no longer needed with Python 3.
+- Makes the mot_float_type use typedef instead of macro define.
+
+
 v0.6.4 (2018-08-28)
 ===================
 - Adds cubic polynomial root finding method for real roots.
