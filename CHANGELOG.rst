@@ -2,6 +2,14 @@
 Changelog
 *********
 
+v0.6.6 (2018-09-11)
+===================
+
+Added
+-----
+- Adds CL function to calculate the even Legendre terms of the Legendre polynomial.
+
+
 v0.6.5 (2018-09-10)
 ===================
 
