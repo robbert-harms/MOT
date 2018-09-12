@@ -2,6 +2,14 @@
 Changelog
 *********
 
+v0.6.7 (2018-09-12)
+===================
+
+Added
+-----
+- Adds more legendre polynomial functions.
+
+
 v0.6.6 (2018-09-11)
 ===================
 
