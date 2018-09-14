@@ -185,7 +185,7 @@ int lmmin(local mot_float_type * const model_parameters, void* data, global mot_
 
     while(true){
         /** Calculate the Jacobian. **/
-        %(JACOBIAN_FUNCTION_NAME)s(model_parameters, data, fvec, fjac, wf);
+        %(JACOBIAN_FUNCTION_NAME)s(model_parameters, data, fvec, fjac);
 
         /** Compute the QR factorization of the Jacobian. **/
 

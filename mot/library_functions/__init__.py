@@ -336,8 +336,7 @@ class LevenbergMarquardt(SimpleCLLibraryFromFile):
             void compute_jacobian(local mot_float_type* model_parameters,
                                   void* data,
                                   local mot_float_type* fvec,
-                                  global mot_float_type* const fjac,
-                                  local mot_float_type* scratch){
+                                  global mot_float_type* const fjac){
                 /**
                  * Compute the Jacobian for use in the LM method.
                  *
@@ -347,12 +346,12 @@ class LevenbergMarquardt(SimpleCLLibraryFromFile):
                  *
                  *   model_parameters: (nmr_params,) the current point around which we want to know the Jacobian
                  *   data: the current modeling data, used by the objective function
-                 *   fvec: (nmr_observations,), the current set of function values, corresponding to the given model parameters
+                 *   fvec: (nmr_observations,), the function values corresponding to the current model parameters
                  *   fjac: (nmr_parameters, nmr_observations), the memory location for the Jacobian
-                 *   scratch: (nmr_observations,), temporary storage array for one row of the Jacobian.
                  */
                 int i, j;
                 local mot_float_type temp, step;
+                local mot_float_type scratch[''' + str(nmr_observations) + '''];
                 
                 mot_float_type EPS = 30 * MOT_EPSILON;
                 

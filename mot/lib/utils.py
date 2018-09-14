@@ -180,7 +180,7 @@ def get_float_type_def(double_precision, include_complex=True):
         str: defines the mot_float_type types, the epsilon and the MIN and MAX values.
     """
     if include_complex:
-        with open(os.path.abspath(resource_filename('pyopencl', 'cl/pyopencl-complex.h')), 'r') as f:
+        with open(os.path.abspath(resource_filename('mot', 'data/opencl/complex.h')), 'r') as f:
             complex_number_support = f.read()
     else:
         complex_number_support = ''

@@ -11,7 +11,8 @@ __email__ = 'robbert.harms@maastrichtuniversity.nl'
 __licence__ = 'LGPL v3'
 
 
-def minimize(func, x0, data=None, method=None, nmr_observations=None, cl_runtime_info=None, options=None):
+def minimize(func, x0, data=None, method=None, nmr_observations=None, cl_runtime_info=None, options=None,
+             jacobian_func=None):
     """Minimization of scalar function of one or more variables.
 
     Args:
@@ -44,6 +45,27 @@ def minimize(func, x0, data=None, method=None, nmr_observations=None, cl_runtime
         cl_runtime_info (mot.configuration.CLRuntimeInfo): the CL runtime information
         options (dict): A dictionary of solver options. All methods accept the following generic options:
                 patience (int): Maximum number of iterations to perform.
+        jacobian_func (mot.lib.cl_function.CLFunction): a CL function to compute the Jacobian of the objective function.
+            This should have the signature:
+
+            .. code-block:: c
+
+                void compute_jacobian(local mot_float_type* model_parameters,
+                                      void* data,
+                                      local mot_float_type* fvec,
+                                      global mot_float_type* const fjac);
+
+            With as input:
+
+            * model_parameters: (nmr_params,) the current point around which we want to know the Jacobian
+            * data: the current modeling data, used by the objective function
+            * fvec: (nmr_observations,), the function values corresponding to the current model parameters
+            * fjac: (nmr_parameters, nmr_observations), the memory location for the Jacobian
+
+
+            This function is only used by the Levenberg-Marquardt algorithm. If not given, we will use a numerical
+            derivative.
+
 
     Returns:
         mot.optimize.base.OptimizeResults:
@@ -63,7 +85,8 @@ def minimize(func, x0, data=None, method=None, nmr_observations=None, cl_runtime
     elif method == 'Nelder-Mead':
         return _minimize_nmsimplex(func, x0, cl_runtime_info, data, options)
     elif method == 'Levenberg-Marquardt':
-        return _minimize_levenberg_marquardt(func, x0, nmr_observations, cl_runtime_info, data, options)
+        return _minimize_levenberg_marquardt(func, x0, nmr_observations, cl_runtime_info, data, options,
+                                             jacobian_func=jacobian_func)
     elif method == 'Subplex':
         return _minimize_subplex(func, x0, cl_runtime_info, data, options)
     raise ValueError('Could not find the specified method "{}".'.format(method))
@@ -297,7 +320,8 @@ def _minimize_subplex(func, x0, cl_runtime_info, data=None, options=None):
                             'status': return_code})
 
 
-def _minimize_levenberg_marquardt(func, x0, nmr_observations, cl_runtime_info, data=None, options=None):
+def _minimize_levenberg_marquardt(func, x0, nmr_observations, cl_runtime_info, data=None, options=None,
+                                  jacobian_func=None):
     options = _clean_options('Levenberg-Marquardt', options)
 
     nmr_problems = x0.shape[0]
@@ -317,7 +341,7 @@ def _minimize_levenberg_marquardt(func, x0, nmr_observations, cl_runtime_info, d
         }
     ''', dependencies=[func])
 
-    optimizer_func = LevenbergMarquardt(eval_func, nmr_parameters, nmr_observations, jacobian_func=None, **options)
+    optimizer_func = LevenbergMarquardt(eval_func, nmr_parameters, nmr_observations, jacobian_func=jacobian_func, **options)
 
     return_code = optimizer_func.evaluate(
         kernel_data, nmr_problems,
