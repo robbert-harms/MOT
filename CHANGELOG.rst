@@ -2,6 +2,14 @@
 Changelog
 *********
 
+v0.6.8 (2018-09-15)
+===================
+
+Added
+-----
+- Adds support for providing a Jacobian in the minimization function.
+
+
 v0.6.7 (2018-09-12)
 ===================
 
