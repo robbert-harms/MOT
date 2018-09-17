@@ -266,7 +266,7 @@ class _find_inverse_gamma(SimpleCLLibrary):
                             result = w;
                         }
                         else {
-                            double D = fmax(2, a * (a - 1));
+                            double D = fmax((double)2.0, (double)(a * (a - 1)));
                             double lg = lgamma(a);
                             double lb = log(q) + lg;
                             if (lb < -D * 2.3) {

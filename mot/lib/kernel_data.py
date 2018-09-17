@@ -1,3 +1,4 @@
+import numbers
 from collections import OrderedDict, Mapping
 
 import numpy as np
@@ -192,10 +193,10 @@ class Struct(KernelData):
         Please be aware that structs will always be passed as a pointer to the calling function.
 
         Args:
-            ctype (str): the name of this structure
             elements (Dict[str, Union[Dict, KernelData]]): the kernel data elements to load into the kernel
                 Can be a nested dictionary, in which case we load the nested elements as anonymous structs.
                 Alternatively, you can nest Structs in Structs, yielding named structs.
+            ctype (str): the name of this structure
             anonymous (boolean): if this struct is to be loaded anonymously, this is only meant for nested Structs.
         """
         self._elements = OrderedDict(sorted(elements.items()))
@@ -378,11 +379,10 @@ class Scalar(KernelData):
         if mot_dtype.is_vector_type:
             vector_length = mot_dtype.vector_length
 
-            values = np.squeeze(self._value)
-            values = [str(values[ind]) for ind in range(len(values))]
+            values = [str(el) for el in np.atleast_1d(np.squeeze(self._value))]
 
             if len(values) < vector_length:
-                values.extend([str(0)] * (vector_length - len(values)))
+                values.extend(['0'] * (vector_length - len(values)))
             assignment = '(' + self._ctype + ')(' + ', '.join(values) + ')'
 
         elif np.isinf(self._value):
@@ -397,19 +397,26 @@ class Scalar(KernelData):
 
 class LocalMemory(KernelData):
 
-    def __init__(self, ctype, size_func=None):
+    def __init__(self, ctype, nmr_items=None):
         """Indicates that a local memory array of the indicated size must be loaded as kernel input data.
 
         By default, this will create a local memory object the size of the local work group.
 
         Args:
             ctype (str): the desired c-type for this local memory object, like ``int``, ``float`` or ``mot_float_type``.
-            size_func (Callable[[int, dtype], int]): a function that can calculate the required local memory size
-                (in number of bytes), given the workgroup size and numpy dtype used by the kernel.
+            nmr_items (int or Callable[[int], int]): either the size directly or a function that can calculate the
+                required local memory size given the work group size. This will independently be multiplied with the
+                item size of the ctype for the final size in bytes.
         """
         self._ctype = ctype
-        self._size_func = size_func or (lambda workgroup_size, dtype: workgroup_size * np.dtype(dtype).itemsize)
         self._mot_float_dtype = None
+
+        if nmr_items is None:
+            self._size_func = lambda workgroup_size: workgroup_size
+        elif isinstance(nmr_items, numbers.Number):
+            self._size_func = lambda _: nmr_items
+        else:
+            self._size_func = nmr_items
 
     def set_mot_float_dtype(self, mot_float_dtype):
         self._mot_float_dtype = mot_float_dtype
@@ -445,8 +452,8 @@ class LocalMemory(KernelData):
         return ['local {}* restrict {}'.format(self._ctype, kernel_param_name)]
 
     def get_kernel_inputs(self, cl_context, workgroup_size):
-        return [cl.LocalMemory(self._size_func(
-            workgroup_size, ctype_to_dtype(self._ctype, dtype_to_ctype(self._mot_float_dtype))))]
+        itemsize = np.dtype(ctype_to_dtype(self._ctype, dtype_to_ctype(self._mot_float_dtype))).itemsize
+        return [cl.LocalMemory(itemsize * self._size_func(workgroup_size))]
 
     def get_nmr_kernel_inputs(self):
         return 1

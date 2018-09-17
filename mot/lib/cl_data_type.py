@@ -13,24 +13,14 @@ _cl_data_type_parser = tatsu.compile('''
     address_space = ['__'] ('local' | 'global' | 'constant' | 'private');
     pre_type_qualifiers = 'const' | 'volatile';
     
-    data_type = type_specifier [vector_length] {pointer}*;
+    data_type = type_specifier [vector_length] {array_size}* {pointer}*;
     pointer = '*';
     vector_length = /[2348(16]/;
+    array_size = /\[\d+\]/;
     
     post_type_qualifiers = 'const' | 'restrict';
     
-    # match some as regex, to ensure the vector length is taken into account.
-    type_specifier =
-                     ?'mot_float_type'
-                   | 'void'
-                   | ?'bool'
-                   | ?'char' | ?'cl_char' | ?'unsigned char' | ?'uchar' | ?'cl_uchar'
-                   | ?'short' | ?'cl_short' | ?'unsigned short' | ?'ushort'
-                   | ?'int' | ?'unsigned int' | ?'uint'
-                   | ?'long' | ?'unsigned long' | ?'ulong'
-                   | ?'half'
-                   | ?'float'
-                   | ?'double';
+    type_specifier = ?'(unsigned )?\w[\w]*[a-zA-Z]';
 ''')
 
 
@@ -112,6 +102,26 @@ class CLDataType:
         raise NotImplementedError()
 
     @property
+    def is_array_type(self):
+        """Check if this parameter is an array type (like float[3] or int[10][5]).
+
+        Returns:
+            boolean: True if this is an array type, false otherwise
+        """
+        raise NotImplementedError()
+
+    @property
+    def array_sizes(self):
+        """Get the dimension of this array type.
+
+        This returns for example (10, 5) for the data type float[10][5].
+
+        Returns:
+            tuple: the sizes of the arrays
+        """
+        raise NotImplementedError()
+
+    @property
     def vector_length(self):
         """Get the length of this vector, returns None if not a vector type.
 
@@ -132,7 +142,7 @@ class CLDataType:
 
 class SimpleCLDataType(CLDataType):
 
-    def __init__(self, raw_data_type, nmr_pointers=0, vector_length=None, address_space=None,
+    def __init__(self, raw_data_type, nmr_pointers=0, array_sizes=None, vector_length=None, address_space=None,
                  pre_type_qualifiers=None, post_type_qualifiers=None):
         """Create a new CL data type container.
 
@@ -142,6 +152,8 @@ class SimpleCLDataType(CLDataType):
         Args:
             raw_data_type (str): the specific data type without the vector number and asterisks
             nmr_pointers (int): The number of dereferences of this parameter (number of ``*``).
+            array_sizes (List[Int]): if this parameter is supposed to be an array (i.e. float[10] or int[10][3]),
+                this array lists those sizes
             vector_length (int or None): If None this data type is not a CL vector type.
                 If it is an integer it is the vector length of this data type (2, 3, 4, ...)
             address_space (str or None): the address space qualifier or None if not used. One of:
@@ -155,6 +167,7 @@ class SimpleCLDataType(CLDataType):
         self._raw_data_type = str(raw_data_type)
         self._nmr_pointers = nmr_pointers
         self._vector_length = vector_length
+        self._array_sizes = array_sizes or ()
 
         if self.vector_length:
             self._vector_length = int(self.vector_length)
@@ -198,11 +211,13 @@ class SimpleCLDataType(CLDataType):
                 self._address_space = None
                 self._pre_type_qualifiers = None
                 self._post_type_qualifiers = None
+                self._array_sizes = []
 
             def result(self, ast):
                 return SimpleCLDataType(
                     self._raw_data_type,
                     nmr_pointers=self._nmr_pointers,
+                    array_sizes=self._array_sizes,
                     vector_length=self._vector_length,
                     address_space=self._address_space,
                     pre_type_qualifiers=self._pre_type_qualifiers,
@@ -232,6 +247,10 @@ class SimpleCLDataType(CLDataType):
                 self._post_type_qualifiers = ast
                 return ast
 
+            def array_size(self, ast):
+                self._array_sizes.append(ast[1:-1])
+                return ast
+
         return _cl_data_type_parser.parse(parameter_declaration, semantics=Semantics())
 
     def get_declaration(self):
@@ -255,6 +274,9 @@ class SimpleCLDataType(CLDataType):
         if self.is_pointer_type:
             s += '*' * self._nmr_pointers
 
+        if self.is_array_type:
+            s += ''.join('[{}]'.format(s) for s in self._array_sizes)
+
         return str(s)
 
     @property
@@ -268,6 +290,14 @@ class SimpleCLDataType(CLDataType):
     @property
     def nmr_pointers(self):
         return self._nmr_pointers
+
+    @property
+    def is_array_type(self):
+        return len(self._array_sizes)
+
+    @property
+    def array_sizes(self):
+        return self._array_sizes
 
     @property
     def vector_length(self):

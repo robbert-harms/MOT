@@ -29,7 +29,7 @@ _simple_cl_function_parser = tatsu.compile('''
     data_type = /\w+(\s*(\*)?)+/;
     function_name = /\w+/;
     arglist = '(' @+:arg {',' @+:arg}* ')' | '()';
-    arg = /[\w \*]+/;
+    arg = /[\w \*\[\]]+/;
     body = compound_statement;    
     compound_statement = '{' {[/[^\{\}]*/] [compound_statement]}* '}';
 ''')
@@ -136,8 +136,8 @@ class SimpleCLFunction(CLFunction):
             return_type (str): the CL return type of the function
             cl_function_name (string): The name of the CL function
             parameter_list (list or tuple): This either contains instances of
-                :class:`mot.cl_parameter.CLFunctionParameter` or contains tuples with arguments that
-                can be used to construct a :class:`mot.cl_parameter.SimpleCLFunctionParameter`.
+                :class:`CLFunctionParameter` or contains tuples with arguments that
+                can be used to construct a :class:`SimpleCLFunctionParameter`.
             cl_body (str): the body of the CL code for this function.
             dependencies (list or tuple of CLLibrary): The list of CL libraries this function depends on
             cl_extra (str): extra CL code for this function that does not warrant an own function.
@@ -259,7 +259,8 @@ class SimpleCLFunction(CLFunction):
                     return input_data[param.name]
                 elif param.data_type.is_vector_type and np.squeeze(input_data[param.name]).shape[0] == 3:
                     return Scalar(input_data[param.name], ctype=param.data_type.ctype)
-                elif is_scalar(input_data[param.name]) and not param.data_type.is_pointer_type:
+                elif is_scalar(input_data[param.name]) \
+                        and not (param.data_type.is_pointer_type or param.data_type.is_array_type):
                     return Scalar(input_data[param.name])
                 else:
                     if is_scalar(input_data[param.name]):
@@ -267,7 +268,10 @@ class SimpleCLFunction(CLFunction):
                     else:
                         data = input_data[param.name]
 
-                    return Array(data, ctype=param.data_type.ctype, mode='rw')
+                    if param.data_type.is_pointer_type or param.data_type.is_array_type:
+                        return Array(data, ctype=param.data_type.ctype, mode='rw')
+                    else:
+                        return Array(data, ctype=param.data_type.ctype, mode='r', as_scalar=True)
 
             return {param.name.replace('.', '_'): get_data_object(param) for param in self.get_parameters()}
 
