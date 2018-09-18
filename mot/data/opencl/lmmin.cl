@@ -280,15 +280,12 @@ int lmmin(local mot_float_type * const model_parameters, void* data, global mot_
             }
 
             /* initialize the step bound delta. */
-            if(get_local_id(0) == 0){
-                if(xnorm){
-                    delta = STEP_BOUND * xnorm;
-                }
-                else{
-                    delta = STEP_BOUND;
-                }
+            if(xnorm){
+                delta = STEP_BOUND * xnorm;
             }
-            barrier(CLK_LOCAL_MEM_FENCE);
+            else{
+                delta = STEP_BOUND;
+            }
         } else {
             if(get_local_id(0) == 0){
                 if (SCALE_DIAG) {
