@@ -2,6 +2,14 @@
 Changelog
 *********
 
+v0.6.9 (2018-09-17)
+===================
+
+Fixed
+-----
+- Fixes the Gamma distribution for nvidia compilers.
+
+
 v0.6.8 (2018-09-15)
 ===================
 

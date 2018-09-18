@@ -341,7 +341,8 @@ def _minimize_levenberg_marquardt(func, x0, nmr_observations, cl_runtime_info, d
         }
     ''', dependencies=[func])
 
-    optimizer_func = LevenbergMarquardt(eval_func, nmr_parameters, nmr_observations, jacobian_func=jacobian_func, **options)
+    optimizer_func = LevenbergMarquardt(eval_func, nmr_parameters, nmr_observations,
+                                        jacobian_func=jacobian_func, **options)
 
     return_code = optimizer_func.evaluate(
         kernel_data, nmr_problems,
