@@ -2,6 +2,14 @@
 Changelog
 *********
 
+v0.6.10 (2018-09-18)
+====================
+
+Fixed
+-----
+- Fixed synchronization bug in the LM optimizer, only happened in very rare cases.
+
+
 v0.6.9 (2018-09-17)
 ===================
 
