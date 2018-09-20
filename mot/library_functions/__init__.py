@@ -326,8 +326,7 @@ class LevenbergMarquardt(SimpleCLLibraryFromFile):
 
         super().__init__(
             'int', 'lmmin', [('local mot_float_type* const', 'model_parameters'),
-                             ('void*', 'data'),
-                             ('global mot_float_type*', 'fjac')],
+                             ('void*', 'data')],
             resource_filename('mot', 'data/opencl/lmmin.cl'),
             var_replace_dict=var_replace_dict, **kwargs)
 
@@ -336,7 +335,7 @@ class LevenbergMarquardt(SimpleCLLibraryFromFile):
             void compute_jacobian(local mot_float_type* model_parameters,
                                   void* data,
                                   local mot_float_type* fvec,
-                                  global mot_float_type* const fjac){
+                                  local mot_float_type* const fjac){
                 /**
                  * Compute the Jacobian for use in the LM method.
                  *
@@ -351,7 +350,6 @@ class LevenbergMarquardt(SimpleCLLibraryFromFile):
                  */
                 int i, j;
                 local mot_float_type temp, step;
-                local mot_float_type scratch[''' + str(nmr_observations) + '''];
                 
                 mot_float_type EPS = 30 * MOT_EPSILON;
                 
@@ -363,11 +361,11 @@ class LevenbergMarquardt(SimpleCLLibraryFromFile):
                     }
                     barrier(CLK_LOCAL_MEM_FENCE);
     
-                    %(FUNCTION_NAME)s(model_parameters, data, scratch);
+                    %(FUNCTION_NAME)s(model_parameters, data, fjac + j*%(NMR_OBSERVATIONS)s);
     
                     if(get_local_id(0) == 0){
                         for (i = 0; i < %(NMR_OBSERVATIONS)s; i++){
-                            fjac[j*%(NMR_OBSERVATIONS)s+i] = (scratch[i] - fvec[i]) / step;
+                            fjac[j*%(NMR_OBSERVATIONS)s+i] = (fjac[j*%(NMR_OBSERVATIONS)s+i] - fvec[i]) / step;
                         }
                         model_parameters[j] = temp; /* restore */
                     }

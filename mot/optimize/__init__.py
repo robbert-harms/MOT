@@ -1,6 +1,6 @@
 from mot.lib.cl_function import SimpleCLFunction
 from mot.configuration import CLRuntimeInfo
-from mot.lib.kernel_data import Array, Zeros
+from mot.lib.kernel_data import Array, Zeros, LocalMemory
 from mot.library_functions import Powell, Subplex, NMSimplex, LevenbergMarquardt
 from mot.optimize.base import OptimizeResults
 
@@ -331,9 +331,7 @@ def _minimize_levenberg_marquardt(func, x0, nmr_observations, cl_runtime_info, d
         raise ValueError('The number of instances per problem must be greater than the number of parameters')
 
     kernel_data = {'model_parameters': Array(x0, ctype='mot_float_type', mode='rw'),
-                   'data': data,
-                   'fjac': Zeros((nmr_problems, nmr_parameters, nmr_observations), ctype='mot_float_type',
-                                 mode='rw')}
+                   'data': data}
 
     eval_func = SimpleCLFunction.from_string('''
         void evaluate(local mot_float_type* x, void* data, local mot_float_type* result){
