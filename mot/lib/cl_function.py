@@ -6,7 +6,6 @@ import numpy as np
 from copy import copy
 
 import pyopencl as cl
-import tatsu
 
 from mot.lib.cl_data_type import SimpleCLDataType
 from textwrap import dedent, indent
@@ -14,25 +13,13 @@ from textwrap import dedent, indent
 from mot.configuration import CLRuntimeInfo
 from mot.lib.kernel_data import KernelData, Scalar, Array, Zeros
 from mot.lib.load_balance_strategies import Worker
-from mot.lib.utils import is_scalar, get_float_type_def
+from mot.lib.utils import is_scalar, get_float_type_def, split_cl_function
 
 __author__ = 'Robbert Harms'
 __date__ = '2017-08-31'
 __maintainer__ = 'Robbert Harms'
 __email__ = 'robbert.harms@maastrichtuniversity.nl'
 __licence__ = 'LGPL v3'
-
-
-_simple_cl_function_parser = tatsu.compile('''
-    result = [address_space] data_type function_name arglist body;
-    address_space = ['__'] ('local' | 'global' | 'constant' | 'private');
-    data_type = /\w+(\s*(\*)?)+/;
-    function_name = /\w+/;
-    arglist = '(' @+:arg {',' @+:arg}* ')' | '()';
-    arg = /[\w \*\[\]]+/;
-    body = compound_statement;    
-    compound_statement = '{' {[/[^\{\}]*/] [compound_statement]}* '}';
-''')
 
 
 class CLFunction:
@@ -164,48 +151,9 @@ class SimpleCLFunction(CLFunction):
         Returns:
             SimpleCLFunction: the CL data type for this parameter declaration
         """
-        class Semantics:
-
-            def __init__(self):
-                self._return_type = ''
-                self._function_name = ''
-                self._parameter_list = []
-                self._cl_body = ''
-
-            def result(self, ast):
-                return SimpleCLFunction(self._return_type, self._function_name, self._parameter_list, self._cl_body,
-                                        dependencies=dependencies, cl_extra=cl_extra)
-
-            def address_space(self, ast):
-                self._return_type = ast.strip() + ' '
-                return ast
-
-            def data_type(self, ast):
-                self._return_type += ''.join(ast).strip()
-                return ast
-
-            def function_name(self, ast):
-                self._function_name = ast.strip()
-                return ast
-
-            def arglist(self, ast):
-                if ast != '()':
-                    self._parameter_list = ast
-                return ast
-
-            def body(self, ast):
-                def join(items):
-                    result = ''
-                    for item in items:
-                        if isinstance(item, str):
-                            result += item
-                        else:
-                            result += join(item)
-                    return result
-                self._cl_body = join(ast).strip()[1:-1]
-                return ast
-
-        return _simple_cl_function_parser.parse(cl_function, semantics=Semantics())
+        return_type, function_name, parameter_list, body = split_cl_function(cl_function)
+        return SimpleCLFunction(return_type, function_name, parameter_list, body,
+                                dependencies=dependencies, cl_extra=cl_extra)
 
     def get_cl_function_name(self):
         return self._function_name

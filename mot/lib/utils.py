@@ -543,16 +543,24 @@ def multiprocess_mapping(func, iterable):
         return list(map(func, iterable))
 
 
-_cl_functions_parser = tatsu.compile('''
-    result = {function}+;
-    function = [address_space] data_type function_name arguments body;
+_tatsu_cl_function = '''
+    function = [address_space] data_type function_name arglist body;
     address_space = ['__'] ('local' | 'global' | 'constant' | 'private');
     data_type = /\w+(\s*(\*)?)+/;
     function_name = /\w+/;
-    arguments = /\([\w,\*\s]+\)/;
+    arglist = '(' @+:arg {',' @+:arg}* ')' | '()';
+    arg = /[\w \*\[\]]+/;
     body = compound_statement;    
     compound_statement = '{' {[/[^\{\}]*/] [compound_statement]}* '}';
-''')
+'''
+
+_extract_cl_functions_parser = tatsu.compile('''
+    result = {function}+;
+''' + _tatsu_cl_function)
+
+_split_cl_function_parser = tatsu.compile('''
+    result = function;
+''' + _tatsu_cl_function)
 
 
 def parse_cl_function(cl_code, dependencies=(), cl_extra=None):
@@ -604,9 +612,63 @@ def parse_cl_function(cl_code, dependencies=(), cl_extra=None):
                 self._functions.append(join(ast).strip())
                 return ast
 
-        return _cl_functions_parser.parse(input_str, semantics=Semantics())
+        return _extract_cl_functions_parser.parse(input_str, semantics=Semantics())
 
     functions = separate_cl_functions(cl_code)
     return SimpleCLFunction.from_string(functions[-1], dependencies=list(dependencies or []) + [
         SimpleCLFunction.from_string(s) for s in functions[:-1]
     ], cl_extra=cl_extra)
+
+
+def split_cl_function(cl_str):
+    """Split an CL function into a return type, function name, parameters list and the body.
+
+    Args:
+        cl_str (str): the CL code to parse and plit into components
+
+    Returns:
+        tuple: string elements for the return type, function name, parameter list and the body
+    """
+    class Semantics:
+
+        def __init__(self):
+            self._return_type = ''
+            self._function_name = ''
+            self._parameter_list = []
+            self._cl_body = ''
+
+        def result(self, ast):
+            return self._return_type, self._function_name, self._parameter_list, self._cl_body
+
+        def address_space(self, ast):
+            self._return_type = ast.strip() + ' '
+            return ast
+
+        def data_type(self, ast):
+            self._return_type += ''.join(ast).strip()
+            return ast
+
+        def function_name(self, ast):
+            self._function_name = ast.strip()
+            return ast
+
+        def arglist(self, ast):
+            if ast != '()':
+                self._parameter_list = ast
+            return ast
+
+        def body(self, ast):
+            def join(items):
+                result = ''
+                for item in items:
+                    if isinstance(item, str):
+                        result += item
+                    else:
+                        result += join(item)
+                return result
+
+            self._cl_body = join(ast).strip()[1:-1]
+            return ast
+
+    return _split_cl_function_parser.parse(cl_str, semantics=Semantics())
+

@@ -1,7 +1,7 @@
 import os
 from textwrap import indent, dedent
 from mot.lib.cl_function import CLFunction, SimpleCLFunction
-
+from mot.lib.utils import split_cl_function
 
 __author__ = 'Robbert Harms'
 __date__ = "2016-10-03"
@@ -16,14 +16,14 @@ class CLLibrary(CLFunction):
 class SimpleCLLibrary(CLLibrary, SimpleCLFunction):
 
     def __init__(self, cl_code, **kwargs):
-        func = SimpleCLFunction.from_string(cl_code, **kwargs)
+        return_type, function_name, parameter_list, body = split_cl_function(cl_code)
         super().__init__(
-            func.get_return_type(),
-            func.get_cl_function_name(),
-            func.get_parameters(),
-            func.get_cl_body(),
-            dependencies=func.get_dependencies(),
-            cl_extra=func.get_cl_extra()
+            return_type,
+            function_name,
+            parameter_list,
+            body,
+            dependencies=kwargs.get('dependencies', None),
+            cl_extra=kwargs.get('cl_extra', None)
         )
 
 

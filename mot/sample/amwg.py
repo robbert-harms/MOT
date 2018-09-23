@@ -30,8 +30,8 @@ class AdaptiveMetropolisWithinGibbs(AbstractRWMSampler):
                 with for every modeling instance (first dimension) and every parameter (second dimension) a value.
             proposal_stds (ndarray): for every parameter and every modeling instance an initial proposal std.
             target_acceptance_rate (float): the target acceptance rate between 0 and 1.
-            batch_size (int): the size of the batches inbetween which we update the parameters
-            damping_factor (int): how fast the function moves to zero
+            batch_size (int): the size of the batches in between which we update the parameters
+            damping_factor (int): how fast the adaptation moves to zero
             min_val (float): the minimum value the standard deviation can take
             max_val (float): the maximum value the standard deviation can take
 
@@ -68,8 +68,8 @@ class AdaptiveMetropolisWithinGibbs(AbstractRWMSampler):
                 if(current_iteration > 0 && current_iteration % ''' + str(self._batch_size) + ''' == 0){
                     mot_float_type delta = sqrt(1.0/
                             (''' + str(self._damping_factor) + ''' * 
-                            (current_iteration / ''' + str(self._batch_size) + ''')));
-                            
+                                (current_iteration / ''' + str(self._batch_size) + ''')));
+                    
                     for(uint k = 0; k < ''' + str(self._nmr_params) + '''; k++){
                         if(method_data->acceptance_counter[k] / (mot_float_type)''' + str(self._batch_size) + ''' 
                                 > ''' + str(self._target_acceptance_rate) + '''){
