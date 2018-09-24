@@ -13,7 +13,7 @@ __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 class SingleComponentAdaptiveMetropolis(AbstractRWMSampler):
 
-    def __init__(self, ll_func, log_prior_func, x0, proposal_stds, waiting_period=100,
+    def __init__(self, ll_func, log_prior_func, x0, proposal_stds, waiting_period=10,
                  scaling_factor=2.4, epsilon=1e-5, **kwargs):
         r"""An implementation of the Single Component Adaptive Metropolis (SCAM) MCMC algorithm [1].
 
