@@ -81,18 +81,22 @@ class AbstractSampler:
         Returns:
             SamplingOutput: the sample output object
         """
+        nmr_parameters = self._x0.shape[1]
+
         if not thinning or thinning < 1:
             thinning = 1
         if not burnin or burnin < 0:
             burnin = 0
 
+        max_samples_per_batch = max(50000 // thinning // nmr_parameters, 100)
+
         with self._logging(nmr_samples, burnin, thinning):
             if burnin > 0:
-                for batch_start, batch_end in split_in_batches(burnin, max(1000 // thinning, 100)):
+                for batch_start, batch_end in split_in_batches(burnin, max_samples_per_batch):
                     self._sample(batch_end - batch_start, return_output=False)
             if nmr_samples > 0:
                 outputs = []
-                for batch_start, batch_end in split_in_batches(nmr_samples, max(1000 // thinning, 100)):
+                for batch_start, batch_end in split_in_batches(nmr_samples, max_samples_per_batch):
                     outputs.append(self._sample(batch_end - batch_start, thinning=thinning))
                 return SimpleSampleOutput(*[np.concatenate([o[ind] for o in outputs], axis=-1) for ind in range(3)])
 
