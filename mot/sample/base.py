@@ -81,14 +81,12 @@ class AbstractSampler:
         Returns:
             SamplingOutput: the sample output object
         """
-        nmr_parameters = self._x0.shape[1]
-
         if not thinning or thinning < 1:
             thinning = 1
         if not burnin or burnin < 0:
             burnin = 0
 
-        max_samples_per_batch = max(50000 // thinning // nmr_parameters, 100)
+        max_samples_per_batch = max(1000 // thinning, 100)
 
         with self._logging(nmr_samples, burnin, thinning):
             if burnin > 0:
