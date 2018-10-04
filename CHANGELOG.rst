@@ -2,6 +2,19 @@
 Changelog
 *********
 
+v0.6.11 (2018-10-04)
+====================
+
+Changed
+-------
+- Updates to the SCAM MCMC routines default settings.
+
+Other
+-----
+- Removed CL extra from the CL functions and added support for CLCodeObjects for injecting simple CL code as a dependency.
+- Small local memory optimization to the LM optimization routine.
+
+
 v0.6.10 (2018-09-18)
 ====================
 
