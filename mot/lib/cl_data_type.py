@@ -117,7 +117,7 @@ class CLDataType:
         This returns for example (10, 5) for the data type float[10][5].
 
         Returns:
-            tuple: the sizes of the arrays
+            Tuple[int]: the sizes of the arrays
         """
         raise NotImplementedError()
 
@@ -248,7 +248,7 @@ class SimpleCLDataType(CLDataType):
                 return ast
 
             def array_size(self, ast):
-                self._array_sizes.append(ast[1:-1])
+                self._array_sizes.append(int(ast[1:-1]))
                 return ast
 
         return _cl_data_type_parser.parse(parameter_declaration, semantics=Semantics())

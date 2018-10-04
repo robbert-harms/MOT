@@ -22,8 +22,7 @@ class SimpleCLLibrary(CLLibrary, SimpleCLFunction):
             function_name,
             parameter_list,
             body,
-            dependencies=kwargs.get('dependencies', None),
-            cl_extra=kwargs.get('cl_extra', None)
+            dependencies=kwargs.get('dependencies', None)
         )
 
 
@@ -55,10 +54,8 @@ class SimpleCLLibraryFromFile(CLLibrary, SimpleCLFunction):
             {dependencies}
             #ifndef {inclusion_guard_name}
             #define {inclusion_guard_name}
-            {cl_extra}
             {code}
             #endif // {inclusion_guard_name}
         '''.format(dependencies=indent(self._get_cl_dependency_code(), ' ' * 4 * 3),
                    inclusion_guard_name='INCLUDE_GUARD_{}'.format(self.get_cl_function_name()),
-                   cl_extra=self._cl_extra if self._cl_extra is not None else '',
                    code=indent('\n' + self._code.strip() + '\n', ' ' * 4 * 3)))

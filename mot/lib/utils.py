@@ -563,7 +563,7 @@ _split_cl_function_parser = tatsu.compile('''
 ''' + _tatsu_cl_function)
 
 
-def parse_cl_function(cl_code, dependencies=(), cl_extra=None):
+def parse_cl_function(cl_code, dependencies=()):
     """Parse the given OpenCL string to a single SimpleCLFunction.
 
     If the string contains more than one function, we will return only the last, with all the other added as a
@@ -571,9 +571,7 @@ def parse_cl_function(cl_code, dependencies=(), cl_extra=None):
 
     Args:
         cl_code (str): the input string containing one or more functions.
-        dependencies (list or tuple of CLLibrary): The list of CL libraries this function depends on
-        cl_extra (str): extra CL code for this function that does not warrant an own function.
-            This is prepended to the function body.
+        dependencies (Iterable[CLCodeObject]): The list of CL libraries this function depends on
 
     Returns:
         mot.lib.cl_function.SimpleCLFunction: the CL function for the last function in the given strings.
@@ -616,8 +614,7 @@ def parse_cl_function(cl_code, dependencies=(), cl_extra=None):
 
     functions = separate_cl_functions(cl_code)
     return SimpleCLFunction.from_string(functions[-1], dependencies=list(dependencies or []) + [
-        SimpleCLFunction.from_string(s) for s in functions[:-1]
-    ], cl_extra=cl_extra)
+        SimpleCLFunction.from_string(s) for s in functions[:-1]])
 
 
 def split_cl_function(cl_str):

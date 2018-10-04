@@ -1,7 +1,7 @@
 import logging
 from contextlib import contextmanager
 
-from mot.lib.cl_function import SimpleCLFunction
+from mot.lib.cl_function import SimpleCLFunction, SimpleCLCodeObject
 from mot.configuration import CLRuntimeInfo
 from mot.library_functions import Rand123
 from mot.lib.utils import split_in_batches
@@ -265,8 +265,8 @@ class AbstractSampler:
         '''
         return SimpleCLFunction.from_string(
             cl_func,
-            dependencies=[Rand123(), self._get_log_prior_cl_func(), self._get_log_likelihood_cl_func()],
-            cl_extra=kernel_source)
+            dependencies=[Rand123(), self._get_log_prior_cl_func(),
+                          self._get_log_likelihood_cl_func(), SimpleCLCodeObject(kernel_source)])
 
     def _get_state_update_cl_func(self, nmr_samples, thinning, return_output):
         """Get the function that can advance the sampler state.

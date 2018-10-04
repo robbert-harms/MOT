@@ -2,7 +2,7 @@ import itertools
 from numbers import Number
 
 import numpy as np
-from mot.lib.cl_function import SimpleCLFunction
+from mot.lib.cl_function import SimpleCLFunction, SimpleCLCodeObject
 from mot.configuration import CLRuntimeInfo, config_context, CLRuntimeAction
 from mot.lib.kernel_data import Array, Zeros
 from scipy import linalg
@@ -632,7 +632,7 @@ def _derivation_kernel(objective_func, nmr_params, nmr_steps, step_ratio, parame
                                initial_step);
             }
         }
-    ''', cl_extra=func)
+    ''', dependencies=[SimpleCLCodeObject(func)])
 
 
 def _richardson_error_kernel(nmr_steps, nmr_convolutions, richardson_coefficients):
@@ -643,7 +643,7 @@ def _richardson_error_kernel(nmr_steps, nmr_convolutions, richardson_coefficient
             _apply_richardson_convolution(derivatives, richardson_extrapolations);
             _compute_richardson_errors(derivatives, richardson_extrapolations, errors);
         }
-    ''', cl_extra=func)
+    ''', dependencies=[SimpleCLCodeObject(func)])
 
 
 def _wynn_extrapolation_kernel(nmr_steps):
