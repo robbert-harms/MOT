@@ -100,7 +100,7 @@ class LegendreTerms(SimpleCLLibrary):
         The function arguments are:
 
             x: The argument of the Legendre polynomial Pn.
-            n: The maximum degree of the Legendre polynomial Pn.
+            n: The number of terms to fill.
             legendre_terms: an matrix of length n for storing the legendre terms
         """
         super().__init__('''
@@ -167,7 +167,7 @@ class EvenLegendreTerms(SimpleCLLibrary):
         The function arguments are:
 
             x: The argument of the Legendre polynomial Pn.
-            n: The maximum degree of the Legendre polynomial Pn.
+            n: The number of terms to fill.
             legendre_terms: an matrix of length n/2 for storing the even legendre terms
         """
         super().__init__('''
@@ -177,7 +177,7 @@ class EvenLegendreTerms(SimpleCLLibrary):
                 }
 
                 if(fabs(x) == 1.0){
-                    for(uint i = 0; i < n/2; i++){
+                    for(uint i = 0; i < n; i++){
                         legendre_terms[i] = 1.0;
                     }
                     return;
@@ -189,7 +189,7 @@ class EvenLegendreTerms(SimpleCLLibrary):
                 double P1 = x;
                 double Pn = P1;
 
-                for(uint k = 1; k < n/2; k++){
+                for(uint k = 1; k < n; k++){
                     Pn = ((2 * (2*k-1) + 1) * x * P1 - ((2*k-1) * P0)) / ((2*k-1) + 1);
                     P0 = P1;
                     P1 = Pn;
@@ -234,7 +234,7 @@ class OddLegendreTerms(SimpleCLLibrary):
         The function arguments are:
 
             x: The argument of the Legendre polynomial Pn.
-            n: The maximum degree of the Legendre polynomial Pn.
+            n: The number of terms to fill.
             legendre_terms: an matrix of length n/2 for storing the odd legendre terms
         """
         super().__init__('''
@@ -245,12 +245,12 @@ class OddLegendreTerms(SimpleCLLibrary):
 
                 if(fabs(x) == 1.0){
                     if(x > 0.0){
-                        for(uint i = 0; i < n/2; i++){
+                        for(uint i = 0; i < n; i++){
                             legendre_terms[i] = 1.0;
                         }
                     }
                     else{
-                        for(uint i = 0; i < n/2; i++){
+                        for(uint i = 0; i < n; i++){
                             legendre_terms[i] = -1.0;
                         }
                     }
@@ -261,7 +261,7 @@ class OddLegendreTerms(SimpleCLLibrary):
                 double P1 = x;
                 double Pn = P1;
 
-                for(uint k = 1; k < n/2; k++){
+                for(uint k = 1; k < n; k++){
                     legendre_terms[k-1] = Pn;
 
                     Pn = ((2 * (2*k-1) + 1) * x * P1 - ((2*k-1) * P0)) / ((2*k-1) + 1);
