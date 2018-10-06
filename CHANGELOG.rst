@@ -2,6 +2,14 @@
 Changelog
 *********
 
+v0.6.12 (2018-10-06)
+====================
+
+Fixed
+-----
+- Out of bounds fix in the legendre polynomial computations.
+
+
 v0.6.11 (2018-10-04)
 ====================
 
