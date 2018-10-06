@@ -44,7 +44,8 @@ def minimize(func, x0, data=None, method=None, nmr_observations=None, cl_runtime
             This is only needed for the ``Levenberg-Marquardt`` method.
         cl_runtime_info (mot.configuration.CLRuntimeInfo): the CL runtime information
         options (dict): A dictionary of solver options. All methods accept the following generic options:
-                patience (int): Maximum number of iterations to perform.
+            - patience (int): Maximum number of iterations to perform.
+
         jacobian_func (mot.lib.cl_function.CLFunction): a CL function to compute the Jacobian of the objective function.
             This should have the signature:
 

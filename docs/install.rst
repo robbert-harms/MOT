@@ -109,14 +109,16 @@ Alternative 1: Using a binary PyOpenCL package
 Installing a precompiled binary wheel (.whl) is the easiest way to install PyOpenCL, but only works if the wheel is compiled for your specific Python implementation.
 At Christoph Gohlke website (http://www.lfd.uci.edu/~gohlke/pythonlibs/#pyopencl) you can find a range of PyOpenCL binary packages.
 If there is a compatible one for your system, download that version.
-You can see if it is compatible if the Python version in the binary name matches that of your installed Python version.
-For example if you have 64-bit Windows system with Python 3.5 you need to download the wheel with``win-amd64`` and ``cp35m`` in the name (note the format, ``cp<version>m``, the ``m`` is important).
+You can see if it is compatible if the Python version and OpenCl version in the binary name matches that of your installed Python and driver supported versions. 
+Note that many drivers, such as nVIDIA’s only support OpenCL 1.2, so in that case take the wheel with "+cl12" in the name, and not e.g. "+cl21". For example if you have
+64-bit Windows system with Python 3.5 and your GPU or CPU drivers support OpenCL 1.2 you need to download the wheel with "+cl12", ``win-amd64`` and cp35m in the name
+(note the format, cp<version>m, the m is important).
 (To check which Python version you have you can run ``python --version`` in the command line).
 
 If there is no compatible version for your system to be found on Gohlke's website, here is a mirror of an older version by Gohlke that is compatible with most Python 3.5 systems:
 :download:`pyopencl-2015.2.4-cp35-none-win_amd64 <./_downloads/pyopencl-2015.2.4-cp35-none-win_amd64.whl>`.
 
-After the download, open an Anaconda Prompt (or a normal Windows cmd) and change directory to where you downloaded the ``.whl`` file.
+After the download, open an Anaconda Prompt (or a normal Windows cmd) as administrator (right-click the command and select "Run as administrator") and change directory to where you downloaded the ``.whl`` file.
 Then, install the binary using pip:
 
 .. code-block:: none

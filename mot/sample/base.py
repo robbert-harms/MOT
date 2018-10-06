@@ -461,8 +461,8 @@ class AbstractRWMSampler(AbstractSampler):
 
                 local mot_float_type new_position[''' + str(self._nmr_params) + '''];
                 local mot_float_type new_prior;
-                local double new_likelihood;
-                local double bayesian_f;
+                double new_likelihood;
+                double bayesian_f;
                 bool is_first_work_item = get_local_id(0) == 0;
 
                 if(is_first_work_item){
@@ -495,7 +495,7 @@ class AbstractRWMSampler(AbstractSampler):
 
                         if(is_first_work_item){
                             bayesian_f = exp((new_likelihood + new_prior) - (*current_likelihood + *current_prior));
-
+                            
                             if(frand(rng_data) < bayesian_f){
                                 *current_likelihood = new_likelihood;
                                 *current_prior = new_prior;
@@ -518,8 +518,8 @@ class AbstractRWMSampler(AbstractSampler):
                             }
                         }
                     }
+                    barrier(CLK_LOCAL_MEM_FENCE);
                 }
-                
                 if(is_first_work_item){
                     _updateProposalState((_mcmc_method_data*)method_data, current_iteration, current_position);
                 }
