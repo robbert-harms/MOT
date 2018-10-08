@@ -19,6 +19,17 @@ class normal_pdf(SimpleCLLibrary):
         ''')
 
 
+class normal_logpdf(SimpleCLLibrary):
+
+    def __init__(self):
+        """Compute the log of the Probability Density Function of the Gaussian distribution."""
+        super().__init__('''
+            double normal_logpdf(double x, double mean, double std){
+                return -((x - mean) * (x - mean)) / (2 * std * std) - (log(std) + (0.5 * log(2 * M_PI)));
+            }
+        ''')
+
+
 class normal_cdf(SimpleCLLibrary):
 
     def __init__(self):

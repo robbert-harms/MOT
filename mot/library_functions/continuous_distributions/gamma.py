@@ -30,6 +30,26 @@ class gamma_pdf(SimpleCLLibrary):
         ''')
 
 
+class gamma_logpdf(SimpleCLLibrary):
+    def __init__(self):
+        r"""Computes the log of the Gamma probability density function using the shape and scale parameterization.
+
+        This computes the gamma PDF as:
+
+        .. math::
+
+            \frac{-x}{\theta} + (k-1)\ln(x) - \ln(\Gamma(k)) - k * \ln(\theta)
+
+
+        With :math:`x` the desired position, :math:`k` the shape and :math:`\theta` the scale.
+        """
+        super().__init__('''
+            double gamma_logpdf(double x, double shape, double scale){
+                 return (-x / scale) + (shape - 1) * log(x) - lgamma(shape) - shape * log(scale);
+            }
+        ''')
+
+
 class gamma_cdf(SimpleCLLibrary):
     def __init__(self):
         r"""Calculate the Cumulative Distribution Function of the Gamma function.

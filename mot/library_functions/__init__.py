@@ -5,8 +5,8 @@ from mot.library_functions.base import SimpleCLLibrary, SimpleCLLibraryFromFile,
 from pkg_resources import resource_filename
 from mot.library_functions.unity import log1pmx
 from mot.library_functions.polynomials import p1evl, polevl, ratevl, solve_cubic_pol_real
-from mot.library_functions.continuous_distributions.normal import normal_cdf, normal_pdf, normal_ppf
-from mot.library_functions.continuous_distributions.gamma import gamma_pdf, gamma_ppf, gamma_cdf
+from mot.library_functions.continuous_distributions.normal import normal_cdf, normal_pdf, normal_logpdf, normal_ppf
+from mot.library_functions.continuous_distributions.gamma import gamma_pdf, gamma_logpdf, gamma_ppf, gamma_cdf
 from mot.library_functions.error_functions import dawson, CerfImWOfX, erfi
 from mot.library_functions.legendre_polynomial import FirstLegendreTerm, LegendreTerms, \
     EvenLegendreTerms, OddLegendreTerms

@@ -5,7 +5,7 @@ from scipy.stats import norm
 import numpy as np
 from numpy.testing import assert_allclose
 from mot.library_functions import normal_pdf, normal_cdf, normal_ppf
-from mot.library_functions.continuous_distributions.normal import _ndtri
+from mot.library_functions.continuous_distributions.normal import _ndtri, normal_logpdf
 from mot.lib.utils import cartesian
 
 
@@ -32,6 +32,22 @@ class test_NormalDistribution(unittest.TestCase):
             python_results[ind] = norm.pdf(x, loc=mean, scale=std)
 
         opencl_results = normal_pdf().evaluate({
+            'x': self.distribution_test_params[:, 0],
+            'mean': self.distribution_test_params[:, 1],
+            'std': self.distribution_test_params[..., 2]}, self.distribution_test_params.shape[0])
+
+        assert_allclose(opencl_results, python_results, atol=1e-5, rtol=1e-5)
+
+    def test_logpdf(self):
+        python_results = np.zeros(self.distribution_test_params.shape[0])
+        for ind in range(self.distribution_test_params.shape[0]):
+            x = self.distribution_test_params[ind, 0]
+            mean = self.distribution_test_params[ind, 1]
+            std = self.distribution_test_params[ind, 2]
+
+            python_results[ind] = norm.logpdf(x, loc=mean, scale=std)
+
+        opencl_results = normal_logpdf().evaluate({
             'x': self.distribution_test_params[:, 0],
             'mean': self.distribution_test_params[:, 1],
             'std': self.distribution_test_params[..., 2]}, self.distribution_test_params.shape[0])

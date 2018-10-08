@@ -1,6 +1,6 @@
 import numpy as np
 from mot.lib.kernel_data import Array
-from mot.library_functions import gamma_pdf
+from mot.library_functions import gamma_logpdf
 from mot.optimize import minimize
 from mot.lib.cl_function import SimpleCLFunction
 
@@ -24,12 +24,12 @@ def get_objective_function(nmr_datapoints):
             
             double sum = 0;
             for(uint i = 0; i < ''' + str(nmr_datapoints) + '''; i++){
-                sum += log(gamma_pdf(((double*)data)[i], x[0], x[1]));
+                sum += gamma_logpdf(((double*)data)[i], x[0], x[1]);
             }
             
             return -sum; // the optimization routines are minimizers
         }
-    ''', dependencies=[gamma_pdf()])
+    ''', dependencies=[gamma_logpdf()])
 
 
 if __name__ == '__main__':
