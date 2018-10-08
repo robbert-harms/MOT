@@ -2,6 +2,19 @@
 Changelog
 *********
 
+v0.6.13 (2018-10-08)
+====================
+
+Added
+-----
+- Adds the logpdf for the Gamma and the Normal distribution.
+- Adds an exapmle of fitting a Gamma distribution.
+
+Changed
+-------
+- Changed the function signature of the legendre polynomial computations.
+
+
 v0.6.12 (2018-10-06)
 ====================
 
