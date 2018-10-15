@@ -597,6 +597,9 @@ def parse_cl_function(cl_code, dependencies=()):
             def result(self, ast):
                 return self._functions
 
+            def arglist(self, ast):
+                return '({})'.format(', '.join(ast))
+
             def function(self, ast):
                 def join(items):
                     result = ''

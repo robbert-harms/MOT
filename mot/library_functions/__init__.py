@@ -116,6 +116,75 @@ class EuclidianNormFunction(SimpleCLLibraryFromFile):
             var_replace_dict={'MEMSPACE': memspace, 'MEMTYPE': memtype})
 
 
+class simpsons_rule(SimpleCLLibrary):
+
+    def __init__(self, function_name):
+        """Create a CL function for integrating a function using Simpson's rule.
+
+        This creates a CL function specifically meant for integrating the function of the given name.
+        The name of the generated CL function will be 'simpsons_rule_<function_name>'.
+
+        Args:
+            function_name (str): the name of the function to integrate, accepting the arguments:
+                - a: the lower bound of the integral
+                - b: the upper bound of the integral
+                - n: the number of steps, i.e. the number of approximations to make
+                - data: a pointer to some data, this is passed on to the function we are integrating.
+        """
+        super().__init__('''
+            double simpsons_rule_{f}(double a, double b, uint n, void* data){{
+                double h = (b - a) / n;
+
+                double sum_odds = {f}(a + h/2.0, data);
+                double sum_evens = 0.0;
+
+                double x;
+
+                for(uint i = 1; i < n; i++){{
+                    sum_odds += {f}(a + h * i + h / 2.0, data);
+                    sum_evens += {f}(a + h * i, data);
+                }}
+
+                return h / 6.0 * ({f}(a, data) + {f}(b, data) + 4.0 * sum_odds + 2.0 * sum_evens);
+            }}
+        '''.format(f=function_name))
+
+
+class linear_cubic_interpolation(SimpleCLLibrary):
+
+    def __init__(self):
+        """Cubic interpolation for a one-dimensional grid.
+
+        This uses the theory of Cubic Hermite splines for interpolating a one-dimensional grid of values.
+
+        At the borders, it will clip the values to the nearest border.
+
+        For more information on this method, see https://en.wikipedia.org/wiki/Cubic_Hermite_spline.
+
+        Example usage:
+            constant float data[] = {1.0, 2.0, 5.0, 6.0};
+            linear_cubic_interpolation(1.5, 4, data);
+        """
+        super().__init__('''
+            double linear_cubic_interpolation(double x, int y_len, constant float* y_values){
+                int n = x;
+                double u = x - n;
+
+                double p0 = y_values[min(max((int)0, n - 1), y_len - 1)];
+                double p1 = y_values[min(max((int)0, n    ), y_len - 1)];
+                double p2 = y_values[min(max((int)0, n + 1), y_len - 1)];
+                double p3 = y_values[min(max((int)0, n + 2), y_len - 1)];
+
+                double a = 0.5 * (-p0 + 3.0 * p1 - 3.0 * p2 + p3);
+                double b = 0.5 * (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3);
+                double c = 0.5 * (-p0 + p2);
+                double d = p1;
+
+                return d + u * (c + u * (b + u * a));                
+            }
+        ''')
+
+
 class LibNMSimplex(SimpleCLLibraryFromFile):
 
     def __init__(self, function_name):
