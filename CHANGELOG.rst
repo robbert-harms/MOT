@@ -2,13 +2,26 @@
 Changelog
 *********
 
+v0.6.14 (2018-10-15)
+====================
+
+Added
+-----
+- Adds linear cubic interpolation method for interpolating on a grid.
+- Adds a CL function for Simpson's rule numerical integration
+
+Fixed
+-----
+- Bugfix in the CL multi-functions parser.
+
+
 v0.6.13 (2018-10-08)
 ====================
 
 Added
 -----
 - Adds the logpdf for the Gamma and the Normal distribution.
-- Adds an exapmle of fitting a Gamma distribution.
+- Adds an example of fitting a Gamma distribution.
 
 Changed
 -------
