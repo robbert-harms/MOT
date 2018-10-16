@@ -165,7 +165,8 @@ def device_supports_double(cl_device):
     Returns:
         boolean: True if the given cl_device supports double, false otherwise.
     """
-    return cl_device.get_info(cl.device_info.DOUBLE_FP_CONFIG) == 63
+    dev_extensions = cl_device.extensions.strip().split(' ')
+    return 'cl_khr_fp64' in dev_extensions
 
 
 def get_float_type_def(double_precision, include_complex=True):
