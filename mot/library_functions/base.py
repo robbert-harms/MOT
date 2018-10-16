@@ -40,6 +40,8 @@ class SimpleCLLibraryFromFile(CLLibrary, SimpleCLFunction):
             var_replace_dict (dict): In the cl_code file these replacements will be made
                 (using the % format function of Python)
         """
+        self._var_replace_dict = var_replace_dict
+
         with open(os.path.abspath(cl_code_file), 'r') as f:
             code = f.read()
 

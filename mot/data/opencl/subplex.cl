@@ -215,34 +215,37 @@ void _subplex_get_subspaces(local const mot_float_type* const delta_x,
 }
 
 
-int sbplx_minimize(local mot_float_type* model_parameters, /* in: initial guess, out: minimizer */
+int subplex_minimize(local mot_float_type* model_parameters, /* in: initial guess, out: minimizer */
 			       void* data,
-			       local const mot_float_type* const xstep0/* initial step sizes */){
+			       local const mot_float_type* const xstep0,/* initial step sizes */
+			       local mot_float_type* subplex_scratch_float,
+			       local int* subplex_scratch_int){
 
-    local mot_float_type scratch[%(NMR_PARAMS)r * 2 // (xstep, delta_x)
-                                + MAX_SUBSPACE_LENGTH * 2 // (subspace_model_parameters, subspace_xstep)
-                                + (MAX_SUBSPACE_LENGTH+1)*(MAX_SUBSPACE_LENGTH+1) + 2*MAX_SUBSPACE_LENGTH // NMSimplex scratch
-                         ];
+    local mot_float_type* scratch_ind_float = subplex_scratch_float;
 
-    local mot_float_type* xstep = scratch;
-    local mot_float_type* delta_x = xstep + %(NMR_PARAMS)r;
-    local mot_float_type* subspace_model_parameters = delta_x + %(NMR_PARAMS)r;
-    local mot_float_type* subspace_xstep = subspace_model_parameters + MAX_SUBSPACE_LENGTH;
-    local mot_float_type* nms_scratch = subspace_xstep + MAX_SUBSPACE_LENGTH;
+    local mot_float_type* fdiff_max = scratch_ind_float; scratch_ind_float += 1;
+    local mot_float_type* step_size_scale = scratch_ind_float; scratch_ind_float += 1;
+    local mot_float_type* stepnorm = scratch_ind_float; scratch_ind_float += 1;
+    local mot_float_type* dxnorm = scratch_ind_float; scratch_ind_float += 1;
 
-    local int x_indices[%(NMR_PARAMS)r]; /* permuted indices of model_parameters sorted by decreasing magnitude |delta_x| */
-    local int subspace_dimensions[%(NMR_PARAMS)r / MIN_SUBSPACE_LENGTH];
+    local mot_float_type* xstep = scratch_ind_float; scratch_ind_float += %(NMR_PARAMS)r;
+    local mot_float_type* delta_x = scratch_ind_float; scratch_ind_float += %(NMR_PARAMS)r;
+    local mot_float_type* subspace_model_parameters = scratch_ind_float; scratch_ind_float += MAX_SUBSPACE_LENGTH;
+    local mot_float_type* subspace_xstep = scratch_ind_float; scratch_ind_float += MAX_SUBSPACE_LENGTH;
+    local mot_float_type* nms_scratch = scratch_ind_float;
+
+    local int* scratch_ind_int = subplex_scratch_int;
+
+    local int* nmr_subspaces = scratch_ind_int; scratch_ind_int += 1;
+    local int* subspace_starting_index = scratch_ind_int; scratch_ind_int += 1;
+    /* permuted indices of model_parameters sorted by decreasing magnitude |delta_x| */
+    local int* x_indices = scratch_ind_int; scratch_ind_int += %(NMR_PARAMS)r;
+    local int* subspace_dimensions = scratch_ind_int;
 
     int i, k;
     int itr;
     SubspaceData subspace_data;
-    local int nmr_subspaces;
-    local int subspace_starting_index;
     mot_float_type fdiff;
-    local mot_float_type fdiff_max;
-    local mot_float_type step_size_scale;
-    local mot_float_type stepnorm; // used in the computation of the next step size
-    local mot_float_type dxnorm;   // used in the computation of the next step size
 
     mot_float_type alpha = ALPHA;
     mot_float_type beta = BETA;
@@ -265,7 +268,7 @@ int sbplx_minimize(local mot_float_type* model_parameters, /* in: initial guess,
 
         if(get_local_id(0) == 0){
             // first use delta_x to create the subspaces
-            _subplex_get_subspaces(delta_x, x_indices, subspace_dimensions, &nmr_subspaces, %(NMR_PARAMS)r,
+            _subplex_get_subspaces(delta_x, x_indices, subspace_dimensions, nmr_subspaces, %(NMR_PARAMS)r,
                                   MIN_SUBSPACE_LENGTH, MAX_SUBSPACE_LENGTH);
 
 
@@ -274,23 +277,23 @@ int sbplx_minimize(local mot_float_type* model_parameters, /* in: initial guess,
                 delta_x[i] = model_parameters[i];
             }
 
-            subspace_starting_index = 0; // loop variable, keeping track of the subspace index
-            fdiff_max = 0; // records the largest gain in function value over the subspaces
+            *subspace_starting_index = 0; // loop variable, keeping track of the subspace index
+            *fdiff_max = 0; // records the largest gain in function value over the subspaces
         }
         barrier(CLK_LOCAL_MEM_FENCE);
 
         // run NMSimplex on each subspace
-        for(i = 0; i < nmr_subspaces; i++){
+        for(i = 0; i < *nmr_subspaces; i++){
 
             // prepare the subspace data
-            subspace_data.subspace_starting_index = subspace_starting_index;
+            subspace_data.subspace_starting_index = *subspace_starting_index;
             subspace_data.subspace_length = subspace_dimensions[i];
 
             if(get_local_id(0) == 0){
                 // prepare the subspace parameters and step sizes (initial simplex scales)
-                for(k = subspace_starting_index; k < subspace_dimensions[i] + subspace_starting_index; k++){
-                    subspace_model_parameters[k-subspace_starting_index] = model_parameters[x_indices[k]];
-                    subspace_xstep[k-subspace_starting_index] = xstep[x_indices[k]];
+                for(k = *subspace_starting_index; k < subspace_dimensions[i] + *subspace_starting_index; k++){
+                    subspace_model_parameters[k - *subspace_starting_index] = model_parameters[x_indices[k]];
+                    subspace_xstep[k - *subspace_starting_index] = xstep[x_indices[k]];
                 }
             }
             barrier(CLK_LOCAL_MEM_FENCE);
@@ -308,16 +311,16 @@ int sbplx_minimize(local mot_float_type* model_parameters, /* in: initial guess,
 
             if(get_local_id(0) == 0){
                 // add the optimized subspace parameters to the current optimal set of model_parameters
-                for(k = subspace_starting_index; k < subspace_dimensions[i] + subspace_starting_index; k++){
-                    model_parameters[x_indices[k]] = subspace_model_parameters[k-subspace_starting_index];
+                for(k = *subspace_starting_index; k < subspace_dimensions[i] + *subspace_starting_index; k++){
+                    model_parameters[x_indices[k]] = subspace_model_parameters[k - *subspace_starting_index];
                 }
 
-                if(fdiff > fdiff_max){
-                    fdiff_max = fdiff;
+                if(fdiff > *fdiff_max){
+                    *fdiff_max = fdiff;
                 }
 
                 // prepare for the next iteration
-                subspace_starting_index += subspace_dimensions[i];
+                *subspace_starting_index += subspace_dimensions[i];
             }
             barrier(CLK_LOCAL_MEM_FENCE);
         }
@@ -328,17 +331,17 @@ int sbplx_minimize(local mot_float_type* model_parameters, /* in: initial guess,
                 delta_x[i] = model_parameters[i] - delta_x[i];
             }
 
-            dxnorm = 0;
-            stepnorm = 0;
+            *dxnorm = 0;
+            *stepnorm = 0;
             for (i = 0; i < %(NMR_PARAMS)r; ++i) {
-                dxnorm = max(dxnorm, fabs(delta_x[i]));
-                stepnorm = max(stepnorm, fabs(xstep[i]));
+                *dxnorm = max(*dxnorm, fabs(delta_x[i]));
+                *stepnorm = max(*stepnorm, fabs(xstep[i]));
             }
         }
         barrier(CLK_LOCAL_MEM_FENCE);
 
         // stopping criteria using the infinity norm
-        if(max(dxnorm, (mot_float_type)(stepnorm * PSI)) / max(stepnorm, (mot_float_type)1.0) <= USER_TOL_X){
+        if(max(*dxnorm, (mot_float_type)(*stepnorm * PSI)) / max(*stepnorm, (mot_float_type)1.0) <= USER_TOL_X){
             return 3;
         }
 
@@ -346,27 +349,27 @@ int sbplx_minimize(local mot_float_type* model_parameters, /* in: initial guess,
         // calculate the step size
         /**************************/
         if(get_local_id(0) == 0){
-            if(nmr_subspaces == 1){
-                step_size_scale = PSI;
+            if(*nmr_subspaces == 1){
+                *step_size_scale = PSI;
             }
             else {
                 // calculate the L1 norm
-                dxnorm = 0;
-                stepnorm = 0;
+                *dxnorm = 0;
+                *stepnorm = 0;
                 for (i = 0; i < %(NMR_PARAMS)r; ++i) {
-                    dxnorm += fabs(delta_x[i]);
-                    stepnorm += fabs(xstep[i]);
+                    *dxnorm += fabs(delta_x[i]);
+                    *stepnorm += fabs(xstep[i]);
                 }
-                step_size_scale = min(max(dxnorm / stepnorm, (mot_float_type)OMEGA), (mot_float_type)(1.0/OMEGA));
+                *step_size_scale = min(max(*dxnorm / *stepnorm, (mot_float_type)OMEGA), (mot_float_type)(1.0/OMEGA));
             }
 
             // create the new step size (initial simplex scale)
             for (i = 0; i < %(NMR_PARAMS)r; ++i){
                 if(delta_x[i] == 0){
-                    xstep[i] = -(xstep[i] * step_size_scale);
+                    xstep[i] = -(xstep[i] * *step_size_scale);
                 }
                 else{
-                    xstep[i] = copysign(xstep[i] * step_size_scale, delta_x[i]);
+                    xstep[i] = copysign(xstep[i] * *step_size_scale, delta_x[i]);
                 }
             }
         }
@@ -380,15 +383,17 @@ int sbplx_minimize(local mot_float_type* model_parameters, /* in: initial guess,
     return 6;
 }
 
-int subplex(local mot_float_type* const model_parameters, void* data){
-    local mot_float_type initial_simplex_scale[%(NMR_PARAMS)r];
+int subplex(local mot_float_type* const model_parameters, void* data,
+            local mot_float_type* initial_simplex_scale,
+            local mot_float_type* subplex_scratch_float,
+            local int* subplex_scratch_int){
 
     if(get_local_id(0) == 0){
         %(INITIAL_SIMPLEX_SCALES)s
     }
     barrier(CLK_LOCAL_MEM_FENCE);
 
-    return sbplx_minimize(model_parameters, data, initial_simplex_scale);
+    return subplex_minimize(model_parameters, data, initial_simplex_scale, subplex_scratch_float, subplex_scratch_int);
 }
 
 

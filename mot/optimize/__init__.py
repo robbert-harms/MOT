@@ -165,9 +165,6 @@ def _minimize_powell(func, x0, cl_runtime_info, data=None, options=None):
     nmr_problems = x0.shape[0]
     nmr_parameters = x0.shape[1]
 
-    kernel_data = {'model_parameters': Array(x0, ctype='mot_float_type', mode='rw'),
-                   'data': data}
-
     eval_func = SimpleCLFunction.from_string('''
         double evaluate(local mot_float_type* x, void* data){
             return ''' + func.get_cl_function_name() + '''(x, data, 0);
@@ -175,6 +172,10 @@ def _minimize_powell(func, x0, cl_runtime_info, data=None, options=None):
     ''', dependencies=[func])
 
     optimizer_func = Powell(eval_func, nmr_parameters, **options)
+
+    kernel_data = {'model_parameters': Array(x0, ctype='mot_float_type', mode='rw'),
+                   'data': data}
+    kernel_data.update(optimizer_func.get_kernel_data())
 
     return_code = optimizer_func.evaluate(
         kernel_data, nmr_problems,
@@ -228,9 +229,6 @@ def _minimize_nmsimplex(func, x0, cl_runtime_info, data=None, options=None):
     nmr_problems = x0.shape[0]
     nmr_parameters = x0.shape[1]
 
-    kernel_data = {'model_parameters': Array(x0, ctype='mot_float_type', mode='rw'),
-                   'data': data}
-
     eval_func = SimpleCLFunction.from_string('''
         double evaluate(local mot_float_type* x, void* data){
             return ''' + func.get_cl_function_name() + '''(x, data, 0);
@@ -238,6 +236,10 @@ def _minimize_nmsimplex(func, x0, cl_runtime_info, data=None, options=None):
     ''', dependencies=[func])
 
     optimizer_func = NMSimplex('evaluate', nmr_parameters, dependencies=[eval_func], **options)
+
+    kernel_data = {'model_parameters': Array(x0, ctype='mot_float_type', mode='rw'),
+                   'data': data}
+    kernel_data.update(optimizer_func.get_kernel_data())
 
     return_code = optimizer_func.evaluate(
         kernel_data, nmr_problems,
@@ -301,9 +303,6 @@ def _minimize_subplex(func, x0, cl_runtime_info, data=None, options=None):
     nmr_problems = x0.shape[0]
     nmr_parameters = x0.shape[1]
 
-    kernel_data = {'model_parameters': Array(x0, ctype='mot_float_type', mode='rw'),
-                   'data': data}
-
     eval_func = SimpleCLFunction.from_string('''
         double evaluate(local mot_float_type* x, void* data){
             return ''' + func.get_cl_function_name() + '''(x, data, 0);
@@ -311,6 +310,10 @@ def _minimize_subplex(func, x0, cl_runtime_info, data=None, options=None):
     ''', dependencies=[func])
 
     optimizer_func = Subplex(eval_func, nmr_parameters, **options)
+
+    kernel_data = {'model_parameters': Array(x0, ctype='mot_float_type', mode='rw'),
+                   'data': data}
+    kernel_data.update(optimizer_func.get_kernel_data())
 
     return_code = optimizer_func.evaluate(
         kernel_data, nmr_problems,

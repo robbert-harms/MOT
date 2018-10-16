@@ -406,7 +406,7 @@ int lib_nmsimplex(
     int i, j;        /** helper variables */
 	int itr;	      /* track the number of iterations */
 	double tmp;
-    local double contraction_tolerance; /* used for the subplex convergence check */
+    double contraction_tolerance; /* used for the subplex convergence check */
 
 	mot_float_type reflection_fval;      /* value of function at reflection point */
 
@@ -430,14 +430,11 @@ int lib_nmsimplex(
          */
         _libnms_find_worst_best_fvals(nmr_parameters, func_vals, &ind_worst, &ind_best);
 
-        if(get_local_id(0) == 0){
-            for(i = 0; i < nmr_parameters; ++i){
-                contraction_tolerance += pown(vertices[ind_best * nmr_parameters + i]
-                                              - vertices[ind_worst * nmr_parameters + i], 2);
-            }
-            contraction_tolerance = sqrt(contraction_tolerance) * psi;
+        for(i = 0; i < nmr_parameters; ++i){
+            contraction_tolerance += pown(vertices[ind_best * nmr_parameters + i]
+                                          - vertices[ind_worst * nmr_parameters + i], 2);
         }
-        barrier(CLK_LOCAL_MEM_FENCE);
+        contraction_tolerance = sqrt(contraction_tolerance) * psi;
     }
 
 	/* begin the main loop of the minimization */

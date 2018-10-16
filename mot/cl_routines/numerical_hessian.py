@@ -4,7 +4,7 @@ from numbers import Number
 import numpy as np
 from mot.lib.cl_function import SimpleCLFunction, SimpleCLCodeObject
 from mot.configuration import CLRuntimeInfo, config_context, CLRuntimeAction
-from mot.lib.kernel_data import Array, Zeros
+from mot.lib.kernel_data import Array, Zeros, LocalMemory
 from scipy import linalg
 
 
@@ -197,6 +197,7 @@ def _compute_derivatives(objective_func, parameters, step_ratio, step_offset, nm
         'parameter_scalings_inv': Array(1. / scaling_factors, ctype='float', offset_str='0'),
         'initial_step': Array(initial_step, ctype='float'),
         'step_evaluates': Zeros((parameters.shape[0], nmr_derivatives, nmr_steps), 'double'),
+        'x_tmp': LocalMemory('mot_float_type', nmr_params)
     }
 
     _derivation_kernel(objective_func, nmr_params, nmr_steps, step_ratio, parameter_transform_func).evaluate(
@@ -435,10 +436,9 @@ def _get_compute_functions_cl(objective_func, nmr_params, nmr_steps, step_ratio,
          */
         double _eval_step(void* data, local mot_float_type* x_input,
                           uint perturb_dim_0, mot_float_type perturb_0,
-                          uint perturb_dim_1, mot_float_type perturb_1){
+                          uint perturb_dim_1, mot_float_type perturb_1,
+                          local mot_float_type* x_tmp){
 
-            local mot_float_type x_tmp[''' + str(nmr_params) + '''];
-            
             if(get_local_id(0) == 0){
                 for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
                     x_tmp[i] = x_input[i];
@@ -460,7 +460,8 @@ def _get_compute_functions_cl(objective_func, nmr_params, nmr_steps, step_ratio,
         void _compute_steps(void* data, local mot_float_type* x_input, mot_float_type f_x_input,
                             uint px, uint py, global double* step_evaluates, 
                             global float* parameter_scalings_inv,
-                            global float* initial_step){
+                            global float* initial_step,
+                            local mot_float_type* x_tmp){
             
             double step_x;
             double step_y;
@@ -474,10 +475,10 @@ def _get_compute_functions_cl(objective_func, nmr_params, nmr_steps, step_ratio,
                     tmp = (
                           _eval_step(data, x_input,
                                      px, 2 * (step_x * parameter_scalings_inv[px]),
-                                     0, 0)
+                                     0, 0, x_tmp)
                         + _eval_step(data, x_input,
                                      px, -2 * (step_x * parameter_scalings_inv[px]),
-                                     0, 0)
+                                     0, 0, x_tmp)
                         - 2 * f_x_input
                     ) / (4 * step_x * step_x);
                     
@@ -494,16 +495,16 @@ def _get_compute_functions_cl(objective_func, nmr_params, nmr_steps, step_ratio,
                     tmp = (
                           _eval_step(data, x_input,
                                      px, step_x * parameter_scalings_inv[px],
-                                     py, step_y * parameter_scalings_inv[py])
+                                     py, step_y * parameter_scalings_inv[py], x_tmp)
                         - _eval_step(data, x_input,
                                      px, step_x * parameter_scalings_inv[px],
-                                     py, -step_y * parameter_scalings_inv[py])
+                                     py, -step_y * parameter_scalings_inv[py], x_tmp)
                         - _eval_step(data, x_input,
                                      px, -step_x * parameter_scalings_inv[px],
-                                     py, step_y * parameter_scalings_inv[py])
+                                     py, step_y * parameter_scalings_inv[py], x_tmp)
                         + _eval_step(data, x_input,
                                      px, -step_x * parameter_scalings_inv[px],
-                                     py, -step_y * parameter_scalings_inv[py])
+                                     py, -step_y * parameter_scalings_inv[py], x_tmp)
                     ) / (4 * step_x * step_y);
 
                     if(is_first_workitem){
@@ -618,6 +619,7 @@ def _derivation_kernel(objective_func, nmr_params, nmr_steps, step_ratio, parame
                      global float* parameter_scalings_inv,
                      global float* initial_step,
                      global double* step_evaluates,
+                     local mot_float_type* x_tmp,
                      void* data){
                                  
             double f_x_input = _calculate_function(data, parameters);
@@ -629,7 +631,7 @@ def _derivation_kernel(objective_func, nmr_params, nmr_steps, step_ratio, parame
             for(uint coord_ind = 0; coord_ind < ''' + str(len(coords)) + '''; coord_ind++){
                 _compute_steps(data, parameters, f_x_input, coords[coord_ind][0], coords[coord_ind][1], 
                                step_evaluates + coord_ind * ''' + str(nmr_steps) + ''', parameter_scalings_inv,
-                               initial_step);
+                               initial_step, x_tmp);
             }
         }
     ''', dependencies=[SimpleCLCodeObject(func)])

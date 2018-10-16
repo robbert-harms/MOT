@@ -1,6 +1,7 @@
 import os
 
 from mot.lib.cl_function import SimpleCLFunction, SimpleCLCodeObject
+from mot.lib.kernel_data import LocalMemory
 from mot.library_functions.base import SimpleCLLibrary, SimpleCLLibraryFromFile, CLLibrary
 from pkg_resources import resource_filename
 from mot.library_functions.unity import log1pmx
@@ -211,6 +212,8 @@ class NMSimplex(SimpleCLLibrary):
     def __init__(self, function_name, nmr_parameters, patience=200, alpha=1.0, beta=0.5,
                  gamma=2.0, delta=0.5, scale=1.0, adaptive_scales=True, **kwargs):
 
+        self._nmr_parameters = nmr_parameters
+
         if 'dependencies' in kwargs:
             kwargs['dependencies'] = list(kwargs['dependencies']) + [LibNMSimplex(function_name)]
         else:
@@ -234,8 +237,9 @@ class NMSimplex(SimpleCLLibrary):
             )
 
         super().__init__('''
-            int nmsimplex(local mot_float_type* model_parameters, void* data){
-                local mot_float_type initial_simplex_scale[%(NMR_PARAMS)r];
+            int nmsimplex(local mot_float_type* model_parameters, void* data, 
+                          local mot_float_type* initial_simplex_scale, 
+                          local mot_float_type* nmsimplex_scratch){
                 
                 if(get_local_id(0) == 0){
                     %(INITIAL_SIMPLEX_SCALES)s
@@ -244,15 +248,21 @@ class NMSimplex(SimpleCLLibrary):
     
                 mot_float_type fdiff;
                 mot_float_type psi = 0;
-                local mot_float_type nmsimplex_scratch[
-                    %(NMR_PARAMS)r * 2 + (%(NMR_PARAMS)r + 1) * (%(NMR_PARAMS)r + 1)];
-    
+                
                 return lib_nmsimplex(%(NMR_PARAMS)r, model_parameters, data, initial_simplex_scale,
                                      &fdiff, psi, (int)(%(PATIENCE)r * (%(NMR_PARAMS)r+1)),
                                      %(ALPHA)r, %(BETA)r, %(GAMMA)r, %(DELTA)r,
                                      nmsimplex_scratch);
             }
         ''' % params, **kwargs)
+
+    def get_kernel_data(self):
+        """Get the kernel data needed for this optimization routine to work."""
+        return {
+            'nmsimplex_scratch': LocalMemory('mot_float_type',
+                                             self._nmr_parameters * 2 + (self._nmr_parameters + 1) ** 2),
+            'initial_simplex_scale': LocalMemory('mot_float_type', self._nmr_parameters)
+        }
 
 
 class Powell(SimpleCLLibraryFromFile):
@@ -283,9 +293,22 @@ class Powell(SimpleCLLibraryFromFile):
             'PATIENCE_LINE_SEARCH': patience if patience_line_search is None else patience_line_search
         }
         super().__init__(
-            'int', 'powell', [('local mot_float_type*', 'model_parameters'), ('void*', 'data')],
+            'int', 'powell', [
+                'local mot_float_type* model_parameters',
+                'void* data',
+                'local mot_float_type* powell_scratch'
+            ],
             resource_filename('mot', 'data/opencl/powell.cl'),
             var_replace_dict=params, **kwargs)
+
+    def get_kernel_data(self):
+        """Get the kernel data needed for this optimization routine to work."""
+        return {
+            'powell_scratch': LocalMemory(
+                'mot_float_type',  self._var_replace_dict['NMR_PARAMS']
+                                    + self._var_replace_dict['NMR_PARAMS']**2)
+        }
+
 
 
 class Subplex(SimpleCLLibraryFromFile):
@@ -352,8 +375,27 @@ class Subplex(SimpleCLLibraryFromFile):
         params['INITIAL_SIMPLEX_SCALES'] = s
 
         super().__init__(
-            'int', 'subplex', [('local mot_float_type* const', 'model_parameters'), ('void*', 'data')],
+            'int', 'subplex', [
+                'local mot_float_type* const model_parameters',
+                'void* data',
+                'local mot_float_type* initial_simplex_scale',
+                'local mot_float_type* subplex_scratch_float',
+                'local int* subplex_scratch_int'
+            ],
             resource_filename('mot', 'data/opencl/subplex.cl'), var_replace_dict=params, **kwargs)
+
+    def get_kernel_data(self):
+        """Get the kernel data needed for this optimization routine to work."""
+        return {
+            'subplex_scratch_float': LocalMemory(
+                'mot_float_type', 4 + self._var_replace_dict['NMR_PARAMS'] * 2
+                                    + self._var_replace_dict['MAX_SUBSPACE_LENGTH'] * 4
+                                    + (self._var_replace_dict['MAX_SUBSPACE_LENGTH']+1)**2),
+            'subplex_scratch_int': LocalMemory(
+                'int', 2 + self._var_replace_dict['NMR_PARAMS']
+                         + (self._var_replace_dict['NMR_PARAMS'] // self._var_replace_dict['MIN_SUBSPACE_LENGTH'])),
+            'initial_simplex_scale': LocalMemory('mot_float_type', self._var_replace_dict['NMR_PARAMS'])
+        }
 
 
 class LevenbergMarquardt(SimpleCLLibraryFromFile):

@@ -81,11 +81,11 @@ int brent(mot_float_type ax, mot_float_type bx, mot_float_type cx,
  * Args:
  *  search_directions (2d nxn array): the array with vectors to initialize)
  */
-void powell_init_search_directions(local mot_float_type search_directions[%(NMR_PARAMS)r][%(NMR_PARAMS)r]){
+void powell_init_search_directions(local mot_float_type* search_directions){
     int i, j;
     for(i=0; i < %(NMR_PARAMS)r; i++){
         for(j=0; j < %(NMR_PARAMS)r; j++){
-            search_directions[i][j] = (i == j ? 1.0 : 0.0);
+            search_directions[i * %(NMR_PARAMS)r + j] = (i == j ? 1.0 : 0.0);
         }
     }
 }
@@ -212,20 +212,17 @@ double powell_linear_eval_function(mot_float_type x, void* eval_data){
  *   the new lowest function value
  */
 mot_float_type powell_do_line_searches(
-        local mot_float_type search_directions[%(NMR_PARAMS)r][%(NMR_PARAMS)r],
+        local mot_float_type* search_directions,
         void* data,
         mot_float_type fval,
         local mot_float_type* starting_point,
-        local mot_float_type* largest_decrease,
-        local int* index_largest_decrease){
+        mot_float_type* largest_decrease,
+        int* index_largest_decrease){
 
     int i, j;
 
-    if(get_local_id(0) == 0){
-        *index_largest_decrease = 0;
-        *largest_decrease = 0.0;
-    }
-    barrier(CLK_LOCAL_MEM_FENCE);
+    *largest_decrease = 0.0;
+    *index_largest_decrease = 0;
 
     local mot_float_type fval_previous;
     local mot_float_type search_vector[%(NMR_PARAMS)r];
@@ -233,7 +230,7 @@ mot_float_type powell_do_line_searches(
     for(i = 0; i < %(NMR_PARAMS)r; i++){
         if(get_local_id(0) == 0){
             for(j = 0; j < %(NMR_PARAMS)r; j++){
-                search_vector[j] = search_directions[j][i];
+                search_vector[j] = search_directions[j * %(NMR_PARAMS)r + i];
             }
 
             fval_previous = fval;
@@ -242,13 +239,10 @@ mot_float_type powell_do_line_searches(
 
         fval = powell_find_linear_minimum(starting_point, search_vector, data);
 
-        if(get_local_id(0) == 0){
-            if(fabs(fval_previous - fval) > *largest_decrease){
-                *largest_decrease = fabs(fval_previous - fval);
-                *index_largest_decrease = i;
-            }
+        if(fabs(fval_previous - fval) > *largest_decrease){
+            *largest_decrease = fabs(fval_previous - fval);
+            *index_largest_decrease = i;
         }
-        barrier(CLK_LOCAL_MEM_FENCE);
     }
     return fval;
 }
@@ -313,29 +307,29 @@ bool powell_should_exchange_search_directions(
 #define SHOULD_EXCHANGE_SEARCH_DIRECTION true
 #endif
 
-int powell(local mot_float_type* model_parameters, void* data){
-    int i, j;
-    mot_float_type fval, fval_extrapolated;
+int powell(local mot_float_type* model_parameters, void* data,
+           local mot_float_type* powell_scratch){
 
-    local int iteration;
-    local int index_largest_decrease;
-    local mot_float_type fval_at_start_of_iteration, largest_decrease;
+    local mot_float_type* scratch_ind = powell_scratch;
+    local mot_float_type* parameters_at_start_of_iteration = scratch_ind; scratch_ind += %(NMR_PARAMS)r;
+    local mot_float_type* search_directions = scratch_ind;
 
-    local mot_float_type parameters_at_start_of_iteration[%(NMR_PARAMS)r];
-    local mot_float_type search_directions[%(NMR_PARAMS)r][%(NMR_PARAMS)r];
+    mot_float_type fval, fval_extrapolated, fval_at_start_of_iteration, largest_decrease;
+
+    int i, j, index_largest_decrease;
+    int iteration = 0;
 
     if(get_local_id(0) == 0){
-        iteration = 0;
         powell_init_search_directions(search_directions);
     }
     barrier(CLK_LOCAL_MEM_FENCE);
 
     fval = %(FUNCTION_NAME)s(model_parameters, data);
 
-    while(iteration < POWELL_MAX_ITERATIONS){
-        if(get_local_id(0) == 0){
-            fval_at_start_of_iteration = fval;
+    while(iteration++ < POWELL_MAX_ITERATIONS){
+        fval_at_start_of_iteration = fval;
 
+        if(get_local_id(0) == 0){
             for(i=0; i < %(NMR_PARAMS)r; i++){
                 parameters_at_start_of_iteration[i] = model_parameters[i];
             }
@@ -359,10 +353,12 @@ int powell(local mot_float_type* model_parameters, void* data){
                 #if POWELL_RESET_METHOD == POWELL_RESET_METHOD_EXTRAPOLATED_POINT
                     for(i = 0; i < %(NMR_PARAMS)r; i++){
                         // remove the one with the largest increase (see Numerical Recipes)
-                        search_directions[i][index_largest_decrease] = search_directions[i][%(NMR_PARAMS)r-1];
+                        search_directions[i * %(NMR_PARAMS)r + index_largest_decrease] =
+                            search_directions[i * %(NMR_PARAMS)r + %(NMR_PARAMS)r-1];
 
                         // add p_n - p_0, see Powell 1964.
-                        search_directions[i][%(NMR_PARAMS)r-1] = model_parameters[i] - parameters_at_start_of_iteration[i];
+                        search_directions[i * %(NMR_PARAMS)r + %(NMR_PARAMS)r-1] =
+                            model_parameters[i] - parameters_at_start_of_iteration[i];
                     }
 
                 #elif POWELL_RESET_METHOD == POWELL_RESET_METHOD_RESET_TO_IDENTITY
@@ -372,10 +368,11 @@ int powell(local mot_float_type* model_parameters, void* data){
                     else{
                         for(i = 0; i < %(NMR_PARAMS)r; i++){
                             for(j = 0; j < %(NMR_PARAMS)r - 1; j++){
-                                search_directions[i][j] = search_directions[i][j+1];
+                                search_directions[i * %(NMR_PARAMS)r + j] = search_directions[i * %(NMR_PARAMS)r + j+1];
                             }
                             // add p_n - p_0, see Powell 1964.
-                            search_directions[i][%(NMR_PARAMS)r-1] = model_parameters[i] - parameters_at_start_of_iteration[i];
+                            search_directions[i * %(NMR_PARAMS)r + %(NMR_PARAMS)r-1] =
+                                model_parameters[i] - parameters_at_start_of_iteration[i];
                         }
                     }
                 #endif
@@ -389,11 +386,6 @@ int powell(local mot_float_type* model_parameters, void* data){
 
             fval = powell_find_linear_minimum(model_parameters, parameters_at_start_of_iteration, data);
         }
-
-        if(get_local_id(0) == 0){
-            ++iteration;
-        }
-        barrier(CLK_LOCAL_MEM_FENCE);
     }
     return 6;
 }
