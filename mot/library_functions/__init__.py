@@ -186,6 +186,51 @@ class linear_cubic_interpolation(SimpleCLLibrary):
         ''')
 
 
+class Powell(SimpleCLLibraryFromFile):
+
+    def __init__(self, eval_func, nmr_parameters, patience=2, patience_line_search=None,
+                 reset_method='EXTRAPOLATED_POINT', **kwargs):
+        """The Powell CL implementation.
+
+        Args:
+            eval_func (mot.lib.cl_function.CLFunction): the function we want to optimize, Should be of signature:
+                ``double evaluate(local mot_float_type* x, void* data_void);``
+            nmr_parameters (int): the number of parameters in the model, this will be hardcoded in the method
+            patience (int): the patience of the Powell algorithm
+            patience_line_search (int): the patience of the line search algorithm. If None, we set it equal to the
+                patience.
+            reset_method (str): one of ``RESET_TO_IDENTITY`` or ``EXTRAPOLATED_POINT``. The method used to
+                reset the search directions every iteration.
+        """
+        dependencies = list(kwargs.get('dependencies', []))
+        dependencies.append(eval_func)
+        kwargs['dependencies'] = dependencies
+
+        params = {
+            'FUNCTION_NAME': eval_func.get_cl_function_name(),
+            'NMR_PARAMS': nmr_parameters,
+            'RESET_METHOD': reset_method.upper(),
+            'PATIENCE': patience,
+            'PATIENCE_LINE_SEARCH': patience if patience_line_search is None else patience_line_search
+        }
+        super().__init__(
+            'int', 'powell', [
+                'local mot_float_type* model_parameters',
+                'void* data',
+                'local mot_float_type* powell_scratch'
+            ],
+            resource_filename('mot', 'data/opencl/powell.cl'),
+            var_replace_dict=params, **kwargs)
+
+    def get_kernel_data(self):
+        """Get the kernel data needed for this optimization routine to work."""
+        return {
+            'powell_scratch': LocalMemory(
+                'mot_float_type',  self._var_replace_dict['NMR_PARAMS']
+                                    + self._var_replace_dict['NMR_PARAMS']**2)
+        }
+
+
 class LibNMSimplex(SimpleCLLibraryFromFile):
 
     def __init__(self, function_name):
@@ -240,15 +285,15 @@ class NMSimplex(SimpleCLLibrary):
             int nmsimplex(local mot_float_type* model_parameters, void* data, 
                           local mot_float_type* initial_simplex_scale, 
                           local mot_float_type* nmsimplex_scratch){
-                
+
                 if(get_local_id(0) == 0){
                     %(INITIAL_SIMPLEX_SCALES)s
                 }
                 barrier(CLK_LOCAL_MEM_FENCE);
-    
+
                 mot_float_type fdiff;
                 mot_float_type psi = 0;
-                
+
                 return lib_nmsimplex(%(NMR_PARAMS)r, model_parameters, data, initial_simplex_scale,
                                      &fdiff, psi, (int)(%(PATIENCE)r * (%(NMR_PARAMS)r+1)),
                                      %(ALPHA)r, %(BETA)r, %(GAMMA)r, %(DELTA)r,
@@ -259,56 +304,10 @@ class NMSimplex(SimpleCLLibrary):
     def get_kernel_data(self):
         """Get the kernel data needed for this optimization routine to work."""
         return {
-            'nmsimplex_scratch': LocalMemory('mot_float_type',
-                                             self._nmr_parameters * 2 + (self._nmr_parameters + 1) ** 2),
+            'nmsimplex_scratch': LocalMemory(
+                'mot_float_type', self._nmr_parameters * 2 + (self._nmr_parameters + 1) ** 2 + 1),
             'initial_simplex_scale': LocalMemory('mot_float_type', self._nmr_parameters)
         }
-
-
-class Powell(SimpleCLLibraryFromFile):
-
-    def __init__(self, eval_func, nmr_parameters, patience=2, patience_line_search=None,
-                 reset_method='EXTRAPOLATED_POINT', **kwargs):
-        """The Powell CL implementation.
-
-        Args:
-            eval_func (mot.lib.cl_function.CLFunction): the function we want to optimize, Should be of signature:
-                ``double evaluate(local mot_float_type* x, void* data_void);``
-            nmr_parameters (int): the number of parameters in the model, this will be hardcoded in the method
-            patience (int): the patience of the Powell algorithm
-            patience_line_search (int): the patience of the line search algorithm. If None, we set it equal to the
-                patience.
-            reset_method (str): one of ``RESET_TO_IDENTITY`` or ``EXTRAPOLATED_POINT``. The method used to
-                reset the search directions every iteration.
-        """
-        dependencies = list(kwargs.get('dependencies', []))
-        dependencies.append(eval_func)
-        kwargs['dependencies'] = dependencies
-
-        params = {
-            'FUNCTION_NAME': eval_func.get_cl_function_name(),
-            'NMR_PARAMS': nmr_parameters,
-            'RESET_METHOD': reset_method.upper(),
-            'PATIENCE': patience,
-            'PATIENCE_LINE_SEARCH': patience if patience_line_search is None else patience_line_search
-        }
-        super().__init__(
-            'int', 'powell', [
-                'local mot_float_type* model_parameters',
-                'void* data',
-                'local mot_float_type* powell_scratch'
-            ],
-            resource_filename('mot', 'data/opencl/powell.cl'),
-            var_replace_dict=params, **kwargs)
-
-    def get_kernel_data(self):
-        """Get the kernel data needed for this optimization routine to work."""
-        return {
-            'powell_scratch': LocalMemory(
-                'mot_float_type',  self._var_replace_dict['NMR_PARAMS']
-                                    + self._var_replace_dict['NMR_PARAMS']**2)
-        }
-
 
 
 class Subplex(SimpleCLLibraryFromFile):
@@ -389,8 +388,9 @@ class Subplex(SimpleCLLibraryFromFile):
         return {
             'subplex_scratch_float': LocalMemory(
                 'mot_float_type', 4 + self._var_replace_dict['NMR_PARAMS'] * 2
-                                    + self._var_replace_dict['MAX_SUBSPACE_LENGTH'] * 4
-                                    + (self._var_replace_dict['MAX_SUBSPACE_LENGTH']+1)**2),
+                                    + self._var_replace_dict['MAX_SUBSPACE_LENGTH'] * 2
+                                    + (self._var_replace_dict['MAX_SUBSPACE_LENGTH'] * 2
+                                       + self._var_replace_dict['MAX_SUBSPACE_LENGTH']+1)**2 + 1),
             'subplex_scratch_int': LocalMemory(
                 'int', 2 + self._var_replace_dict['NMR_PARAMS']
                          + (self._var_replace_dict['NMR_PARAMS'] // self._var_replace_dict['MIN_SUBSPACE_LENGTH'])),

@@ -223,23 +223,23 @@ int subplex_minimize(local mot_float_type* model_parameters, /* in: initial gues
 
     local mot_float_type* scratch_ind_float = subplex_scratch_float;
 
-    local mot_float_type* fdiff_max = scratch_ind_float; scratch_ind_float += 1;
-    local mot_float_type* step_size_scale = scratch_ind_float; scratch_ind_float += 1;
-    local mot_float_type* stepnorm = scratch_ind_float; scratch_ind_float += 1;
-    local mot_float_type* dxnorm = scratch_ind_float; scratch_ind_float += 1;
+    local mot_float_type* fdiff_max = scratch_ind_float;                    scratch_ind_float += 1;
+    local mot_float_type* step_size_scale = scratch_ind_float;              scratch_ind_float += 1;
+    local mot_float_type* stepnorm = scratch_ind_float;                     scratch_ind_float += 1;
+    local mot_float_type* dxnorm = scratch_ind_float;                       scratch_ind_float += 1;
 
-    local mot_float_type* xstep = scratch_ind_float; scratch_ind_float += %(NMR_PARAMS)r;
-    local mot_float_type* delta_x = scratch_ind_float; scratch_ind_float += %(NMR_PARAMS)r;
-    local mot_float_type* subspace_model_parameters = scratch_ind_float; scratch_ind_float += MAX_SUBSPACE_LENGTH;
-    local mot_float_type* subspace_xstep = scratch_ind_float; scratch_ind_float += MAX_SUBSPACE_LENGTH;
+    local mot_float_type* xstep = scratch_ind_float;                        scratch_ind_float += %(NMR_PARAMS)r;
+    local mot_float_type* delta_x = scratch_ind_float;                      scratch_ind_float += %(NMR_PARAMS)r;
+    local mot_float_type* subspace_model_parameters = scratch_ind_float;    scratch_ind_float += MAX_SUBSPACE_LENGTH;
+    local mot_float_type* subspace_xstep = scratch_ind_float;               scratch_ind_float += MAX_SUBSPACE_LENGTH;
     local mot_float_type* nms_scratch = scratch_ind_float;
 
     local int* scratch_ind_int = subplex_scratch_int;
 
-    local int* nmr_subspaces = scratch_ind_int; scratch_ind_int += 1;
-    local int* subspace_starting_index = scratch_ind_int; scratch_ind_int += 1;
+    local int* nmr_subspaces = scratch_ind_int;             scratch_ind_int += 1;
+    local int* subspace_starting_index = scratch_ind_int;   scratch_ind_int += 1;
     /* permuted indices of model_parameters sorted by decreasing magnitude |delta_x| */
-    local int* x_indices = scratch_ind_int; scratch_ind_int += %(NMR_PARAMS)r;
+    local int* x_indices = scratch_ind_int;                 scratch_ind_int += %(NMR_PARAMS)r;
     local int* subspace_dimensions = scratch_ind_int;
 
     int i, k;

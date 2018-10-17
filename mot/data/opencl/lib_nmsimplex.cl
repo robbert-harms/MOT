@@ -403,15 +403,15 @@ int lib_nmsimplex(
 	int ind_best;                /* vertex with smallest value */
 	int ind_second_worst;        /* vertex with next largest value */
 	int ind_worst;               /* vertex with largest value */
-    int i, j;        /** helper variables */
-	int itr;	      /* track the number of iterations */
+    int i, j;                   /** helper variables */
+	int itr;	                /* track the number of iterations */
 	double tmp;
-    double contraction_tolerance; /* used for the subplex convergence check */
 
 	mot_float_type reflection_fval;      /* value of function at reflection point */
 
-	local mot_float_type* centroid = scratch; /* centroid - coordinates, size [n] */
-	local mot_float_type* tmp_vertex = centroid + nmr_parameters; /* reflection - coordinates , size [n] */
+    local mot_float_type* contraction_tolerance = scratch; /* used for the subplex convergence check */
+	local mot_float_type* centroid = contraction_tolerance + 1; /* centroid - coordinates, size [n] */
+	local mot_float_type* tmp_vertex = centroid + nmr_parameters; /* simplex moving coordinates , size [n] */
     local mot_float_type* func_vals = tmp_vertex + nmr_parameters; /* value of function at each vertex, size [n + 1] */
     local mot_float_type* vertices = func_vals + (nmr_parameters + 1);   /* holds vertices of simplex, size [(n+1) * n] */
 
@@ -430,11 +430,14 @@ int lib_nmsimplex(
          */
         _libnms_find_worst_best_fvals(nmr_parameters, func_vals, &ind_worst, &ind_best);
 
-        for(i = 0; i < nmr_parameters; ++i){
-            contraction_tolerance += pown(vertices[ind_best * nmr_parameters + i]
-                                          - vertices[ind_worst * nmr_parameters + i], 2);
+        if(get_local_id(0) == 0){
+            for(i = 0; i < nmr_parameters; ++i){
+                *contraction_tolerance += pown(vertices[ind_best * nmr_parameters + i]
+                                              - vertices[ind_worst * nmr_parameters + i], 2);
+            }
+            *contraction_tolerance = sqrt(*contraction_tolerance) * psi;
         }
-        contraction_tolerance = sqrt(contraction_tolerance) * psi;
+        barrier(CLK_LOCAL_MEM_FENCE);
     }
 
 	/* begin the main loop of the minimization */
@@ -455,7 +458,7 @@ int lib_nmsimplex(
                 tmp += pown(vertices[ind_best * nmr_parameters + i] - vertices[ind_worst * nmr_parameters + i], 2);
             }
 
-            if(sqrt(tmp) < contraction_tolerance){
+            if(sqrt(tmp) < *contraction_tolerance){
                 return_code = 11;
                 break;
             }
