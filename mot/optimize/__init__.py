@@ -118,7 +118,7 @@ def get_minimizer_options(method):
     elif method == 'Subplex':
         return {'patience': 10,
                 'patience_nmsimplex': 100,
-                'alpha': 1.0, 'beta': 0.5, 'gamma': 2.0, 'delta': 0.5, 'scale': 1.0, 'psi': 0.001, 'omega': 0.01,
+                'alpha': 1.0, 'beta': 0.5, 'gamma': 2.0, 'delta': 0.5, 'scale': 1.0, 'psi': 0.0001, 'omega': 0.01,
                 'adaptive_scales': True,
                 'min_subspace_length': 'auto',
                 'max_subspace_length': 'auto'}
