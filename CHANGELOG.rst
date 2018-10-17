@@ -2,7 +2,7 @@
 Changelog
 *********
 
-v0.6.14 (2018-10-15)
+v0.6.14 (2018-10-17)
 ====================
 
 Added
@@ -13,6 +13,11 @@ Added
 Fixed
 -----
 - Bugfix in the CL multi-functions parser.
+
+Changed
+-------
+- Work on moving local variable declarations outside of non-kernel functions. This should in the future allow running MOT on LLVM OpenCL implementations. More work to be done.
+- Improved the default settings of the Subplex optimizer.
 
 
 v0.6.13 (2018-10-08)
