@@ -255,7 +255,7 @@ class LibNMSimplex(SimpleCLLibraryFromFile):
 class NMSimplex(SimpleCLLibrary):
 
     def __init__(self, function_name, nmr_parameters, patience=200, alpha=1.0, beta=0.5,
-                 gamma=2.0, delta=0.5, scale=1.0, adaptive_scales=True, **kwargs):
+                 gamma=2.0, delta=0.5, scale=0.1, adaptive_scales=True, **kwargs):
 
         self._nmr_parameters = nmr_parameters
 

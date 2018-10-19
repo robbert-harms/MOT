@@ -109,7 +109,7 @@ def get_minimizer_options(method):
 
     elif method == 'Nelder-Mead':
         return {'patience': 200,
-                'alpha': 1.0, 'beta': 0.5, 'gamma': 2.0, 'delta': 0.5, 'scale': 1.0,
+                'alpha': 1.0, 'beta': 0.5, 'gamma': 2.0, 'delta': 0.5, 'scale': 0.1,
                 'adaptive_scales': True}
 
     elif method == 'Levenberg-Marquardt':
