@@ -121,40 +121,44 @@ double lm_euclidian_norm(local const mot_float_type* const x, const int n);
 /******************************************************************************/
 /*  lmmin (main minimization routine)                                         */
 /******************************************************************************/
-int lmmin(local mot_float_type * const model_parameters, void* data){
+int lmmin(local mot_float_type * const model_parameters, void* data,
+          local mot_float_type* scratch_mot_float_type, local int* scratch_int){
 
     int j, i;
+    int nfev = 0;
+    bool outer_done_first = false;  /* loop flags, for monitoring */
+    bool inner_done_first = false;
+    bool inner_success; /* flag for loop control */
+    double sum;
+    mot_float_type delta = 0;
+    mot_float_type actred, dirder, prered, ratio, tmp;
 
-    local mot_float_type actred, dirder, prered, ratio, temp, temp1, temp2, temp3;
-    local mot_float_type xnorm, pnorm, fnorm, fnorm1, gnorm;
-    local double sum;
-    local mot_float_type lmpar;     /* Levenberg-Marquardt parameter */
-    local mot_float_type delta;
-    local int nfev;
-    local bool outer_done_first;  /* loop flags, for monitoring */
-    local bool inner_done_first;
-    local bool inner_success; /* flag for loop control */
+    local mot_float_type* scratch_ind = scratch_mot_float_type;
+
+    local mot_float_type* temp1 = scratch_ind++;
+    local mot_float_type* temp2 = scratch_ind++;
+    local mot_float_type* xnorm = scratch_ind++;
+    local mot_float_type* pnorm = scratch_ind++;
+    local mot_float_type* fnorm = scratch_ind++;
+    local mot_float_type* fnorm1 = scratch_ind++;
+    local mot_float_type* gnorm = scratch_ind++;
+    local mot_float_type* lmpar = scratch_ind++;
+    local mot_float_type* fvec = scratch_ind;  scratch_ind += %(NMR_OBSERVATIONS)s;
+    local mot_float_type* wf = scratch_ind;    scratch_ind += %(NMR_OBSERVATIONS)s;
+    local mot_float_type* diag = scratch_ind;  scratch_ind += %(NMR_PARAMS)s;
+    local mot_float_type* qtf = scratch_ind;   scratch_ind += %(NMR_PARAMS)s;
+    local mot_float_type* wa1 = scratch_ind;   scratch_ind += %(NMR_PARAMS)s;
+    local mot_float_type* wa2 = scratch_ind;   scratch_ind += %(NMR_PARAMS)s;
+    local mot_float_type* wa3 = scratch_ind;   scratch_ind += %(NMR_PARAMS)s;
+    local mot_float_type* fjac = scratch_ind;  scratch_ind += %(NMR_PARAMS)s * %(NMR_OBSERVATIONS)s;
+
+    local int* Pivot = scratch_int;
 
     if(get_local_id(0) == 0){
-        outer_done_first = false;
-        inner_done_first = false;
-        lmpar = 0;
-        delta = 0;
-        xnorm = 0;
-        nfev = 0;
+        *lmpar = 0;
+        *xnorm = 0;
     }
     barrier(CLK_LOCAL_MEM_FENCE);
-
-	/***  Allocate work space.  ***/
-    local mot_float_type fvec[%(NMR_OBSERVATIONS)s];  // objective function value per observation
-    local mot_float_type diag[%(NMR_PARAMS)s];
-    local mot_float_type qtf[%(NMR_PARAMS)s];
-    local mot_float_type wa1[%(NMR_PARAMS)s];
-    local mot_float_type wa2[%(NMR_PARAMS)s];
-    local mot_float_type wa3[%(NMR_PARAMS)s];
-    local mot_float_type wf[%(NMR_OBSERVATIONS)s];
-    local mot_float_type fjac[%(NMR_PARAMS)s * %(NMR_OBSERVATIONS)s];
-    local int Pivot[%(NMR_PARAMS)s];
 
     /* Initialize diag. */
     if (!SCALE_DIAG) {
@@ -168,16 +172,16 @@ int lmmin(local mot_float_type * const model_parameters, void* data){
     /***  Evaluate function at starting point and calculate norm.  ***/
 
     %(FUNCTION_NAME)s(model_parameters, data, fvec);
+    nfev = 1;
 
     if(get_local_id(0) == 0){
-        nfev = 1;
-        fnorm = lm_euclidian_norm(fvec, %(NMR_OBSERVATIONS)s);
+        *fnorm = lm_euclidian_norm(fvec, %(NMR_OBSERVATIONS)s);
     }
     barrier(CLK_LOCAL_MEM_FENCE);
 
-    if (!isfinite(fnorm)) {
+    if (!isfinite(*fnorm)) {
 	    return 10; /* nan */
-    } else if (fnorm <= LM_DWARF) {
+    } else if (*fnorm <= LM_DWARF) {
         return 1;
     }
 
@@ -218,15 +222,15 @@ int lmmin(local mot_float_type * const model_parameters, void* data){
             }
 
             for(j = 0; j < %(NMR_PARAMS)s; j++){
-                temp3 = fjac[j*%(NMR_OBSERVATIONS)s+j];
-                if (temp3 != 0) {
+                tmp = fjac[j*%(NMR_OBSERVATIONS)s+j];
+                if (tmp != 0) {
                     sum = 0;
                     for (i = j; i < %(NMR_OBSERVATIONS)s; i++){
                         sum += fjac[j*%(NMR_OBSERVATIONS)s+i] * wf[i];
                     }
-                    temp = -sum / temp3;
+                    tmp = -sum / tmp;
                     for (i = j; i < %(NMR_OBSERVATIONS)s; i++){
-                        wf[i] += fjac[j*%(NMR_OBSERVATIONS)s+i] * temp;
+                        wf[i] += fjac[j*%(NMR_OBSERVATIONS)s+i] * tmp;
                     }
                 }
                 fjac[j*%(NMR_OBSERVATIONS)s+j] = wa1[j];
@@ -234,7 +238,7 @@ int lmmin(local mot_float_type * const model_parameters, void* data){
             }
 
             /**  Compute norm of scaled gradient and detect degeneracy. **/
-            gnorm = 0;
+            *gnorm = 0;
             for (j = 0; j < %(NMR_PARAMS)s; j++) {
                 if(wa2[Pivot[j]] == 0){
                 }
@@ -243,13 +247,13 @@ int lmmin(local mot_float_type * const model_parameters, void* data){
                     for (i = 0; i <= j; i++){
                         sum += fjac[j*%(NMR_OBSERVATIONS)s+i] * qtf[i];
                     }
-                    gnorm = max((double)gnorm, fabs(sum / wa2[Pivot[j]] / fnorm));
+                    *gnorm = max((double)*gnorm, fabs(sum / wa2[Pivot[j]] / *fnorm));
                 }
             }
         }
         barrier(CLK_LOCAL_MEM_FENCE);
 
-        if (gnorm <= GTOL) {
+        if (*gnorm <= GTOL) {
             return 5;
         }
 
@@ -268,20 +272,20 @@ int lmmin(local mot_float_type * const model_parameters, void* data){
                     for (j = 0; j < %(NMR_PARAMS)s; j++){
                         wa3[j] = diag[j] * model_parameters[j];
                     }
-                    xnorm = lm_euclidian_norm(wa3, %(NMR_PARAMS)s);
+                    *xnorm = lm_euclidian_norm(wa3, %(NMR_PARAMS)s);
                 } else {
-                    xnorm = lm_euclidian_norm(model_parameters, %(NMR_PARAMS)s);
+                    *xnorm = lm_euclidian_norm(model_parameters, %(NMR_PARAMS)s);
                 }
             }
             barrier(CLK_LOCAL_MEM_FENCE);
 
-            if(!isfinite(xnorm)){
+            if(!isfinite(*xnorm)){
                 return 10;
             }
 
             /* initialize the step bound delta. */
-            if(xnorm){
-                delta = STEP_BOUND * xnorm;
+            if(*xnorm){
+                delta = STEP_BOUND * *xnorm;
             }
             else{
                 delta = STEP_BOUND;
@@ -298,51 +302,49 @@ int lmmin(local mot_float_type * const model_parameters, void* data){
         }
 
         /** The inner loop. **/
-        if(get_local_id(0) == 0){
-            inner_done_first = false;
-        }
-        barrier(CLK_LOCAL_MEM_FENCE);
+        inner_done_first = false;
         do {
             if(get_local_id(0) == 0){
                 /** Determine the Levenberg-Marquardt parameter. **/
-                lm_lmpar(%(NMR_PARAMS)s, fjac, %(NMR_OBSERVATIONS)s, Pivot, diag, qtf, delta, &lmpar, wa1, wa2, wf, wa3 );
+                lm_lmpar(%(NMR_PARAMS)s, fjac, %(NMR_OBSERVATIONS)s, Pivot, diag, qtf, delta, lmpar, wa1, wa2, wf, wa3);
                 /* used return values are fjac (partly), lmpar, wa1=x, wa3=diag*x */
 
                 /* Predict scaled reduction */
-                pnorm = lm_euclidian_norm(wa3, %(NMR_PARAMS)s);
+                *pnorm = lm_euclidian_norm(wa3, %(NMR_PARAMS)s);
             }
             barrier(CLK_LOCAL_MEM_FENCE);
 
-			if(!isfinite(pnorm)) {
+			if(!isfinite(*pnorm)) {
 				return 10;
 			}
 
 			if(get_local_id(0) == 0){
-                temp2 = lmpar * ((pnorm / fnorm)*(pnorm / fnorm));
+                *temp2 = *lmpar * ((*pnorm / *fnorm)*(*pnorm / *fnorm));
                 for (j = 0; j < %(NMR_PARAMS)s; j++) {
                     wa3[j] = 0;
                     for (i = 0; i <= j; i++){
                         wa3[i] -= fjac[j*%(NMR_OBSERVATIONS)s+i] * wa1[Pivot[j]];
                     }
                 }
-                temp1 = lm_euclidian_norm(wa3, %(NMR_PARAMS)s) / fnorm;
-                temp1 *= temp1;
+                *temp1 = lm_euclidian_norm(wa3, %(NMR_PARAMS)s) / *fnorm;
+                *temp1 *= *temp1;
             }
             barrier(CLK_LOCAL_MEM_FENCE);
 
-            if (!isfinite(temp1)){
+            if (!isfinite(*temp1)){
                 return 10;
             }
 
+
+            prered = *temp1 + 2 * *temp2;
+            dirder = -*temp1 + *temp2; /* scaled directional derivative */
+
+            /* At first call, adjust the initial step bound. */
+            if (!outer_done_first && !inner_done_first && *pnorm < delta ){
+                delta = *pnorm;
+            }
+
             if(get_local_id(0) == 0){
-                prered = temp1 + 2 * temp2;
-                dirder = -temp1 + temp2; /* scaled directional derivative */
-
-                /* At first call, adjust the initial step bound. */
-                if (!outer_done_first && !inner_done_first && pnorm < delta ){
-                    delta = pnorm;
-                }
-
                 /** Evaluate the function at x + p. **/
                 for (j = 0; j < %(NMR_PARAMS)s; j++){
                     wa2[j] = model_parameters[j] - wa1[j];
@@ -351,49 +353,54 @@ int lmmin(local mot_float_type * const model_parameters, void* data){
             barrier(CLK_LOCAL_MEM_FENCE);
 
             %(FUNCTION_NAME)s(wa2, data, wf);
+            ++nfev;
 
             if(get_local_id(0) == 0){
-                ++nfev;
-                fnorm1 = lm_euclidian_norm(wf, %(NMR_OBSERVATIONS)s);
+                *fnorm1 = lm_euclidian_norm(wf, %(NMR_OBSERVATIONS)s);
                 // exceptionally, for this norm we do not test for infinity
                 // because we can deal with it without terminating.
 
 			    /** Evaluate the scaled reduction. **/
+            }
+            barrier(CLK_LOCAL_MEM_FENCE);
 
-                /* actual scaled reduction (supports even the case fnorm1=infty) */
-                if (0.1 * fnorm1 < fnorm)
-                    actred = 1 - ((fnorm1/fnorm) * (fnorm1/fnorm));
+            /* actual scaled reduction (supports even the case fnorm1=infty) */
+            if (0.1 * *fnorm1 < *fnorm)
+                actred = 1 - ((*fnorm1 / *fnorm) * (*fnorm1 / *fnorm));
+            else
+                actred = -1;
+
+            /* Ratio of actual to predicted reduction */
+            ratio = 0;
+            if(prered){
+                ratio = actred / prered;
+            }
+
+
+            /* Update the step bound */
+            if (ratio <= 0.25) {
+                if (actred >= 0)
+                    tmp = 0.5;
                 else
-                    actred = -1;
+                    tmp = 0.5 * dirder / (dirder + 0.5 * actred);
+                if (0.1 * *fnorm1 >= *fnorm || tmp < 0.1)
+                    tmp = 0.1;
+                delta = tmp * min(delta, *pnorm / 0.1);
 
-                /* Ratio of actual to predicted reduction */
-                ratio = 0;
-                if(prered){
-                    ratio = actred / prered;
+                if(get_local_id(0) == 0){
+                    *lmpar /= tmp;
                 }
+            } else if (*lmpar == 0 || ratio >= 0.75) {
+                delta = 2 * *pnorm;
 
-                /* Update the step bound */
-                if (ratio <= 0.25) {
-                    if (actred >= 0)
-                        temp = 0.5;
-                    else
-                        temp = 0.5 * dirder / (dirder + 0.5 * actred);
-                    if (0.1 * fnorm1 >= fnorm || temp < 0.1)
-                        temp = 0.1;
-                    delta = temp * min(delta, pnorm / 0.1);
-                    lmpar /= temp;
-                } else if (lmpar == 0 || ratio >= 0.75) {
-                    delta = 2 * pnorm;
-                    lmpar *= 0.5;
+                if(get_local_id(0) == 0){
+                    *lmpar *= 0.5;
                 }
             }
             barrier(CLK_LOCAL_MEM_FENCE);
 
             /**  On success, update solution, and test for convergence. **/
-			if(get_local_id(0) == 0){
-			    inner_success = ratio >= 1e-4;
-			}
-			barrier(CLK_LOCAL_MEM_FENCE);
+			inner_success = ratio >= 1e-4;
 
             if ( inner_success ) {
 
@@ -412,27 +419,27 @@ int lmmin(local mot_float_type * const model_parameters, void* data){
                     for (i = 0; i < %(NMR_OBSERVATIONS)s; i++){
                         fvec[i] = wf[i];
                     }
-                    xnorm = lm_euclidian_norm(wa2, %(NMR_PARAMS)s);
+                    *xnorm = lm_euclidian_norm(wa2, %(NMR_PARAMS)s);
                 }
                 barrier(CLK_LOCAL_MEM_FENCE);
 
-                if (!isfinite(xnorm)){
+                if (!isfinite(*xnorm)){
                     return 10; /* nan */
                 }
 
                 if(get_local_id(0) == 0){
-                    fnorm = fnorm1;
+                    *fnorm = *fnorm1;
                 }
                 barrier(CLK_LOCAL_MEM_FENCE);
             }
 
             /* convergence tests */
-            if (fnorm <= LM_DWARF){
+            if (*fnorm <= LM_DWARF){
                 return 1; /* success: sum of squares almost zero */
             }
             /* test two criteria (both may be fulfilled) */
             if (fabs(actred) <= FTOL && prered <= FTOL && ratio <= 2){
-				if (delta <= XTOL * xnorm){
+				if (delta <= XTOL * *xnorm){
 				    return 4; /* success: sum of squares almost stable */
 				}
 				return 2; /* success: x almost stable */
@@ -445,24 +452,17 @@ int lmmin(local mot_float_type * const model_parameters, void* data){
             if ( fabs(actred) <= LM_MACHEP && prered <= LM_MACHEP && ratio <= 2 ){
                 return 7;
             }
-            if ( delta <= LM_MACHEP * xnorm ){
+            if ( delta <= LM_MACHEP * *xnorm ){
                 return 8;
             }
-            if ( gnorm <= LM_MACHEP){
+            if ( *gnorm <= LM_MACHEP){
                 return 9;
             }
 
 			/** End of the inner loop. Repeat if iteration unsuccessful. **/
-			if(get_local_id(0) == 0){
-                inner_done_first = true;
-            }
-            barrier(CLK_LOCAL_MEM_FENCE);
+            inner_done_first = true;
         } while ( !inner_success );
-
-        if(get_local_id(0) == 0){
-            outer_done_first = true;
-        }
-        barrier(CLK_LOCAL_MEM_FENCE);
+        outer_done_first = true;
     };/***  End of the loop. ***/
 } /*** lmmin. ***/
 

@@ -334,9 +334,6 @@ def _minimize_levenberg_marquardt(func, x0, nmr_observations, cl_runtime_info, d
     if nmr_observations < x0.shape[1]:
         raise ValueError('The number of instances per problem must be greater than the number of parameters')
 
-    kernel_data = {'model_parameters': Array(x0, ctype='mot_float_type', mode='rw'),
-                   'data': data}
-
     eval_func = SimpleCLFunction.from_string('''
         void evaluate(local mot_float_type* x, void* data, local mot_float_type* result){
             ''' + func.get_cl_function_name() + '''(x, data, result);
@@ -345,6 +342,10 @@ def _minimize_levenberg_marquardt(func, x0, nmr_observations, cl_runtime_info, d
 
     optimizer_func = LevenbergMarquardt(eval_func, nmr_parameters, nmr_observations,
                                         jacobian_func=jacobian_func, **options)
+
+    kernel_data = {'model_parameters': Array(x0, ctype='mot_float_type', mode='rw'),
+                   'data': data}
+    kernel_data.update(optimizer_func.get_kernel_data())
 
     return_code = optimizer_func.evaluate(
         kernel_data, nmr_problems,

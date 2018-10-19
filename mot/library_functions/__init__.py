@@ -1,7 +1,7 @@
 import os
 
 from mot.lib.cl_function import SimpleCLFunction, SimpleCLCodeObject
-from mot.lib.kernel_data import LocalMemory
+from mot.lib.kernel_data import LocalMemory, Struct
 from mot.library_functions.base import SimpleCLLibrary, SimpleCLLibraryFromFile, CLLibrary
 from pkg_resources import resource_filename
 from mot.library_functions.unity import log1pmx
@@ -217,7 +217,7 @@ class Powell(SimpleCLLibraryFromFile):
             'int', 'powell', [
                 'local mot_float_type* model_parameters',
                 'void* data',
-                'local mot_float_type* powell_scratch'
+                'local mot_float_type* scratch_mot_float_type'
             ],
             resource_filename('mot', 'data/opencl/powell.cl'),
             var_replace_dict=params, **kwargs)
@@ -225,9 +225,8 @@ class Powell(SimpleCLLibraryFromFile):
     def get_kernel_data(self):
         """Get the kernel data needed for this optimization routine to work."""
         return {
-            'powell_scratch': LocalMemory(
-                'mot_float_type',  self._var_replace_dict['NMR_PARAMS']
-                                    + self._var_replace_dict['NMR_PARAMS']**2)
+            'scratch_mot_float_type': LocalMemory(
+                'mot_float_type',  3 * self._var_replace_dict['NMR_PARAMS'] + self._var_replace_dict['NMR_PARAMS']**2)
         }
 
 
@@ -435,8 +434,10 @@ class LevenbergMarquardt(SimpleCLLibraryFromFile):
         }
 
         super().__init__(
-            'int', 'lmmin', [('local mot_float_type* const', 'model_parameters'),
-                             ('void*', 'data')],
+            'int', 'lmmin', ['local mot_float_type* const model_parameters',
+                             'void* data',
+                             'mot_float_type* scratch_mot_float_type',
+                             'int* scratch_int'],
             resource_filename('mot', 'data/opencl/lmmin.cl'),
             var_replace_dict=var_replace_dict, **kwargs)
 
@@ -459,9 +460,9 @@ class LevenbergMarquardt(SimpleCLLibraryFromFile):
                  *   fjac: (nmr_parameters, nmr_observations), the memory location for the Jacobian
                  */
                 int i, j;
-                local mot_float_type temp, step;
+                mot_float_type temp, step;
                 
-                mot_float_type EPS = 30 * MOT_EPSILON;
+                const mot_float_type EPS = 30 * MOT_EPSILON;
                 
                 for (j = 0; j < %(NMR_PARAMS)s; j++) {
                     if(get_local_id(0) == 0){
@@ -483,3 +484,14 @@ class LevenbergMarquardt(SimpleCLLibraryFromFile):
                 }
             }
         ''' % dict(FUNCTION_NAME=function_name, NMR_PARAMS=nmr_params, NMR_OBSERVATIONS=nmr_observations))
+
+    def get_kernel_data(self):
+        """Get the kernel data needed for this optimization routine to work."""
+        return {
+            'scratch_mot_float_type': LocalMemory(
+                'mot_float_type', 9 +
+                                  2 * self._var_replace_dict['NMR_OBSERVATIONS'] +
+                                  5 * self._var_replace_dict['NMR_PARAMS'] +
+                                  self._var_replace_dict['NMR_PARAMS'] * self._var_replace_dict['NMR_OBSERVATIONS']),
+            'scratch_int': LocalMemory('int', self._var_replace_dict['NMR_PARAMS'])
+        }
