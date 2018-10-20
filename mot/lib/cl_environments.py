@@ -244,7 +244,7 @@ class CLEnvironmentFactory:
         return runtime_list
 
     @staticmethod
-    def smart_device_selection():
+    def smart_device_selection(preferred_device_type=None):
         """Get a list of device environments that is suitable for use in MOT.
 
         Basically this gets the total list of devices using all_devices() and applies a filter on it.
@@ -255,10 +255,13 @@ class CLEnvironmentFactory:
 
         More things may be implemented in the future.
 
+        Args:
+            preferred_device_type (str): the preferred device type, one of 'CPU', 'GPU' or 'APU'.
+
         Returns:
             list of CLEnvironment: List with the CL device environments.
         """
-        cl_environments = CLEnvironmentFactory.all_devices()
+        cl_environments = CLEnvironmentFactory.all_devices(cl_device_type=preferred_device_type)
         platform_names = [env.platform.name for env in cl_environments]
         has_amd_pro_platform = any('AMD Accelerated Parallel Processing' in name for name in platform_names)
 

@@ -115,7 +115,7 @@ class AbstractSampler:
         kernel_data = self._get_kernel_data(nmr_samples, thinning, return_output)
         sample_func = self._get_compute_func(nmr_samples, thinning, return_output)
         sample_func.evaluate(kernel_data, self._nmr_problems,
-                             use_local_reduction=all(env.is_gpu for env in self._cl_runtime_info.get_cl_environments()),
+                             use_local_reduction=all(env.is_gpu for env in self._cl_runtime_info.cl_environments),
                              cl_runtime_info=self._cl_runtime_info)
         self._sampling_index += nmr_samples * thinning
         self._readout_kernel_data(kernel_data)
@@ -325,7 +325,7 @@ class AbstractSampler:
         self._logger.info('We will use a {} precision float type for the calculations.'.format(
             'double' if self._cl_runtime_info.double_precision else 'single'))
 
-        for env in self._cl_runtime_info.get_cl_environments():
+        for env in self._cl_runtime_info.cl_environments:
             self._logger.info('Using device \'{}\'.'.format(str(env)))
 
         self._logger.info('Using compile flags: {}'.format(self._cl_runtime_info.get_compile_flags()))

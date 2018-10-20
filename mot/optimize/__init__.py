@@ -179,7 +179,7 @@ def _minimize_powell(func, x0, cl_runtime_info, data=None, options=None):
 
     return_code = optimizer_func.evaluate(
         kernel_data, nmr_problems,
-        use_local_reduction=all(env.is_gpu for env in cl_runtime_info.get_cl_environments()),
+        use_local_reduction=all(env.is_gpu for env in cl_runtime_info.cl_environments),
         cl_runtime_info=cl_runtime_info)
 
     return OptimizeResults({'x': kernel_data['model_parameters'].get_data(),
@@ -243,7 +243,7 @@ def _minimize_nmsimplex(func, x0, cl_runtime_info, data=None, options=None):
 
     return_code = optimizer_func.evaluate(
         kernel_data, nmr_problems,
-        use_local_reduction=all(env.is_gpu for env in cl_runtime_info.get_cl_environments()),
+        use_local_reduction=all(env.is_gpu for env in cl_runtime_info.cl_environments),
         cl_runtime_info=cl_runtime_info)
 
     return OptimizeResults({'x': kernel_data['model_parameters'].get_data(),
@@ -317,7 +317,7 @@ def _minimize_subplex(func, x0, cl_runtime_info, data=None, options=None):
 
     return_code = optimizer_func.evaluate(
         kernel_data, nmr_problems,
-        use_local_reduction=all(env.is_gpu for env in cl_runtime_info.get_cl_environments()),
+        use_local_reduction=all(env.is_gpu for env in cl_runtime_info.cl_environments),
         cl_runtime_info=cl_runtime_info)
 
     return OptimizeResults({'x': kernel_data['model_parameters'].get_data(),
@@ -349,7 +349,7 @@ def _minimize_levenberg_marquardt(func, x0, nmr_observations, cl_runtime_info, d
 
     return_code = optimizer_func.evaluate(
         kernel_data, nmr_problems,
-        use_local_reduction=all(env.is_gpu for env in cl_runtime_info.get_cl_environments()),
+        use_local_reduction=all(env.is_gpu for env in cl_runtime_info.cl_environments),
         cl_runtime_info=cl_runtime_info)
 
     return OptimizeResults({'x': kernel_data['model_parameters'].get_data(),

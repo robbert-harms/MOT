@@ -12,7 +12,6 @@ from textwrap import dedent, indent
 
 from mot.configuration import CLRuntimeInfo
 from mot.lib.kernel_data import KernelData, Scalar, Array, Zeros
-from mot.lib.load_balance_strategies import Worker
 from mot.lib.utils import is_scalar, get_float_type_def, split_cl_function
 
 __author__ = 'Robbert Harms'
@@ -407,6 +406,7 @@ def apply_cl_function(cl_function, kernel_data, nmr_instances, use_local_reducti
         cl_runtime_info (mot.configuration.CLRuntimeInfo): the runtime information
     """
     cl_runtime_info = cl_runtime_info or CLRuntimeInfo()
+    cl_environments = cl_runtime_info.cl_environments
 
     for param in cl_function.get_parameters():
         if param.name not in kernel_data:
@@ -418,23 +418,34 @@ def apply_cl_function(cl_function, kernel_data, nmr_instances, use_local_reducti
     if cl_function.get_return_type() != 'void':
         kernel_data['_results'] = Zeros((nmr_instances,), cl_function.get_return_type())
 
-    workers = []
-    for cl_environment in cl_runtime_info.get_cl_environments():
-        workers.append(_ProcedureWorker(cl_environment, cl_runtime_info.get_compile_flags(),
-                                        cl_function,
-                                        kernel_data, cl_runtime_info.double_precision, use_local_reduction))
+    items_per_worker = [nmr_instances // len(cl_environments) for _ in range(len(cl_environments) - 1)]
+    items_per_worker.append(nmr_instances - sum(items_per_worker))
 
-    cl_runtime_info.load_balancer.process(workers, nmr_instances)
+    workers = []
+    offset = 0
+    for ind, cl_environment in enumerate(cl_environments):
+        worker = _ProcedureWorker(cl_environment, cl_runtime_info.get_compile_flags(),
+                                  cl_function, kernel_data, cl_runtime_info.double_precision, use_local_reduction)
+        workers.append(worker)
+        worker.calculate(offset, offset + items_per_worker[ind])
+        offset += items_per_worker[ind]
+        worker.cl_queue.flush()
+
+    for worker in workers:
+        worker.cl_queue.finish()
 
     if cl_function.get_return_type() != 'void':
         return kernel_data['_results'].get_data()
 
 
-class _ProcedureWorker(Worker):
+class _ProcedureWorker:
 
     def __init__(self, cl_environment, compile_flags, cl_function,
                  kernel_data, double_precision, use_local_reduction):
-        super().__init__(cl_environment)
+
+        self._cl_environment = cl_environment
+        self._cl_context = cl_environment.context
+        self._cl_queue = cl_environment.queue
         self._cl_function = cl_function
         self._kernel_data = OrderedDict(sorted(kernel_data.items()))
         self._double_precision = double_precision
@@ -457,6 +468,26 @@ class _ProcedureWorker(Worker):
 
         self._kernel_inputs = {name: data.get_kernel_inputs(self._cl_context, self._workgroup_size)
                                for name, data in self._kernel_data.items()}
+
+    @property
+    def cl_environment(self):
+        """Get the used CL environment.
+
+        Returns:
+            cl_environment (CLEnvironment): The cl environment to use for calculations.
+        """
+        return self._cl_environment
+
+    @property
+    def cl_queue(self):
+        """Get the queue this worker is using for its GPU computations.
+
+        The load balancing routine will use this queue to flush and finish the computations.
+
+        Returns:
+            pyopencl queues: the queue used by this worker
+        """
+        return self._cl_queue
 
     def calculate(self, range_start, range_end):
         nmr_problems = range_end - range_start
