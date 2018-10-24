@@ -32,18 +32,8 @@ _config = {
     'cl_environments': CLEnvironmentFactory.smart_device_selection('GPU'),
     'compile_flags': ['-cl-single-precision-constant', '-cl-denorms-are-zero', '-cl-mad-enable', '-cl-no-signed-zeros'],
     'compile_flags_to_disable_in_double_precision': ['-cl-single-precision-constant'],
-    'ignore_kernel_compile_warnings': True,
     'double_precision': False
 }
-
-
-def should_ignore_kernel_compile_warnings():
-    """Check if we should ignore kernel compile warnings or not.
-
-    Returns:
-        boolean: True if we should ignore the kernel compile warnings, false if not.
-    """
-    return _config['ignore_kernel_compile_warnings']
 
 
 def get_cl_environments():

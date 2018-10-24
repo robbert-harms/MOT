@@ -491,9 +491,6 @@ class _ProcedureWorker:
         Returns:
             cl.Program: a compiled CL kernel
         """
-        from mot import configuration
-        if configuration.should_ignore_kernel_compile_warnings():
-            warnings.simplefilter("ignore")
         return cl.Program(self._cl_context, kernel_source).build(' '.join(compile_flags))
 
     def _get_kernel_source(self):
