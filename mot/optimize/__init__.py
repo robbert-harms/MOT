@@ -1,6 +1,6 @@
 from mot.lib.cl_function import SimpleCLFunction
 from mot.configuration import CLRuntimeInfo
-from mot.lib.kernel_data import Array, Zeros, LocalMemory
+from mot.lib.kernel_data import Array
 from mot.library_functions import Powell, Subplex, NMSimplex, LevenbergMarquardt
 from mot.optimize.base import OptimizeResults
 
@@ -13,7 +13,9 @@ __licence__ = 'LGPL v3'
 
 def minimize(func, x0, data=None, method=None, nmr_observations=None, cl_runtime_info=None, options=None,
              jacobian_func=None):
-    """Minimization of scalar function of one or more variables.
+    """Minimization of one or more variables.
+
+    For an easy wrapper of function maximization, see :func:`maximize`.
 
     Args:
         func (mot.lib.cl_function.CLFunction): A CL function with the signature:
@@ -91,6 +93,59 @@ def minimize(func, x0, data=None, method=None, nmr_observations=None, cl_runtime
     elif method == 'Subplex':
         return _minimize_subplex(func, x0, cl_runtime_info, data, options)
     raise ValueError('Could not find the specified method "{}".'.format(method))
+
+
+def maximize(func, x0, nmr_observations, **kwargs):
+    """Maximization of a function.
+
+    This wraps the objective function to take the negative of the computed values and passes it then on to one
+    of the minimization routines.
+
+    Args:
+        func (mot.lib.cl_function.CLFunction): A CL function with the signature:
+
+            .. code-block:: c
+
+                double <func_name>(local const mot_float_type* const x,
+                                   void* data,
+                                   local mot_float_type* objective_list);
+
+            The objective list needs to be filled when the provided pointer is not null. It should contain
+            the function values for each observation. This list is used by non-linear least-squares routines,
+            and will be squared by the least-square optimizer. This is only used by the ``Levenberg-Marquardt`` routine.
+
+        x0 (ndarray): Initial guess. Array of real elements of size (n, p), for 'n' problems and 'p'
+            independent variables.
+        nmr_observations (int): the number of observations returned by the optimization function.
+        **kwargs: see :func:`minimize`.
+    """
+    wrapped_func = SimpleCLFunction.from_string('''
+        double _negate_''' + func.get_cl_function_name() + '''(
+                local mot_float_type* x,
+                void* data, 
+                local mot_float_type* objective_list){
+
+            double return_val = ''' + func.get_cl_function_name() + '''(x, data, objective_list);    
+
+            if(objective_list){
+                const uint nmr_observations = ''' + str(nmr_observations) + ''';
+                uint local_id = get_local_id(0);
+                uint workgroup_size = get_local_size(0);
+
+                uint observation_ind;
+                for(uint i = 0; i < (nmr_observations + workgroup_size - 1) / workgroup_size; i++){
+                    observation_ind = i * workgroup_size + local_id;
+
+                    if(observation_ind < nmr_observations){
+                        objective_list[observation_ind] *= -1;    
+                    }
+                }
+            }
+            return -return_val;
+        }
+    ''', dependencies=[func])
+    kwargs['nmr_observations'] = nmr_observations
+    return minimize(wrapped_func, x0, **kwargs)
 
 
 def get_minimizer_options(method):
