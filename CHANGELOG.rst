@@ -2,6 +2,22 @@
 Changelog
 *********
 
+v0.7.0 (2018-10-24)
+====================
+By removing all local variable out of non-kernel functions, this version should now be compatible with POCL (tested with version 1.1).
+
+Changed
+-------
+- Updates to the samplers. Adds initial t-walk sampler implementation.
+
+Other
+-----
+- Removed warning filter in the CL function.
+- Refactored the constructor of the cl function parameter.
+- Removed the CL load balancing. It was not very useful.
+- Modified the Nelder-Mead simplex default scales for slightly better fits.
+
+
 v0.6.14 (2018-10-17)
 ====================
 
