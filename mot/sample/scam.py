@@ -104,7 +104,7 @@ class SingleComponentAdaptiveMetropolis(AbstractRWMSampler):
             }
             
             void _updateProposalState(_mcmc_method_data* method_data, ulong current_iteration, 
-                                      local mot_float_type* current_position){    
+                                      global mot_float_type* current_position){    
                 for(uint k = 0; k < ''' + str(self._nmr_params) + '''; k++){
                     _update_chain_statistics(current_iteration, current_position[k],
                                              method_data->parameter_means + k, 

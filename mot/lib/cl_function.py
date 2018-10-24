@@ -394,11 +394,13 @@ def apply_cl_function(cl_function, kernel_data, nmr_instances, use_local_reducti
     items_per_worker.append(nmr_instances - sum(items_per_worker))
 
     workers = []
-    offset = 0
     for ind, cl_environment in enumerate(cl_environments):
         worker = _ProcedureWorker(cl_environment, cl_runtime_info.get_compile_flags(),
                                   cl_function, kernel_data, cl_runtime_info.double_precision, use_local_reduction)
         workers.append(worker)
+
+    offset = 0
+    for ind, worker in enumerate(workers):
         worker.calculate(offset, offset + items_per_worker[ind])
         offset += items_per_worker[ind]
         worker.cl_queue.flush()

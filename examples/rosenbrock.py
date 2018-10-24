@@ -50,7 +50,7 @@ def get_log_prior_function(nmr_parameters):
     return SimpleCLFunction.from_string('''
         double rosenbrock_logPrior(local const mot_float_type* const x, void* data){
             for(uint i = 0; i < ''' + str(nmr_parameters) + '''; i++){
-                if(x[i] < -10 || x[i] > 10){
+                if(fabs(x[i]) > 10){
                     return log(0.0);
                 }
             }

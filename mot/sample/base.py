@@ -6,7 +6,7 @@ from mot.configuration import CLRuntimeInfo
 from mot.library_functions import Rand123
 from mot.lib.utils import split_in_batches
 from mot.lib.kernel_data import Scalar, Array, \
-    Zeros, Struct
+    Zeros, Struct, LocalMemory
 import numpy as np
 
 __author__ = 'Robbert Harms'
@@ -52,11 +52,50 @@ class AbstractSampler:
         self._nmr_problems = self._x0.shape[0]
         self._nmr_params = self._x0.shape[1]
         self._sampling_index = 0
-        self._current_chain_position = np.require(np.copy(self._x0),
-                                                  requirements=['C', 'A', 'O', 'W'],
-                                                  dtype=self._cl_runtime_info.mot_float_dtype)
+
+        float_type = self._cl_runtime_info.mot_float_dtype
+        self._current_chain_position = np.require(np.copy(self._x0), requirements='CAOW', dtype=float_type)
+        self._current_log_likelihood = np.zeros(self._nmr_problems, dtype=float_type)
+        self._current_log_prior = np.zeros(self._nmr_problems, dtype=float_type)
         self._rng_state = np.random.uniform(low=np.iinfo(np.uint32).min, high=np.iinfo(np.uint32).max + 1,
                                             size=(self._nmr_problems, 6)).astype(np.uint32)
+
+        self._initialize_likelihood_prior(self._current_chain_position, self._current_log_likelihood,
+                                          self._current_log_prior)
+
+    def _get_mcmc_method_kernel_data(self):
+        """Get the kernel data specific for the implemented method.
+
+        This will be provided as a void pointer to the implementing MCMC method.
+
+        Returns:
+            mot.lib.kernel_data.KernelData: the kernel data object
+        """
+        raise NotImplementedError()
+
+    def _get_state_update_cl_func(self, nmr_samples, thinning, return_output):
+        """Get the function that can advance the sampler state.
+
+        This function is called by the MCMC sampler to draw and return a new sample.
+
+        Args:
+            nmr_samples (int): the number of samples we will draw
+            thinning (int): the thinning factor we want to use
+            return_output (boolean): if the kernel should return output
+
+        Returns:
+            str: a CL function with signature:
+
+            .. code-block:: c
+                void _advanceSampler(void* method_data,
+                                     void* data,
+                                     ulong current_iteration,
+                                     void* rng_data,
+                                     global mot_float_type* current_position,
+                                     global mot_float_type* current_log_likelihood,
+                                     global mot_float_type* current_log_prior);
+        """
+        raise NotImplementedError()
 
     def set_cl_runtime_info(self, cl_runtime_info):
         """Update the CL runtime information.
@@ -118,11 +157,50 @@ class AbstractSampler:
                              use_local_reduction=all(env.is_gpu for env in self._cl_runtime_info.cl_environments),
                              cl_runtime_info=self._cl_runtime_info)
         self._sampling_index += nmr_samples * thinning
-        self._readout_kernel_data(kernel_data)
         if return_output:
             return (kernel_data['samples'].get_data(),
                     kernel_data['log_likelihoods'].get_data(),
                     kernel_data['log_priors'].get_data())
+
+    def _initialize_likelihood_prior(self, positions, log_likelihoods, log_priors):
+        """Initialize the likelihood and the prior using the given positions.
+
+        This is a general method for computing the log likelihoods and log priors for given positions.
+
+        Subclasses can use this to instantiate secondary chains as well.
+        """
+        func = SimpleCLFunction.from_string('''
+            void compute(global mot_float_type* chain_position,
+                         global mot_float_type* log_likelihood,
+                         global mot_float_type* log_prior,
+                         local mot_float_type* x_tmp,
+                         void* data){
+                
+                bool is_first_work_item = get_local_id(0) == 0;
+    
+                if(is_first_work_item){
+                    for(uint i = 0; i < ''' + str(self._nmr_params) + '''; i++){
+                        x_tmp[i] = chain_position[i];
+                    }
+                    *log_prior = _computeLogPrior(x_tmp, data);
+                }
+                barrier(CLK_LOCAL_MEM_FENCE);
+                    
+                *log_likelihood = _computeLogLikelihood(x_tmp, data);
+            }
+        ''', dependencies=[self._get_log_prior_cl_func(), self._get_log_likelihood_cl_func()])
+
+        kernel_data = {
+            'chain_position': Array(positions, 'mot_float_type', mode='rw', ensure_zero_copy=True),
+            'log_likelihood': Array(log_likelihoods, 'mot_float_type', mode='rw', ensure_zero_copy=True),
+            'log_prior': Array(log_priors, 'mot_float_type', mode='rw', ensure_zero_copy=True),
+            'x_tmp': LocalMemory('mot_float_type', self._nmr_params),
+            'data': self._data
+        }
+
+        func.evaluate(kernel_data, self._nmr_problems,
+                      use_local_reduction=all(env.is_gpu for env in self._cl_runtime_info.cl_environments),
+                      cl_runtime_info=self._cl_runtime_info)
 
     def _get_kernel_data(self, nmr_samples, thinning, return_output):
         """Get the kernel data we will input to the MCMC sampler.
@@ -135,6 +213,8 @@ class AbstractSampler:
         * iteration_offset: the current sample index, that is, the offset to the given number of iterations
         * rng_state: the random number generator state
         * current_chain_position: the current position of the sampled chain
+        * current_log_likelihood: the log likelihood of the current position on the chain
+        * current_log_prior: the log prior of the current position on the chain
 
         Additionally, if ``return_output`` is True, we add to that the arrays:
 
@@ -150,15 +230,19 @@ class AbstractSampler:
         Returns:
             dict[str: mot.lib.utils.KernelData]: the kernel input data
         """
-        kernel_data = {'data': self._data}
-        kernel_data.update({
+        kernel_data = {
+            'data': self._data,
             'method_data': self._get_mcmc_method_kernel_data(),
             'nmr_iterations': Scalar(nmr_samples * thinning, ctype='ulong'),
             'iteration_offset': Scalar(self._sampling_index, ctype='ulong'),
             'rng_state': Array(self._rng_state, 'uint', mode='rw', ensure_zero_copy=True),
             'current_chain_position': Array(self._current_chain_position, 'mot_float_type',
-                                            mode='rw', ensure_zero_copy=True)
-        })
+                                            mode='rw', ensure_zero_copy=True),
+            'current_log_likelihood': Array(self._current_log_likelihood, 'mot_float_type',
+                                            mode='rw', ensure_zero_copy=True),
+            'current_log_prior': Array(self._current_log_prior, 'mot_float_type',
+                                       mode='rw', ensure_zero_copy=True),
+        }
 
         if return_output:
             kernel_data.update({
@@ -167,24 +251,6 @@ class AbstractSampler:
                 'log_priors': Zeros((self._nmr_problems, nmr_samples), ctype='mot_float_type'),
             })
         return kernel_data
-
-    def _get_mcmc_method_kernel_data(self):
-        """Get the kernel data specific for the implemented method.
-
-        This will be provided as a void pointer to the implementing MCMC method.
-
-        Returns:
-            mot.lib.kernel_data.KernelData: the kernel data object
-        """
-        raise NotImplementedError()
-
-    def _readout_kernel_data(self, kernel_data):
-        """Readout the kernel data and update the sampler state with the state from the compute device.
-
-        Args:
-            kernel_data (dict[str: mot.lib.utils.KernelData]): the kernel data from which to read the output
-        """
-        pass
 
     def _get_compute_func(self, nmr_samples, thinning, return_output):
         """Get the MCMC algorithm as a computable function.
@@ -197,64 +263,49 @@ class AbstractSampler:
         Returns:
             mot.lib.cl_function.CLFunction: the compute function
         """
-        kernel_source = self._get_state_update_cl_func(nmr_samples, thinning, return_output)
-
         cl_func = '''
-            void compute(global uint* rng_state, global mot_float_type* current_chain_position,
-                         ulong iteration_offset, ulong nmr_iterations, 
+            void compute(global uint* rng_state, 
+                         global mot_float_type* current_chain_position,
+                         global mot_float_type* current_log_likelihood,
+                         global mot_float_type* current_log_prior,
+                         ulong iteration_offset, 
+                         ulong nmr_iterations, 
                          ''' + ('''global mot_float_type* samples, 
                                    global mot_float_type* log_likelihoods,
                                    global mot_float_type* log_priors,''' if return_output else '') + '''
-                         void* method_data, void* data){
+                         void* method_data, 
+                         void* data){
+                         
                 bool is_first_work_item = get_local_id(0) == 0;
     
                 rand123_data rand123_rng_data = rand123_initialize_data((uint[]){
                     rng_state[0], rng_state[1], rng_state[2], rng_state[3], 
                     rng_state[4], rng_state[5], 0, 0});
                 void* rng_data = (void*)&rand123_rng_data;
-    
-                local mot_float_type current_position[''' + str(self._nmr_params) + '''];
-                local double current_likelihood;
-                local mot_float_type current_prior;
-    
-                if(is_first_work_item){
-                    for(uint i = 0; i < ''' + str(self._nmr_params) + '''; i++){
-                        current_position[i] = current_chain_position[i];
-                    }
-                    current_prior = _computeLogPrior(current_position, data);
-                }
-                barrier(CLK_LOCAL_MEM_FENCE);
-    
-                current_likelihood = _computeLogLikelihood(current_position, data);
-    
+        
                 for(ulong i = 0; i < nmr_iterations; i++){
         '''
         if return_output:
             cl_func += '''
                     if(is_first_work_item){
                         if(i % ''' + str(thinning) + ''' == 0){
-    
-                            log_likelihoods[i / ''' + str(thinning) + '''] = current_likelihood;
-                            log_priors[i / ''' + str(thinning) + '''] = current_prior;
+                            log_likelihoods[i / ''' + str(thinning) + '''] = *current_log_likelihood;
+                            log_priors[i / ''' + str(thinning) + '''] = *current_log_prior;
     
                             for(uint j = 0; j < ''' + str(self._nmr_params) + '''; j++){
                                 samples[(ulong)(i / ''' + str(thinning) + ''') // remove the interval
                                         + j * ''' + str(nmr_samples) + '''  // parameter index
-                                ] = current_position[j];
+                                ] = current_chain_position[j];
                             }
                         }
                     }
         '''
         cl_func += '''
                     _advanceSampler(method_data, data, i + iteration_offset, rng_data, 
-                                    current_position, &current_likelihood, &current_prior);
+                                    current_chain_position, current_log_likelihood, current_log_prior);
                 }
 
                 if(is_first_work_item){
-                    for(uint i = 0; i < ''' + str(self._nmr_params) + '''; i++){
-                        current_chain_position[i] = current_position[i];
-                    }
-
                     uint state[8];
                     rand123_data_to_array(rand123_rng_data, state);
                     for(uint i = 0; i < 6; i++){
@@ -266,31 +317,8 @@ class AbstractSampler:
         return SimpleCLFunction.from_string(
             cl_func,
             dependencies=[Rand123(), self._get_log_prior_cl_func(),
-                          self._get_log_likelihood_cl_func(), SimpleCLCodeObject(kernel_source)])
-
-    def _get_state_update_cl_func(self, nmr_samples, thinning, return_output):
-        """Get the function that can advance the sampler state.
-
-        This function is called by the MCMC sampler to draw and return a new sample.
-
-        Args:
-            nmr_samples (int): the number of samples we will draw
-            thinning (int): the thinning factor we want to use
-            return_output (boolean): if the kernel should return output
-
-        Returns:
-            str: a CL function with signature:
-
-            .. code-block:: c
-                void _advanceSampler(void* method_data,
-                                     void* data,
-                                     ulong current_iteration,
-                                     void* rng_data,
-                                     local mot_float_type* current_position,
-                                     local double* const current_likelihood,
-                                     local mot_float_type* const current_prior);
-        """
-        raise NotImplementedError()
+                          self._get_log_likelihood_cl_func(),
+                          SimpleCLCodeObject(self._get_state_update_cl_func(nmr_samples, thinning, return_output))])
 
     def _get_log_prior_cl_func(self):
         """Get the CL log prior compute function.
@@ -299,7 +327,7 @@ class AbstractSampler:
             str: the compute function for computing the log prior.
         """
         return SimpleCLFunction.from_string('''
-            mot_float_type _computeLogPrior(local const mot_float_type* const x, void* data){
+            mot_float_type _computeLogPrior(local const mot_float_type* x, void* data){
                 return ''' + self._log_prior_func.get_cl_function_name() + '''(x, data);
             }
         ''', dependencies=[self._log_prior_func])
@@ -314,7 +342,7 @@ class AbstractSampler:
             str: the CL code for the log likelihood compute func.
         """
         return SimpleCLFunction.from_string('''
-            double _computeLogLikelihood(local mot_float_type* const current_position, void* data){
+            double _computeLogLikelihood(local const mot_float_type* current_position, void* data){
                 return ''' + self._ll_func.get_cl_function_name() + '''(current_position, data);
             }
         ''', dependencies=[self._ll_func])
@@ -383,8 +411,8 @@ class AbstractRWMSampler(AbstractSampler):
                     void <func_name>(void* data, local mot_float_type* x);
         """
         super().__init__(ll_func, log_prior_func, x0, **kwargs)
-        self._proposal_stds = np.copy(np.require(proposal_stds, requirements='CAOW',
-                                                 dtype=self._cl_runtime_info.mot_float_dtype))
+        self._proposal_stds = np.require(np.copy(proposal_stds), requirements='CAOW',
+                                         dtype=self._cl_runtime_info.mot_float_dtype)
         self._use_random_scan = use_random_scan
         self._finalize_proposal_func = finalize_proposal_func or SimpleCLFunction.from_string(
             'void finalizeProposal(void* data, local mot_float_type* x){}')
@@ -394,7 +422,8 @@ class AbstractRWMSampler(AbstractSampler):
 
     def _get_mcmc_method_kernel_data_elements(self):
         """Get the mcmc method kernel data elements. Used by :meth:`_get_mcmc_method_kernel_data`."""
-        return {'proposal_stds': Array(self._proposal_stds, 'mot_float_type', mode='rw', ensure_zero_copy=True)}
+        return {'proposal_stds': Array(self._proposal_stds, 'mot_float_type', mode='rw', ensure_zero_copy=True),
+                'x_tmp': LocalMemory('mot_float_type', nmr_items=1 + self._nmr_params)}
 
     def _get_proposal_update_function(self, nmr_samples, thinning, return_output):
         """Get the proposal update function.
@@ -406,11 +435,11 @@ class AbstractRWMSampler(AbstractSampler):
                 .. code-block:: c
                     void _updateProposalState(_mcmc_method_data* method_data,
                                               ulong current_iteration,
-                                              local mot_float_type* current_position);
+                                              global mot_float_type* current_position);
         """
         return '''
             void _updateProposalState(_mcmc_method_data* method_data, ulong current_iteration,
-                                      local mot_float_type* current_position){}
+                                      global mot_float_type* current_position){}
         '''
 
     def _at_acceptance_callback_c_func(self):
@@ -455,14 +484,15 @@ class AbstractRWMSampler(AbstractSampler):
                     void* data,
                     ulong current_iteration, 
                     void* rng_data,
-                    local mot_float_type* current_position,
-                    local double* const current_likelihood,
-                    local mot_float_type* const current_prior){
-
-                local mot_float_type new_position[''' + str(self._nmr_params) + '''];
-                local mot_float_type new_prior;
-                double new_likelihood;
-                double bayesian_f;
+                    global mot_float_type* current_position,
+                    global mot_float_type* current_log_likelihood,
+                    global mot_float_type* current_log_prior){
+                
+                local mot_float_type* new_log_prior = ((_mcmc_method_data*)method_data)->x_tmp;
+                *new_log_prior = 0;
+                local mot_float_type* new_position = ((_mcmc_method_data*)method_data)->x_tmp + 1;
+                
+                mot_float_type new_log_likelihood;
                 bool is_first_work_item = get_local_id(0) == 0;
 
                 if(is_first_work_item){
@@ -486,19 +516,18 @@ class AbstractRWMSampler(AbstractSampler):
                     if(is_first_work_item){
                         new_position[k] += frandn(rng_data) * ((_mcmc_method_data*)method_data)->proposal_stds[k];
                         ''' + self._finalize_proposal_func.get_cl_function_name() + '''(data, new_position);
-                        new_prior = _computeLogPrior(new_position, data);
+                        *new_log_prior = _computeLogPrior(new_position, data);
                     }
                     barrier(CLK_LOCAL_MEM_FENCE);
 
-                    if(exp(new_prior) > 0){
-                        new_likelihood = _computeLogLikelihood(new_position, data);
-
+                    if(exp(*new_log_prior) > 0){
+                        new_log_likelihood = _computeLogLikelihood(new_position, data);
+                        
                         if(is_first_work_item){
-                            bayesian_f = exp((new_likelihood + new_prior) - (*current_likelihood + *current_prior));
-                            
-                            if(frand(rng_data) < bayesian_f){
-                                *current_likelihood = new_likelihood;
-                                *current_prior = new_prior;
+                            if(frand(rng_data) < exp((new_log_likelihood + *new_log_prior) 
+                                                     - (*current_log_likelihood + *current_log_prior))){
+                                *current_log_likelihood = new_log_likelihood;
+                                *current_log_prior = *new_log_prior;
                                 for(uint k = 0; k < ''' + str(self._nmr_params) + '''; k++){
                                     current_position[k] = new_position[k];
                                 }           

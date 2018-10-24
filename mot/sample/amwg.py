@@ -64,7 +64,7 @@ class AdaptiveMetropolisWithinGibbs(AbstractRWMSampler):
     def _get_proposal_update_function(self, nmr_samples, thinning, return_output):
         kernel_source = '''
             void _updateProposalState(_mcmc_method_data* method_data, ulong current_iteration,
-                                      local mot_float_type* current_position){    
+                                      global mot_float_type* current_position){    
                 if(current_iteration > 0 && current_iteration % ''' + str(self._batch_size) + ''' == 0){
                     mot_float_type delta = sqrt(1.0/
                             (''' + str(self._damping_factor) + ''' * 
