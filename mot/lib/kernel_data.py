@@ -459,6 +459,63 @@ class LocalMemory(KernelData):
         return 1
 
 
+class PrivateMemory(KernelData):
+
+    def __init__(self, nmr_items, ctype):
+        """Adds a private memory array of the indicated size to the kernel data elements.
+
+        This is useful if you want to have private memory arrays in kernel data structs.
+
+        Args:
+            nmr_items (int): the size of the private memory array
+            ctype (str): the desired c-type for this local memory object, like ``int``, ``float`` or ``mot_float_type``.
+        """
+        self._ctype = ctype
+        self._mot_float_dtype = None
+        self._nmr_items = nmr_items
+
+    def set_mot_float_dtype(self, mot_float_dtype):
+        self._mot_float_dtype = mot_float_dtype
+
+    def get_data(self):
+        return None
+
+    def get_scalar_arg_dtypes(self):
+        return []
+
+    def enqueue_readouts(self, queue, buffers, range_start, range_end):
+        pass
+
+    def get_type_definitions(self):
+        return ''
+
+    def initialize_variable(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        return '''
+            {ctype} {v_name}[{nmr_elements}];
+        '''.format(ctype=self._ctype, v_name=variable_name, nmr_elements=self._nmr_items)
+
+    def get_function_call_input(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        return None
+
+    def post_function_callback(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        return ''
+
+    def get_struct_declaration(self, name):
+        return '{}* {};'.format(self._ctype, name)
+
+    def get_struct_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
+        return variable_name
+
+    def get_kernel_parameters(self, kernel_param_name):
+        return []
+
+    def get_kernel_inputs(self, cl_context, workgroup_size):
+        return []
+
+    def get_nmr_kernel_inputs(self):
+        return 0
+
+
 class Array(KernelData):
 
     def __init__(self, data, ctype=None, mode='r', offset_str=None, ensure_zero_copy=False, as_scalar=False):
