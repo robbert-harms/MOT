@@ -16,7 +16,7 @@ class ThoughtfulWalk(AbstractSampler):
 
     def __init__(self, ll_func, log_prior_func, x0, x1, finalize_proposal_func=None,
                  subset_size=4, walk_scale=1.5, traverse_scale=6,
-                 move_probabilities=(0.4918, 0.4918, 0.0082, 0.0082), **kwargs):
+                 move_probabilities=(60/122, 60/122., 1/122., 1/122.), **kwargs):
         """The thoughtful- or traverse- walk MCMC algorithm.
 
         The t-walk (twalk) algorithm of Christen and Fox [1] is a general-purpose MCMC algorithm that
