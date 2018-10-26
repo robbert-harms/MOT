@@ -2,6 +2,18 @@
 Changelog
 *********
 
+v0.7.1 (2018-10-26)
+===================
+
+Added
+-----
+- Adds private memory to the list of KernelData classes. This makes it possible to add private memory elements to the kernel data.
+
+Other
+-----
+- Small update to the twalk sampler.
+
+
 v0.7.0 (2018-10-24)
 ====================
 By removing all local variable out of non-kernel functions, this version should now be compatible with POCL (tested with version 1.1).
