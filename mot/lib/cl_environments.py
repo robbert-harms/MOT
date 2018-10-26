@@ -257,6 +257,7 @@ class CLEnvironmentFactory:
 
         Args:
             preferred_device_type (str): the preferred device type, one of 'CPU', 'GPU' or 'APU'.
+                If no devices of this type can be found, we will use any other device available.
 
         Returns:
             list of CLEnvironment: List with the CL device environments.
@@ -268,4 +269,7 @@ class CLEnvironmentFactory:
         if has_amd_pro_platform:
             return list(filter(lambda env: 'Clover' not in env.platform.name, cl_environments))
 
+        if preferred_device_type is not None and not len(cl_environments):
+            return CLEnvironmentFactory.all_devices()
+        
         return cl_environments

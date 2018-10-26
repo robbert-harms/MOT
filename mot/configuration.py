@@ -29,7 +29,7 @@ For any of the AbstractCLRoutines it holds that if no suitable defaults are give
 module. This entire module acts as a singleton containing the current runtime configuration.
 """
 _config = {
-    'cl_environments': CLEnvironmentFactory.smart_device_selection('GPU'),
+    'cl_environments': CLEnvironmentFactory.smart_device_selection(preferred_device_type='GPU'),
     'compile_flags': ['-cl-single-precision-constant', '-cl-denorms-are-zero', '-cl-mad-enable', '-cl-no-signed-zeros'],
     'compile_flags_to_disable_in_double_precision': ['-cl-single-precision-constant'],
     'double_precision': False
