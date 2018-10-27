@@ -4,8 +4,7 @@ from collections import OrderedDict, Mapping
 import numpy as np
 import pyopencl as cl
 
-from mot.lib.cl_data_type import SimpleCLDataType
-from mot.lib.utils import dtype_to_ctype, ctype_to_dtype, convert_data_to_dtype, is_scalar
+from mot.lib.utils import dtype_to_ctype, ctype_to_dtype, convert_data_to_dtype, is_vector_ctype, split_vector_ctype
 
 __author__ = 'Robbert Harms'
 __date__ = '2018-04-09'
@@ -374,10 +373,8 @@ class Scalar(KernelData):
         return ''
 
     def get_function_call_input(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
-        mot_dtype = SimpleCLDataType.from_string(self._ctype)
-
-        if mot_dtype.is_vector_type:
-            vector_length = mot_dtype.vector_length
+        if is_vector_ctype(self._ctype):
+            vector_length = split_vector_ctype(self._ctype)[1]
 
             values = [str(el) for el in np.atleast_1d(np.squeeze(self._value))]
 

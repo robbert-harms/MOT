@@ -11,8 +11,6 @@ import pyopencl.array as cl_array
 import tatsu
 from pkg_resources import resource_filename
 
-from mot.lib.cl_data_type import SimpleCLDataType
-
 __author__ = 'Robbert Harms'
 __date__ = "2014-05-13"
 __license__ = "LGPL v3"
@@ -69,16 +67,21 @@ def ctype_to_dtype(cl_type, mot_float_type='float'):
     Returns:
         dtype: the numpy datatype
     """
-    data_type = SimpleCLDataType.from_string(cl_type)
+    if is_vector_ctype(cl_type):
+        raw_type, vector_length = split_vector_ctype(cl_type)
 
-    if data_type.is_vector_type:
-        if data_type.raw_data_type.startswith('mot_float_type'):
-            data_type = SimpleCLDataType.from_string(mot_float_type + str(data_type.vector_length))
-        vector_type = data_type.raw_data_type + str(data_type.vector_length)
+        if raw_type == 'mot_float_type':
+            if is_vector_ctype(mot_float_type):
+                raw_type, _ = split_vector_ctype(mot_float_type)
+            else:
+                raw_type = mot_float_type
+
+        vector_type = raw_type + str(vector_length)
         return getattr(cl_array.vec, vector_type)
     else:
-        if data_type.raw_data_type.startswith('mot_float_type'):
-            data_type = SimpleCLDataType.from_string(mot_float_type)
+        if cl_type == 'mot_float_type':
+            cl_type = mot_float_type
+
         data_types = [
             ('char', np.int8),
             ('uchar', np.uint8),
@@ -92,7 +95,7 @@ def ctype_to_dtype(cl_type, mot_float_type='float'):
             ('double', np.float64),
         ]
         for ctype, dtype in data_types:
-            if ctype == data_type.raw_data_type:
+            if ctype == cl_type:
                 return dtype
 
 
@@ -101,25 +104,20 @@ def convert_data_to_dtype(data, data_type, mot_float_type='float'):
 
     Args:
         data (ndarray): The value to convert to the correct numpy type
-        data_type (str or mot.lib.cl_data_type.CLDataType): the data type we need to convert the data to
-        mot_float_type (str or mot.lib.cl_data_type.CLDataType): the data type of the current ``mot_float_type``
+        data_type (str): the data type we need to convert the data to
+        mot_float_type (str): the data type of the current ``mot_float_type``
 
     Returns:
         ndarray: the input data but then converted to the desired numpy data type
     """
-    if isinstance(data_type, str):
-        data_type = SimpleCLDataType.from_string(data_type)
-    if isinstance(mot_float_type, str):
-        mot_float_type = SimpleCLDataType.from_string(mot_float_type)
-
-    scalar_dtype = ctype_to_dtype(data_type.raw_data_type, mot_float_type.raw_data_type)
+    scalar_dtype = ctype_to_dtype(data_type, mot_float_type)
 
     if isinstance(data, numbers.Number):
         data = scalar_dtype(data)
 
-    if data_type.is_vector_type:
+    if is_vector_ctype(data_type):
         shape = data.shape
-        dtype = ctype_to_dtype(data_type, mot_float_type.raw_data_type)
+        dtype = ctype_to_dtype(data_type, mot_float_type)
         ve = np.zeros(shape[:-1], dtype=dtype)
 
         if len(shape) == 1:
@@ -137,6 +135,37 @@ def convert_data_to_dtype(data, data_type, mot_float_type='float'):
 
         return np.require(ve, requirements=['C', 'A', 'O'])
     return np.require(data, scalar_dtype, ['C', 'A', 'O'])
+
+
+def split_vector_ctype(ctype):
+    """Split a vector ctype into a raw ctype and the vector length.
+
+    If the given ctype is not a vector type, we raise an error. I
+
+    Args:
+         ctype (str): the ctype to possibly split into a raw ctype and the vector length
+
+    Returns:
+        tuple: the raw ctype and the vector length
+    """
+    if not is_vector_ctype(ctype):
+        raise ValueError('The given ctype is not a vector type.')
+    for vector_length in [2, 3, 4, 8, 16]:
+        if ctype.endswith(str(vector_length)):
+            vector_str_len = len(str(vector_length))
+            return ctype[:-vector_str_len], int(ctype[-vector_str_len:])
+
+
+def is_vector_ctype(ctype):
+    """Test if the given ctype is a vector type. That is, if it ends with 2, 3, 4, 8 or 16.
+
+    Args:
+        ctype (str): the ctype to test if it is an OpenCL vector type
+
+    Returns:
+        bool: if it is a vector type or not
+    """
+    return any(ctype.endswith(str(i)) for i in [2, 3, 4, 8, 16])
 
 
 def device_type_from_string(cl_device_type_str):

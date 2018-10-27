@@ -1,4 +1,3 @@
-import warnings
 from collections import Iterable, Mapping
 from collections.__init__ import OrderedDict
 
@@ -6,8 +5,8 @@ import numpy as np
 from copy import copy
 
 import pyopencl as cl
+import tatsu
 
-from mot.lib.cl_data_type import SimpleCLDataType
 from textwrap import dedent, indent
 
 from mot.configuration import CLRuntimeInfo
@@ -211,10 +210,10 @@ class SimpleCLFunction(CLFunction):
                     return Scalar(0)
                 elif isinstance(input_data[param.name], KernelData):
                     return input_data[param.name]
-                elif param.data_type.is_vector_type and np.squeeze(input_data[param.name]).shape[0] == 3:
-                    return Scalar(input_data[param.name], ctype=param.data_type.ctype)
+                elif param.is_vector_type and np.squeeze(input_data[param.name]).shape[0] == 3:
+                    return Scalar(input_data[param.name], ctype=param.ctype)
                 elif is_scalar(input_data[param.name]) \
-                        and not (param.data_type.is_pointer_type or param.data_type.is_array_type):
+                        and not (param.is_pointer_type or param.is_array_type):
                     return Scalar(input_data[param.name])
                 else:
                     if is_scalar(input_data[param.name]):
@@ -222,10 +221,10 @@ class SimpleCLFunction(CLFunction):
                     else:
                         data = input_data[param.name]
 
-                    if param.data_type.is_pointer_type or param.data_type.is_array_type:
-                        return Array(data, ctype=param.data_type.ctype, mode='rw')
+                    if param.is_pointer_type or param.is_array_type:
+                        return Array(data, ctype=param.ctype, mode='rw')
                     else:
-                        return Array(data, ctype=param.data_type.ctype, mode='r', as_scalar=True)
+                        return Array(data, ctype=param.ctype, mode='r', as_scalar=True)
 
             return {param.name.replace('.', '_'): get_data_object(param) for param in self.get_parameters()}
 
@@ -259,8 +258,11 @@ class SimpleCLFunction(CLFunction):
         Returns:
             list: the signatures of the parameters for the use in the CL code.
         """
-        return ['{} {}'.format(p.data_type.get_declaration(), p.name.replace('.', '_'))
-                for p in self.get_parameters()]
+        declarations = []
+        for p in self.get_parameters():
+            new_p = p.get_renamed(p.name.replace('.', '_'))
+            declarations.append(new_p.get_declaration())
+        return declarations
 
     def _get_cl_dependency_code(self):
         """Get the CL code for all the CL code for all the dependencies.
@@ -314,12 +316,100 @@ class CLFunctionParameter:
         """
         raise NotImplementedError()
 
-    @property
-    def data_type(self):
-        """Get the CL data type of this parameter
+    def get_declaration(self):
+        """Get the complete CL declaration for this parameter.
 
         Returns:
-            mot.lib.cl_data_type.SimpleCLDataType: The CL data type.
+            str: the declaration for this data type.
+        """
+        raise NotImplementedError()
+
+    @property
+    def ctype(self):
+        """Get the ctype of this data type.
+
+        For example, if the data type is float4*, we will return float4 here.
+
+        Returns:
+            str: the full ctype of this data type
+        """
+        raise NotImplementedError()
+
+    @property
+    def address_space(self):
+        """Get the address space of this data declaration.
+
+        Returns:
+            str: the data type address space, one of ``global``, ``local``, ``constant`` or ``private``.
+        """
+        raise NotImplementedError()
+
+    @property
+    def basic_ctype(self):
+        """Get the basic data type without the vector and pointer additions.
+
+        For example, if the full data ctype is ``float4*``, we will only return ``float`` here.
+
+        Returns:
+            str: the raw CL data type
+        """
+        raise NotImplementedError()
+
+    @property
+    def is_vector_type(self):
+        """Check if this data type is a vector type (like for example double4, float2, int8, etc.).
+
+        Returns:
+            boolean: True if it is a vector type, false otherwise
+        """
+        raise NotImplementedError()
+
+    @property
+    def vector_length(self):
+        """Get the length of this vector, returns None if not a vector type.
+
+        Returns:
+            int: the length of the vector type (for example, if the data type is float4, this returns 4).
+        """
+        raise NotImplementedError()
+
+    @property
+    def is_pointer_type(self):
+        """Check if this parameter is a pointer type (appended by a ``*``)
+
+        Returns:
+            boolean: True if it is a pointer type, false otherwise
+        """
+        raise NotImplementedError()
+
+    @property
+    def nmr_pointers(self):
+        """Get the number of asterisks / pointer references of this data type.
+
+        If the data type is float**, we return 2 here.
+
+        Returns:
+            int: the number of pointer asterisks in the data type.
+        """
+        raise NotImplementedError()
+
+    @property
+    def array_sizes(self):
+        """Get the dimension of this array type.
+
+        This returns for example (10, 5) for the data type float[10][5].
+
+        Returns:
+            Tuple[int]: the sizes of the arrays
+        """
+        raise NotImplementedError()
+
+    @property
+    def is_array_type(self):
+        """Check if this parameter is an array type (like float[3] or int[10][5]).
+
+        Returns:
+            boolean: True if this is an array type, false otherwise
         """
         raise NotImplementedError()
 
@@ -335,6 +425,24 @@ class CLFunctionParameter:
         raise NotImplementedError()
 
 
+_cl_data_type_parser = tatsu.compile('''
+    result = [address_space] {type_qualifiers}* ctype {pointer_star}* {pointer_qualifiers}* name {array_size}*;
+
+    address_space = ['__'] ('local' | 'global' | 'constant' | 'private');
+    type_qualifiers = 'const' | 'volatile';
+
+    basic_ctype = ?'(unsigned )?\w[\w]*[a-zA-Z]'; 
+    vector_type_length = '2' | '3' | '4' | '8' | '16';
+    ctype = basic_ctype [vector_type_length];
+    pointer_star = '*';
+    
+    pointer_qualifiers = 'const' | 'restrict';
+
+    name = /[\w\_\-\.]+/;
+    array_size = /\[\d+\]/;
+''')
+
+
 class SimpleCLFunctionParameter(CLFunctionParameter):
 
     def __init__(self, declaration):
@@ -343,21 +451,125 @@ class SimpleCLFunctionParameter(CLFunctionParameter):
         Args:
             declaration (str): the declaration of this parameter. For example ``global int foo``.
         """
-        self._name = declaration.split(' ')[-1].strip()
-        self._data_type = SimpleCLDataType.from_string(declaration[:-len(self._name)].strip())
+        self._address_space = None
+        self._type_qualifiers = []
+        self._basic_ctype = ''
+        self._vector_type_length = None
+        self._nmr_pointer_stars = 0
+        self._pointer_qualifiers = []
+        self._name = ''
+        self._array_sizes = []
+
+        param = self
+
+        class Semantics:
+
+            def type_qualifiers(self, ast):
+                if ast in param._type_qualifiers:
+                    raise ValueError('The pre-type qualifier "{}" is present multiple times.'.format(ast))
+                param._type_qualifiers.append(ast)
+                return ast
+
+            def address_space(self, ast):
+                param._address_space = ''.join(ast)
+                return ''.join(ast)
+
+            def basic_ctype(self, ast):
+                param._basic_ctype = ast
+                return ast
+
+            def vector_type_length(self, ast):
+                param._vector_type_length = int(ast)
+                return ast
+
+            def pointer_star(self, ast):
+                param._nmr_pointer_stars += 1
+                return ast
+
+            def pointer_qualifiers(self, ast):
+                if ast in param._pointer_qualifiers:
+                    raise ValueError('The pre-type qualifier "{}" is present multiple times.'.format(ast))
+                param._pointer_qualifiers.append(ast)
+                return ast
+
+            def name(self, ast):
+                param._name = ast
+                return ast
+
+            def array_size(self, ast):
+                param._array_sizes.append(int(ast[1:-1]))
+                return ast
+
+        _cl_data_type_parser.parse(declaration, semantics=Semantics())
 
     @property
     def name(self):
         return self._name
 
-    @property
-    def data_type(self):
-        return self._data_type
-
     def get_renamed(self, name):
         new_param = copy(self)
         new_param._name = name
         return new_param
+
+    def get_declaration(self):
+        declaration = ''
+
+        if self._address_space:
+            declaration += str(self._address_space) + ' '
+
+        if self._type_qualifiers:
+            declaration += str(' '.join(self._type_qualifiers)) + ' '
+
+        declaration += str(self.ctype)
+        declaration += '*' * self._nmr_pointer_stars
+
+        if self._pointer_qualifiers:
+            declaration += ' ' + str(' '.join(self._pointer_qualifiers)) + ' '
+
+        declaration += ' ' + self._name
+
+        for s in self._array_sizes:
+            declaration += '[{}]'.format(s)
+
+        return declaration
+
+    @property
+    def ctype(self):
+        if self._vector_type_length is not None:
+            return '{}{}'.format(self._basic_ctype, self._vector_type_length)
+        return self._basic_ctype
+
+    @property
+    def address_space(self):
+        return self._address_space or 'private'
+
+    @property
+    def basic_ctype(self):
+        return self._basic_ctype
+
+    @property
+    def is_vector_type(self):
+        return self._vector_type_length is not None
+
+    @property
+    def vector_length(self):
+        return self._vector_type_length
+
+    @property
+    def is_pointer_type(self):
+        return self._nmr_pointer_stars > 0
+
+    @property
+    def nmr_pointers(self):
+        return self._nmr_pointer_stars
+
+    @property
+    def array_sizes(self):
+        return self._array_sizes
+
+    @property
+    def is_array_type(self):
+        return len(self.array_sizes) > 0
 
 
 def apply_cl_function(cl_function, kernel_data, nmr_instances, use_local_reduction=False, cl_runtime_info=None):
@@ -503,7 +715,7 @@ class _ProcedureWorker:
         post_function_callbacks = []
         for parameter in self._cl_function.get_parameters():
             data = self._kernel_data[parameter.name]
-            call_args = (parameter.name, '_' + parameter.name, 'gid', parameter.data_type.address_space)
+            call_args = (parameter.name, '_' + parameter.name, 'gid', parameter.address_space)
 
             variable_inits.append(data.initialize_variable(*call_args))
             function_call_inputs.append(data.get_function_call_input(*call_args))
@@ -513,6 +725,7 @@ class _ProcedureWorker:
         kernel_source += get_float_type_def(self._double_precision)
         kernel_source += '\n'.join(data.get_type_definitions() for data in self._kernel_data.values())
         kernel_source += self._cl_function.get_cl_code()
+
         kernel_source += '''
             __kernel void run_procedure(''' + ",\n".join(self._get_kernel_arguments()) + '''){
                 ulong gid = (ulong)(get_global_id(0) / get_local_size(0));
