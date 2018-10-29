@@ -593,6 +593,13 @@ class Array(KernelData):
                 if self._is_writable and self._ensure_zero_copy:
                     raise ValueError('We had to make a copy of the data while zero copy was set to True.')
 
+        # data length may change when an CL vector type is converted from (n, 3) shape to (n,)
+        self._data_length = 1
+        if len(self._data.shape):
+            self._data_length = self._data.strides[0] // self._data.itemsize
+        if self._offset_str == '0' or self._offset_str == 0:
+            self._data_length = self._data.size
+
     def get_data(self):
         return self._data
 
