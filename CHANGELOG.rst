@@ -2,6 +2,19 @@
 Changelog
 *********
 
+v0.7.2 (2018-10-29)
+===================
+
+Fixed
+-----
+- Fixed a small problem when an array with vectors is loaded in the Array class.
+- Fixed bug that no device would be selected if only CPU's were present.
+
+Other
+-----
+- Simplified the parameter objects by moving the data type information into the object. This also makes it simpler to add new types in the future, like the block type in OpenCL 2.0.
+
+
 v0.7.1 (2018-10-26)
 ===================
 
