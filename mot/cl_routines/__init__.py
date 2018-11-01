@@ -52,7 +52,7 @@ def compute_log_likelihood(ll_func, parameters, data=None, cl_runtime_info=None)
                         
                         double ll = ''' + ll_func.get_cl_function_name() + '''(x, data);
                         if(get_local_id(0) == 0){
-                            *(log_likelihoods) = ll;
+                            log_likelihoods[sample_ind] = ll;
                         }
                     }
                 }
