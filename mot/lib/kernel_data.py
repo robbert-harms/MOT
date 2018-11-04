@@ -492,7 +492,7 @@ class PrivateMemory(KernelData):
         '''.format(ctype=self._ctype, v_name=variable_name, nmr_elements=self._nmr_items)
 
     def get_function_call_input(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
-        return None
+        return variable_name
 
     def post_function_callback(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
         return ''
@@ -728,3 +728,90 @@ class Zeros(Array):
         """
         super().__init__(np.zeros(shape, dtype=ctype_to_dtype(ctype)), ctype, offset_str=offset_str,
                          mode=mode, as_scalar=False)
+
+
+class CompositePrivateArray(KernelData):
+
+    def __init__(self, elements, ctype):
+        """A private array filled with the given kernel data elements.
+
+        Each of the given elements should be a :class:`Scalar` or an :class:`Array` with the property `as_scalar`
+        set to True. We will load each value of the given elements into a private array.
+
+        Args:
+            elements (List[KernelData]): the kernel data elements to load into the private array
+            ctype (str): the data type of this structure
+        """
+        self._elements = elements
+        self._ctype = ctype
+
+    def set_mot_float_dtype(self, mot_float_dtype):
+        for element in self._elements:
+            element.set_mot_float_dtype(mot_float_dtype)
+
+    def get_data(self):
+        return [item.get_data() for item in self._elements]
+
+    def get_scalar_arg_dtypes(self):
+        dtypes = []
+        for d in self._elements:
+            dtypes.extend(d.get_scalar_arg_dtypes())
+        return dtypes
+
+    def enqueue_readouts(self, queue, buffers, range_start, range_end):
+        buffer_ind = 0
+
+        for d in self._elements:
+            if d.get_nmr_kernel_inputs():
+                d.enqueue_readouts(queue, buffers[buffer_ind:buffer_ind + d.get_nmr_kernel_inputs()],
+                                   range_start, range_end)
+                buffer_ind += d.get_nmr_kernel_inputs()
+
+    def get_type_definitions(self):
+        return '\n'.join(element.get_type_definitions() for element in self._elements)
+
+    def initialize_variable(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        return_str = ''
+
+        inits = []
+        for ind, data in enumerate(self._elements):
+            return_str += data.initialize_variable('{}_{}'.format(variable_name, str(ind)),
+                                                   '{}_{}'.format(kernel_param_name, str(ind)),
+                                                   problem_id_substitute, 'global')
+            inits.append(data.get_struct_initialization(
+                '{}_{}'.format(variable_name, str(ind)),
+                '{}_{}'.format(kernel_param_name, str(ind)), problem_id_substitute))
+
+        return_str += '''
+            {ctype} {v_name}[{nmr_elements}] = {{ {inits} }};
+        '''.format(ctype=self._ctype, v_name=variable_name, nmr_elements=len(self._elements),
+                   inits=', '.join(inits))
+
+        return return_str
+
+    def get_function_call_input(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        return variable_name
+
+    def post_function_callback(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        return ''
+
+    def get_struct_declaration(self, name):
+        return '{}* {};'.format(self._ctype, name)
+
+    def get_struct_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
+        return variable_name
+
+    def get_kernel_parameters(self, kernel_param_name):
+        parameters = []
+        for ind, d in enumerate(self._elements):
+            parameters.extend(d.get_kernel_parameters('{}_{}'.format(kernel_param_name, str(ind))))
+        return parameters
+
+    def get_kernel_inputs(self, cl_context, workgroup_size):
+        data = []
+        for d in self._elements:
+            data.extend(d.get_kernel_inputs(cl_context, workgroup_size))
+        return data
+
+    def get_nmr_kernel_inputs(self):
+        return sum(element.get_nmr_kernel_inputs() for element in self._elements)
