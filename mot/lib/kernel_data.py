@@ -489,10 +489,10 @@ class PrivateMemory(KernelData):
     def initialize_variable(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
         return '''
             {ctype} {v_name}[{nmr_elements}];
-        '''.format(ctype=self._ctype, v_name=variable_name, nmr_elements=self._nmr_items)
+        '''.format(ctype=self._ctype, v_name=kernel_param_name, nmr_elements=self._nmr_items)
 
     def get_function_call_input(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
-        return variable_name
+        return kernel_param_name
 
     def post_function_callback(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
         return ''
@@ -501,7 +501,7 @@ class PrivateMemory(KernelData):
         return '{}* {};'.format(self._ctype, name)
 
     def get_struct_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
-        return variable_name
+        return kernel_param_name
 
     def get_kernel_parameters(self, kernel_param_name):
         return []
@@ -730,10 +730,10 @@ class Zeros(Array):
                          mode=mode, as_scalar=False)
 
 
-class CompositePrivateArray(KernelData):
+class CompositeArray(KernelData):
 
-    def __init__(self, elements, ctype):
-        """A private array filled with the given kernel data elements.
+    def __init__(self, elements, ctype, address_space='private'):
+        """An array filled with the given kernel data elements.
 
         Each of the given elements should be a :class:`Scalar` or an :class:`Array` with the property `as_scalar`
         set to True. We will load each value of the given elements into a private array.
@@ -741,77 +741,83 @@ class CompositePrivateArray(KernelData):
         Args:
             elements (List[KernelData]): the kernel data elements to load into the private array
             ctype (str): the data type of this structure
+            address_space (str): the address space for the allocation of the main array
         """
         self._elements = elements
         self._ctype = ctype
+        self._address_space = address_space
+
+        if self._address_space == 'private':
+            self._composite_array = PrivateMemory(len(self._elements), self._ctype)
+        elif self._address_space == 'local':
+            self._composite_array = LocalMemory(self._ctype, len(self._elements))
+        elif self._address_space == 'global':
+            self._composite_array = Zeros(len(self._elements), self._ctype, offset_str='0', mode='rw')
 
     def set_mot_float_dtype(self, mot_float_dtype):
         for element in self._elements:
             element.set_mot_float_dtype(mot_float_dtype)
+        self._composite_array.set_mot_float_dtype(mot_float_dtype)
 
     def get_data(self):
         return [item.get_data() for item in self._elements]
 
     def get_scalar_arg_dtypes(self):
-        dtypes = []
+        dtypes = list(self._composite_array.get_scalar_arg_dtypes())
         for d in self._elements:
             dtypes.extend(d.get_scalar_arg_dtypes())
         return dtypes
 
     def enqueue_readouts(self, queue, buffers, range_start, range_end):
-        buffer_ind = 0
-
-        for d in self._elements:
-            if d.get_nmr_kernel_inputs():
-                d.enqueue_readouts(queue, buffers[buffer_ind:buffer_ind + d.get_nmr_kernel_inputs()],
-                                   range_start, range_end)
-                buffer_ind += d.get_nmr_kernel_inputs()
+        pass
 
     def get_type_definitions(self):
         return '\n'.join(element.get_type_definitions() for element in self._elements)
 
     def initialize_variable(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
-        return_str = ''
+        return_str = self._composite_array.initialize_variable(variable_name, kernel_param_name,
+                                                               problem_id_substitute, address_space)
 
-        inits = []
         for ind, data in enumerate(self._elements):
             return_str += data.initialize_variable('{}_{}'.format(variable_name, str(ind)),
                                                    '{}_{}'.format(kernel_param_name, str(ind)),
                                                    problem_id_substitute, 'global')
-            inits.append(data.get_struct_initialization(
-                '{}_{}'.format(variable_name, str(ind)),
-                '{}_{}'.format(kernel_param_name, str(ind)), problem_id_substitute))
 
-        return_str += '''
-            {ctype} {v_name}[{nmr_elements}] = {{ {inits} }};
-        '''.format(ctype=self._ctype, v_name=variable_name, nmr_elements=len(self._elements),
-                   inits=', '.join(inits))
+            return_str += '{}[{}] = {};\n'.format(
+                kernel_param_name,
+                ind,
+                data.get_struct_initialization(
+                    '{}_{}'.format(variable_name, str(ind)),
+                    '{}_{}'.format(kernel_param_name, str(ind)), problem_id_substitute))
 
         return return_str
 
     def get_function_call_input(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
-        return variable_name
+        return self._composite_array.get_function_call_input(variable_name, kernel_param_name,
+                                                             problem_id_substitute, address_space)
 
     def post_function_callback(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
-        return ''
+        return self._composite_array.post_function_callback(variable_name, kernel_param_name,
+                                                            problem_id_substitute, address_space)
 
     def get_struct_declaration(self, name):
-        return '{}* {};'.format(self._ctype, name)
+        return self._composite_array.get_struct_declaration(name)
 
     def get_struct_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
-        return variable_name
+        return self._composite_array.get_struct_initialization(variable_name, kernel_param_name, problem_id_substitute)
 
     def get_kernel_parameters(self, kernel_param_name):
-        parameters = []
+        parameters = list(self._composite_array.get_kernel_parameters(kernel_param_name))
         for ind, d in enumerate(self._elements):
             parameters.extend(d.get_kernel_parameters('{}_{}'.format(kernel_param_name, str(ind))))
         return parameters
 
     def get_kernel_inputs(self, cl_context, workgroup_size):
-        data = []
+        data = list(self._composite_array.get_kernel_inputs(cl_context, workgroup_size))
         for d in self._elements:
             data.extend(d.get_kernel_inputs(cl_context, workgroup_size))
         return data
 
     def get_nmr_kernel_inputs(self):
-        return sum(element.get_nmr_kernel_inputs() for element in self._elements)
+        return self._composite_array.get_nmr_kernel_inputs() + \
+               sum(element.get_nmr_kernel_inputs() for element in self._elements)
