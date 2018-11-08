@@ -1,5 +1,5 @@
 import numpy as np
-from mot.lib.kernel_data import Array
+from mot.lib.kernel_data import Array, Struct
 from mot.library_functions import gamma_logpdf
 from mot.optimize import minimize
 from mot.lib.cl_function import SimpleCLFunction
@@ -24,7 +24,7 @@ def get_objective_function(nmr_datapoints):
             
             double sum = 0;
             for(uint i = 0; i < ''' + str(nmr_datapoints) + '''; i++){
-                sum += gamma_logpdf(((double*)data)[i], x[0], x[1]);
+                sum += gamma_logpdf(((optimization_data*)data)->gamma_random[i], x[0], x[1]);
             }
             
             return -sum; // the optimization routines are minimizers
@@ -60,7 +60,8 @@ if __name__ == '__main__':
     x0 = np.ones((nmr_simulations, 2))
 
     # Minimize the parameters of the model given the starting points.
-    opt_output = minimize(get_objective_function(nmr_datapoints), x0, data=Array(gamma_random))
+    opt_output = minimize(get_objective_function(nmr_datapoints), x0,
+                          data=Struct({'gamma_random': Array(gamma_random)}, 'optimization_data'))
 
     # Print the output
     print(np.column_stack([shape, scale]))

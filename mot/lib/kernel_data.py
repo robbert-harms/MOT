@@ -332,6 +332,8 @@ class Scalar(KernelData):
         """
         if isinstance(value, str) and value == 'INFINITY':
             self._value = np.inf
+        elif isinstance(value, str) and value == '-INFINITY':
+            self._value = -np.inf
         else:
             self._value = np.array(value)
         self._ctype = ctype or dtype_to_ctype(self._value.dtype)
@@ -382,8 +384,10 @@ class Scalar(KernelData):
                 values.extend(['0'] * (vector_length - len(values)))
             assignment = '(' + self._ctype + ')(' + ', '.join(values) + ')'
 
-        elif np.isinf(self._value):
+        elif np.isposinf(self._value):
             assignment = 'INFINITY'
+        elif np.isneginf(self._value):
+            assignment = '-INFINITY'
         else:
             assignment = str(np.squeeze(self._value))
         return assignment
@@ -608,10 +612,10 @@ class Array(KernelData):
 
     def enqueue_readouts(self, queue, buffers, range_start, range_end):
         if self._is_writable:
-            nmr_problems = range_end - range_start
+            nmr_problems = int(range_end - range_start)
             cl.enqueue_map_buffer(
                 queue, buffers[0], cl.map_flags.READ,
-                range_start * self._data.strides[0],
+                int(range_start * self._data.strides[0]),
                 (nmr_problems,) + self._data.shape[1:], self._data.dtype,
                 order="C", wait_for=None, is_blocking=False)
 

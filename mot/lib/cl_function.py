@@ -11,7 +11,7 @@ from textwrap import dedent, indent
 
 from mot.configuration import CLRuntimeInfo
 from mot.lib.kernel_data import KernelData, Scalar, Array, Zeros
-from mot.lib.utils import is_scalar, get_float_type_def, split_cl_function
+from mot.lib.utils import is_scalar, get_float_type_def, split_cl_function, split_in_batches
 
 __author__ = 'Robbert Harms'
 __date__ = '2017-08-31'
@@ -602,23 +602,29 @@ def apply_cl_function(cl_function, kernel_data, nmr_instances, use_local_reducti
     if cl_function.get_return_type() != 'void':
         kernel_data['_results'] = Zeros((nmr_instances,), cl_function.get_return_type())
 
-    items_per_worker = [nmr_instances // len(cl_environments) for _ in range(len(cl_environments) - 1)]
-    items_per_worker.append(nmr_instances - sum(items_per_worker))
-
     workers = []
     for ind, cl_environment in enumerate(cl_environments):
         worker = _ProcedureWorker(cl_environment, cl_runtime_info.get_compile_flags(),
                                   cl_function, kernel_data, cl_runtime_info.double_precision, use_local_reduction)
         workers.append(worker)
 
-    offset = 0
-    for ind, worker in enumerate(workers):
-        worker.calculate(offset, offset + items_per_worker[ind])
-        offset += items_per_worker[ind]
-        worker.cl_queue.flush()
+    def enqueue_batch(batch_size, offset):
+        items_per_worker = [batch_size // len(cl_environments) for _ in range(len(cl_environments) - 1)]
+        items_per_worker.append(batch_size - sum(items_per_worker))
 
-    for worker in workers:
-        worker.cl_queue.finish()
+        for ind, worker in enumerate(workers):
+            worker.calculate(offset, offset + items_per_worker[ind])
+            offset += items_per_worker[ind]
+            worker.cl_queue.flush()
+
+        for worker in workers:
+            worker.cl_queue.finish()
+
+        return offset
+
+    total_offset = 0
+    for batch_start, batch_end in split_in_batches(nmr_instances, 1e4 * len(workers)):
+        total_offset = enqueue_batch(batch_end - batch_start, total_offset)
 
     if cl_function.get_return_type() != 'void':
         return kernel_data['_results'].get_data()
