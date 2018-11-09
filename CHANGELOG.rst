@@ -2,6 +2,28 @@
 Changelog
 *********
 
+v0.8.0 (2018-11-09)
+===================
+This version adds support for box constraints to the optimization routines.
+For routines that do not natively support box constraints we wrap the evaluation function with a check for
+bound violations and return INFINITY when that happens.
+
+
+Added
+-----
+- Adds support for boundary conditions (box constraints) to the optimization routines.
+- Adds composite kernel data private array.
+
+Changed
+-------
+- Updated the CompositeArray to support multiple address spaces.
+
+Fixed
+-----
+- Fixed that the LL calculator did not return results for all samples.
+
+
+
 v0.7.2 (2018-10-29)
 ===================
 
