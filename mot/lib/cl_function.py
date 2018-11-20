@@ -604,7 +604,7 @@ def apply_cl_function(cl_function, kernel_data, nmr_instances, use_local_reducti
 
     workers = []
     for ind, cl_environment in enumerate(cl_environments):
-        worker = _ProcedureWorker(cl_environment, cl_runtime_info.get_compile_flags(),
+        worker = _ProcedureWorker(cl_environment, cl_runtime_info.compile_flags,
                                   cl_function, kernel_data, cl_runtime_info.double_precision, use_local_reduction)
         workers.append(worker)
 

@@ -30,8 +30,7 @@ module. This entire module acts as a singleton containing the current runtime co
 """
 _config = {
     'cl_environments': CLEnvironmentFactory.smart_device_selection(preferred_device_type='GPU'),
-    'compile_flags': ['-cl-single-precision-constant', '-cl-denorms-are-zero', '-cl-mad-enable', '-cl-no-signed-zeros'],
-    'compile_flags_to_disable_in_double_precision': ['-cl-single-precision-constant'],
+    'compile_flags': ['-cl-denorms-are-zero', '-cl-mad-enable', '-cl-no-signed-zeros'],
     'double_precision': False
 }
 
@@ -78,15 +77,6 @@ def set_compile_flags(compile_flags):
         compile_flags (list): the new list of compile flags
     """
     _config['compile_flags'] = compile_flags
-
-
-def get_compile_flags_to_disable_in_double_precision():
-    """Get the list of compile flags we want to disable when running in double precision.
-
-    Returns:
-        boolean: the list of flags we want to disable when running in double mode
-    """
-    return copy(_config['compile_flags_to_disable_in_double_precision'])
 
 
 def set_default_proposal_update(proposal_update):
@@ -271,15 +261,3 @@ class CLRuntimeInfo:
     def compile_flags(self):
         """Get all defined compile flags."""
         return self._compile_flags
-
-    def get_compile_flags(self):
-        """Get a list of the applicable compile flags.
-
-        Returns:
-            list: the list of enabled compile flags.
-        """
-        elements = list(self._compile_flags)
-        if self._double_precision:
-            elements_to_remove = get_compile_flags_to_disable_in_double_precision()
-            elements = list(filter(lambda e: e not in elements_to_remove, elements))
-        return elements

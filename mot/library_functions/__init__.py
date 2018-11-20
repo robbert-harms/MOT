@@ -186,6 +186,63 @@ class linear_cubic_interpolation(SimpleCLLibrary):
         ''')
 
 
+class eigenvalues_3x3_symmetric(SimpleCLLibrary):
+
+    def __init__(self):
+        """Calculate the eigenvalues of a symmetric 3x3 matrix.
+
+        This simple algorithm only works in case of a real and symmetric matrix.
+
+        The input to this function is an array with the upper triangular elements of the matrix.
+        The output are the eigenvalues such that eig1 >= eig2 >= eig3, i.e. from large to small.
+
+        Args:
+            A: the upper triangle of an 3x3 matrix
+            v: the output eigenvalues as a vector of three elements.
+
+        References:
+            [1]: https://en.wikipedia.org/wiki/Eigenvalue_algorithm#3.C3.973_matrices
+            [2]: Smith, Oliver K. (April 1961), "Eigenvalues of a symmetric 3 × 3 matrix.", Communications of the ACM,
+                 4 (4): 168, doi:10.1145/355578.366316
+        """
+        super().__init__('''
+            void eigenvalues_3x3_symmetric(double* A, double* v){
+                double p1 = (A[1] * A[1]) + (A[2] * A[2]) + (A[4] * A[4]);
+        
+                if (p1 == 0.0){
+                    v[0] = A[0];
+                    v[1] = A[3];
+                    v[2] = A[5];
+                    return;
+                }
+        
+                double q = (A[0] + A[3] + A[5]) / 3.0;
+                double p = sqrt(((A[0] - q)*(A[0] - q) + (A[3] - q)*(A[3] - q) + (A[5] - q)*(A[5] - q) + 2*p1) / 6.0);
+        
+                double r = (
+                     ((A[0] - q)/p) * ((((A[3] - q)/p) * ((A[5] - q)/p)) - ((A[4]/p) * (A[4]/p))) 
+                    - (A[1]/p)      * ((A[1]/p) * ((A[5] - q)/p) - (A[2]/p) * (A[4]/p)) 
+                    + (A[2]/p)      * ((A[1]/p) * (A[4]/p) - (A[2]/p) * ((A[3] - q)/p))
+                ) / 2.0;
+        
+                double phi;
+                if(r <= -1){
+                    phi = M_PI / 3.0;
+                }
+                else if(r >= 1){
+                    phi = 0;
+                }
+                else{
+                    phi = acos(r) / 3;
+                }
+        
+                v[0] = q + 2 * p * cos(phi);
+                v[2] = q + 2 * p * cos(phi + (2*M_PI/3.0));
+                v[1] = 3 * q - v[0] - v[2];            
+            }
+        ''')
+
+
 class Powell(SimpleCLLibraryFromFile):
 
     def __init__(self, eval_func, nmr_parameters, patience=2, patience_line_search=None,
