@@ -356,7 +356,7 @@ class AbstractSampler:
         for env in self._cl_runtime_info.cl_environments:
             self._logger.info('Using device \'{}\'.'.format(str(env)))
 
-        self._logger.info('Using compile flags: {}'.format(self._cl_runtime_info.get_compile_flags()))
+        self._logger.info('Using compile flags: {}'.format(self._cl_runtime_info.compile_flags))
 
         sample_settings = dict(nmr_samples=nmr_samples,
                                burnin=burnin,
