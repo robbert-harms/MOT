@@ -314,38 +314,7 @@ class Subplex(SimpleCLLibraryFromFile):
     def __init__(self, eval_func, nmr_parameters, patience=10,
                  patience_nmsimplex=100, alpha=1.0, beta=0.5, gamma=2.0, delta=0.5, scale=1.0, psi=0.001, omega=0.01,
                  adaptive_scales=True, min_subspace_length='auto', max_subspace_length='auto', **kwargs):
-        """The Subplex optimization routines.
-
-        Args:
-            eval_func (mot.lib.cl_function.CLFunction): the function we want to optimize, Should be of signature:
-                ``double evaluate(local mot_float_type* x, void* data_void);``
-            nmr_parameters (int): the number of parameters in the model, this will be hardcoded in the method
-            patience (int): the patience of the Powell algorithm
-            patience_nmsimplex (int): the patience of the Nelder-Mead simplex routine
-            scale (double): the scale of the initial simplex, default 1.0
-            alpha (double): reflection coefficient, default 1.0
-            beta (double): contraction coefficient, default 0.5
-            gamma (double); expansion coefficient, default 2.0
-            delta (double); shrinkage coefficient, default 0.5
-            psi (double): subplex specific, simplex reduction coefficient, default 0.001.
-            omega (double): subplex specific, scaling reduction coefficient, default 0.01
-            min_subspace_length (int): the minimum subspace length, defaults to min(2, n).
-                This should hold: (1 <= min_s_d <= max_s_d <= n and min_s_d*ceil(n/nsmax_s_dmax) <= n)
-            max_subspace_length (int): the maximum subspace length, defaults to min(5, n).
-                This should hold: (1 <= min_s_d <= max_s_d <= n and min_s_d*ceil(n/max_s_d) <= n)
-
-            adaptive_scales (boolean): if set to True we use adaptive scales instead of the default scale values.
-                This sets the scales to:
-
-                .. code-block:: python
-
-                    n = <# parameters>
-
-                    alpha = 1
-                    beta  = 0.75 - 1.0 / (2 * n)
-                    gamma = 1 + 2.0 / n
-                    delta = 1 - 1.0 / n
-        """
+        """The Subplex optimization routines."""
         dependencies = list(kwargs.get('dependencies', []))
         dependencies.append(eval_func)
         dependencies.append(LibNMSimplex('subspace_evaluate'))
