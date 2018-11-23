@@ -2,6 +2,22 @@
 Changelog
 *********
 
+v0.8.1 (2018-11-23)
+===================
+
+Added
+-----
+- Adds a function for computing the eigenvalues of a 3x3 symmetric matrix.
+
+Changed
+-------
+- Removed the constants to single precision flag from the compilation.
+
+Other
+-----
+- Small bugfix in the polynomial computation, no value was returned for 0 real roots.
+
+
 v0.8.0 (2018-11-09)
 ===================
 This version adds support for box constraints to the optimization routines.
