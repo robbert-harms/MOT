@@ -22,7 +22,8 @@ class solve_cubic_pol_real(SimpleCLLibrary):
 
         Args:
             coefficients: array of length 4, with the coefficients (a, b, c, d)
-            roots: array of length 3, for the return values.
+            roots: array of length 3, for the return values. Please note that only the first *n* values will be set,
+                with n the number of returned real roots.
 
         Returns:
             the number of real roots
@@ -33,10 +34,6 @@ class solve_cubic_pol_real(SimpleCLLibrary):
                 const double b = coefficients[1];
                 const double c = coefficients[2];
                 const double d = coefficients[3];
-                
-                for(int i = 0; i < 3; i++){
-                    roots[i] = 0;
-                }
                 
                 if(a == 0 && b == 0){
                     roots[0] = -d / c;
@@ -52,11 +49,11 @@ class solve_cubic_pol_real(SimpleCLLibrary):
                         return 2;
                     }
                     /* // Imaginary roots, not returned 
-                    D = sqrt(-D);
-                    roots[0] = (-c + D * 1j) / (2.0 * b);
-                    roots[1] = (-c - D * 1j) / (2.0 * b);
-                    return 0;
+                        D = sqrt(-D);
+                        roots[0] = (-c + D * 1j) / (2.0 * b);
+                        roots[1] = (-c - D * 1j) / (2.0 * b);
                     */
+                    return 0;
                 }
                 
                 double f = ((3.0 * c / a) - ((b *b) / (a * a))) / 3.0;
