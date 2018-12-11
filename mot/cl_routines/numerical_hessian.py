@@ -17,10 +17,9 @@ __licence__ = 'LGPL v3'
 
 def numerical_hessian(objective_func, parameters,
                       lower_bounds=None, upper_bounds=None,
-                      step_ratio=2, nmr_steps=15, data=None,
-                      max_step_sizes=None, scaling_factors=None,
-                      step_offset=None, parameter_transform_func=None,
-                      cl_runtime_info=None):
+                      step_ratio=2, nmr_steps=5,
+                      max_step_sizes=None, step_offset=None,
+                      data=None, cl_runtime_info=None):
     """Calculate and return the Hessian of the given function at the given parameters.
 
     This calculates the Hessian using central difference (using a 2nd order Taylor expansion) with a Richardson
@@ -56,9 +55,7 @@ def numerical_hessian(objective_func, parameters,
 
             .. code-block:: c
 
-                double <func_name>(local const mot_float_type* const x,
-                                   void* data,
-                                   local mot_float_type* objective_list);
+                double <func_name>(local const mot_float_type* const x, void* data);
 
             The objective function has the same signature as the minimization function in MOT. For the numerical
             hessian, the ``objective_list`` parameter is ignored.
@@ -66,47 +63,23 @@ def numerical_hessian(objective_func, parameters,
         parameters (ndarray): The parameters at which to evaluate the gradient. A (d, p) matrix with d problems,
             and p parameters
         lower_bounds (list or None): a list of length (p,) for p parameters with the lower bounds.
-            Each element of the list can be a scalar, a vector (of the same length as the number of problem instances),
-            or None. For infinity use np.inf, for boundless use None.
+            Each element of the list can be a scalar or a vector (of the same length as the number
+            of problem instances). To disable bounds for this parameter use -np.inf.
         upper_bounds (list or None): a list of length (p,) for p parameters with the upper bounds.
-            Each element of the list can be a scalar, a vector (of the same length as the number of problem instances),
-            or None. For infinity use np.inf, for boundless use None.
+            Each element of the list can be a scalar or a vector (of the same length as the number
+            of problem instances). To disable bounds for this parameter use np.inf.
         step_ratio (float): the ratio at which the steps diminish.
         nmr_steps (int): the number of steps we will generate. We will calculate the derivative for each of these
             step sizes and extrapolate the best step size from among them. The minimum number of steps is 2.
-        data (mot.lib.kernel_data.KernelData): the user provided data for the ``void* data`` pointer.
         step_offset (int): the offset in the steps, if set we start the steps from the given offset.
         max_step_sizes (float or ndarray or None): the maximum step size, or the maximum step size per parameter.
             If None is given, we use 0.1 for all parameters. If a float is given, we use that for all parameters.
             If a list is given, it should be of the same length as the number of parameters.
-        scaling_factors (List[float] or ndarray): per estimable parameter a single float with the parameter scaling
-            for that parameter. Use 1 as identity.
-
-            Since numerical differentiation is sensitive to differences in step sizes, it is better to rescale
-            the parameters to a unitary range instead of changing the step sizes for the parameters.
-            This vector should contain scaling factors such that when the parameter is multiplied with this value,
-            the order of magnitude of the parameter is about one.
-
-        parameter_transform_func (mot.lib.cl_function.CLFunction or None): A transformation that can prepare the
-            parameter plus/minus the proposed step before evaluation.
-
-            As an example, suppose we are taking the derivative of a a polar coordinate :math:`\theta` defined on
-            :math:`[0, 2\pi]`. While taking the derivative, the function might propose positions outside of the range
-            of :math:`\theta`. This function allows changing the parameter vector before it is put into the model.
-
-            Please note that this function should return a parameter vector that is equivalent (but not necessarily
-            equal) to the provided proposal.
-
-            Signature:
-
-            .. code-block:: c
-
-                void <func_name>(void* data, local mot_float_type* x);
-
+        data (mot.lib.kernel_data.KernelData): the user provided data for the ``void* data`` pointer.
         cl_runtime_info (mot.configuration.CLRuntimeInfo): the runtime information
 
     Returns:
-        ndarray: the gradients for each of the parameters for each of the problems
+        ndarray: per problem instance a vector with the lower triangular elements of the Hessian matrix
     """
     if len(parameters.shape) == 1:
         parameters = parameters[None, :]
@@ -118,42 +91,30 @@ def numerical_hessian(objective_func, parameters,
         max_step_sizes = [max_step_sizes] * nmr_params
     max_step_sizes = np.array(max_step_sizes)
 
-    if scaling_factors is None:
-        scaling_factors = 1
-    if isinstance(scaling_factors, Number):
-        scaling_factors = [scaling_factors] * nmr_params
-    scaling_factors = np.array(scaling_factors)
-
-    def finalize_derivatives(derivatives):
-        """Transforms the derivatives from vector to matrix and apply the parameter scalings."""
-        return _results_vector_to_matrix(derivatives, nmr_params) * np.outer(scaling_factors, scaling_factors)
-
     with config_context(CLRuntimeAction(cl_runtime_info or CLRuntimeInfo())):
         derivatives = _compute_derivatives(objective_func, parameters, step_ratio, step_offset, nmr_steps,
-                                           lower_bounds, upper_bounds, max_step_sizes, scaling_factors, data=data,
-                                           parameter_transform_func=parameter_transform_func)
+                                           lower_bounds, upper_bounds, max_step_sizes, data=data)
 
         if nmr_steps == 1:
-            return finalize_derivatives(derivatives[..., 0])
+            return derivatives[..., 0]
 
         derivatives, errors = _richardson_extrapolation(derivatives, step_ratio)
 
         if nmr_steps <= 3:
-            return finalize_derivatives(derivatives[..., 0])
+            return derivatives[..., 0]
 
         if derivatives.shape[2] > 2:
             derivatives, errors = _wynn_extrapolate(derivatives)
 
         if derivatives.shape[2] == 1:
-            return finalize_derivatives(derivatives[..., 0])
+            return derivatives[..., 0]
 
         derivatives, errors = _median_outlier_extrapolation(derivatives, errors)
-        return finalize_derivatives(derivatives)
+        return derivatives
 
 
 def _compute_derivatives(objective_func, parameters, step_ratio, step_offset, nmr_steps,
-                         lower_bounds, upper_bounds, max_step_sizes, scaling_factors, data=None,
-                         parameter_transform_func=None):
+                         lower_bounds, upper_bounds, max_step_sizes, data=None):
     """Compute the lower triangular elements of the Hessian using the central difference method.
 
     This will compute the elements of the Hessian multiple times with decreasing step sizes.
@@ -168,39 +129,24 @@ def _compute_derivatives(objective_func, parameters, step_ratio, step_offset, nm
         lower_bounds (list): lower bounds
         upper_bounds (list): upper bounds
         max_step_sizes (ndarray): the maximum step sizes per parameter
-        scaling_factors (ndarray): per estimable parameter a single float with the parameter scaling for that parameter.
-            Use 1 as identity.
         data (mot.lib.kernel_data.KernelData): the user provided data for the ``void* data`` pointer.
-        parameter_transform_func (mot.lib.cl_function.CLFunction): A transformation that can prepare the parameter plus/
-            minus the proposed step before evaluation.
-
-            Signature:
-
-            .. code-block:: c
-
-                void <func_name>(void* data, local mot_float_type* x);
     """
     nmr_params = parameters.shape[1]
     nmr_derivatives = (nmr_params ** 2 - nmr_params) // 2 + nmr_params
 
-    if parameter_transform_func is None:
-        parameter_transform_func = SimpleCLFunction.from_string(
-            'void voidTransform(void* data, local mot_float_type* x){}')
-
-    initial_step = _get_initial_step_size(parameters, lower_bounds, upper_bounds, max_step_sizes, scaling_factors)
+    initial_step = _get_initial_step_size(parameters, lower_bounds, upper_bounds, max_step_sizes)
     if step_offset:
         initial_step *= float(step_ratio) ** -step_offset
 
     kernel_data = {
         'data': data,
         'parameters': Array(parameters, ctype='mot_float_type'),
-        'parameter_scalings_inv': Array(1. / scaling_factors, ctype='float', offset_str='0'),
         'initial_step': Array(initial_step, ctype='float'),
         'step_evaluates': Zeros((parameters.shape[0], nmr_derivatives, nmr_steps), 'double'),
         'x_tmp': LocalMemory('mot_float_type', nmr_params)
     }
 
-    _derivation_kernel(objective_func, nmr_params, nmr_steps, step_ratio, parameter_transform_func).evaluate(
+    _derivation_kernel(objective_func, nmr_params, nmr_steps, step_ratio).evaluate(
         kernel_data, parameters.shape[0], use_local_reduction=True)
 
     return kernel_data['step_evaluates'].get_data()
@@ -306,31 +252,7 @@ def _median_outlier_extrapolation(derivatives, errors):
     return derivatives_final, errors_final
 
 
-def _results_vector_to_matrix(vectors, nmr_params):
-    """Transform for every problem (and optionally every step size) the vector results to a square matrix.
-
-    Since we only process the lower triangular items, we have to convert the 1d vectors into 2d matrices for every
-    problem. This function does that.
-
-    Args:
-        vectors (ndarray): for every problem (and step size) the 1d vector with results
-        nmr_params (int): the number of parameters
-    """
-    matrices = np.zeros(vectors.shape[:-1] + (nmr_params, nmr_params), dtype=vectors.dtype)
-
-    ltr_ind = 0
-    for px in range(nmr_params):
-        matrices[..., px, px] = vectors[..., ltr_ind]
-        ltr_ind += 1
-
-        for py in range(px + 1, nmr_params):
-            matrices[..., px, py] = vectors[..., ltr_ind]
-            matrices[..., py, px] = vectors[..., ltr_ind]
-            ltr_ind += 1
-    return matrices
-
-
-def _get_initial_step_size(parameters, lower_bounds, upper_bounds, max_step_sizes, scaling_factors):
+def _get_initial_step_size(parameters, lower_bounds, upper_bounds, max_step_sizes):
     """Get an initial step size to use for every parameter.
 
     This chooses the step sizes based on the maximum step size and the lower and upper bounds.
@@ -341,34 +263,18 @@ def _get_initial_step_size(parameters, lower_bounds, upper_bounds, max_step_size
         lower_bounds (list): lower bounds
         upper_bounds (list): upper bounds
         max_step_sizes (list): the maximum step size, or the maximum step size per parameter.
-        scaling_factors (ndarray): per estimable parameter a single float with the parameter scaling for that parameter.
-            Use 1 as identity.
 
     Returns:
         ndarray: for every problem instance the vector with the initial step size for each parameter.
     """
-    if lower_bounds is None and upper_bounds is None:
-        return np.repeat(max_step_sizes[None, :], parameters.shape[0], axis=0)
-
     initial_step = np.zeros_like(parameters)
 
     for ind in range(parameters.shape[1]):
-        if lower_bounds[ind] is None and upper_bounds[ind] is None:
-            initial_step[:, ind] = max_step_sizes[ind]
-        else:
-            use_lower = lower_bounds[ind] is not None
-            use_upper = upper_bounds[ind] is not None
+        minimum_allowed_step = np.minimum(np.abs(parameters[:, ind] - lower_bounds[ind]),
+                                          np.abs(upper_bounds[ind] - parameters[:, ind]))
+        initial_step[:, ind] = np.minimum(minimum_allowed_step, max_step_sizes[ind])
 
-            if use_upper and not use_lower:
-                minimum_allowed_step = np.abs(upper_bounds[ind] - parameters[:, ind]) * scaling_factors[ind]
-            elif use_lower and not use_upper:
-                minimum_allowed_step = np.abs(parameters[:, ind] - lower_bounds[ind]) * scaling_factors[ind]
-            else:
-                minimum_allowed_step = np.minimum(np.abs(parameters[:, ind] - lower_bounds[ind]),
-                                                  np.abs(upper_bounds[ind] - parameters[:, ind])) * scaling_factors[ind]
-            initial_step[:, ind] = np.minimum(minimum_allowed_step, max_step_sizes[ind])
-
-    return initial_step
+    return initial_step / 2.
 
 
 def _get_richardson_coefficients(step_ratio, nmr_extrapolations):
@@ -411,45 +317,91 @@ def _get_richardson_coefficients(step_ratio, nmr_extrapolations):
     return linalg.pinv(r_matrix(nmr_extrapolations))[0]
 
 
-def _get_compute_functions_cl(objective_func, nmr_params, nmr_steps, step_ratio, parameter_transform_func):
+def _get_compute_functions_cl(objective_func, nmr_steps, step_ratio):
     func = objective_func.get_cl_code()
-    func += parameter_transform_func.get_cl_code()
 
     return func + '''
         double _calculate_function(void* data, local mot_float_type* x){
-            return ''' + objective_func.get_cl_function_name() + '''(x, data, 0);
+            return ''' + objective_func.get_cl_function_name() + '''(x, data);
         }
         
+        /**
+         * Evaluate the model with a perturbation in one dimensions.
+         *
+         * Args:
+         *  data: the data container
+         *  x_tmp: the array with the input parameters, needs to be writable, although it will return
+         *         the same values.
+         *  perturb_dim0: the index (into the x_tmp parameters) of the parameter to perturbate
+         *  perturb_0: the added perturbation of the index corresponding to ``perturb_dim_0``
+         *
+         * Returns:
+         *  the function evaluated at the parameters plus their perturbation.
+         */
+        double _eval_step_mono(void* data, local mot_float_type* x_tmp, 
+                               uint perturb_dim_0, mot_float_type perturb_0){
+            
+            mot_float_type old_0;
+            double return_val;
+            
+            if(get_local_id(0) == 0){
+                old_0 = x_tmp[perturb_dim_0];
+                x_tmp[perturb_dim_0] += perturb_0;
+            }
+            barrier(CLK_LOCAL_MEM_FENCE);
+            
+            return_val = _calculate_function(data, x_tmp);
+            barrier(CLK_LOCAL_MEM_FENCE);
+            
+            if(get_local_id(0) == 0){
+                x_tmp[perturb_dim_0] = old_0;
+            }
+            barrier(CLK_LOCAL_MEM_FENCE);
+            
+            return return_val;
+        }
         /**
          * Evaluate the model with a perturbation in two dimensions.
          *
          * Args:
          *  data: the data container
-         *  x_input: the array with the input parameters
-         *  perturb_dim_0: the index (into the x_input parameters) of the first parameter to perturbate
+         *  x_tmp: the array with the input parameters, needs to be writable, although it will return
+         *         the same values.
+         *  perturb_dim_0: the index (into the x_tmp parameters) of the first parameter to perturbate
          *  perturb_0: the added perturbation of the index corresponding to ``perturb_dim_0``
-         *  perturb_dim_1: the index (into the x_input parameters) of the second parameter to perturbate
+         *  perturb_dim_1: the index (into the x_tmp parameters) of the second parameter to perturbate
          *  perturb_1: the added perturbation of the index corresponding to ``perturb_dim_1``
          *
          * Returns:
          *  the function evaluated at the parameters plus their perturbation.
          */
-        double _eval_step(void* data, local mot_float_type* x_input,
-                          uint perturb_dim_0, mot_float_type perturb_0,
-                          uint perturb_dim_1, mot_float_type perturb_1,
-                          local mot_float_type* x_tmp){
-
+        double _eval_step_bi(void* data, local mot_float_type* x_tmp,
+                             uint perturb_dim_0, mot_float_type perturb_0,
+                             uint perturb_dim_1, mot_float_type perturb_1){
+            
+            mot_float_type old_0;
+            mot_float_type old_1;
+            double return_val;
+            
             if(get_local_id(0) == 0){
-                for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
-                    x_tmp[i] = x_input[i];
-                }
+                old_0 = x_tmp[perturb_dim_0];
+                old_1 = x_tmp[perturb_dim_1];
+                
                 x_tmp[perturb_dim_0] += perturb_0;
                 x_tmp[perturb_dim_1] += perturb_1;
             }
             barrier(CLK_LOCAL_MEM_FENCE);
-
-            ''' + parameter_transform_func.get_cl_function_name() + '''(data, x_tmp);
-            return _calculate_function(data, x_tmp);
+            
+            return_val = _calculate_function(data, x_tmp);
+            barrier(CLK_LOCAL_MEM_FENCE);
+            
+            if(get_local_id(0) == 0){
+                x_tmp[perturb_dim_0] = old_0;
+                x_tmp[perturb_dim_1] = old_1;
+            }
+            barrier(CLK_LOCAL_MEM_FENCE);
+            
+            return return_val;
         }
         
         /**
@@ -457,11 +409,11 @@ def _get_compute_functions_cl(objective_func, nmr_params, nmr_steps, step_ratio,
          * 
          * This uses the initial steps in the data structure, indexed by the parameters to change (px, py).
          */
-        void _compute_steps(void* data, local mot_float_type* x_input, mot_float_type f_x_input,
-                            uint px, uint py, global double* step_evaluates, 
-                            global float* parameter_scalings_inv,
-                            global float* initial_step,
-                            local mot_float_type* x_tmp){
+        void _compute_steps(void* data, local mot_float_type* x_tmp, 
+                            mot_float_type f_x_input,
+                            uint px, uint py, 
+                            global double* step_evaluates, 
+                            global float* initial_step){
             
             double step_x;
             double step_y;
@@ -473,14 +425,10 @@ def _get_compute_functions_cl(objective_func, nmr_params, nmr_steps, step_ratio,
                     step_x = initial_step[px] / pown(''' + str(float(step_ratio)) + ''', step_ind);
                     
                     tmp = (
-                          _eval_step(data, x_input,
-                                     px, 2 * (step_x * parameter_scalings_inv[px]),
-                                     0, 0, x_tmp)
-                        + _eval_step(data, x_input,
-                                     px, -2 * (step_x * parameter_scalings_inv[px]),
-                                     0, 0, x_tmp)
+                          _eval_step_mono(data, x_tmp, px, 2 * step_x)
+                        + _eval_step_mono(data, x_tmp, px, -2 * step_x)
                         - 2 * f_x_input
-                    ) / (4 * step_x * step_x);
+                    ) / (4 * step_x * step_x);    
                     
                     if(is_first_workitem){
                         step_evaluates[step_ind] = tmp;
@@ -493,20 +441,12 @@ def _get_compute_functions_cl(objective_func, nmr_params, nmr_steps, step_ratio,
                     step_y = initial_step[py] / pown(''' + str(float(step_ratio)) + ''', step_ind);
                     
                     tmp = (
-                          _eval_step(data, x_input,
-                                     px, step_x * parameter_scalings_inv[px],
-                                     py, step_y * parameter_scalings_inv[py], x_tmp)
-                        - _eval_step(data, x_input,
-                                     px, step_x * parameter_scalings_inv[px],
-                                     py, -step_y * parameter_scalings_inv[py], x_tmp)
-                        - _eval_step(data, x_input,
-                                     px, -step_x * parameter_scalings_inv[px],
-                                     py, step_y * parameter_scalings_inv[py], x_tmp)
-                        + _eval_step(data, x_input,
-                                     px, -step_x * parameter_scalings_inv[px],
-                                     py, -step_y * parameter_scalings_inv[py], x_tmp)
+                          _eval_step_bi(data, x_tmp, px, step_x, py, step_y)
+                        - _eval_step_bi(data, x_tmp, px, step_x, py, -step_y)
+                        - _eval_step_bi(data, x_tmp, px, -step_x, py, step_y)
+                        + _eval_step_bi(data, x_tmp, px, -step_x, py, -step_y)
                     ) / (4 * step_x * step_y);
-
+                    
                     if(is_first_workitem){
                         step_evaluates[step_ind] = tmp;
                     }                       
@@ -514,6 +454,40 @@ def _get_compute_functions_cl(objective_func, nmr_params, nmr_steps, step_ratio,
             }
         }
     '''
+
+
+def _derivation_kernel(objective_func, nmr_params, nmr_steps, step_ratio):
+    coords = [(x, y) for x, y in itertools.combinations_with_replacement(range(nmr_params), 2)]
+    func = _get_compute_functions_cl(objective_func, nmr_steps, step_ratio)
+
+    return SimpleCLFunction.from_string('''
+        void compute(global mot_float_type* parameters,
+                     global float* initial_step,
+                     global double* step_evaluates,
+                     local mot_float_type* x_tmp,
+                     void* data){
+
+            uint coords[''' + str(len(coords)) + '''][2] = {
+                ''' + ', '.join('{{{}, {}}}'.format(*c) for c in coords) + '''
+            };
+
+            if(get_local_id(0) == 0){
+                for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
+                    x_tmp[i] = parameters[i];
+                }
+            }
+            barrier(CLK_LOCAL_MEM_FENCE);
+
+            double f_x_input = _calculate_function(data, x_tmp);
+
+            for(uint coord_ind = 0; coord_ind < ''' + str(len(coords)) + '''; coord_ind++){
+                _compute_steps(data, x_tmp, f_x_input, 
+                               coords[coord_ind][0], coords[coord_ind][1],
+                               step_evaluates + coord_ind * ''' + str(nmr_steps) + ''',
+                               initial_step);
+            }
+        }
+    ''', dependencies=[SimpleCLCodeObject(func)])
 
 
 def _get_error_estimate_functions_cl(nmr_steps, nmr_convolutions,
@@ -609,32 +583,6 @@ def _get_error_estimate_functions_cl(nmr_steps, nmr_convolutions,
     '''
     return func
 
-
-def _derivation_kernel(objective_func, nmr_params, nmr_steps, step_ratio, parameter_transform_func):
-    coords = [(x, y) for x, y in itertools.combinations_with_replacement(range(nmr_params), 2)]
-    func = _get_compute_functions_cl(objective_func, nmr_params, nmr_steps, step_ratio, parameter_transform_func)
-
-    return SimpleCLFunction.from_string('''
-        void compute(local mot_float_type* parameters,
-                     global float* parameter_scalings_inv,
-                     global float* initial_step,
-                     global double* step_evaluates,
-                     local mot_float_type* x_tmp,
-                     void* data){
-                                 
-            double f_x_input = _calculate_function(data, parameters);
-            
-            uint coords[''' + str(len(coords)) + '''][2] = {
-                ''' + ', '.join('{{{}, {}}}'.format(*c) for c in coords)  + '''
-            };
-            
-            for(uint coord_ind = 0; coord_ind < ''' + str(len(coords)) + '''; coord_ind++){
-                _compute_steps(data, parameters, f_x_input, coords[coord_ind][0], coords[coord_ind][1], 
-                               step_evaluates + coord_ind * ''' + str(nmr_steps) + ''', parameter_scalings_inv,
-                               initial_step, x_tmp);
-            }
-        }
-    ''', dependencies=[SimpleCLCodeObject(func)])
 
 
 def _richardson_error_kernel(nmr_steps, nmr_convolutions, richardson_coefficients):

@@ -4,6 +4,8 @@ from mot.lib.cl_function import SimpleCLFunction, SimpleCLCodeObject
 from mot.lib.kernel_data import LocalMemory, Struct
 from mot.library_functions.base import SimpleCLLibrary, SimpleCLLibraryFromFile, CLLibrary
 from pkg_resources import resource_filename
+
+from mot.library_functions.eispack import eispack_tred2, eispack_tql2
 from mot.library_functions.unity import log1pmx
 from mot.library_functions.polynomials import p1evl, polevl, ratevl, solve_cubic_pol_real
 from mot.library_functions.continuous_distributions.normal import normal_cdf, normal_pdf, normal_logpdf, normal_ppf
@@ -241,6 +243,115 @@ class eigenvalues_3x3_symmetric(SimpleCLLibrary):
                 v[1] = 3 * q - v[0] - v[2];            
             }
         ''')
+
+
+class multiply_square_matrices(SimpleCLLibrary):
+    def __init__(self):
+        """Matrix multiplication of two square matrices.
+
+        Having this as a special function is slightly faster than a more generic matrix multiplication algorithm.
+
+        All matrices are expected to be in c/row-major order.
+
+        Parameters:
+            n: the rectangular size of the matrix (the number of rows / the number of columns).
+            A[n*n]: the left matrix
+            B[n*n]: the right matrix
+            C[n*n]: the output matrix
+        """
+        super().__init__('''
+            void multiply_square_matrices(uint n, double* A, double* B, double* C){
+                int i, j, z;
+                double sum;
+                for(int ind = 0; ind < n*n; ind++){
+                    i = ind / n;
+                    j = ind - n * i;
+
+                    sum = 0;
+                    for(z = 0; z < n; z++){
+                        sum += A[i * n + z] * B[z * n + j];
+                    }
+                    C[ind] = sum;
+                }
+            }
+        ''')
+
+
+class eigen_decompose_real_symmetric_matrix(SimpleCLLibrary):
+
+    def __init__(self):
+        """Computes eigenvalues and eigenvectors of real symmetric matrix.
+
+        This uses the RS routine from the EISPACK code, to be found at:
+        https://people.sc.fsu.edu/~jburkardt/c_src/eispack/eispack.html
+
+        It first tri-diagonalizes the matrix using Householder transformations and then computes the diagonal
+        using QR transformations.
+
+        This routine only works with real symmetric matrices as input.
+
+        Parameters:
+            n: input, the order of the matrix.
+            A[n*n]: input, the real symmetric matrix to invert
+            W[n]: output, the eigenvalues in ascending order.
+            Z[n*n]: output, the eigenvectors
+            scratch[n]: input, scratch data
+
+        Output:
+            error code: the error for the the TQL2 routine (see EISPACK).
+            The no-error, normal completion code is zero.
+        """
+        super().__init__('''
+            int eigen_decompose_real_symmetric_matrix(int n, double* A, double* w, double* Z, double* scratch){
+                
+                // tri-diagonalize the matrix
+                eispack_tred2 ( n, A, w, scratch, Z );
+                
+                // QR decompose the tri-diagonal
+                return eispack_tql2 ( n, w, scratch, Z );
+            }
+        ''', dependencies=[eispack_tred2(), eispack_tql2()])
+
+
+class pseudo_inverse_real_symmetric_matrix(SimpleCLLibrary):
+
+    def __init__(self):
+        """Compute the pseudo-inverse of the given matrix, inplace.
+
+        Parameters:
+            n: the size of the symmetric matrix
+            A[n*n]: on input, the matrix to inverse. On output, the inverse of the matrix.
+            scratch[2*n + 2*n*n]: scratch data
+        """
+        super().__init__('''
+            void pseudo_inverse_real_symmetric_matrix(uint n, double* A, double* scratch){
+                int i, j;
+                
+                double* w = scratch;
+                double* Z = w + n;
+                double* decomposition_scratch = Z + n * n;
+                double* Z_transpose_w = decomposition_scratch + n;
+
+                eigen_decompose_real_symmetric_matrix(n, A, w, Z, decomposition_scratch);
+                
+                for(i = 0; i < n; i++){
+                    if(w[i] == 0.){
+                        w[i] = 0;
+                    }
+                    else{
+                        w[i] = fabs(1/w[i]);
+                    }
+                }
+                
+                for(i = 0; i < n; i++){
+                    for(j = 0; j < n; j++){
+                        Z_transpose_w[i * n + j] = Z[j * n + i] * w[j];
+                    }
+                }
+
+                multiply_square_matrices(n, Z_transpose_w, Z, A);
+            }
+        ''', dependencies=[eigen_decompose_real_symmetric_matrix(), multiply_square_matrices()])
 
 
 class Powell(SimpleCLLibraryFromFile):

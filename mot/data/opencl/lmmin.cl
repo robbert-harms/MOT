@@ -385,7 +385,7 @@ int lmmin(local mot_float_type * const model_parameters, void* data,
                     tmp = 0.5 * dirder / (dirder + 0.5 * actred);
                 if (0.1 * *fnorm1 >= *fnorm || tmp < 0.1)
                     tmp = 0.1;
-                delta = tmp * min(delta, *pnorm / 0.1);
+                delta = tmp * min(delta, (mot_float_type)(*pnorm / 0.1));
 
                 if(get_local_id(0) == 0){
                     *lmpar /= tmp;
