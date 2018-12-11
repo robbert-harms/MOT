@@ -2,6 +2,23 @@
 Changelog
 *********
 
+v0.8.2 (2018-12-11)
+===================
+
+Added
+-----
+- Added routines for computing the inverse of a symmetric matrix using eigenvalue decomposition.
+
+Changed
+-------
+- Refactored parts of the numerical Hessian routine.
+
+Other
+-----
+- Fixed LM by adding a double cast.
+
+
+
 v0.8.1 (2018-11-23)
 ===================
 
