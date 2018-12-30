@@ -79,7 +79,7 @@ def numerical_hessian(objective_func, parameters,
         cl_runtime_info (mot.configuration.CLRuntimeInfo): the runtime information
 
     Returns:
-        ndarray: per problem instance a vector with the lower triangular elements of the Hessian matrix
+        ndarray: per problem instance a vector with the upper triangular elements of the Hessian matrix
     """
     if len(parameters.shape) == 1:
         parameters = parameters[None, :]
@@ -115,7 +115,7 @@ def numerical_hessian(objective_func, parameters,
 
 def _compute_derivatives(objective_func, parameters, step_ratio, step_offset, nmr_steps,
                          lower_bounds, upper_bounds, max_step_sizes, data=None):
-    """Compute the lower triangular elements of the Hessian using the central difference method.
+    """Compute the upper triangular elements of the Hessian using the central difference method.
 
     This will compute the elements of the Hessian multiple times with decreasing step sizes.
 
@@ -457,7 +457,6 @@ def _get_compute_functions_cl(objective_func, nmr_steps, step_ratio):
 
 
 def _derivation_kernel(objective_func, nmr_params, nmr_steps, step_ratio):
-    coords = [(x, y) for x, y in itertools.combinations_with_replacement(range(nmr_params), 2)]
     func = _get_compute_functions_cl(objective_func, nmr_steps, step_ratio)
 
     return SimpleCLFunction.from_string('''
@@ -467,10 +466,6 @@ def _derivation_kernel(objective_func, nmr_params, nmr_steps, step_ratio):
                      local mot_float_type* x_tmp,
                      void* data){
 
-            uint coords[''' + str(len(coords)) + '''][2] = {
-                ''' + ', '.join('{{{}, {}}}'.format(*c) for c in coords) + '''
-            };
-
             if(get_local_id(0) == 0){
                 for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
                     x_tmp[i] = parameters[i];
@@ -479,12 +474,15 @@ def _derivation_kernel(objective_func, nmr_params, nmr_steps, step_ratio):
             barrier(CLK_LOCAL_MEM_FENCE);
 
             double f_x_input = _calculate_function(data, x_tmp);
-
-            for(uint coord_ind = 0; coord_ind < ''' + str(len(coords)) + '''; coord_ind++){
-                _compute_steps(data, x_tmp, f_x_input, 
-                               coords[coord_ind][0], coords[coord_ind][1],
-                               step_evaluates + coord_ind * ''' + str(nmr_steps) + ''',
-                               initial_step);
+            
+            uint coord_ind = 0;
+            for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
+                for(int j = i; j < ''' + str(nmr_params) + '''; j++){
+                    _compute_steps(data, x_tmp, f_x_input, i, j,
+                                   step_evaluates + coord_ind * ''' + str(nmr_steps) + ''',
+                                   initial_step);
+                    coord_ind++;
+                }
             }
         }
     ''', dependencies=[SimpleCLCodeObject(func)])
@@ -582,7 +580,6 @@ def _get_error_estimate_functions_cl(nmr_steps, nmr_convolutions,
         }
     '''
     return func
-
 
 
 def _richardson_error_kernel(nmr_steps, nmr_convolutions, richardson_coefficients):
