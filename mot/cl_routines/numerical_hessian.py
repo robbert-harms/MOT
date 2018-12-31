@@ -132,7 +132,7 @@ def _compute_derivatives(objective_func, parameters, step_ratio, step_offset, nm
         data (mot.lib.kernel_data.KernelData): the user provided data for the ``void* data`` pointer.
     """
     nmr_params = parameters.shape[1]
-    nmr_derivatives = (nmr_params ** 2 - nmr_params) // 2 + nmr_params
+    nmr_derivatives = nmr_params * (nmr_params + 1) // 2
 
     initial_step = _get_initial_step_size(parameters, lower_bounds, upper_bounds, max_step_sizes)
     if step_offset:

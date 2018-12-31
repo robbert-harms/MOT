@@ -1,11 +1,11 @@
 import os
 
 from mot.lib.cl_function import SimpleCLFunction, SimpleCLCodeObject
-from mot.lib.kernel_data import LocalMemory, Struct
+from mot.lib.kernel_data import LocalMemory
 from mot.library_functions.base import SimpleCLLibrary, SimpleCLLibraryFromFile, CLLibrary
 from pkg_resources import resource_filename
 
-from mot.library_functions.eispack import eispack_tred2, eispack_tql2
+from mot.library_functions.eispack import eispack_tred2, eispack_tql2, eispack_tred2_upper_triangular
 from mot.library_functions.unity import log1pmx
 from mot.library_functions.polynomials import p1evl, polevl, ratevl, solve_cubic_pol_real
 from mot.library_functions.continuous_distributions.normal import normal_cdf, normal_pdf, normal_logpdf, normal_ppf
@@ -280,7 +280,7 @@ class multiply_square_matrices(SimpleCLLibrary):
 class eigen_decompose_real_symmetric_matrix(SimpleCLLibrary):
 
     def __init__(self):
-        """Computes eigenvalues and eigenvectors of real symmetric matrix.
+        """Computes eigenvalues and eigenvectors of a real symmetric matrix.
 
         This uses the RS routine from the EISPACK code, to be found at:
         https://people.sc.fsu.edu/~jburkardt/c_src/eispack/eispack.html
@@ -293,8 +293,8 @@ class eigen_decompose_real_symmetric_matrix(SimpleCLLibrary):
         Parameters:
             n: input, the order of the matrix.
             A[n*n]: input, the real symmetric matrix to invert
-            W[n]: output, the eigenvalues in ascending order.
-            Z[n*n]: output, the eigenvectors
+            w[n]: output, the eigenvalues in ascending order.
+            Z[n*n]: output, the eigenvectors, can coincide with A.
             scratch[n]: input, scratch data
 
         Output:
@@ -305,12 +305,47 @@ class eigen_decompose_real_symmetric_matrix(SimpleCLLibrary):
             int eigen_decompose_real_symmetric_matrix(int n, double* A, double* w, double* Z, double* scratch){
                 
                 // tri-diagonalize the matrix
-                eispack_tred2 ( n, A, w, scratch, Z );
+                eispack_tred2(n, A, w, scratch, Z);
                 
                 // QR decompose the tri-diagonal
-                return eispack_tql2 ( n, w, scratch, Z );
+                return eispack_tql2(n, w, scratch, Z);
             }
         ''', dependencies=[eispack_tred2(), eispack_tql2()])
+
+
+class eigen_decompose_real_symmetric_matrix_upper_triangular(SimpleCLLibrary):
+
+    def __init__(self):
+        """Computes eigenvalues and eigenvectors of a real symmetric matrix stored as an upper triangular matrix.
+
+        This uses the RS routine from the EISPACK code, to be found at:
+        https://people.sc.fsu.edu/~jburkardt/c_src/eispack/eispack.html
+
+        It first tri-diagonalizes the matrix using Householder transformations and then computes the diagonal
+        using QR transformations.
+
+        Parameters:
+            n: input, the order of the matrix.
+            A[n*(n+1)/2]: input, the upper triangular elements of the real symmetric matrix to invert
+            w[n]: output, the eigenvalues in ascending order.
+            Z[n*n]: output, the eigenvectors, can not coincide with A.
+            scratch[n]: input, scratch data
+
+        Output:
+            error code: the error for the the TQL2 routine (see EISPACK).
+            The no-error, normal completion code is zero.
+        """
+        super().__init__('''
+            int eigen_decompose_real_symmetric_matrix_upper_triangular(int n, double* A, double* w, 
+                                                                       double* Z, double* scratch){
+
+                // tri-diagonalize the matrix
+                eispack_tred2_upper_triangular(n, A, w, scratch, Z);
+
+                // QR decompose the tri-diagonal
+                return eispack_tql2(n, w, scratch, Z);
+            }
+        ''', dependencies=[eispack_tred2_upper_triangular(), eispack_tql2()])
 
 
 class pseudo_inverse_real_symmetric_matrix(SimpleCLLibrary):
@@ -326,13 +361,55 @@ class pseudo_inverse_real_symmetric_matrix(SimpleCLLibrary):
         super().__init__('''
             void pseudo_inverse_real_symmetric_matrix(uint n, double* A, double* scratch){
                 int i, j;
-                
+
                 double* w = scratch;
                 double* Z = w + n;
                 double* decomposition_scratch = Z + n * n;
                 double* Z_transpose_w = decomposition_scratch + n;
 
                 eigen_decompose_real_symmetric_matrix(n, A, w, Z, decomposition_scratch);
+
+                for(i = 0; i < n; i++){
+                    if(w[i] == 0.){
+                        w[i] = 0;
+                    }
+                    else{
+                        w[i] = fabs(1/w[i]);
+                    }
+                }
+
+                for(i = 0; i < n; i++){
+                    for(j = 0; j < n; j++){
+                        Z_transpose_w[i * n + j] = Z[j * n + i] * w[j];
+                    }
+                }
+
+                multiply_square_matrices(n, Z_transpose_w, Z, A);
+            }
+        ''', dependencies=[eigen_decompose_real_symmetric_matrix(), multiply_square_matrices()])
+
+
+class pseudo_inverse_real_symmetric_matrix_upper_triangular(SimpleCLLibrary):
+
+    def __init__(self):
+        """Compute the pseudo-inverse of the given (upper triangular) matrix, inplace.
+
+        Parameters:
+            n: the size of the symmetric matrix
+            A[n*(n+1)/2]: on input, the matrix to inverse. On output, the inverse of the matrix.
+            scratch[2*n + 2*n*n]: scratch data
+        """
+        super().__init__('''
+            void pseudo_inverse_real_symmetric_matrix_upper_triangular(uint n, double* A, double* scratch){
+                int i, j, z, utr_ind;
+                double sum;
+                
+                double* w = scratch;
+                double* Z = w + n;
+                double* decomposition_scratch = Z + n * n;
+                double* Z_transpose_w = decomposition_scratch + n;
+
+                eigen_decompose_real_symmetric_matrix_upper_triangular(n, A, w, Z, decomposition_scratch);
                 
                 for(i = 0; i < n; i++){
                     if(w[i] == 0.){
@@ -348,10 +425,22 @@ class pseudo_inverse_real_symmetric_matrix(SimpleCLLibrary):
                         Z_transpose_w[i * n + j] = Z[j * n + i] * w[j];
                     }
                 }
-
-                multiply_square_matrices(n, Z_transpose_w, Z, A);
+                
+                utr_ind = 0;
+                for(i = 0; i < n; i++){
+                    for(j = i; j < n; j++){
+                        
+                        sum = 0;
+                        for(z = 0; z < n; z++){
+                            sum += Z_transpose_w[i * n + z] * Z[z * n + j];
+                        }
+                        
+                        A[utr_ind] = sum;
+                        utr_ind++;
+                    }
+                }
             }
-        ''', dependencies=[eigen_decompose_real_symmetric_matrix(), multiply_square_matrices()])
+        ''', dependencies=[eigen_decompose_real_symmetric_matrix_upper_triangular()])
 
 
 class Powell(SimpleCLLibraryFromFile):
