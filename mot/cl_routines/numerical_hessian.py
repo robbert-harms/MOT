@@ -95,12 +95,13 @@ def numerical_hessian(objective_func, parameters,
         if nmr_steps <= 3:
             return derivatives[..., 0]
 
-        if derivatives.shape[2] > 2:
+        if nmr_steps > 3:
             derivatives, errors = _wynn_extrapolate(derivatives)
 
-        if derivatives.shape[2] == 1:
+        if nmr_steps == 5:
             return derivatives[..., 0]
 
+        # for nmr of steps of 4, or 6 and higher
         derivatives, errors = _median_outlier_extrapolation(derivatives, errors)
         return derivatives
 
@@ -126,7 +127,7 @@ def _compute_derivatives(objective_func, parameters, step_ratio, step_offset, nm
     nmr_params = parameters.shape[1]
     nmr_derivatives = nmr_params * (nmr_params + 1) // 2
 
-    initial_step = _get_initial_step_size(parameters, lower_bounds, upper_bounds, max_step_sizes)
+    initial_step = _get_initial_step(parameters, lower_bounds, upper_bounds, max_step_sizes)
 
     if step_offset:
         initial_step *= float(step_ratio) ** -step_offset
@@ -139,7 +140,7 @@ def _compute_derivatives(objective_func, parameters, step_ratio, step_offset, nm
         'x_tmp': LocalMemory('mot_float_type', nmr_params)
     }
 
-    _derivation_kernel(objective_func, nmr_params, nmr_steps, step_ratio).evaluate(
+    _compute_hessian_stepsizes(objective_func, nmr_params, nmr_steps, step_ratio).evaluate(
         kernel_data, parameters.shape[0], use_local_reduction=True)
 
     return kernel_data['step_evaluates'].get_data()
@@ -164,24 +165,45 @@ def _richardson_extrapolation(derivatives, step_ratio):
     nmr_problems, nmr_derivatives, nmr_steps = derivatives.shape
 
     richardson_coefficients = _get_richardson_coefficients(step_ratio, min(nmr_steps, 3) - 1)
-    nmr_convolutions_needed = nmr_steps - (len(richardson_coefficients) - 2)
+    nmr_convolutions = nmr_steps - (len(richardson_coefficients) - 2)
 
     kernel_data = {
         'derivatives': Array(derivatives, 'double', mode='r'),
-        'richardson_extrapolations': Zeros((nmr_problems, nmr_derivatives, nmr_convolutions_needed),
+        'richardson_extrapolations': Zeros((nmr_problems, nmr_derivatives, nmr_convolutions),
                                            'double', mode='rw'),
-        'errors': Zeros((nmr_problems, nmr_derivatives, (nmr_convolutions_needed - 1)), 'double', mode='rw'),
+        'errors': Zeros((nmr_problems, nmr_derivatives, (nmr_convolutions - 1)), 'double', mode='rw'),
     }
 
-    richardson_func = _richardson_error_kernel(nmr_derivatives, nmr_steps,
-                                               nmr_convolutions_needed, richardson_coefficients)
+    richardson_func = _richardson_convolution(nmr_derivatives, nmr_steps,
+                                              nmr_convolutions, richardson_coefficients)
     richardson_func.evaluate(kernel_data, nmr_problems, use_local_reduction=True)
 
-    return (kernel_data['richardson_extrapolations'].get_data()[..., :(nmr_convolutions_needed - 1)],
+    return (kernel_data['richardson_extrapolations'].get_data()[..., :(nmr_convolutions - 1)],
             kernel_data['errors'].get_data())
 
 
 def _wynn_extrapolate(derivatives):
+    """Apply Wynn extrapolation to the derivatives.
+
+    This algorithm, known in the Python Numdifftools as DEA3, attempts to extrapolate non-linearly to a better
+    estimate of the sequence's limiting value, thus improving the rate of convergence. The routine is based on the
+    epsilon algorithm of P. Wynn [1].
+
+    References:
+    - [1] C. Brezinski and M. Redivo Zaglia (1991)
+            "Extrapolation Methods. Theory and Practice", North-Holland.
+
+    - [2] C. Brezinski (1977)
+            "Acceleration de la convergence en analyse numerique",
+            "Lecture Notes in Math.", vol. 584,
+            Springer-Verlag, New York, 1977.
+
+    - [3] E. J. Weniger (1989)
+            "Nonlinear sequence transformations for the acceleration of
+            convergence and the summation of divergent series"
+            Computer Physics Reports Vol. 10, 189 - 371
+            http://arxiv.org/abs/math/0306302v1
+    """
     nmr_problems, nmr_derivatives, nmr_steps = derivatives.shape
     nmr_extrapolations = nmr_steps - 2
 
@@ -191,7 +213,7 @@ def _wynn_extrapolate(derivatives):
         'errors': Zeros((nmr_problems, nmr_derivatives, nmr_extrapolations), 'double', mode='rw'),
     }
 
-    wynn_func = _wynn_extrapolation_kernel(nmr_steps, nmr_extrapolations, nmr_derivatives)
+    wynn_func = _wynn_extrapolation(nmr_derivatives, nmr_steps)
     wynn_func.evaluate(kernel_data, nmr_problems, use_local_reduction=True)
 
     return kernel_data['extrapolations'].get_data(), kernel_data['errors'].get_data()
@@ -236,7 +258,7 @@ def _median_outlier_extrapolation(derivatives, errors):
     return derivatives_final, errors_final
 
 
-def _get_initial_step_size(parameters, lower_bounds, upper_bounds, max_step_sizes):
+def _get_initial_step(parameters, lower_bounds, upper_bounds, max_step_sizes):
     """Get an initial step size to use for every parameter.
 
     This chooses the step sizes based on the maximum step size and the lower and upper bounds.
@@ -309,14 +331,8 @@ def _get_richardson_coefficients(step_ratio, nmr_extrapolations):
     return linalg.pinv(r_matrix(nmr_extrapolations))[0]
 
 
-def _get_compute_functions_cl(objective_func, nmr_steps, step_ratio):
-    func = objective_func.get_cl_code()
-
-    return func + '''
-        double _calculate_function(void* data, local mot_float_type* x){
-            return ''' + objective_func.get_cl_function_name() + '''(x, data);
-        }
-        
+def _compute_hessian_stepsizes(objective_func, nmr_params, nmr_steps, step_ratio):
+    func = objective_func.get_cl_code() + '''
         /**
          * Evaluate the model with a perturbation in one dimensions.
          *
@@ -342,7 +358,7 @@ def _get_compute_functions_cl(objective_func, nmr_steps, step_ratio):
             }
             barrier(CLK_LOCAL_MEM_FENCE);
             
-            return_val = _calculate_function(data, x_tmp);
+            return_val = ''' + objective_func.get_cl_function_name() + '''(x_tmp, data);
             barrier(CLK_LOCAL_MEM_FENCE);
             
             if(get_local_id(0) == 0){
@@ -384,7 +400,7 @@ def _get_compute_functions_cl(objective_func, nmr_steps, step_ratio):
             }
             barrier(CLK_LOCAL_MEM_FENCE);
             
-            return_val = _calculate_function(data, x_tmp);
+            return_val = ''' + objective_func.get_cl_function_name() + '''(x_tmp, data);
             barrier(CLK_LOCAL_MEM_FENCE);
             
             if(get_local_id(0) == 0){
@@ -447,16 +463,13 @@ def _get_compute_functions_cl(objective_func, nmr_steps, step_ratio):
         }
     '''
 
-
-def _derivation_kernel(objective_func, nmr_params, nmr_steps, step_ratio):
-    func = _get_compute_functions_cl(objective_func, nmr_steps, step_ratio)
-
     return SimpleCLFunction.from_string('''
-        void compute(global mot_float_type* parameters,
-                     global float* initial_step,
-                     global double* step_evaluates,
-                     local mot_float_type* x_tmp,
-                     void* data){
+        void _compute_hessian_stepsizes(
+                    global mot_float_type* parameters,
+                    global float* initial_step,
+                    global double* step_evaluates,
+                    local mot_float_type* x_tmp,
+                    void* data){
 
             if(get_local_id(0) == 0){
                 for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
@@ -465,7 +478,7 @@ def _derivation_kernel(objective_func, nmr_params, nmr_steps, step_ratio):
             }
             barrier(CLK_LOCAL_MEM_FENCE);
 
-            double f_x_input = _calculate_function(data, x_tmp);
+            double f_x_input = ''' + objective_func.get_cl_function_name() + '''(x_tmp, data);
             
             uint coord_ind = 0;
             for(int i = 0; i < ''' + str(nmr_params) + '''; i++){
@@ -480,8 +493,7 @@ def _derivation_kernel(objective_func, nmr_params, nmr_steps, step_ratio):
     ''', dependencies=[SimpleCLCodeObject(func)])
 
 
-def _get_error_estimate_functions_cl(nmr_steps, nmr_convolutions,
-                                     richardson_coefficients):
+def _richardson_convolution(nmr_derivatives, nmr_steps, nmr_convolutions, richardson_coefficients):
     func = '''
         /**
          * Apply a simple kernel convolution over the results from each row of steps.
@@ -490,7 +502,7 @@ def _get_error_estimate_functions_cl(nmr_steps, nmr_convolutions,
          * It uses the mode 'reflect' to deal with outside points.
          *
          * Please note that this kernel is hard coded to work with 2nd order Taylor expansions derivatives only.
-
+        
          * Args:
          *  step_evaluates: the step evaluates for each row of the step sizes
          *  richardson_extrapolations: the array to place the convoluted results in
@@ -498,23 +510,23 @@ def _get_error_estimate_functions_cl(nmr_steps, nmr_convolutions,
         void _apply_richardson_convolution(
                 global double* derivatives,
                 global double* richardson_extrapolations){
-
+        
             double convolution_kernel[''' + str(len(richardson_coefficients)) + '''] = {''' + \
-                ', '.join(map(str, richardson_coefficients)) + '''};
-            
+        ', '.join(map(str, richardson_coefficients)) + '''};
+        
             for(uint step_ind = 0; step_ind < ''' + str(nmr_convolutions) + '''; step_ind++){
-                
+        
                 // convolute the Richardson coefficients
                 for(uint kernel_ind = 0; kernel_ind < ''' + str(len(richardson_coefficients)) + '''; kernel_ind++){
-                    
+        
                     uint kernel_step_ind = step_ind + kernel_ind;
-
+        
                     // reflect
                     if(kernel_step_ind >= ''' + str(nmr_steps) + '''){
                         kernel_step_ind -= 2 * (kernel_step_ind - ''' + str(nmr_steps) + ''') + 1;
                     }
-
-                    richardson_extrapolations[step_ind] +=
+        
+                    richardson_extrapolations[step_ind] += 
                         derivatives[kernel_step_ind] * convolution_kernel[kernel_ind];
                 }
             }
@@ -541,24 +553,24 @@ def _get_error_estimate_functions_cl(nmr_steps, nmr_convolutions,
                 global double* derivatives, 
                 global double* richardson_extrapolations,
                 global double* errors){
-            
+        
             // The magic number 12.7062... follows from the student T distribution with one dof. 
             //  >>> import scipy.stats as ss
             //  >>> allclose(ss.t.cdf(12.7062047361747, 1), 0.975) # True
             double fact = max(
-                (mot_float_type)''' + str(12.7062047361747 * np.sqrt(np.sum(richardson_coefficients**2))) + ''',
+                (mot_float_type)''' + str(12.7062047361747 * np.sqrt(np.sum(richardson_coefficients ** 2))) + ''',
                 (mot_float_type)MOT_EPSILON * 10);
-            
+        
             double tolerance;
             double error;
-            
+        
             for(uint conv_ind = 0; conv_ind < ''' + str(nmr_convolutions - 1) + '''; conv_ind++){
                 tolerance = max(fabs(richardson_extrapolations[conv_ind + 1]), 
                                 fabs(richardson_extrapolations[conv_ind])
                                 ) * MOT_EPSILON * fact;
-                
+        
                 error = fabs(richardson_extrapolations[conv_ind] - richardson_extrapolations[conv_ind + 1]) * fact;
-                
+        
                 if(error <= tolerance){
                     error += tolerance * 10;
                 }
@@ -566,19 +578,18 @@ def _get_error_estimate_functions_cl(nmr_steps, nmr_convolutions,
                     error += fabs(richardson_extrapolations[conv_ind] - 
                                   derivatives[''' + str(nmr_steps - nmr_convolutions + 1) + ''' + conv_ind]) * fact;
                 }
-                
+        
                 errors[conv_ind] = error;
             }
         }
     '''
-    return func
-
-
-def _richardson_error_kernel(nmr_derivatives, nmr_steps, nmr_convolutions, richardson_coefficients):
-    func = _get_error_estimate_functions_cl(nmr_steps, nmr_convolutions, richardson_coefficients)
 
     return SimpleCLFunction.from_string('''
-        void convolute(global double* derivatives, global double* richardson_extrapolations, global double* errors){
+        void _richardson_convolution(
+                global double* derivatives, 
+                global double* richardson_extrapolations, 
+                global double* errors){
+           
             const uint nmr_derivatives = ''' + str(nmr_derivatives) + ''';
             const uint nmr_steps = ''' + str(nmr_steps) + ''';
             const uint nmr_convolutions = ''' + str(nmr_convolutions) + ''';
@@ -604,28 +615,7 @@ def _richardson_error_kernel(nmr_derivatives, nmr_steps, nmr_convolutions, richa
     ''', dependencies=[SimpleCLCodeObject(func)])
 
 
-def _wynn_extrapolation_kernel(nmr_steps, nmr_extrapolations, nmr_derivatives):
-    """OpenCL kernel for extrapolating a slowly convergent sequence.
-
-    This algorithm, known in the Python Numdifftools as DEA3, attempts to extrapolate nonlinearly to a better
-    estimate of the sequence's limiting value, thus improving the rate of convergence. The routine is based on the
-    epsilon algorithm of P. Wynn [1].
-
-    References:
-    - [1] C. Brezinski and M. Redivo Zaglia (1991)
-            "Extrapolation Methods. Theory and Practice", North-Holland.
-
-    - [2] C. Brezinski (1977)
-            "Acceleration de la convergence en analyse numerique",
-            "Lecture Notes in Math.", vol. 584,
-            Springer-Verlag, New York, 1977.
-
-    - [3] E. J. Weniger (1989)
-            "Nonlinear sequence transformations for the acceleration of
-            convergence and the summation of divergent series"
-            Computer Physics Reports Vol. 10, 189 - 371
-            http://arxiv.org/abs/math/0306302v1
-    """
+def _wynn_extrapolation(nmr_derivatives, nmr_steps):
     _wynn_extrapolate = SimpleCLFunction.from_string('''
         void _wynn_extrapolate(global double* derivatives, global double* extrapolations, global double* errors){
             double v0, v1, v2; 
@@ -673,9 +663,13 @@ def _wynn_extrapolation_kernel(nmr_steps, nmr_extrapolations, nmr_derivatives):
     ''')
 
     return SimpleCLFunction.from_string('''
-        void compute(global double* derivatives, global double* extrapolations, global double* errors){
+        void _wynn_extrapolation(
+                global double* derivatives, 
+                global double* extrapolations, 
+                global double* errors){
+                
             const uint nmr_steps = ''' + str(nmr_steps) + ''';
-            const uint nmr_extrapolations = ''' + str(nmr_extrapolations) + ''';
+            const uint nmr_extrapolations = nmr_steps - 2;;
             const uint nmr_derivatives = ''' + str(nmr_derivatives) + ''';
             
             uint local_id = get_local_id(0);
