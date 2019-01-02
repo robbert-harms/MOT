@@ -1,6 +1,4 @@
-import itertools
 from numbers import Number
-
 import numpy as np
 from mot.lib.cl_function import SimpleCLFunction, SimpleCLCodeObject
 from mot.configuration import CLRuntimeInfo, config_context, CLRuntimeAction
@@ -79,17 +77,11 @@ def numerical_hessian(objective_func, parameters,
         cl_runtime_info (mot.configuration.CLRuntimeInfo): the runtime information
 
     Returns:
-        ndarray: per problem instance a vector with the upper triangular elements of the Hessian matrix
+        ndarray: per problem instance a vector with the upper triangular elements of the Hessian matrix.
+            This array can hold NaN's, for elements where the Hessian failed to approximate.
     """
     if len(parameters.shape) == 1:
         parameters = parameters[None, :]
-    nmr_params = parameters.shape[1]
-
-    if max_step_sizes is None:
-        max_step_sizes = 0.1
-    if isinstance(max_step_sizes, Number):
-        max_step_sizes = [max_step_sizes] * nmr_params
-    max_step_sizes = np.array(max_step_sizes)
 
     with config_context(CLRuntimeAction(cl_runtime_info or CLRuntimeInfo())):
         derivatives = _compute_derivatives(objective_func, parameters, step_ratio, step_offset, nmr_steps,
@@ -128,13 +120,14 @@ def _compute_derivatives(objective_func, parameters, step_ratio, step_offset, nm
         nmr_steps (int): the number of steps to compute and return (after the step offset)
         lower_bounds (list): lower bounds
         upper_bounds (list): upper bounds
-        max_step_sizes (ndarray): the maximum step sizes per parameter
+        max_step_sizes (ndarray, None): the maximum step sizes per parameter or None and we will use 0.1
         data (mot.lib.kernel_data.KernelData): the user provided data for the ``void* data`` pointer.
     """
     nmr_params = parameters.shape[1]
     nmr_derivatives = nmr_params * (nmr_params + 1) // 2
 
     initial_step = _get_initial_step_size(parameters, lower_bounds, upper_bounds, max_step_sizes)
+
     if step_offset:
         initial_step *= float(step_ratio) ** -step_offset
 
@@ -169,28 +162,23 @@ def _richardson_extrapolation(derivatives, step_ratio):
         step_ratio (ndarray): the diminishing ratio of the steps used to compute the derivatives.
     """
     nmr_problems, nmr_derivatives, nmr_steps = derivatives.shape
+
     richardson_coefficients = _get_richardson_coefficients(step_ratio, min(nmr_steps, 3) - 1)
     nmr_convolutions_needed = nmr_steps - (len(richardson_coefficients) - 2)
-    final_nmr_convolutions = nmr_convolutions_needed - 1
 
     kernel_data = {
-        'derivatives': Array(derivatives, 'double', offset_str='{problem_id} * ' + str(nmr_steps)),
-        'richardson_extrapolations': Zeros(
-            (nmr_problems * nmr_derivatives, nmr_convolutions_needed), 'double', mode='rw'),
-        'errors': Zeros(
-            (nmr_problems * nmr_derivatives, final_nmr_convolutions), 'double', mode='rw'),
+        'derivatives': Array(derivatives, 'double', mode='r'),
+        'richardson_extrapolations': Zeros((nmr_problems, nmr_derivatives, nmr_convolutions_needed),
+                                           'double', mode='rw'),
+        'errors': Zeros((nmr_problems, nmr_derivatives, (nmr_convolutions_needed - 1)), 'double', mode='rw'),
     }
 
-    richardson_func = _richardson_error_kernel(nmr_steps, nmr_convolutions_needed, richardson_coefficients)
-    richardson_func.evaluate(kernel_data, nmr_problems * nmr_derivatives,
-                             use_local_reduction=False)
+    richardson_func = _richardson_error_kernel(nmr_derivatives, nmr_steps,
+                                               nmr_convolutions_needed, richardson_coefficients)
+    richardson_func.evaluate(kernel_data, nmr_problems, use_local_reduction=True)
 
-    richardson_extrapolations = np.reshape(kernel_data['richardson_extrapolations'].get_data(),
-                                           (nmr_problems, nmr_derivatives, nmr_convolutions_needed))
-    errors = np.reshape(kernel_data['errors'].get_data(),
-                        (nmr_problems, nmr_derivatives, final_nmr_convolutions))
-
-    return richardson_extrapolations[..., :final_nmr_convolutions], errors
+    return (kernel_data['richardson_extrapolations'].get_data()[..., :(nmr_convolutions_needed - 1)],
+            kernel_data['errors'].get_data())
 
 
 def _wynn_extrapolate(derivatives):
@@ -198,19 +186,15 @@ def _wynn_extrapolate(derivatives):
     nmr_extrapolations = nmr_steps - 2
 
     kernel_data = {
-        'derivatives': Array(derivatives, 'double', offset_str='{problem_id} * ' + str(nmr_steps)),
-        'extrapolations': Zeros((nmr_problems * nmr_derivatives, nmr_extrapolations), 'double', mode='rw'),
-        'errors': Zeros((nmr_problems * nmr_derivatives, nmr_extrapolations), 'double', mode='rw'),
+        'derivatives': Array(derivatives, 'double', mode='r'),
+        'extrapolations': Zeros((nmr_problems, nmr_derivatives, nmr_extrapolations), 'double', mode='rw'),
+        'errors': Zeros((nmr_problems, nmr_derivatives, nmr_extrapolations), 'double', mode='rw'),
     }
 
-    wynn_func = _wynn_extrapolation_kernel(nmr_steps)
-    wynn_func.evaluate(kernel_data, nmr_problems * nmr_derivatives,
-                       use_local_reduction=False)
+    wynn_func = _wynn_extrapolation_kernel(nmr_steps, nmr_extrapolations, nmr_derivatives)
+    wynn_func.evaluate(kernel_data, nmr_problems, use_local_reduction=True)
 
-    extrapolations = np.reshape(kernel_data['extrapolations'].get_data(),
-                                (nmr_problems, nmr_derivatives, nmr_extrapolations))
-    errors = np.reshape(kernel_data['errors'].get_data(), (nmr_problems, nmr_derivatives, nmr_extrapolations))
-    return extrapolations, errors
+    return kernel_data['extrapolations'].get_data(), kernel_data['errors'].get_data()
 
 
 def _median_outlier_extrapolation(derivatives, errors):
@@ -262,12 +246,20 @@ def _get_initial_step_size(parameters, lower_bounds, upper_bounds, max_step_size
             p parameters and n samples.
         lower_bounds (list): lower bounds
         upper_bounds (list): upper bounds
-        max_step_sizes (list): the maximum step size, or the maximum step size per parameter.
+        max_step_sizes (list or None): the maximum step size, or the maximum step size per parameter. Defaults to 0.1
 
     Returns:
         ndarray: for every problem instance the vector with the initial step size for each parameter.
     """
+    nmr_params = parameters.shape[1]
+
     initial_step = np.zeros_like(parameters)
+
+    if max_step_sizes is None:
+        max_step_sizes = 0.1
+    if isinstance(max_step_sizes, Number):
+        max_step_sizes = [max_step_sizes] * nmr_params
+    max_step_sizes = np.array(max_step_sizes)
 
     for ind in range(parameters.shape[1]):
         minimum_allowed_step = np.minimum(np.abs(parameters[:, ind] - lower_bounds[ind]),
@@ -582,18 +574,37 @@ def _get_error_estimate_functions_cl(nmr_steps, nmr_convolutions,
     return func
 
 
-def _richardson_error_kernel(nmr_steps, nmr_convolutions, richardson_coefficients):
+def _richardson_error_kernel(nmr_derivatives, nmr_steps, nmr_convolutions, richardson_coefficients):
     func = _get_error_estimate_functions_cl(nmr_steps, nmr_convolutions, richardson_coefficients)
 
     return SimpleCLFunction.from_string('''
         void convolute(global double* derivatives, global double* richardson_extrapolations, global double* errors){
-            _apply_richardson_convolution(derivatives, richardson_extrapolations);
-            _compute_richardson_errors(derivatives, richardson_extrapolations, errors);
+            const uint nmr_derivatives = ''' + str(nmr_derivatives) + ''';
+            const uint nmr_steps = ''' + str(nmr_steps) + ''';
+            const uint nmr_convolutions = ''' + str(nmr_convolutions) + ''';
+            
+            uint local_id = get_local_id(0);
+            uint workgroup_size = get_local_size(0);
+
+            uint derivative_ind;
+            
+            for(uint i = 0; i < (nmr_derivatives + workgroup_size - 1) / workgroup_size; i++){
+                derivative_ind = i * workgroup_size + local_id;
+
+                if(derivative_ind < nmr_derivatives){
+                    _apply_richardson_convolution(derivatives + derivative_ind * nmr_steps, 
+                                                  richardson_extrapolations + derivative_ind * nmr_convolutions);
+                    
+                    _compute_richardson_errors(derivatives + derivative_ind * nmr_steps, 
+                                               richardson_extrapolations + derivative_ind * nmr_convolutions, 
+                                               errors + derivative_ind * (nmr_convolutions - 1));
+                }
+            }
         }
     ''', dependencies=[SimpleCLCodeObject(func)])
 
 
-def _wynn_extrapolation_kernel(nmr_steps):
+def _wynn_extrapolation_kernel(nmr_steps, nmr_extrapolations, nmr_derivatives):
     """OpenCL kernel for extrapolating a slowly convergent sequence.
 
     This algorithm, known in the Python Numdifftools as DEA3, attempts to extrapolate nonlinearly to a better
@@ -615,8 +626,8 @@ def _wynn_extrapolation_kernel(nmr_steps):
             Computer Physics Reports Vol. 10, 189 - 371
             http://arxiv.org/abs/math/0306302v1
     """
-    return SimpleCLFunction.from_string('''
-        void compute(global double* derivatives, global double* extrapolations, global double* errors){
+    _wynn_extrapolate = SimpleCLFunction.from_string('''
+        void _wynn_extrapolate(global double* derivatives, global double* extrapolations, global double* errors){
             double v0, v1, v2; 
             
             double delta0, delta1; 
@@ -660,3 +671,27 @@ def _wynn_extrapolation_kernel(nmr_steps):
             }
         }
     ''')
+
+    return SimpleCLFunction.from_string('''
+        void compute(global double* derivatives, global double* extrapolations, global double* errors){
+            const uint nmr_steps = ''' + str(nmr_steps) + ''';
+            const uint nmr_extrapolations = ''' + str(nmr_extrapolations) + ''';
+            const uint nmr_derivatives = ''' + str(nmr_derivatives) + ''';
+            
+            uint local_id = get_local_id(0);
+            uint workgroup_size = get_local_size(0);
+
+            uint derivative_ind;
+            
+            for(uint i = 0; i < (nmr_derivatives + workgroup_size - 1) / workgroup_size; i++){
+                derivative_ind = i * workgroup_size + local_id;
+
+                if(derivative_ind < nmr_derivatives){
+                    _wynn_extrapolate(derivatives + derivative_ind * nmr_steps, 
+                                      extrapolations + derivative_ind * nmr_extrapolations,
+                                      errors + derivative_ind * nmr_extrapolations);
+                }
+            }            
+        }
+    ''', dependencies=[_wynn_extrapolate])
+
