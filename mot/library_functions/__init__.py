@@ -562,24 +562,21 @@ class Subplex(SimpleCLLibraryFromFile):
 
 class LevenbergMarquardt(SimpleCLLibraryFromFile):
 
-    def __init__(self, eval_func, nmr_parameters, nmr_observations, patience=250,
-                 step_bound=100.0, scale_diag=1, usertol_mult=30, jacobian_func=None, **kwargs):
+    def __init__(self, eval_func, nmr_parameters, nmr_observations, jacobian_func, patience=250,
+                 step_bound=100.0, scale_diag=1, usertol_mult=30, **kwargs):
         """The Powell CL implementation.
 
         Args:
             eval_func (mot.lib.cl_function.CLFunction): the function we want to optimize, Should be of signature:
                 ``void evaluate(local mot_float_type* x, void* data_void, local mot_float_type* result);``
             nmr_parameters (int): the number of parameters in the model, this will be hardcoded in the method
+            nmr_observations (int): the number of observations in the model
+            jacobian_func (mot.lib.cl_function.CLFunction): the function used to compute the Jacobian.
             patience (int): the patience of the Powell algorithm
             patience_line_search (int): the patience of the line search algorithm
             reset_method (str): one of ``RESET_TO_IDENTITY`` or ``EXTRAPOLATED_POINT``. The method used to
                 reset the search directions every iteration.
-            jacobian_func (mot.lib.cl_function.CLFunction or None): the function used to compute the Jacobian.
-                If not given, we will use a numerical differentiation
         """
-        if not jacobian_func:
-            jacobian_func = self._get_numerical_jacobian_func(eval_func.get_cl_function_name(),
-                                                              nmr_parameters, nmr_observations)
         dependencies = list(kwargs.get('dependencies', []))
         dependencies.append(eval_func)
         dependencies.append(jacobian_func)
@@ -604,55 +601,11 @@ class LevenbergMarquardt(SimpleCLLibraryFromFile):
             resource_filename('mot', 'data/opencl/lmmin.cl'),
             var_replace_dict=var_replace_dict, **kwargs)
 
-    def _get_numerical_jacobian_func(self, function_name, nmr_params, nmr_observations):
-        return SimpleCLFunction.from_string(r'''
-            void compute_jacobian(local mot_float_type* model_parameters,
-                                  void* data,
-                                  local mot_float_type* fvec,
-                                  local mot_float_type* const fjac){
-                /**
-                 * Compute the Jacobian for use in the LM method.
-                 *
-                 * This should place the output in the ``fjac`` matrix.
-                 *
-                 * Parameters:
-                 *
-                 *   model_parameters: (nmr_params,) the current point around which we want to know the Jacobian
-                 *   data: the current modeling data, used by the objective function
-                 *   fvec: (nmr_observations,), the function values corresponding to the current model parameters
-                 *   fjac: (nmr_parameters, nmr_observations), the memory location for the Jacobian
-                 */
-                int i, j;
-                mot_float_type temp, step;
-                
-                const mot_float_type EPS = 30 * MOT_EPSILON;
-                
-                for (j = 0; j < %(NMR_PARAMS)s; j++) {
-                    if(get_local_id(0) == 0){
-                        temp = model_parameters[j];
-                        step = max(EPS*EPS, EPS * fabs(temp));
-                        model_parameters[j] += step; /* replace temporarily */
-                    }
-                    barrier(CLK_LOCAL_MEM_FENCE);
-    
-                    %(FUNCTION_NAME)s(model_parameters, data, fjac + j*%(NMR_OBSERVATIONS)s);
-    
-                    if(get_local_id(0) == 0){
-                        for (i = 0; i < %(NMR_OBSERVATIONS)s; i++){
-                            fjac[j*%(NMR_OBSERVATIONS)s+i] = (fjac[j*%(NMR_OBSERVATIONS)s+i] - fvec[i]) / step;
-                        }
-                        model_parameters[j] = temp; /* restore */
-                    }
-                    barrier(CLK_LOCAL_MEM_FENCE);
-                }
-            }
-        ''' % dict(FUNCTION_NAME=function_name, NMR_PARAMS=nmr_params, NMR_OBSERVATIONS=nmr_observations))
-
     def get_kernel_data(self):
         """Get the kernel data needed for this optimization routine to work."""
         return {
             'scratch_mot_float_type': LocalMemory(
-                'mot_float_type', 9 +
+                'mot_float_type', 8 +
                                   2 * self._var_replace_dict['NMR_OBSERVATIONS'] +
                                   5 * self._var_replace_dict['NMR_PARAMS'] +
                                   self._var_replace_dict['NMR_PARAMS'] * self._var_replace_dict['NMR_OBSERVATIONS']),

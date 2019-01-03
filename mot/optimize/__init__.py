@@ -450,8 +450,7 @@ def _minimize_subplex(func, x0, cl_runtime_info, lower_bounds, upper_bounds, dat
 
 def _minimize_levenberg_marquardt(func, x0, nmr_observations, cl_runtime_info,
                                   lower_bounds, upper_bounds,
-                                  data=None, options=None,
-                                  jacobian_func=None):
+                                  data=None, options=None, jacobian_func=None):
     options = _clean_options('Levenberg-Marquardt', options)
 
     nmr_problems = x0.shape[0]
@@ -488,8 +487,15 @@ def _minimize_levenberg_marquardt(func, x0, nmr_observations, cl_runtime_info,
         }
     ''', dependencies=[func])
 
-    optimizer_func = LevenbergMarquardt(eval_func, nmr_parameters, nmr_observations,
-                                        jacobian_func=jacobian_func, **options)
+    if not jacobian_func:
+        jacobian_eval_func = SimpleCLFunction.from_string('''
+            void _jacobian_evaluate(local mot_float_type* x, void* data, local mot_float_type* result){
+                ''' + func.get_cl_function_name() + '''(x, ((_lm_eval_func_data*)data)->data, result);
+            }
+        ''', dependencies=[func])
+        jacobian_func = get_numerical_jacobian_func(jacobian_eval_func, nmr_parameters, nmr_observations)
+
+    optimizer_func = LevenbergMarquardt(eval_func, nmr_parameters, nmr_observations, jacobian_func, **options)
 
     kernel_data = {'model_parameters': Array(x0, ctype='mot_float_type', mode='rw'),
                    'data': Struct({'data': data,
@@ -505,3 +511,73 @@ def _minimize_levenberg_marquardt(func, x0, nmr_observations, cl_runtime_info,
 
     return OptimizeResults({'x': kernel_data['model_parameters'].get_data(),
                             'status': return_code})
+
+
+def get_numerical_jacobian_func(eval_func, nmr_params, nmr_observations):
+    """Get a numerical Jacobian function.
+
+    This computes the Jacobian of the observations (function vector) with respect to the parameters.
+
+    Args:
+        eval_func (mot.lib.cl_function.CLFunction): the evaluation function
+        nmr_params (int): the number of parameters
+        nmr_observations (int): the number of observations (the length of the function vector).
+
+    Returns:
+        mot.lib.cl_function.CLFunction: CL function for numerically estimating the Jacobian.
+    """
+    return SimpleCLFunction.from_string(r'''
+        void numerical_jacobian(local mot_float_type* model_parameters,
+                                void* data,
+                                local mot_float_type* fvec,
+                                local mot_float_type* const fjac){
+            /**
+             * Compute the Jacobian for use in the LM method.
+             *
+             * This should place the output in the ``fjac`` matrix.
+             *
+             * Parameters:
+             *
+             *   model_parameters: (nmr_params,) the current point around which we want to know the Jacobian
+             *   data: the current modeling data, used by the objective function
+             *   fvec: (nmr_observations,), the function values corresponding to the current model parameters
+             *   fjac: (nmr_parameters, nmr_observations), the memory location for the Jacobian
+             */
+            int i, j;
+            uint observation_ind;
+            mot_float_type temp, step;
+            
+            const uint nmr_observations = %(NMR_OBSERVATIONS)s;
+            const mot_float_type EPS = 30 * MOT_EPSILON;
+            
+            uint local_id = get_local_id(0);
+            uint workgroup_size = get_local_size(0);
+            
+            for (j = 0; j < %(NMR_PARAMS)s; j++) {
+                step = max(EPS*EPS, EPS * fabs(model_parameters[j]));
+                barrier(CLK_LOCAL_MEM_FENCE);
+                
+                if(get_local_id(0) == 0){
+                    temp = model_parameters[j];
+                    model_parameters[j] += step; /* replace temporarily */
+                }
+                barrier(CLK_LOCAL_MEM_FENCE);
+
+                %(FUNCTION_NAME)s(model_parameters, data, fjac + j*nmr_observations);
+            
+                for(i = 0; i < (nmr_observations + workgroup_size - 1) / workgroup_size; i++){
+                    observation_ind = i * workgroup_size + local_id;
+                    if(observation_ind < nmr_observations){
+                        fjac[j*nmr_observations + observation_ind] = (
+                            fjac[j*nmr_observations + observation_ind] - fvec[observation_ind]) / step;
+                    }
+                }
+                
+                if(get_local_id(0) == 0){
+                    model_parameters[j] = temp; /* restore */
+                }
+                barrier(CLK_LOCAL_MEM_FENCE);
+            }
+        }
+    ''' % dict(FUNCTION_NAME=eval_func.get_cl_function_name(),
+               NMR_PARAMS=nmr_params, NMR_OBSERVATIONS=nmr_observations), dependencies=[eval_func])
