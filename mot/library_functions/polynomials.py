@@ -7,7 +7,7 @@ __email__ = 'robbert.harms@maastrichtuniversity.nl'
 __licence__ = 'LGPL v3'
 
 
-class solve_cubic_pol_real(SimpleCLLibrary):
+class real_zeros_cubic_pol(SimpleCLLibrary):
 
     def __init__(self):
         """Returns (only) the real roots of a cubic polynomial.
@@ -29,7 +29,7 @@ class solve_cubic_pol_real(SimpleCLLibrary):
             the number of real roots
         """
         super().__init__('''
-            int solve_cubic_pol_real(double* coefficients, double* roots){
+            int real_zeros_cubic_pol(double* coefficients, double* roots){
                 const double a = coefficients[0];
                 const double b = coefficients[1];
                 const double c = coefficients[2];
