@@ -2,6 +2,25 @@
 Changelog
 *********
 
+v0.8.3 (2019-01-08)
+===================
+
+Added
+-----
+- Adds functions for inverting a real symmetric matrix stored as an upper triangular vector.
+
+Changed
+-------
+- Changed the numerical Hessian to produce upper triangular elements instead of lower triangular.
+- Refactored the Hessian function a bit to optionally merge the different functions in the future.
+
+Other
+-----
+- Renamed solve_cubic_pol_real to real_zeros_cubic_pol.
+- Slight refactoring of the Jacobian function of the LM method. The Jacobian is now no longer suspect to the bounds.
+- Small refactorings to make the Hessian code more clear.
+
+
 v0.8.2 (2018-12-11)
 ===================
 
