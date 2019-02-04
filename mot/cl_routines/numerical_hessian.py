@@ -95,7 +95,7 @@ def numerical_hessian(objective_func, parameters,
         if nmr_steps <= 3:
             return derivatives[..., 0]
 
-        if nmr_steps > 3:
+        if nmr_steps > 4:
             derivatives, errors = _wynn_extrapolate(derivatives)
 
         if nmr_steps == 5:
@@ -244,7 +244,8 @@ def _median_outlier_extrapolation(derivatives, errors):
     errors[all_nan[0], all_nan[1], 0] = 0
     derivatives[all_nan[0], all_nan[1], 0] = 0
 
-    errors += _get_median_outliers_errors(derivatives)
+    median_outlier_errors = _get_median_outliers_errors(derivatives)
+    errors += median_outlier_errors
 
     minpos = np.nanargmin(errors, axis=2)
     indices = np.indices(minpos.shape)
