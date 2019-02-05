@@ -21,7 +21,8 @@ def numerical_hessian(objective_func, parameters,
     """Calculate and return the Hessian of the given function at the given parameters.
 
     This calculates the Hessian using central difference (using a 2nd order Taylor expansion) with a Richardson
-    extrapolation over the proposed sequence of steps.
+    extrapolation over the proposed sequence of steps, followed by a Wynn epsilon extrapolation over the remaining steps
+    and finally returns the estimate with the lowest error, taking into account outliers using a median filter.
 
     The Hessian is evaluated at the steps:
 
