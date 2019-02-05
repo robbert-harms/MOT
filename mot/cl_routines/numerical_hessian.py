@@ -102,7 +102,8 @@ def numerical_hessian(objective_func, parameters,
             return derivatives[..., 0]
 
         # for nmr of steps of 4, or 6 and higher
-        derivatives, errors = _median_outlier_extrapolation(derivatives, errors)
+        derivatives, errors = _find_best_steps(derivatives, errors)
+
         return derivatives
 
 
@@ -219,44 +220,18 @@ def _wynn_extrapolate(derivatives):
     return kernel_data['extrapolations'].get_data(), kernel_data['errors'].get_data()
 
 
-def _median_outlier_extrapolation(derivatives, errors):
-    """Add an error to outliers and afterwards return the derivatives with the lowest errors.
+def _find_best_steps(derivatives, errors):
+    nmr_problems, nmr_derivatives, nmr_steps = derivatives.shape
 
-    This seems to be the slowest function in the library. Perhaps one day update this to OpenCL as well.
-    Some ideas are in: http://krstn.eu/np.nanpercentile()-there-has-to-be-a-faster-way/
-    """
-    def _get_median_outliers_errors(der, trim_fact=10):
-        """Discards any estimate that differs wildly from the median of the estimates (of that derivative).
+    kernel_data = {
+        'derivatives': Array(derivatives, 'double', mode='rw'),
+        'errors': Array(errors, 'double', mode='rw'),
+    }
 
-        A factor of 10 to 1 in either direction . The actual trimming factor is
-        defined as a parameter.
-        """
-        p25, median, p75 = np.nanpercentile(der, q=[25, 50, 75], axis=2)[..., None]
-        iqr = np.abs(p75 - p25)
+    best_step_func = _find_best_estimate_kernel(nmr_derivatives, nmr_steps)
+    best_step_func.evaluate(kernel_data, nmr_problems, use_local_reduction=True)
 
-        a_median = np.abs(median)
-        outliers = (((abs(der) < (a_median / trim_fact)) +
-                     (abs(der) > (a_median * trim_fact))) * (a_median > 1e-8) +
-                    ((der < p25 - 1.5 * iqr) + (p75 + 1.5 * iqr < der)))
-        return outliers * np.abs(der - median)
-
-    all_nan = np.where(np.sum(np.isnan(errors), axis=2) == errors.shape[2])
-    errors[all_nan[0], all_nan[1], 0] = 0
-    derivatives[all_nan[0], all_nan[1], 0] = 0
-
-    median_outlier_errors = _get_median_outliers_errors(derivatives)
-    errors += median_outlier_errors
-
-    minpos = np.nanargmin(errors, axis=2)
-    indices = np.indices(minpos.shape)
-
-    derivatives_final = derivatives[indices[0], indices[1], minpos]
-    errors_final = errors[indices[0], indices[1], minpos]
-
-    derivatives_final[all_nan[0], all_nan[1]] = np.nan
-    errors_final[all_nan[0], all_nan[1]] = np.nan
-
-    return derivatives_final, errors_final
+    return kernel_data['derivatives'].get_data()[..., 0], kernel_data['errors'].get_data()[..., 0]
 
 
 def _get_initial_step(parameters, lower_bounds, upper_bounds, max_step_sizes):
@@ -689,4 +664,169 @@ def _wynn_extrapolation(nmr_derivatives, nmr_steps):
             }            
         }
     ''', dependencies=[_wynn_extrapolate])
+
+
+def _find_best_estimate_kernel(nmr_derivatives, nmr_steps):
+    _get_percentile = SimpleCLFunction.from_string('''
+        double _get_percentile(double* sorted_values, int n, double percentile){
+            /**
+             * Find the distribution value for the requested percentile.
+             * 
+             * This uses linear interpolation with C == 1, as defined in 
+             * https://en.wikipedia.org/wiki/Percentile#The_nearest-rank_method.
+             * 
+             * Args:
+             *  sorted_values: array of sorted values
+             *  n: number of values
+             *  percentile: the requested percentile, between 0 and 1.
+             * 
+             * Returns:
+             *  the value for the percentile
+             */
+
+            double rank = percentile * (n - 1);
+            int rank_int = (int) rank;
+            double rank_fraction = rank - rank_int;
+            return sorted_values[rank_int] + rank_fraction * (sorted_values[rank_int + 1] - sorted_values[rank_int]);    
+        }
+    ''')
+
+    _sort_values = SimpleCLFunction.from_string('''
+        void _sort_values(double* values, int n){
+            /** 
+             * Uses bubblesort to sort the given values in ascending order.
+             * 
+             */ 
+            int i, j;
+            double tmp;
+
+            for(i = 0; i < n; i++){
+                for(j = 0; j < n - i - 1; j++){
+                    if(values[j] > values[j + 1]){
+                        tmp = values[j];
+                        values[j] = values[j + 1];
+                        values[j + 1] = tmp;    
+                    }
+                }
+            }
+        }
+    ''')
+
+    _get_median_outlier_error = SimpleCLFunction.from_string('''
+        void _get_median_outlier_error(global double* derivatives, double* median_errors){
+            /**
+             * This function tries to detect outliers by means of an median filter. 
+             * If a value is a factor of 10 to 1 in either direction away from the median, we weight it 
+             * with an additional error.
+             *
+             * This uses a hardcoded trim factor of 10 to 1 as relative distance.
+             */
+
+            const uint nmr_steps = ''' + str(nmr_steps) + ''';
+            float trim_factor = 10;   
+            int i;
+
+            double* sorted_values = median_errors;
+            for(int i = 0; i < nmr_steps; i++){
+                sorted_values[i] = derivatives[i];
+            }            
+            _sort_values(sorted_values, nmr_steps);
+
+            double p25 = _get_percentile(sorted_values, nmr_steps, 0.25);
+            double p50 = _get_percentile(sorted_values, nmr_steps, 0.50);
+            double p75 = _get_percentile(sorted_values, nmr_steps, 0.75);
+
+            double iqr = fabs(p75 - p25);
+            double abs_median = fabs(p50);
+
+            bool is_outlier;
+            for(i = 0; i < nmr_steps; i++){
+                is_outlier = (((fabs(derivatives[i]) < (abs_median / trim_factor)) +
+                               (fabs(derivatives[i]) > (abs_median * trim_factor))) * (abs_median > 1e-8) +
+                              ((derivatives[i] < p25 - 1.5 * iqr) + (p75 + 1.5 * iqr < derivatives[i])));
+
+                median_errors[i] = is_outlier * fabs(derivatives[i] - p50);
+            }            
+        }
+
+    ''', dependencies=[_sort_values, _get_percentile])
+
+    _find_best_step = SimpleCLFunction.from_string('''
+        void _find_best_step(global double* derivatives, global double* errors){
+            /**
+             * Find the step with the lowest error.
+             *
+             * This will first apply a median filter on the derivatives to locate the derivatives that deviate 
+             * strongly from the distribution. These deviations are added as extra error term to the other error term.
+             * Afterwards it chooses the derivative with the lowest error. 
+             *
+             * Args:
+             *  derivatives: on input, (n, m) matrix for n derivatives and m steps. On output, (n, 1) matrix with for every 
+             *               derivative the best estimate.
+             *  errors: on input, (n, m) matrix for n derivatives and m steps with the error terms from 
+             *               Taylor / polynomial expansion. On output, (n, 1) matrix with a single error for every 
+             *               derivative.
+             *
+             */
+
+            const uint nmr_steps = ''' + str(nmr_steps) + ''';
+            int i;
+
+            bool all_nan = true;
+            for(i = 0; i < nmr_steps; i++){
+                if(isnan(derivatives[i])){
+                    derivatives[i] = 0;
+                }
+                else{
+                    all_nan = false;
+                }
+            }
+
+            if(all_nan){
+                derivatives[0] = NAN;
+                errors[0] = NAN;
+
+                return;
+            }
+
+            double median_outlier_errors[''' + str(nmr_steps) + '''];
+            _get_median_outlier_error(derivatives, median_outlier_errors);
+
+            double lowest_error = INFINITY;
+            int ind_lowest_error = 0; 
+            for(i = 0; i < nmr_steps; i++){
+                if(median_outlier_errors[i] + errors[i] < lowest_error){
+                    lowest_error = median_outlier_errors[i] + errors[i];
+                    ind_lowest_error = i;
+                } 
+            }
+
+            derivatives[0] = derivatives[ind_lowest_error];
+            errors[0] = errors[ind_lowest_error] + median_outlier_errors[ind_lowest_error];    
+        }
+    ''', dependencies=[_get_median_outlier_error])
+
+    return SimpleCLFunction.from_string('''
+        void _find_best_steps(
+               global double* derivatives, 
+               global double* errors){
+
+           const uint nmr_steps = ''' + str(nmr_steps) + ''';
+           const uint nmr_derivatives = ''' + str(nmr_derivatives) + ''';
+
+           uint local_id = get_local_id(0);
+           uint workgroup_size = get_local_size(0);
+
+           uint derivative_ind;
+
+           for(uint i = 0; i < (nmr_derivatives + workgroup_size - 1) / workgroup_size; i++){
+               derivative_ind = i * workgroup_size + local_id;
+
+               if(derivative_ind < nmr_derivatives){
+                   _find_best_step(derivatives + derivative_ind * nmr_steps, 
+                                   errors + derivative_ind * nmr_steps);
+               }
+           }            
+        }
+       ''', dependencies=[_find_best_step])
 
