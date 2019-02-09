@@ -2,7 +2,8 @@ from numbers import Number
 import numpy as np
 from mot.lib.cl_function import SimpleCLFunction
 from mot.lib.kernel_data import Array, Zeros, LocalMemory
-from scipy import linalg
+
+from mot.library_functions import SimpleCLLibrary
 
 __author__ = 'Robbert Harms'
 __date__ = '2017-10-16'
@@ -11,16 +12,17 @@ __email__ = 'robbert.harms@maastrichtuniversity.nl'
 __licence__ = 'LGPL v3'
 
 
-def numerical_hessian(objective_func, parameters,
-                      lower_bounds=None, upper_bounds=None,
-                      step_ratio=2, nmr_steps=5,
-                      max_step_sizes=None, step_offset=None,
-                      data=None, cl_runtime_info=None):
-    """Calculate and return the Hessian of the given function at the given parameters.
+def estimate_hessian(objective_func, parameters,
+                     lower_bounds=None, upper_bounds=None,
+                     step_ratio=2, nmr_steps=5,
+                     max_step_sizes=None,
+                     data=None, cl_runtime_info=None):
+    """Estimate and return the upper triangular elements of the Hessian of the given function at the given parameters.
 
     This calculates the Hessian using central difference (using a 2nd order Taylor expansion) with a Richardson
-    extrapolation over the proposed sequence of steps, followed by a Wynn epsilon extrapolation over the remaining steps
-    and finally returns the estimate with the lowest error, taking into account outliers using a median filter.
+    extrapolation over the proposed sequence of steps. If enough steps are given, we apply a Wynn epsilon extrapolation
+    on top of the Richardson extrapolated results. If more steps are left, we return the estimate with the lowest error,
+    taking into account outliers using a median filter.
 
     The Hessian is evaluated at the steps:
 
@@ -32,19 +34,16 @@ def numerical_hessian(objective_func, parameters,
     where :math:`e_j` is a vector where element :math:`j` is one and the rest are zero
     and :math:`d_j` is a scalar spacing :math:`steps_j`.
 
-    Steps are generated according to a exponentially diminishing ratio defined as:
+    Steps are generated according to an exponentially diminishing ratio, defined as:
 
-        steps = max_step * step_ratio**-(i+offset), i=0, 1,.., nmr_steps-1.
+        steps = max_step * step_ratio**-i, i = 0,1,..,nmr_steps-1.
 
-    Where the max step can be provided. For example, a maximum step of 2 with a step ratio of 2 and with
-    4 steps gives: [2.0, 1.0, 0.5, 0.25]. If offset would be 2, we would instead get: [0.5, 0.25, 0.125, 0.0625].
+    Where the maximum step can be provided. For example, a maximum step of 2 with a step ratio of 2, computed for
+    4 steps gives: [2.0, 1.0, 0.5, 0.25]. If lower and upper bounds are given, we use as maximum step size the largest
+    step size that fits between the Hessian point and the boundaries.
 
-    If number of steps is 1, we use not Richardson extrapolation and return the results of the first step. If the
-    number of steps is 2 we use a first order Richardson extrapolation step. For all higher number of steps
-    we use a second order Richardson extrapolation.
-
-    The derivative calculation method uses an adaptive step size to determine the step with the best trade-off between
-    numerical errors and localization of the derivative.
+    The steps define the order of the estimation, with 2 steps resulting in a O(h^2) estimate, 3 steps resulting in a
+    O(h^4) estimate and 4 or more steps resulting in a O(h^6) derivative estimate.
 
     Args:
         objective_func (mot.lib.cl_function.CLFunction): The function we want to differentiate.
@@ -67,8 +66,7 @@ def numerical_hessian(objective_func, parameters,
             of problem instances). To disable bounds for this parameter use np.inf.
         step_ratio (float): the ratio at which the steps diminish.
         nmr_steps (int): the number of steps we will generate. We will calculate the derivative for each of these
-            step sizes and extrapolate the best step size from among them. The minimum number of steps is 2.
-        step_offset (int): the offset in the steps, if set we start the steps from the given offset.
+            step sizes and extrapolate the best step size from among them. The minimum number of steps is 1.
         max_step_sizes (float or ndarray or None): the maximum step size, or the maximum step size per parameter.
             If None is given, we use 0.1 for all parameters. If a float is given, we use that for all parameters.
             If a list is given, it should be of the same length as the number of parameters.
@@ -87,9 +85,6 @@ def numerical_hessian(objective_func, parameters,
     nmr_derivatives = nmr_params * (nmr_params + 1) // 2
 
     initial_step = _get_initial_step(parameters, lower_bounds, upper_bounds, max_step_sizes)
-
-    if step_offset:
-        initial_step *= float(step_ratio) ** -step_offset
 
     kernel_data = {
         'parameters': Array(parameters, ctype='mot_float_type'),
@@ -158,11 +153,18 @@ def _get_numdiff_hessian_element_func(objective_func, nmr_steps, step_ratio):
             local double* steps = scratch_ind;      scratch_ind += nmr_steps; 
             local double* errors = scratch_ind;     scratch_ind += nmr_steps - 1;
             local double* steps_tmp = scratch_ind;  scratch_ind += nmr_steps;
-
+            
+            if(get_local_id(0) == 0){
+                for(int i = 0; i < nmr_steps - 1; i++){
+                    errors[i] = 0;
+                }
+            }
+            barrier(CLK_LOCAL_MEM_FENCE);
+            
             _numdiff_hessian_steps(data, x_tmp, f_x_input, px, py, steps, initial_step);
 
             if(nmr_steps_remaining > 1){
-                nmr_steps_remaining = _numdiff_hessian_richardson_extrapolation(steps, errors, steps_tmp); 
+                nmr_steps_remaining = _numdiff_hessian_richardson_extrapolation(steps); 
                 barrier(CLK_LOCAL_MEM_FENCE);
             }
             
@@ -337,9 +339,6 @@ def _get_numdiff_hessian_steps_func(objective_func, nmr_steps, step_ratio):
 
 
 def _get_numdiff_hessian_richardson_extrapolation_func(nmr_steps, step_ratio):
-    richardson_coefficients = _get_richardson_coefficients(step_ratio, min(nmr_steps, 3) - 1)
-    nmr_richardson_steps = nmr_steps - (len(richardson_coefficients) - 2)
-
     return SimpleCLFunction.from_string('''
         /**
          * Apply the Richardson extrapolation to the derivatives computed with multiple steps.
@@ -350,125 +349,37 @@ def _get_numdiff_hessian_richardson_extrapolation_func(nmr_steps, step_ratio):
          *
          * This method only considers extrapolation up to the sixth error order. For a set of two derivatives we compute
          * a single fourth order approximation, for three derivatives or more, we compute ``n-2`` sixth order 
-         * approximations. Expected errors for approximation ``i`` are computed using the ``i+1`` derivative plus a 
-         * statistical error based on the machine precision.
+         * approximations. 
          * 
          * Args:
          *  steps: on input, the steps we are convoluting with Richardson extrapolation. On output, 
          *         the convoluted steps, these are less than the input, see the return value.
-         *  errors: for each returned step, the error of that step
-         *  scratch: scratch location, of the same size as the input steps
          * 
          * Returns:
          *  nmr_steps: the number of steps remaining after convolution
          */
-        uint _numdiff_hessian_richardson_extrapolation(
-                local double* steps, 
-                local double* errors, 
-                local double* scratch){
-
-            const uint nmr_richardson_steps = ''' + str(nmr_richardson_steps) + ''';
-
+        uint _numdiff_hessian_richardson_extrapolation(local double* steps){
+            
+            const uint nmr_steps = ''' + str(nmr_steps) + ''';
+            uint nmr_steps_remaining = nmr_steps;
+            
             if(get_local_id(0) == 0){
-                for(uint i = 0; i < nmr_richardson_steps; i++){
-                    scratch[i] = 0;
+                // 4th order approximations
+                for(uint i = 0; i < nmr_steps - 1; i++){
+                    steps[i] = richardson_extrapolate(steps[i], steps[i + 1], ''' + str(step_ratio) + ''', 2);
                 }
-
-                _numdiff_hessian_apply_richardson_convolution(steps, scratch);
-                _numdiff_hessian_richardson_errors(steps, scratch, errors);
-
-                for(uint i = 0; i < nmr_richardson_steps - 1; i++){
-                    steps[i] = scratch[i];
+                nmr_steps_remaining--;
+                
+                // 6th order approximations
+                for(uint i = 0; i < nmr_steps - 2; i++){
+                    steps[i] = richardson_extrapolate(steps[i], steps[i + 1], ''' + str(step_ratio) + ''', 2);
                 }
+                nmr_steps_remaining--;
             }
 
-            return nmr_richardson_steps - 1;
+            return nmr_steps_remaining;
         }
-    ''', dependencies=[SimpleCLFunction.from_string('''
-        /**
-         * Apply a simple kernel convolution over the results from each row of steps.
-         *
-         * This applies a convolution starting from the starting step index that contained a valid move.
-         * It uses the mode 'reflect' to deal with outside points.
-         *
-         * Please note that this kernel is hard coded to work with 2nd order Taylor expansions derivatives only.
-
-         * Args:
-         *  step_evaluates: the step evaluates for each row of the step sizes
-         *  convolutions: the array to place the convoluted results in
-         */
-        void _numdiff_hessian_apply_richardson_convolution(
-                local double* steps,
-                local double* convolutions){
-
-            double convolution_kernel[''' + str(len(richardson_coefficients)) + '''] = {''' + \
-                                                    ', '.join(map(str, richardson_coefficients)) + '''};
-
-            for(uint step_ind = 0; step_ind < ''' + str(nmr_richardson_steps) + '''; step_ind++){
-                for(uint kernel_ind = 0; kernel_ind < ''' + str(len(richardson_coefficients)) + '''; kernel_ind++){
-                    uint kernel_step_ind = step_ind + kernel_ind;
-
-                    // reflect
-                    if(kernel_step_ind >= ''' + str(nmr_steps) + '''){
-                        kernel_step_ind -= 2 * (kernel_step_ind - ''' + str(nmr_steps) + ''') + 1;
-                    }
-
-                    convolutions[step_ind] += steps[kernel_step_ind] * convolution_kernel[kernel_ind];
-                }
-            }
-        }
-    '''), SimpleCLFunction.from_string('''
-        /**
-         * Compute the errors from using the Richardson extrapolation.
-         *
-         * "A neat trick to compute the statistical uncertainty in the estimate of our desired derivative is to use 
-         *  statistical methodology for that error estimate. While I do appreciate that there is nothing truly 
-         *  statistical or stochastic in this estimate, the approach still works nicely, providing a very 
-         *  reasonable estimate in practice. A three term Richardson-like extrapolant, then evaluated at four 
-         *  distinct values for \delta, will yield an estimate of the standard error of the constant term, with one 
-         *  spare degree of freedom. The uncertainty is then derived by multiplying that standard error by the 
-         *  appropriate percentile from the Students-t distribution." 
-         * 
-         * Cited from https://numdifftools.readthedocs.io/en/latest/src/numerical/derivest.html
-         * 
-         * In addition to the error derived from the various estimates, we also approximate the numerical round-off 
-         * errors in this method. All in all, the resulting errors should reflect the absolute error of the
-         * estimates.
-         */ 
-        void _numdiff_hessian_richardson_errors(
-                local double* derivatives, 
-                local double* convolutions,
-                local double* errors){
-
-            // The magic number 12.7062... follows from the student T distribution with one dof. 
-            //  >>> import scipy.stats as ss
-            //  >>> allclose(ss.t.cdf(12.7062047361747, 1), 0.975) # True
-            double fact = max(
-                (mot_float_type)''' + str(12.7062047361747 * np.sqrt(np.sum(richardson_coefficients ** 2))) + ''',
-                (mot_float_type)MOT_EPSILON * 10);
-
-            double tolerance;
-            double error;
-
-            for(uint conv_ind = 0; conv_ind < ''' + str(nmr_richardson_steps - 1) + '''; conv_ind++){
-                tolerance = max(fabs(convolutions[conv_ind + 1]), 
-                                fabs(convolutions[conv_ind])
-                                ) * MOT_EPSILON * fact;
-
-                error = fabs(convolutions[conv_ind] - convolutions[conv_ind + 1]) * fact;
-
-                if(error <= tolerance){
-                    error += tolerance * 10;
-                }
-                else{
-                    error += fabs(convolutions[conv_ind] - 
-                                  derivatives[''' + str(nmr_steps - nmr_richardson_steps + 1) + ''' + conv_ind]) * fact;
-                }
-
-                errors[conv_ind] = error;
-            }
-        }
-    ''')])
+    ''', dependencies=[richardson_extrapolation()])
 
 
 def _get_numdiff_find_best_step_func():
@@ -716,41 +627,27 @@ def _get_initial_step(parameters, lower_bounds, upper_bounds, max_step_sizes):
     return initial_step / 2.
 
 
-def _get_richardson_coefficients(step_ratio, nmr_extrapolations):
-    """Get the matrix with the convolution rules.
+class richardson_extrapolation(SimpleCLLibrary):
 
-    In the kernel we will extrapolate the sequence based on the Richardsons method.
-
-    This method assumes we have a series expansion like:
-
-        L = f(h) + a0 * h^p_0 + a1 * h^p_1+ a2 * h^p_2 + ...
-
-    where p_i = order + step * i  and f(h) -> L as h -> 0, but f(0) != L.
-
-    If we evaluate the right hand side for different stepsizes h we can fit a polynomial to that sequence
-    of approximations.
-
-    Instead of using all the generated points at the same time, we convolute the Richardson method over the
-    acquired steps to approximate the higher order error terms.
-
-    Args:
-        step_ratio (float): the ratio at which the steps diminish.
-        nmr_extrapolations (int): the number of extrapolations we want to do. Each extrapolation requires
-            an evaluation at an exponentially decreasing step size.
-
-    Returns:
-        ndarray: a vector with the extrapolation coefficients.
-    """
-    if nmr_extrapolations == 0:
-        return np.array([1])
-
-    error_diminishing_per_step = 2
-    taylor_expansion_order = 2
-
-    def r_matrix(num_terms):
-        i, j = np.ogrid[0:num_terms + 1, 0:num_terms]
-        r_mat = np.ones((num_terms + 1, num_terms + 1))
-        r_mat[:, 1:] = (1.0 / step_ratio) ** (i * (error_diminishing_per_step * j + taylor_expansion_order))
-        return r_mat
-
-    return linalg.pinv(r_matrix(nmr_extrapolations))[0]
+    def __init__(self):
+        """Get the Richardson extrapolation function."""
+        super().__init__('''
+            /**
+             * Apply a Richardson extrapolation on the given input.
+             *
+             * See https://en.wikipedia.org/wiki/Richardson_extrapolation. 
+             *
+             * Args:
+             *  v1: the primary value at a step size of h
+             *  v2: the secondary value, computed at a step size of h/step_ratio 
+             *  step_ratio: the ratio at which the steps diminish
+             *  approximation_order: the order of the current approximations
+             * 
+             * Returns:
+             *   the Richardson extrapolation
+             */
+            double richardson_extrapolate(double v1, double v2, float step_ratio, uint approximation_order){
+                double div = 1 / (pown(step_ratio, approximation_order) - 1);
+                return (div + 1) * v2 - div * v1;
+            }
+        ''')

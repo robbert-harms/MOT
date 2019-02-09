@@ -1,6 +1,6 @@
 from mot.lib.cl_function import SimpleCLFunction
 from mot.lib.kernel_data import Array, Zeros
-from mot.cl_routines.numerical_differentiation import numerical_hessian
+from mot.cl_routines.numerical_differentiation import estimate_hessian
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-05-21"
