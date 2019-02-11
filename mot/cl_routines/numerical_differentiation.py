@@ -43,7 +43,7 @@ def estimate_hessian(objective_func, parameters,
     step size that fits between the Hessian point and the boundaries.
 
     The steps define the order of the estimation, with 2 steps resulting in a O(h^2) estimate, 3 steps resulting in a
-    O(h^4) estimate and 4 or more steps resulting in a O(h^6) derivative estimate.
+    O(h^4) estimate and 4 or more steps resulting in a O(h^8) derivative estimate.
 
     Args:
         objective_func (mot.lib.cl_function.CLFunction): The function we want to differentiate.
@@ -345,10 +345,10 @@ def _get_numdiff_hessian_richardson_extrapolation_func(nmr_steps, step_ratio):
          * 
          * Having for every problem instance and every Hessian element multiple derivatives computed 
          * with decreasing steps, we can now apply Richardson extrapolation to reduce the error term from O(h^2) to
-         * O(h^4) or O(h^6) depending on how many steps we have calculated.
+         * O(h^4) or O(h^8) depending on how many steps we have calculated.
          *
-         * This method only considers extrapolation up to the sixth error order. For a set of two derivatives we compute
-         * a single fourth order approximation, for three derivatives or more, we compute ``n-2`` sixth order 
+         * This method only considers extrapolation up to the eight error order. For a set of two derivatives we compute
+         * a single fourth order approximation, for three derivatives or more, we compute ``n-2`` eight order 
          * approximations. 
          * 
          * Args:
@@ -370,9 +370,9 @@ def _get_numdiff_hessian_richardson_extrapolation_func(nmr_steps, step_ratio):
                 }
                 nmr_steps_remaining--;
                 
-                // 6th order approximations
+                // 8th order approximations
                 for(uint i = 0; i < nmr_steps - 2; i++){
-                    steps[i] = richardson_extrapolate(steps[i], steps[i + 1], ''' + str(step_ratio) + ''', 2);
+                    steps[i] = richardson_extrapolate(steps[i], steps[i + 1], ''' + str(step_ratio) + ''', 4);
                 }
                 nmr_steps_remaining--;
             }
