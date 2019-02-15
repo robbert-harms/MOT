@@ -223,19 +223,19 @@ def get_float_type_def(double_precision, include_complex=True):
     '''
 
     if double_precision:
-        return '''            
+        return '''
             #if __OPENCL_VERSION__ <= CL_VERSION_1_1
                 #pragma OPENCL EXTENSION cl_khr_fp64 : enable
             #endif
-            
+
             #define PYOPENCL_DEFINE_CDOUBLE
-            
+
             typedef double mot_float_type;
             typedef double2 mot_float_type2;
             typedef double4 mot_float_type4;
             typedef double8 mot_float_type8;
             typedef double16 mot_float_type16;
-            
+
             #define MOT_EPSILON DBL_EPSILON
             #define MOT_MIN DBL_MIN
             #define MOT_MAX DBL_MAX
@@ -245,13 +245,13 @@ def get_float_type_def(double_precision, include_complex=True):
             #if __OPENCL_VERSION__ <= CL_VERSION_1_1
                 #pragma OPENCL EXTENSION cl_khr_fp64 : enable
             #endif
-            
+
             typedef float mot_float_type;
             typedef float2 mot_float_type2;
             typedef float4 mot_float_type4;
             typedef float8 mot_float_type8;
             typedef float16 mot_float_type16;
-            
+
             #define MOT_EPSILON FLT_EPSILON
             #define MOT_MIN FLT_MIN
             #define MOT_MAX FLT_MAX
@@ -269,12 +269,14 @@ def get_atomic_functions(mot_float_type_is_double):
         mot_float_type_is_double (bool): if the mot_float_type is double or not
     """
     atomics = '''
+        #pragma OPENCL EXTENSION cl_khr_int64_base_atomics: enable
+
         void atomic_add_g_f(volatile __global float *addr, float val){
             union {
                 unsigned int u32;
                 float        f32;
             } next, expected, current;
-            
+
             current.f32    = *addr;
             do {
                 expected.f32 = current.f32;
@@ -282,13 +284,13 @@ def get_atomic_functions(mot_float_type_is_double):
                 current.u32  = atomic_cmpxchg( (volatile __global unsigned int *)addr, expected.u32, next.u32);
             } while( current.u32 != expected.u32 );
         }
-        
+
         void atomic_add_l_f(volatile __local float *addr, float val){
             union {
                 unsigned int u32;
                 float        f32;
             } next, expected, current;
-            
+
             current.f32    = *addr;
             do {
                 expected.f32 = current.f32;
@@ -296,13 +298,13 @@ def get_atomic_functions(mot_float_type_is_double):
                 current.u32  = atomic_cmpxchg( (volatile __local unsigned int *)addr, expected.u32, next.u32);
             } while( current.u32 != expected.u32 );
         }
-        
+
         void atomic_add_g_d(volatile __global double *addr, double val) {
             union {
                 ulong  u64;
                 double f64;
             } next, expected, current;
-                        
+
             current.f64 = *addr;
             do {
                 expected.f64 = current.f64;
@@ -310,13 +312,13 @@ def get_atomic_functions(mot_float_type_is_double):
                 current.u64  = atom_cmpxchg( (volatile __global ulong *)addr, expected.u64, next.u64);
             } while( current.u64 != expected.u64 );
         }
-        
+
         void atomic_add_l_d(volatile __local double *addr, double val) {
             union {
                 ulong  u64;
                 double f64;
             } next, expected, current;
-                        
+
             current.f64 = *addr;
             do {
                 expected.f64 = current.f64;
@@ -330,7 +332,7 @@ def get_atomic_functions(mot_float_type_is_double):
             void atomic_add_g_mft(volatile __global double *addr, double val){
                 atomic_add_g_d(addr, val);
             }
-            
+
             void atomic_add_l_mft(volatile __local double *addr, double val){
                 atomic_add_l_d(addr, val);
             }
@@ -615,13 +617,13 @@ def multiprocess_mapping(func, iterable):
 
 _tatsu_cl_function = '''
     function = {documentation}* [address_space] data_type function_name arglist body;
-    documentation = '/*' ->'*/'; 
+    documentation = '/*' ->'*/';
     address_space = ['__'] ('local' | 'global' | 'constant' | 'private');
     data_type = /\w+(\s*(\*)?)+/;
     function_name = /\w+/;
     arglist = '(' @+:arg {',' @+:arg}* ')' | '()';
     arg = /[\w \*\[\]]+/;
-    body = compound_statement;    
+    body = compound_statement;
     compound_statement = '{' {[/[^\{\}]*/] [compound_statement]}* '}';
 '''
 
