@@ -258,6 +258,97 @@ def get_float_type_def(double_precision, include_complex=True):
         ''' + scipy_constants + complex_number_support
 
 
+def get_atomic_functions(mot_float_type_is_double):
+    """Add a few additional atomic functions to all kernels.
+
+    Copied from: https://streamhpc.com/blog/2016-02-09/atomic-operations-for-floats-in-opencl-improved/
+
+    Todo: remove these when we support OpenCL 2.0
+
+    Args:
+        mot_float_type_is_double (bool): if the mot_float_type is double or not
+    """
+    atomics = '''
+        void atomic_add_g_f(volatile __global float *addr, float val){
+            union {
+                unsigned int u32;
+                float        f32;
+            } next, expected, current;
+            
+            current.f32    = *addr;
+            do {
+                expected.f32 = current.f32;
+                next.f32     = expected.f32 + val;
+                current.u32  = atomic_cmpxchg( (volatile __global unsigned int *)addr, expected.u32, next.u32);
+            } while( current.u32 != expected.u32 );
+        }
+        
+        void atomic_add_l_f(volatile __local float *addr, float val){
+            union {
+                unsigned int u32;
+                float        f32;
+            } next, expected, current;
+            
+            current.f32    = *addr;
+            do {
+                expected.f32 = current.f32;
+                next.f32     = expected.f32 + val;
+                current.u32  = atomic_cmpxchg( (volatile __local unsigned int *)addr, expected.u32, next.u32);
+            } while( current.u32 != expected.u32 );
+        }
+        
+        void atomic_add_g_d(volatile __global double *addr, double val) {
+            union {
+                ulong  u64;
+                double f64;
+            } next, expected, current;
+                        
+            current.f64 = *addr;
+            do {
+                expected.f64 = current.f64;
+                next.f64     = expected.f64 + val;
+                current.u64  = atom_cmpxchg( (volatile __global ulong *)addr, expected.u64, next.u64);
+            } while( current.u64 != expected.u64 );
+        }
+        
+        void atomic_add_l_d(volatile __local double *addr, double val) {
+            union {
+                ulong  u64;
+                double f64;
+            } next, expected, current;
+                        
+            current.f64 = *addr;
+            do {
+                expected.f64 = current.f64;
+                next.f64     = expected.f64 + val;
+                current.u64  = atom_cmpxchg( (volatile __local ulong *)addr, expected.u64, next.u64);
+            } while( current.u64 != expected.u64 );
+        }
+    '''
+    if mot_float_type_is_double:
+        atomics += '''
+            void atomic_add_g_mft(volatile __global double *addr, double val){
+                atomic_add_g_d(addr, val);
+            }
+            
+            void atomic_add_l_mft(volatile __local double *addr, double val){
+                atomic_add_l_d(addr, val);
+            }
+        '''
+    else:
+        atomics += '''
+            void atomic_add_g_mft(volatile __global float *addr, float val){
+                atomic_add_g_f(addr, val);
+            }
+
+            void atomic_add_l_mft(volatile __local float *addr, float val){
+                atomic_add_l_f(addr, val);
+            }
+        '''
+
+    return atomics
+
+
 def topological_sort(data):
     """Topological sort the given dictionary structure.
 

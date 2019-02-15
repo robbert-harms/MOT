@@ -1,3 +1,6 @@
+from mot.lib.cl_function import CLFunction, SimpleCLFunction
+from mot.lib.utils import split_cl_function
+
 __author__ = 'Robbert Harms'
 __date__ = '2018-08-01'
 __maintainer__ = 'Robbert Harms'
@@ -47,3 +50,56 @@ class OptimizeResults(dict):
 
     def __dir__(self):
         return list(self.keys())
+
+
+class ConstraintFunction(CLFunction):
+    """These functions are meant to be provided to the optimization routines.
+
+    If provided to the optimization routines, they should hold a CL function with the signature:
+
+    .. code-block:: c
+
+        void <func_name>(local const mot_float_type* const x,
+                         void* data,
+                         local mot_float_type* constraints);
+
+    Although this is not enforced for general usage of this class.
+
+    Since the number of constraints in the ``constraints`` array is variable, this class additionally specifies the
+    number of constraints using the method :meth:`get_nmr_constraints`.
+    """
+
+    def get_nmr_constraints(self):
+        """Get the number of constraints defined in this function.
+
+        Returns:
+            int: the number of constraints defined in this function.
+        """
+        raise NotImplementedError()
+
+
+class SimpleConstraintFunction(SimpleCLFunction, ConstraintFunction):
+
+    def __init__(self, *args, nmr_constraints=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._nmr_constraints = nmr_constraints
+        if nmr_constraints is None:
+            raise ValueError('Number of constraints not defined.')
+
+    @classmethod
+    def from_string(cls, cl_function, dependencies=(), nmr_constraints=None):
+        """Parse the given CL function into a SimpleCLFunction object.
+
+        Args:
+            cl_function (str): the function we wish to turn into an object
+            dependencies (list or tuple of CLLibrary): The list of CL libraries this function depends on
+
+        Returns:
+            SimpleCLFunction: the CL data type for this parameter declaration
+        """
+        return_type, function_name, parameter_list, body = split_cl_function(cl_function)
+        return SimpleConstraintFunction(return_type, function_name, parameter_list, body, dependencies=dependencies,
+                                        nmr_constraints=nmr_constraints)
+
+    def get_nmr_constraints(self):
+        return self._nmr_constraints

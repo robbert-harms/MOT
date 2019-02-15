@@ -1,6 +1,6 @@
 from mot.lib.cl_function import SimpleCLFunction
 from mot.configuration import CLRuntimeInfo
-from mot.lib.kernel_data import Array, Scalar, CompositeArray, Struct, LocalMemory, Zeros
+from mot.lib.kernel_data import Array, Scalar, CompositeArray, Struct, LocalMemory
 from mot.lib.utils import all_elements_equal, get_single_value
 from mot.library_functions import Powell, Subplex, NMSimplex, LevenbergMarquardt
 from mot.optimize.base import OptimizeResults
@@ -13,11 +13,25 @@ __email__ = 'robbert.harms@maastrichtuniversity.nl'
 __licence__ = 'LGPL v3'
 
 
-def minimize(func, x0, data=None, method=None, lower_bounds=None, upper_bounds=None,
+def minimize(func, x0, data=None, method=None, lower_bounds=None, upper_bounds=None, constraints_func=None,
              nmr_observations=None, cl_runtime_info=None, options=None):
     """Minimization of one or more variables.
 
     For an easy wrapper of function maximization, see :func:`maximize`.
+
+    All boundary conditions are enforced using the augmented lagrangian technique. That is, we optimize the
+    objective function:
+
+    .. math::
+
+        F(x) = f(x) + \lambda\sum \max(0, g_i(x)) + \frac{\mu}{2}\sum \max(0, g_i(x))^2
+
+    where :math:`F(x)` is the new objective function, :math:`f(x)` is the old objective function, :math:`g_i` are
+    the boundary functions defined as :math:`g_i(x) \leq 0` and :math:`\lambda` and :math:`\mu` are the weights
+     of the penalty terms.
+
+    The penalty weights defaults are :math:`\lambda = 1e20` and :math:`\mu = 2e20` and can be set using the ``options``
+    dictionary as ``penalty_linear`` and ``penalty_quadratic``.
 
     Args:
         func (mot.lib.cl_function.CLFunction): A CL function with the signature:
@@ -51,11 +65,31 @@ def minimize(func, x0, data=None, method=None, lower_bounds=None, upper_bounds=N
             b the upper bound and x the parameter. If not given, +infinity is assumed for all parameters.
             Each tuple element can either be a scalar or a vector. If a vector is given the first dimension length
             should match that of the parameters.
+        constraints_func (mot.optimize.base.ConstraintFunction): function to compute (inequality) constraints.
+            Should hold a CL function with the signature:
+
+            .. code-block:: c
+
+                void <func_name>(local const mot_float_type* const x,
+                                 void* data,
+                                 local mot_float_type* constraints);
+
+            Where ``constraints_values`` is filled as:
+
+            .. code-block:: c
+
+                constraints[i] = g_i(x)
+
+            That is, for each constraint function :math:`g_i`, formulated as :math:`g_i(x) <= 0`, we should return
+            the function value of :math:`g_i`.
+
         nmr_observations (int): the number of observations returned by the optimization function.
             This is only needed for the ``Levenberg-Marquardt`` method.
         cl_runtime_info (mot.configuration.CLRuntimeInfo): the CL runtime information
         options (dict): A dictionary of solver options. All methods accept the following generic options:
             - patience (int): Maximum number of iterations to perform.
+            - penalty_linear (float): the weight of the linear penalty term for the boundary conditions
+            - penalty_quadratic (float): the weight of the quadratic penalty term for the boundary conditions
 
     Returns:
         mot.optimize.base.OptimizeResults:
@@ -74,14 +108,17 @@ def minimize(func, x0, data=None, method=None, lower_bounds=None, upper_bounds=N
     upper_bounds = _bounds_to_array(upper_bounds or np.ones(x0.shape[1]) * np.inf)
 
     if method == 'Powell':
-        return _minimize_powell(func, x0, cl_runtime_info, lower_bounds, upper_bounds, data=data, options=options)
+        return _minimize_powell(func, x0, cl_runtime_info, lower_bounds, upper_bounds,
+                                constraints_func=constraints_func, data=data, options=options)
     elif method == 'Nelder-Mead':
-        return _minimize_nmsimplex(func, x0, cl_runtime_info, lower_bounds, upper_bounds, data=data, options=options)
+        return _minimize_nmsimplex(func, x0, cl_runtime_info, lower_bounds, upper_bounds,
+                                   constraints_func=constraints_func, data=data, options=options)
     elif method == 'Levenberg-Marquardt':
         return _minimize_levenberg_marquardt(func, x0, nmr_observations, cl_runtime_info, lower_bounds, upper_bounds,
-                                             data=data, options=options)
+                                             constraints_func=constraints_func, data=data, options=options)
     elif method == 'Subplex':
-        return _minimize_subplex(func, x0, cl_runtime_info, lower_bounds, upper_bounds, data=data, options=options)
+        return _minimize_subplex(func, x0, cl_runtime_info, lower_bounds, upper_bounds,
+                                 constraints_func=constraints_func, data=data, options=options)
     raise ValueError('Could not find the specified method "{}".'.format(method))
 
 
@@ -208,7 +245,8 @@ def _clean_options(method, provided_options):
     return result
 
 
-def _minimize_powell(func, x0, cl_runtime_info, lower_bounds, upper_bounds, data=None, options=None):
+def _minimize_powell(func, x0, cl_runtime_info, lower_bounds, upper_bounds,
+                     constraints_func=None, data=None, options=None):
     """
     Options:
         patience (int): Used to set the maximum number of iterations to patience*(number_of_parameters+1)
@@ -216,43 +254,35 @@ def _minimize_powell(func, x0, cl_runtime_info, lower_bounds, upper_bounds, data
         patience_line_search (int): the patience of the searching algorithm. Defaults to the
             same patience as for the Powell algorithm itself.
     """
-    options = _clean_options('Powell', options)
-
+    options = options or {}
     nmr_problems = x0.shape[0]
     nmr_parameters = x0.shape[1]
 
+    penalty_data, penalty_func = _get_penalty_function(nmr_parameters, constraints_func)
+
     eval_func = SimpleCLFunction.from_string('''
         double evaluate(local mot_float_type* x, void* data){
-            local mot_float_type* lower_bounds = ((_powell_eval_func_data*)data)->lower_bounds;
-            local mot_float_type* upper_bounds = ((_powell_eval_func_data*)data)->upper_bounds;
-            local int* out_of_bounds = ((_powell_eval_func_data*)data)->out_of_bounds;
+            double penalty = _mle_penalty(
+                x, 
+                ((_powell_eval_func_data*)data)->data,
+                ((_powell_eval_func_data*)data)->lower_bounds,
+                ((_powell_eval_func_data*)data)->upper_bounds,
+                ''' + str(options.get('penalty_linear', 1e20)) + ''',
+                ''' + str(options.get('penalty_quadratic', 2e20)) + ''',  
+                ((_powell_eval_func_data*)data)->penalty_data
+            );
             
-            if(get_local_id(0) == 0){
-                *out_of_bounds = 0;
-                
-                for(int i = 0; i < ''' + str(nmr_parameters) + '''; i++){
-                    if(x[i] <= lower_bounds[i] || x[i] >= upper_bounds[i]){
-                        *out_of_bounds = 1;
-                        break;
-                    }
-                }
-            }
-            barrier(CLK_LOCAL_MEM_FENCE);
-            if(*out_of_bounds){
-                return INFINITY;
-            }
-        
-            return ''' + func.get_cl_function_name() + '''(x, ((_powell_eval_func_data*)data)->data, 0);
+            return ''' + func.get_cl_function_name() + '''(x, ((_powell_eval_func_data*)data)->data, 0) + penalty;
         }
-    ''', dependencies=[func])
+    ''', dependencies=[func, penalty_func])
 
-    optimizer_func = Powell(eval_func, nmr_parameters, **options)
+    optimizer_func = Powell(eval_func, nmr_parameters, **_clean_options('Powell', options))
 
     kernel_data = {'model_parameters': Array(x0, ctype='mot_float_type', mode='rw'),
                    'data': Struct({'data': data,
                                    'lower_bounds': lower_bounds,
                                    'upper_bounds': upper_bounds,
-                                   'out_of_bounds': LocalMemory('int', 1)}, '_powell_eval_func_data')}
+                                   'penalty_data': penalty_data}, '_powell_eval_func_data')}
     kernel_data.update(optimizer_func.get_kernel_data())
 
     return_code = optimizer_func.evaluate(
@@ -264,7 +294,8 @@ def _minimize_powell(func, x0, cl_runtime_info, lower_bounds, upper_bounds, data
                             'status': return_code})
 
 
-def _minimize_nmsimplex(func, x0, cl_runtime_info, lower_bounds, upper_bounds, data=None, options=None):
+def _minimize_nmsimplex(func, x0, cl_runtime_info, lower_bounds, upper_bounds,
+                        constraints_func=None, data=None, options=None):
     """Use the Nelder-Mead simplex method to calculate the optimimum.
 
     The scales should satisfy the following constraints:
@@ -302,33 +333,36 @@ def _minimize_nmsimplex(func, x0, cl_runtime_info, lower_bounds, upper_bounds, d
         [1] Gao F, Han L. Implementing the Nelder-Mead simplex algorithm with adaptive parameters.
               Comput Optim Appl. 2012;51(1):259-277. doi:10.1007/s10589-010-9329-3.
     """
-    options = _clean_options('Nelder-Mead', options)
-
+    options = options or {}
     nmr_problems = x0.shape[0]
     nmr_parameters = x0.shape[1]
 
+    penalty_data, penalty_func = _get_penalty_function(nmr_parameters, constraints_func)
+
     eval_func = SimpleCLFunction.from_string('''
         double evaluate(local mot_float_type* x, void* data){
-            local mot_float_type* lower_bounds = ((_nmsimplex_eval_func_data*)data)->lower_bounds;
-            local mot_float_type* upper_bounds = ((_nmsimplex_eval_func_data*)data)->upper_bounds;
-            
-            if(get_local_id(0) == 0){
-                for(int i = 0; i < ''' + str(nmr_parameters) + '''; i++){
-                    x[i] = clamp(x[i], lower_bounds[i], upper_bounds[i]);
-                }
-            }
-            barrier(CLK_LOCAL_MEM_FENCE);
-            
-            return ''' + func.get_cl_function_name() + '''(x, ((_nmsimplex_eval_func_data*)data)->data, 0);
-        }
-    ''', dependencies=[func])
+            double penalty = _mle_penalty(
+                x, 
+                ((_nmsimplex_eval_func_data*)data)->data,
+                ((_nmsimplex_eval_func_data*)data)->lower_bounds,
+                ((_nmsimplex_eval_func_data*)data)->upper_bounds,
+                ''' + str(options.get('penalty_linear', 1e20)) + ''',
+                ''' + str(options.get('penalty_quadratic', 2e20)) + ''',
+                ((_nmsimplex_eval_func_data*)data)->penalty_data
+            );
 
-    optimizer_func = NMSimplex('evaluate', nmr_parameters, dependencies=[eval_func], **options)
+            return ''' + func.get_cl_function_name() + '''(x, ((_nmsimplex_eval_func_data*)data)->data, 0) + penalty;
+        }
+    ''', dependencies=[func, penalty_func])
+
+    optimizer_func = NMSimplex('evaluate', nmr_parameters, dependencies=[eval_func],
+                               **_clean_options('Nelder-Mead', options))
 
     kernel_data = {'model_parameters': Array(x0, ctype='mot_float_type', mode='rw'),
                    'data': Struct({'data': data,
                                    'lower_bounds': lower_bounds,
-                                   'upper_bounds': upper_bounds}, '_nmsimplex_eval_func_data')}
+                                   'upper_bounds': upper_bounds,
+                                   'penalty_data': penalty_data}, '_nmsimplex_eval_func_data')}
     kernel_data.update(optimizer_func.get_kernel_data())
 
     return_code = optimizer_func.evaluate(
@@ -340,7 +374,8 @@ def _minimize_nmsimplex(func, x0, cl_runtime_info, lower_bounds, upper_bounds, d
                             'status': return_code})
 
 
-def _minimize_subplex(func, x0, cl_runtime_info, lower_bounds, upper_bounds, data=None, options=None):
+def _minimize_subplex(func, x0, cl_runtime_info, lower_bounds, upper_bounds,
+                      constraints_func=None, data=None, options=None):
     """Variation on the Nelder-Mead Simplex method by Thomas H. Rowan.
 
     This method uses NMSimplex to search subspace regions for the minimum. See Rowan's thesis titled
@@ -388,32 +423,35 @@ def _minimize_subplex(func, x0, cl_runtime_info, lower_bounds, upper_bounds, dat
         [1] Gao F, Han L. Implementing the Nelder-Mead simplex algorithm with adaptive parameters.
               Comput Optim Appl. 2012;51(1):259-277. doi:10.1007/s10589-010-9329-3.
     """
-    options = _clean_options('Subplex', options)
-
+    options = options or {}
     nmr_problems = x0.shape[0]
     nmr_parameters = x0.shape[1]
 
+    penalty_data, penalty_func = _get_penalty_function(nmr_parameters, constraints_func)
+
     eval_func = SimpleCLFunction.from_string('''
         double evaluate(local mot_float_type* x, void* data){
-            local mot_float_type* lower_bounds = ((_subplex_eval_func_data*)data)->lower_bounds;
-            local mot_float_type* upper_bounds = ((_subplex_eval_func_data*)data)->upper_bounds;
-            
-            if(get_local_id(0) == 0){
-                for(int i = 0; i < ''' + str(nmr_parameters) + '''; i++){
-                    x[i] = clamp(x[i], lower_bounds[i], upper_bounds[i]);
-                }
-            }
-            barrier(CLK_LOCAL_MEM_FENCE);
-            return ''' + func.get_cl_function_name() + '''(x, ((_subplex_eval_func_data*)data)->data, 0);
-        }
-    ''', dependencies=[func])
+            double penalty = _mle_penalty(
+                x, 
+                ((_subplex_eval_func_data*)data)->data,
+                ((_subplex_eval_func_data*)data)->lower_bounds,
+                ((_subplex_eval_func_data*)data)->upper_bounds,
+                ''' + str(options.get('penalty_linear', 1e20)) + ''',
+                ''' + str(options.get('penalty_quadratic', 2e20)) + ''',
+                ((_subplex_eval_func_data*)data)->penalty_data
+            );
 
-    optimizer_func = Subplex(eval_func, nmr_parameters, **options)
+            return ''' + func.get_cl_function_name() + '''(x, ((_subplex_eval_func_data*)data)->data, 0) + penalty;
+        }
+    ''', dependencies=[func, penalty_func])
+
+    optimizer_func = Subplex(eval_func, nmr_parameters, **_clean_options('Subplex', options))
 
     kernel_data = {'model_parameters': Array(x0, ctype='mot_float_type', mode='rw'),
                    'data': Struct({'data': data,
                                    'lower_bounds': lower_bounds,
-                                   'upper_bounds': upper_bounds}, '_subplex_eval_func_data')}
+                                   'upper_bounds': upper_bounds,
+                                   'penalty_data': penalty_data}, '_subplex_eval_func_data')}
     kernel_data.update(optimizer_func.get_kernel_data())
 
     return_code = optimizer_func.evaluate(
@@ -425,55 +463,50 @@ def _minimize_subplex(func, x0, cl_runtime_info, lower_bounds, upper_bounds, dat
                             'status': return_code})
 
 
-def _minimize_levenberg_marquardt(func, x0, nmr_observations, cl_runtime_info,
-                                  lower_bounds, upper_bounds, data=None, options=None):
-    options = _clean_options('Levenberg-Marquardt', options)
-
+def _minimize_levenberg_marquardt(func, x0, nmr_observations, cl_runtime_info, lower_bounds, upper_bounds,
+                                  constraints_func=None, data=None, options=None):
+    options = options or {}
     nmr_problems = x0.shape[0]
     nmr_parameters = x0.shape[1]
 
     if nmr_observations < x0.shape[1]:
         raise ValueError('The number of instances per problem must be greater than the number of parameters')
 
+    penalty_data, penalty_func = _get_penalty_function(nmr_parameters, constraints_func)
+
     eval_func = SimpleCLFunction.from_string('''
         void evaluate(local mot_float_type* x, void* data, local mot_float_type* result){
-            local mot_float_type* lower_bounds = ((_lm_eval_func_data*)data)->lower_bounds;
-            local mot_float_type* upper_bounds = ((_lm_eval_func_data*)data)->upper_bounds;
-            local int* out_of_bounds = ((_lm_eval_func_data*)data)->out_of_bounds;
+            double penalty = _mle_penalty(
+                x, 
+                ((_lm_eval_func_data*)data)->data,
+                ((_lm_eval_func_data*)data)->lower_bounds,
+                ((_lm_eval_func_data*)data)->upper_bounds,
+                ''' + str(options.get('penalty_linear', 1e20)) + ''',
+                ''' + str(options.get('penalty_quadratic', 2e20)) + ''',
+                ((_lm_eval_func_data*)data)->penalty_data
+            );
+
+            ''' + func.get_cl_function_name() + '''(x, ((_lm_eval_func_data*)data)->data, result);
             
             if(get_local_id(0) == 0){
-                *out_of_bounds = 0;
-                
-                for(int i = 0; i < ''' + str(nmr_parameters) + '''; i++){
-                    if(x[i] <= lower_bounds[i] || x[i] >= upper_bounds[i]){
-                        for(int j = 0; j < ''' + str(nmr_observations) + '''; j++){
-                            result[j] = INFINITY;    
-                        }
-                        *out_of_bounds = 1;
-                        break;
-                    }
+                for(int j = 0; j < ''' + str(nmr_observations) + '''; j++){
+                    result[j] += penalty;    
                 }
             }
-            barrier(CLK_LOCAL_MEM_FENCE);
-            if(*out_of_bounds){
-                return;
-            }
-            
-            ''' + func.get_cl_function_name() + '''(x, ((_lm_eval_func_data*)data)->data, result);
+            barrier(CLK_LOCAL_MEM_FENCE);            
         }
-    ''', dependencies=[func])
+    ''', dependencies=[func, penalty_func])
 
-    jacobian_func = _lm_numdiff_jacobian(func, nmr_parameters, nmr_observations)
+    jacobian_func = _lm_numdiff_jacobian(eval_func, nmr_parameters, nmr_observations)
 
-    optimizer_func = LevenbergMarquardt(eval_func, nmr_parameters, nmr_observations, jacobian_func, **options)
+    optimizer_func = LevenbergMarquardt(eval_func, nmr_parameters, nmr_observations, jacobian_func,
+                                        **_clean_options('Levenberg-Marquardt', options))
 
     kernel_data = {'model_parameters': Array(x0, ctype='mot_float_type', mode='rw'),
                    'data': Struct({'data': data,
                                    'lower_bounds': lower_bounds,
                                    'upper_bounds': upper_bounds,
-                                   'out_of_bounds': LocalMemory('int', 1),
-                                   # 'jacobian_x_tmp': Zeros((nmr_problems, nmr_observations),
-                                   #                         ctype='mot_float_type', mode='rw'),
+                                   'penalty_data': penalty_data,
                                    'jacobian_x_tmp': LocalMemory('mot_float_type', nmr_observations)
                                    },
                                   '_lm_eval_func_data')}
@@ -567,7 +600,7 @@ def _lm_numdiff_jacobian(eval_func, nmr_params, nmr_observations):
                 model_parameters[px] = temp + step_size;
             }
             barrier(CLK_LOCAL_MEM_FENCE);
-            ''' + eval_func.get_cl_function_name() + '''(model_parameters, ((_lm_eval_func_data*)data)->data, fjac);
+            ''' + eval_func.get_cl_function_name() + '''(model_parameters, data, fjac);
             
             
             // F(x - h)
@@ -575,7 +608,7 @@ def _lm_numdiff_jacobian(eval_func, nmr_params, nmr_observations):
                 model_parameters[px] = temp - step_size;
             }
             barrier(CLK_LOCAL_MEM_FENCE);
-            ''' + eval_func.get_cl_function_name() + '''(model_parameters, ((_lm_eval_func_data*)data)->data, fjac_tmp);
+            ''' + eval_func.get_cl_function_name() + '''(model_parameters, data, fjac_tmp);
             
             
             // combine
@@ -616,7 +649,7 @@ def _lm_numdiff_jacobian(eval_func, nmr_params, nmr_observations):
                model_parameters[px] = temp - step_size;
             }
             barrier(CLK_LOCAL_MEM_FENCE);
-            ''' + eval_func.get_cl_function_name() + '''(model_parameters, ((_lm_eval_func_data*)data)->data, fjac);
+            ''' + eval_func.get_cl_function_name() + '''(model_parameters, data, fjac);
                         
             
             // F(x - 2*h)
@@ -624,7 +657,7 @@ def _lm_numdiff_jacobian(eval_func, nmr_params, nmr_observations):
                model_parameters[px] = temp - 2 * step_size;
             }
             barrier(CLK_LOCAL_MEM_FENCE);
-            ''' + eval_func.get_cl_function_name() + '''(model_parameters, ((_lm_eval_func_data*)data)->data, fjac_tmp);
+            ''' + eval_func.get_cl_function_name() + '''(model_parameters, data, fjac_tmp);
             
             // combine
             for(int i = 0; i < (nmr_observations + workgroup_size - 1) / workgroup_size; i++){
@@ -666,7 +699,7 @@ def _lm_numdiff_jacobian(eval_func, nmr_params, nmr_observations):
                model_parameters[px] = temp + step_size;
             }
             barrier(CLK_LOCAL_MEM_FENCE);
-            ''' + eval_func.get_cl_function_name() + '''(model_parameters, ((_lm_eval_func_data*)data)->data, fjac);
+            ''' + eval_func.get_cl_function_name() + '''(model_parameters, data, fjac);
             
           
             // F(x + 2*h)
@@ -674,7 +707,7 @@ def _lm_numdiff_jacobian(eval_func, nmr_params, nmr_observations):
                model_parameters[px] = temp + 2 * step_size;
             }
             barrier(CLK_LOCAL_MEM_FENCE);
-            ''' + eval_func.get_cl_function_name() + '''(model_parameters, ((_lm_eval_func_data*)data)->data, fjac);
+            ''' + eval_func.get_cl_function_name() + '''(model_parameters, data, fjac);
             
             // combine
             for(int i = 0; i < (nmr_observations + workgroup_size - 1) / workgroup_size; i++){
@@ -693,3 +726,99 @@ def _lm_numdiff_jacobian(eval_func, nmr_params, nmr_observations):
             barrier(CLK_LOCAL_MEM_FENCE);
         }
     ''')])
+
+
+def _get_penalty_function(nmr_parameters, constraints_func=None):
+    """Get a function to compute the penalty term for the boundary conditions.
+
+    This is meant to be used in the evaluation function of the optimization routines.
+
+    Args:
+        nmr_parameters (int): the number of parameters in the model
+        constraints_func (mot.optimize.base.ConstraintFunction): function to compute (inequality) constraints.
+            Should hold a CL function with the signature:
+
+            .. code-block:: c
+
+                void <func_name>(local const mot_float_type* const x,
+                                 void* data,
+                                 local mot_float_type* constraint_values);
+
+            Where ``constraints_values`` is filled as:
+
+            .. code-block:: c
+
+                constraint_values[i] = g_i(x)
+
+            That is, for each constraint function :math:`g_i`, formulated as :math:`g_i(x) <= 0`, we should return
+            the function value of :math:`g_i`.
+
+    Returns:
+        tuple: Struct and SimpleCLFunction, the required data for the penalty function and the penalty function itself.
+    """
+    dependencies = []
+    data_requirements = {'scratch': LocalMemory('double', 2)}
+    constraints_code = ''
+
+    if constraints_func and constraints_func.get_nmr_constraints() > 0:
+        nmr_constraints = constraints_func.get_nmr_constraints()
+        dependencies.append(constraints_func)
+        data_requirements['constraints'] = LocalMemory('mot_float_type', nmr_constraints)
+
+        constraints_code = '''
+            local mot_float_type* constraints = ((_mle_penalty_data*)scratch_data)->constraints;
+            
+            ''' + constraints_func.get_cl_function_name() + '''(x, data, constraints);
+            
+            for(int i = 0; i < ''' + str(nmr_constraints) + '''; i++){
+                tmp = max((mot_float_type)0, constraints[i]);
+                *linear_sum += tmp;
+                *quadratic_sum += tmp * tmp; 
+            }
+        '''
+
+    data = Struct(data_requirements, '_mle_penalty_data')
+    func = SimpleCLFunction.from_string('''
+        double _mle_penalty(
+                local mot_float_type* x,
+                void* data, 
+                local mot_float_type* lower_bounds, 
+                local mot_float_type* upper_bounds,
+                float penalty_linear,
+                float penalty_quadratic,
+                void* scratch_data){
+            
+            double tmp;
+            local double* linear_sum = ((_mle_penalty_data*)scratch_data)->scratch;
+            local double* quadratic_sum = ((_mle_penalty_data*)scratch_data)->scratch + 1;
+
+            if(get_local_id(0) == 0){
+                *linear_sum = 0;
+                *quadratic_sum = 0;
+                
+                // boundary conditions
+                for(int i = 0; i < ''' + str(nmr_parameters) + '''; i++){
+                    if(isfinite(upper_bounds[i])){
+                        tmp = max((mot_float_type)0, x[i] - upper_bounds[i]);
+                        *linear_sum += tmp;
+                        *quadratic_sum += tmp * tmp;    
+                    }
+                    if(isfinite(lower_bounds[i])){
+                        tmp = max((mot_float_type)0, lower_bounds[i] - x[i]);
+                        *linear_sum += tmp;
+                        *quadratic_sum += tmp * tmp;
+                    }
+                }
+                
+                
+            }
+            barrier(CLK_LOCAL_MEM_FENCE);
+            
+            // constraints
+            ''' + constraints_code + '''
+            
+            return (penalty_linear * *linear_sum + 0.5 * penalty_quadratic * *quadratic_sum);
+        }
+    ''', dependencies=dependencies)
+    return data, func
+
