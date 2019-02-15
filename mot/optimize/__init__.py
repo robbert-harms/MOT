@@ -19,19 +19,17 @@ def minimize(func, x0, data=None, method=None, lower_bounds=None, upper_bounds=N
 
     For an easy wrapper of function maximization, see :func:`maximize`.
 
-    All boundary conditions are enforced using the augmented lagrangian technique. That is, we optimize the
-    objective function:
+    All boundary conditions are enforced using the penalty method. That is, we optimize the objective function:
 
     .. math::
 
-        F(x) = f(x) + \lambda\sum \max(0, g_i(x)) + \frac{\mu}{2}\sum \max(0, g_i(x))^2
+        F(x) = f(x) \mu \sum \max(0, g_i(x))^2
 
     where :math:`F(x)` is the new objective function, :math:`f(x)` is the old objective function, :math:`g_i` are
-    the boundary functions defined as :math:`g_i(x) \leq 0` and :math:`\lambda` and :math:`\mu` are the weights
-     of the penalty terms.
+    the boundary functions defined as :math:`g_i(x) \leq 0` and :math:`\mu` is the penalty weight.
 
-    The penalty weights defaults are :math:`\lambda = 1e20` and :math:`\mu = 2e20` and can be set using the ``options``
-    dictionary as ``penalty_linear`` and ``penalty_quadratic``.
+    The penalty weight is by default :math:`\mu = 1e20` and can be set
+    using the ``options`` dictionary as ``penalty_weight``.
 
     Args:
         func (mot.lib.cl_function.CLFunction): A CL function with the signature:
@@ -88,8 +86,7 @@ def minimize(func, x0, data=None, method=None, lower_bounds=None, upper_bounds=N
         cl_runtime_info (mot.configuration.CLRuntimeInfo): the CL runtime information
         options (dict): A dictionary of solver options. All methods accept the following generic options:
             - patience (int): Maximum number of iterations to perform.
-            - penalty_linear (float): the weight of the linear penalty term for the boundary conditions
-            - penalty_quadratic (float): the weight of the quadratic penalty term for the boundary conditions
+            - penalty_weight (float): the weight of the penalty term for the boundary conditions
 
     Returns:
         mot.optimize.base.OptimizeResults:
@@ -267,8 +264,7 @@ def _minimize_powell(func, x0, cl_runtime_info, lower_bounds, upper_bounds,
                 ((_powell_eval_func_data*)data)->data,
                 ((_powell_eval_func_data*)data)->lower_bounds,
                 ((_powell_eval_func_data*)data)->upper_bounds,
-                ''' + str(options.get('penalty_linear', 1e20)) + ''',
-                ''' + str(options.get('penalty_quadratic', 2e20)) + ''',  
+                ''' + str(options.get('penalty_weight', 1e30)) + ''',  
                 ((_powell_eval_func_data*)data)->penalty_data
             );
             
@@ -346,8 +342,7 @@ def _minimize_nmsimplex(func, x0, cl_runtime_info, lower_bounds, upper_bounds,
                 ((_nmsimplex_eval_func_data*)data)->data,
                 ((_nmsimplex_eval_func_data*)data)->lower_bounds,
                 ((_nmsimplex_eval_func_data*)data)->upper_bounds,
-                ''' + str(options.get('penalty_linear', 1e20)) + ''',
-                ''' + str(options.get('penalty_quadratic', 2e20)) + ''',
+                ''' + str(options.get('penalty_weight', 1e30)) + ''',
                 ((_nmsimplex_eval_func_data*)data)->penalty_data
             );
 
@@ -436,8 +431,7 @@ def _minimize_subplex(func, x0, cl_runtime_info, lower_bounds, upper_bounds,
                 ((_subplex_eval_func_data*)data)->data,
                 ((_subplex_eval_func_data*)data)->lower_bounds,
                 ((_subplex_eval_func_data*)data)->upper_bounds,
-                ''' + str(options.get('penalty_linear', 1e20)) + ''',
-                ''' + str(options.get('penalty_quadratic', 2e20)) + ''',
+                ''' + str(options.get('penalty_weight', 1e30)) + ''',
                 ((_subplex_eval_func_data*)data)->penalty_data
             );
 
@@ -481,8 +475,7 @@ def _minimize_levenberg_marquardt(func, x0, nmr_observations, cl_runtime_info, l
                 ((_lm_eval_func_data*)data)->data,
                 ((_lm_eval_func_data*)data)->lower_bounds,
                 ((_lm_eval_func_data*)data)->upper_bounds,
-                ''' + str(options.get('penalty_linear', 1e20)) + ''',
-                ''' + str(options.get('penalty_quadratic', 2e20)) + ''',
+                ''' + str(options.get('penalty_weight', 1e30)) + ''',
                 ((_lm_eval_func_data*)data)->penalty_data
             );
 
@@ -757,7 +750,7 @@ def _get_penalty_function(nmr_parameters, constraints_func=None):
         tuple: Struct and SimpleCLFunction, the required data for the penalty function and the penalty function itself.
     """
     dependencies = []
-    data_requirements = {'scratch': LocalMemory('double', 2)}
+    data_requirements = {'scratch': LocalMemory('double', 1)}
     constraints_code = ''
 
     if constraints_func and constraints_func.get_nmr_constraints() > 0:
@@ -771,9 +764,7 @@ def _get_penalty_function(nmr_parameters, constraints_func=None):
             ''' + constraints_func.get_cl_function_name() + '''(x, data, constraints);
             
             for(int i = 0; i < ''' + str(nmr_constraints) + '''; i++){
-                tmp = max((mot_float_type)0, constraints[i]);
-                *linear_sum += tmp;
-                *quadratic_sum += tmp * tmp; 
+                *penalty_sum += pown(max((mot_float_type)0, constraints[i]), 2); 
             }
         '''
 
@@ -784,40 +775,30 @@ def _get_penalty_function(nmr_parameters, constraints_func=None):
                 void* data, 
                 local mot_float_type* lower_bounds, 
                 local mot_float_type* upper_bounds,
-                float penalty_linear,
-                float penalty_quadratic,
+                float penalty_weight,
                 void* scratch_data){
             
-            double tmp;
-            local double* linear_sum = ((_mle_penalty_data*)scratch_data)->scratch;
-            local double* quadratic_sum = ((_mle_penalty_data*)scratch_data)->scratch + 1;
-
+            local double* penalty_sum = ((_mle_penalty_data*)scratch_data)->scratch;
+            
             if(get_local_id(0) == 0){
-                *linear_sum = 0;
-                *quadratic_sum = 0;
+                *penalty_sum = 0;
                 
                 // boundary conditions
                 for(int i = 0; i < ''' + str(nmr_parameters) + '''; i++){
                     if(isfinite(upper_bounds[i])){
-                        tmp = max((mot_float_type)0, x[i] - upper_bounds[i]);
-                        *linear_sum += tmp;
-                        *quadratic_sum += tmp * tmp;    
+                        *penalty_sum += pown(max((mot_float_type)0, x[i] - upper_bounds[i]), 2);    
                     }
                     if(isfinite(lower_bounds[i])){
-                        tmp = max((mot_float_type)0, lower_bounds[i] - x[i]);
-                        *linear_sum += tmp;
-                        *quadratic_sum += tmp * tmp;
+                        *penalty_sum += pown(max((mot_float_type)0, lower_bounds[i] - x[i]), 2);
                     }
                 }
-                
-                
             }
             barrier(CLK_LOCAL_MEM_FENCE);
             
             // constraints
             ''' + constraints_code + '''
             
-            return (penalty_linear * *linear_sum + 0.5 * penalty_quadratic * *quadratic_sum);
+            return penalty_weight * *penalty_sum;
         }
     ''', dependencies=dependencies)
     return data, func
