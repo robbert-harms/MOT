@@ -2,6 +2,29 @@
 Changelog
 *********
 
+v0.9.0 (2019-02-19)
+===================
+The primary addition in this version is the support for inequality constraints in the non-linear optimization routines.
+This allows the user to provide a function :math:`g(x)` enforcing the rule :math:`g(x) <= 0`. The current optimization routines
+have no native capability for dealing with these bounds and therefore use the penalty method.
+
+Added
+-----
+- Adds support for inequality constraints (in the non-linear optimization routines) using the penalty method.
+- The CL function parser can now handle ``/* */`` documentation strings prefixed to the function definition.
+- Adds atomic float and double functions to the CL kernels
+
+Changed
+-------
+- Moved the box constraints to the penalty methods.
+- Changed the Richardson extrapolation computation (for the Hessian) to a clearer and cleaner version using recursion.
+- In the Levenberg-Marquardt routine, changed the Jacobian computation to a second order approximation. Furthermore, it now uses centered difference by default, and forward and backward difference when near the upper and lower bounds. These changes improve the converge of the LM routine, but do cost more memory.
+
+Other
+-----
+- The Hessian function is now completely in OpenCL, making it slightly faster.
+
+
 v0.8.3 (2019-01-08)
 ===================
 

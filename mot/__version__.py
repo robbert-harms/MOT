@@ -1,4 +1,4 @@
-VERSION = '0.8.3'
+VERSION = '0.9.0'
 
 _items = VERSION.split('-')
 VERSION_NUMBER_PARTS = tuple(int(i) for i in _items[0].split('.'))
