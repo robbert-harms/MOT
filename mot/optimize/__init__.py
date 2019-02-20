@@ -268,7 +268,13 @@ def _minimize_powell(func, x0, cl_runtime_info, lower_bounds, upper_bounds,
                 ((_powell_eval_func_data*)data)->penalty_data
             );
             
-            return ''' + func.get_cl_function_name() + '''(x, ((_powell_eval_func_data*)data)->data, 0) + penalty;
+            double func_val = ''' + func.get_cl_function_name() + '''(x, ((_powell_eval_func_data*)data)->data, 0);
+            
+            if(isnan(func_val)){
+                return INFINITY;
+            }
+            
+            return func_val + penalty;
         }
     ''', dependencies=[func, penalty_func])
 
@@ -346,7 +352,13 @@ def _minimize_nmsimplex(func, x0, cl_runtime_info, lower_bounds, upper_bounds,
                 ((_nmsimplex_eval_func_data*)data)->penalty_data
             );
 
-            return ''' + func.get_cl_function_name() + '''(x, ((_nmsimplex_eval_func_data*)data)->data, 0) + penalty;
+            double func_val = ''' + func.get_cl_function_name() + '''(x, ((_nmsimplex_eval_func_data*)data)->data, 0);
+            
+            if(isnan(func_val)){
+                return INFINITY;
+            }
+            
+            return func_val + penalty;
         }
     ''', dependencies=[func, penalty_func])
 
@@ -435,7 +447,13 @@ def _minimize_subplex(func, x0, cl_runtime_info, lower_bounds, upper_bounds,
                 ((_subplex_eval_func_data*)data)->penalty_data
             );
 
-            return ''' + func.get_cl_function_name() + '''(x, ((_subplex_eval_func_data*)data)->data, 0) + penalty;
+            double func_val = ''' + func.get_cl_function_name() + '''(x, ((_subplex_eval_func_data*)data)->data, 0);
+            
+            if(isnan(func_val)){
+                return INFINITY;
+            }
+            
+            return func_val + penalty;
         }
     ''', dependencies=[func, penalty_func])
 
