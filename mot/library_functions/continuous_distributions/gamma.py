@@ -91,6 +91,97 @@ class gamma_ppf(SimpleCLLibrary):
         ''', dependencies=(igami(),))
 
 
+
+class gamma_cdf_approx(SimpleCLLibrary):
+    def __init__(self):
+        r"""Approximate the Cumulative Distribution Function of the Gamma function.
+
+        This uses the approximation from Revfeim [1] to compute the cdf for x given the shape and scale parameters.
+
+        The approximation returns infinity for values near the tails of the distribution, i.e. where the cdf is near
+        zero or near one.
+
+        Function arguments:
+         * x: the value at which to approximate the cdf
+         * shape: the shape parameter of the gamma distribution (often denoted :math:`k`)
+         * scale: the scale parameter of the gamma distribution (often denoted :math:`\theta`)
+
+        References:
+            1. Revfeim, K. J. A. (1991). Approximation for the cumulative and inverse gamma distribution.
+               Statistica Neerlandica, 45(3), 327–331.
+        """
+        super().__init__('''
+            double gamma_cdf_approx(double x, double shape, double scale){
+                double R = 1/(12 * shape) - 1/(360 * pown(shape, 3)) 
+                           + 1/(1260 * pown(shape, 5)) - 1/(1680 * pown(shape, 7));
+
+                double _w = (14 - 9 * log(x / (shape * scale))) / 4.;
+                double y = 2 * (1 + pow(sqrt(_w * _w + 8) - _w, 1/3.0) - pow(sqrt(_w * _w + 8) + _w, 1/3.0));
+
+                double z = sqrt(shape) * y;
+
+                double phi = exp(-(z * z) / 2) / sqrt(2 * M_PI);
+                double PHI = 1 / (1 + exp(-2 * z * (sqrt(M_2_PI) + z * z / 28.0)));
+
+                double A = 1 + 1 / (12 * shape);
+                double B = (-1 + z / (4 * sqrt(shape)) - 2 * (z * z + 2) / (45 * shape)) / (3 * sqrt(shape));
+
+                return exp(-R) * (A * PHI - B * phi);
+            }
+        ''')
+
+
+class gamma_ppf_approx(SimpleCLLibrary):
+    def __init__(self):
+        r"""Approximates the Gamma percentile point function.
+
+        This uses the approximation from Revfeim [1] to compute the ppf for y given the shape and scale parameters.
+
+        The approximation is not valid in the tails of the distribution, i.e. where the cdf is near
+        zero or near one.
+
+        Function arguments:
+         * y: the value at which to approximate the ppf
+         * shape: the shape parameter of the gamma distribution (often denoted :math:`k`)
+         * scale: the scale parameter of the gamma distribution (often denoted :math:`\theta`)
+
+        References:
+            1. Revfeim, K. J. A. (1991). Approximation for the cumulative and inverse gamma distribution.
+               Statistica Neerlandica, 45(3), 327–331.
+        """
+        super().__init__('''
+            double gamma_ppf_approx(double y, double shape, double scale){
+                double R = 1/(12 * shape) - 1/(360 * pown(shape, 3)) 
+                           + 1/(1260 * pown(shape, 5)) - 1/(1680 * pown(shape, 7));
+
+                double A = 1 + 1 / (12 * shape);
+
+                double u = 0.5 * log(1 / (exp(R) * y / A) - 1);
+                double v = pow(14 * (sqrt(2.11 + u * u) - u), 1/3.);
+                double z = v - 7.45/v;
+
+                double phi, PHI, B, B_prime, f_z, f_prime_z;
+                double h = INFINITY;
+
+                while(fabs(h) >= 1e-4){
+                    phi = exp(-(z * z) / 2) / sqrt(2 * M_PI);
+                    PHI = 1 / (1 + exp(-2 * z * (sqrt(M_2_PI) + z * z / 28.0)));
+                    B = (-1 + z / (4 * sqrt(shape)) - 2 * (z * z + 2) / (45 * shape)) / (3 * sqrt(shape));   
+                    B_prime = 1 / (12 * shape) - (8 * z) / (270 * pow(shape, 3 / 2.));
+
+                    f_z = A * PHI - B * phi - exp(R) * y;
+                    f_prime_z = phi * (A + z * B - B_prime);
+
+                    h = f_z / f_prime_z;
+                    z = z - h;
+                }
+
+                y = z / sqrt(shape);
+                return exp(y - pown(y, 2)/6. + pown(y, 3)/36. - pown(y, 4)/270.) * shape * scale;
+            }
+        ''')
+
+
 class _find_inverse_s(SimpleCLLibrary):
     def __init__(self):
         """Helper function to computing the inverse gamma
