@@ -2,6 +2,19 @@
 Changelog
 *********
 
+v0.9.1 (2019-02-21)
+===================
+
+Added
+-----
+- Adds OpenCL approximations to the Gamma CDF and Gamma PPF functions.
+
+Other
+-----
+- Removed atomic functions. They were unsupport on some platforms.
+- Made the ML routines more robust for objective functions that return NaN.
+
+
 v0.9.0 (2019-02-19)
 ===================
 The primary addition in this version is the support for inequality constraints in the non-linear optimization routines.
