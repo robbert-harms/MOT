@@ -11,7 +11,7 @@ from textwrap import dedent, indent
 
 from mot.configuration import CLRuntimeInfo
 from mot.lib.kernel_data import KernelData, Scalar, Array, Zeros
-from mot.lib.utils import is_scalar, get_float_type_def, split_cl_function, split_in_batches, get_atomic_functions
+from mot.lib.utils import is_scalar, get_float_type_def, split_cl_function, split_in_batches
 
 __author__ = 'Robbert Harms'
 __date__ = '2017-08-31'
@@ -729,7 +729,6 @@ class _ProcedureWorker:
 
         kernel_source = ''
         kernel_source += get_float_type_def(self._double_precision)
-        kernel_source += get_atomic_functions(self._double_precision)
         kernel_source += '\n'.join(data.get_type_definitions() for data in self._kernel_data.values())
         kernel_source += self._cl_function.get_cl_code()
 
