@@ -304,6 +304,9 @@ class SimpleCLFunction(CLFunction):
     def __ne__(self, other):
         return type(self) != type(other)
 
+    def __call__(self, *args, **kwargs):
+        return self.evaluate(*args, **kwargs)
+
 
 class CLFunctionParameter:
 
