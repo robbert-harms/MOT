@@ -2,6 +2,14 @@
 Changelog
 *********
 
+v0.9.2 (2019-04-01)
+===================
+
+Added
+-----
+- Makes CL functions directly callable. Calls are forwarded to the evaluate method.
+
+
 v0.9.1 (2019-02-21)
 ===================
 
