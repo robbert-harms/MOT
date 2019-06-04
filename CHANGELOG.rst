@@ -2,6 +2,14 @@
 Changelog
 *********
 
+v0.9.3 (2019-06-04)
+===================
+
+Added
+-----
+- Adds include guards to the Struct kernel data object.
+
+
 v0.9.2 (2019-04-01)
 ===================
 
