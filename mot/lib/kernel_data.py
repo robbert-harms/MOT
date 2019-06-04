@@ -240,11 +240,15 @@ class Struct(KernelData):
             return other_structs
 
         return other_structs + '''
+            #ifndef {inclusion_guard_name}
+            #define {inclusion_guard_name}
             typedef struct {ctype}{{
                 {definitions}
             }} {ctype};
+            #endif // {inclusion_guard_name}
         '''.format(ctype=self._ctype,
-                   definitions='\n'.join(data.get_struct_declaration(name) for name, data in self._elements.items()))
+                   definitions='\n'.join(data.get_struct_declaration(name) for name, data in self._elements.items()),
+                   inclusion_guard_name='INCLUDE_GUARD_CL_EXTRA_{}'.format(self._ctype))
 
     def initialize_variable(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
         return_str = ''
