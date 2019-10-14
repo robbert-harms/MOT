@@ -240,9 +240,8 @@ class SimpleCLFunction(CLFunction):
         for param in self.get_parameters():
             if param.name not in inputs:
                 names = [param.name for param in self.get_parameters()]
-                missing_names = [name for name in names if name not in inputs]
                 raise ValueError('Some parameters are missing an input value, '
-                                 'required parameters are: {}, missing inputs are: {}'.format(names, missing_names))
+                                 'required parameters are: {}, given inputs are: {}'.format(names, inputs.keys()))
 
         return apply_cl_function(self, wrap_input_data(inputs), nmr_instances,
                                  use_local_reduction=use_local_reduction, cl_runtime_info=cl_runtime_info)
@@ -598,9 +597,8 @@ def apply_cl_function(cl_function, kernel_data, nmr_instances, use_local_reducti
     for param in cl_function.get_parameters():
         if param.name not in kernel_data:
             names = [param.name for param in cl_function.get_parameters()]
-            missing_names = [name for name in names if name not in kernel_data]
             raise ValueError('Some parameters are missing an input value, '
-                             'required parameters are: {}, missing inputs are: {}'.format(names, missing_names))
+                             'required parameters are: {}, given items are: {}'.format(names, kernel_data.keys()))
 
     if cl_function.get_return_type() != 'void':
         kernel_data['_results'] = Zeros((nmr_instances,), cl_function.get_return_type())
