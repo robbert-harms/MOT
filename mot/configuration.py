@@ -13,7 +13,6 @@ using :py:func:`config_context`. Example:
 
 """
 from contextlib import contextmanager
-from copy import copy
 import numpy as np
 from .lib.cl_environments import CLEnvironmentFactory
 
