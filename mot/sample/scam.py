@@ -72,7 +72,7 @@ class SingleComponentAdaptiveMetropolis(AbstractRWMSampler):
                                          ensure_zero_copy=True),
             'parameter_variance_update_m2s': Array(self._parameter_variance_update_m2s, 'mot_float_type',
                                                    mode='rw', ensure_zero_copy=True),
-            'epsilons': Array(self._epsilon, 'float', mode='r', offset_str='0')
+            'epsilons': Array(self._epsilon, 'float', mode='r', parallelize_over_first_dimension=False)
         })
         return kernel_data
 
