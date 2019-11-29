@@ -120,6 +120,9 @@ def convert_data_to_dtype(data, data_type, mot_float_type='float'):
         dtype = ctype_to_dtype(data_type, mot_float_type)
         ve = np.zeros(shape[:-1], dtype=dtype)
 
+        if data.dtype == dtype:
+            return data
+
         if len(shape) == 1:
             for vector_ind in range(shape[0]):
                 ve[0][vector_ind] = data[vector_ind]
