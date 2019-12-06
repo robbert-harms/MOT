@@ -2,6 +2,23 @@
 Changelog
 *********
 
+v0.9.4 (2019-12-06)
+===================
+
+Added
+-----
+- Added the method 'get_subset' to allow getting kernel data for a subset of the instances.
+
+Changed
+-------
+- Changed the Array kernel data type by removing the offset_str in favor of a simple boolean switch.
+
+Other
+-----
+- Bugfix in convert_data_to_dtype, in the case a vector type was already in the correct dtype.
+- Improved error reporting in the function evaluator.
+
+
 v0.9.3 (2019-06-04)
 ===================
 
