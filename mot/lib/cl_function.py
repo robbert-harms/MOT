@@ -433,11 +433,11 @@ _cl_data_type_parser = tatsu.compile('''
     address_space = ['__'] ('local' | 'global' | 'constant' | 'private');
     type_qualifiers = 'const' | 'volatile';
 
-    basic_ctype = ?'(unsigned )?\w[\w]*[a-zA-Z]'; 
+    basic_ctype = ?'(unsigned )?\w[\w]*[a-zA-Z]';
     vector_type_length = '2' | '3' | '4' | '8' | '16';
     ctype = basic_ctype [vector_type_length];
     pointer_star = '*';
-    
+
     pointer_qualifiers = 'const' | 'restrict';
 
     name = /[\w\_\-\.]+/;
@@ -609,23 +609,12 @@ def apply_cl_function(cl_function, kernel_data, nmr_instances, use_local_reducti
                                   cl_function, kernel_data, cl_runtime_info.double_precision, use_local_reduction)
         workers.append(worker)
 
-    def enqueue_batch(batch_size, offset):
-        items_per_worker = [batch_size // len(cl_environments) for _ in range(len(cl_environments) - 1)]
-        items_per_worker.append(batch_size - sum(items_per_worker))
+    for worker, (batch_start, batch_end) in zip(workers, split_in_batches(nmr_instances, nmr_batches=len(workers))):
+        worker.calculate(batch_start, batch_end - batch_start)
+        worker.cl_queue.flush()
 
-        for ind, worker in enumerate(workers):
-            worker.calculate(offset, offset + items_per_worker[ind])
-            offset += items_per_worker[ind]
-            worker.cl_queue.flush()
-
-        for worker in workers:
-            worker.cl_queue.finish()
-
-        return offset
-
-    total_offset = 0
-    for batch_start, batch_end in split_in_batches(nmr_instances, 1e4 * len(workers)):
-        total_offset = enqueue_batch(batch_end - batch_start, total_offset)
+    for worker in workers:
+        worker.cl_queue.finish()
 
     if cl_function.get_return_type() != 'void':
         return kernel_data['_results'].get_data()
@@ -653,10 +642,11 @@ class _ProcedureWorker:
 
         self._kernel = self._build_kernel(self._get_kernel_source(), compile_flags)
 
-        self._workgroup_size = self._kernel.run_procedure.get_work_group_info(
-            cl.kernel_work_group_info.PREFERRED_WORK_GROUP_SIZE_MULTIPLE,
-            self._cl_environment.device)
-        if not self._use_local_reduction:
+        if self._use_local_reduction:
+            self._workgroup_size = self._kernel.run_procedure.get_work_group_info(
+                cl.kernel_work_group_info.PREFERRED_WORK_GROUP_SIZE_MULTIPLE,
+                self._cl_environment.device)
+        else:
             self._workgroup_size = 1
 
         self._kernel_inputs = {name: data.get_kernel_inputs(self._cl_context, self._workgroup_size)
@@ -736,12 +726,12 @@ class _ProcedureWorker:
         kernel_source += '''
             __kernel void run_procedure(''' + ",\n".join(self._get_kernel_arguments()) + '''){
                 ulong gid = (ulong)(get_global_id(0) / get_local_size(0));
-                
-                ''' + '\n'.join(variable_inits) + '''     
-                
+
+                ''' + '\n'.join(variable_inits) + '''
+
                 ''' + assignment + ' ' + self._cl_function.get_cl_function_name() + '(' + \
                          ', '.join(function_call_inputs) + ''');
-                
+
                 ''' + '\n'.join(post_function_callbacks) + '''
             }
         '''

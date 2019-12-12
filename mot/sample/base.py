@@ -129,11 +129,11 @@ class AbstractSampler:
 
         with self._logging(nmr_samples, burnin, thinning):
             if burnin > 0:
-                for batch_start, batch_end in split_in_batches(burnin, max_samples_per_batch):
+                for batch_start, batch_end in split_in_batches(burnin, max_batch_size=max_samples_per_batch):
                     self._sample(batch_end - batch_start, return_output=False)
             if nmr_samples > 0:
                 outputs = []
-                for batch_start, batch_end in split_in_batches(nmr_samples, max_samples_per_batch):
+                for batch_start, batch_end in split_in_batches(nmr_samples, max_batch_size=max_samples_per_batch):
                     outputs.append(self._sample(batch_end - batch_start, thinning=thinning))
                 return SimpleSampleOutput(*[np.concatenate([o[ind] for o in outputs], axis=-1) for ind in range(3)])
 
@@ -175,9 +175,9 @@ class AbstractSampler:
                          global mot_float_type* log_prior,
                          local mot_float_type* x_tmp,
                          void* data){
-                
+
                 bool is_first_work_item = get_local_id(0) == 0;
-    
+
                 if(is_first_work_item){
                     for(uint i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                         x_tmp[i] = chain_position[i];
@@ -185,7 +185,7 @@ class AbstractSampler:
                     *log_prior = _computeLogPrior(x_tmp, data);
                 }
                 barrier(CLK_LOCAL_MEM_FENCE);
-                    
+
                 *log_likelihood = _computeLogLikelihood(x_tmp, data);
             }
         ''', dependencies=[self._get_log_prior_cl_func(), self._get_log_likelihood_cl_func()])
@@ -264,25 +264,25 @@ class AbstractSampler:
             mot.lib.cl_function.CLFunction: the compute function
         """
         cl_func = '''
-            void compute(global uint* rng_state, 
+            void compute(global uint* rng_state,
                          global mot_float_type* current_chain_position,
                          global mot_float_type* current_log_likelihood,
                          global mot_float_type* current_log_prior,
-                         ulong iteration_offset, 
-                         ulong nmr_iterations, 
-                         ''' + ('''global mot_float_type* samples, 
+                         ulong iteration_offset,
+                         ulong nmr_iterations,
+                         ''' + ('''global mot_float_type* samples,
                                    global mot_float_type* log_likelihoods,
                                    global mot_float_type* log_priors,''' if return_output else '') + '''
-                         void* method_data, 
+                         void* method_data,
                          void* data){
-                         
+
                 bool is_first_work_item = get_local_id(0) == 0;
-    
+
                 rand123_data rand123_rng_data = rand123_initialize_data((uint[]){
-                    rng_state[0], rng_state[1], rng_state[2], rng_state[3], 
+                    rng_state[0], rng_state[1], rng_state[2], rng_state[3],
                     rng_state[4], rng_state[5], 0, 0});
                 void* rng_data = (void*)&rand123_rng_data;
-        
+
                 for(ulong i = 0; i < nmr_iterations; i++){
         '''
         if return_output:
@@ -291,7 +291,7 @@ class AbstractSampler:
                         if(i % ''' + str(thinning) + ''' == 0){
                             log_likelihoods[i / ''' + str(thinning) + '''] = *current_log_likelihood;
                             log_priors[i / ''' + str(thinning) + '''] = *current_log_prior;
-    
+
                             for(uint j = 0; j < ''' + str(self._nmr_params) + '''; j++){
                                 samples[(ulong)(i / ''' + str(thinning) + ''') // remove the interval
                                         + j * ''' + str(nmr_samples) + '''  // parameter index
@@ -301,7 +301,7 @@ class AbstractSampler:
                     }
         '''
         cl_func += '''
-                    _advanceSampler(method_data, data, i + iteration_offset, rng_data, 
+                    _advanceSampler(method_data, data, i + iteration_offset, rng_data,
                                     current_chain_position, current_log_likelihood, current_log_prior);
                 }
 
@@ -468,8 +468,8 @@ class AbstractRWMSampler(AbstractSampler):
                 void _shuffle(uint* array, uint n, void* rng_data){
                     if(n > 1){
                         for(uint i = 0; i < n - 1; i++){
-                          uint j = (uint)(frand(rng_data) * (n - i) + i); 
-                          
+                          uint j = (uint)(frand(rng_data) * (n - i) + i);
+
                           uint tmp = array[j];
                           array[j] = array[i];
                           array[i] = tmp;
@@ -482,16 +482,16 @@ class AbstractRWMSampler(AbstractSampler):
             void _advanceSampler(
                     void* method_data,
                     void* data,
-                    ulong current_iteration, 
+                    ulong current_iteration,
                     void* rng_data,
                     global mot_float_type* current_position,
                     global mot_float_type* current_log_likelihood,
                     global mot_float_type* current_log_prior){
-                
+
                 local mot_float_type* new_log_prior = ((_mcmc_method_data*)method_data)->x_tmp;
                 *new_log_prior = 0;
                 local mot_float_type* new_position = ((_mcmc_method_data*)method_data)->x_tmp + 1;
-                
+
                 mot_float_type new_log_likelihood;
                 bool is_first_work_item = get_local_id(0) == 0;
 
@@ -500,15 +500,15 @@ class AbstractRWMSampler(AbstractSampler):
                         new_position[k] = current_position[k];
                     }
                 }
-                barrier(CLK_LOCAL_MEM_FENCE);     
+                barrier(CLK_LOCAL_MEM_FENCE);
         '''
         if self._use_random_scan:
             kernel_source += '''
                 uint indices[] = {''' + ', '.join(map(str, range(self._nmr_params))) + '''};
                 _shuffle(indices, ''' + str(self._nmr_params) + ''', rng_data);
-                
+
                 for(uint ind = 0; ind < ''' + str(self._nmr_params) + '''; ind++){
-                    uint k = indices[ind];    
+                    uint k = indices[ind];
             '''
         else:
             kernel_source += 'for(uint k = 0; k < ' + str(self._nmr_params) + '; k++){'
@@ -522,15 +522,15 @@ class AbstractRWMSampler(AbstractSampler):
 
                     if(exp(*new_log_prior) > 0){
                         new_log_likelihood = _computeLogLikelihood(new_position, data);
-                        
+
                         if(is_first_work_item){
-                            if(frand(rng_data) < exp((new_log_likelihood + *new_log_prior) 
+                            if(frand(rng_data) < exp((new_log_likelihood + *new_log_prior)
                                                      - (*current_log_likelihood + *current_log_prior))){
                                 *current_log_likelihood = new_log_likelihood;
                                 *current_log_prior = *new_log_prior;
                                 for(uint k = 0; k < ''' + str(self._nmr_params) + '''; k++){
                                     current_position[k] = new_position[k];
-                                }           
+                                }
                                 _sampleAccepted((_mcmc_method_data*)method_data, current_iteration, k);
                             }
                             else{

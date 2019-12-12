@@ -460,27 +460,48 @@ def cartesian(arrays, out=None):
     return out
 
 
-def split_in_batches(nmr_elements, max_batch_size):
-    """Split the total number of elements into batches of the specified maximum size.
+def split_in_batches(nmr_elements, max_batch_size=None, nmr_batches=None):
+    """Split the total number of elements into batches.
+
+    This function has two modes of operation. One is to make batches of the specified maximum size, the other
+    is to make a selected number of batches.
 
     Examples::
-        split_in_batches(30, 8) -> [(0, 8), (8, 15), (16, 23), (24, 29)]
+        split_in_batches(30, max_batch_size=8) -> [(0, 8), (8, 15), (16, 23), (24, 29)]
 
         for batch_start, batch_end in split_in_batches(2000, 100):
             array[batch_start:batch_end]
 
+    Args:
+        nmr_elements (int): the total number of elements to partition
+        max_batch_size (int): the maximum size per batch, if set one can not set nmr_batches.
+        nmr_batches (int): the number of batches to create, if set one can not set max_batch_size.
+
     Yields:
         tuple: the start and end point of the next batch
     """
-    offset = 0
-    elements_left = nmr_elements
-    while elements_left > 0:
-        next_batch = (offset, offset + min(elements_left, max_batch_size))
-        yield next_batch
+    if max_batch_size is not None and nmr_batches is not None:
+        raise ValueError('max_batch_size and nmr_batches can not be set at the same time.')
+    if max_batch_size is None and nmr_batches is None:
+        raise ValueError('Either max_batch_size or nmr_batches must be set.')
 
-        batch_size = min(elements_left, max_batch_size)
-        elements_left -= batch_size
-        offset += batch_size
+    if max_batch_size is not None:
+        offset = 0
+        elements_left = nmr_elements
+        while elements_left > 0:
+            batch_size = min(elements_left, max_batch_size)
+            yield offset, offset + batch_size
+            elements_left -= batch_size
+            offset += batch_size
+    else:
+        offset = 0
+        elements_left = nmr_elements
+        for ind in range(nmr_batches - 1):
+            batch_size = int(min(np.ceil(nmr_elements / nmr_batches), nmr_elements))
+            yield offset, offset + batch_size
+            elements_left -= batch_size
+            offset += batch_size
+        yield (offset, offset + elements_left)
 
 
 def covariance_to_correlations(covariance):
