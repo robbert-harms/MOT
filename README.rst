@@ -20,7 +20,7 @@ If, on the other hand, you have one big optimization problem with 10.000 variabl
 ****************
 Example use case
 ****************
-MOT was originally written as a computation package for the `Microstructure Diffusion Toolbox <https://github.com/cbclab/MDT>`_, used in dMRI brain research.
+MOT was originally written as a computation package for the `Microstructure Diffusion Toolbox <https://github.com/robbert-harms/MDT>`_, used in dMRI brain research.
 In diffusion Magnetic Resonance Imaging (dMRI) the brain is scanned in a 3D grid where each grid element, a *voxel*, represents its own optimization problem.
 The number of data points per voxel is generally small, ranging from 30 to 500 datapoints, and the models fitted to that data have generally
 somewhere between 6 and 20 parameters.
@@ -29,7 +29,7 @@ in OpenCL potentially allows large speed gains.
 This software toolbox was originally built for exactly this use case, yet the algorithms and data structures are generalized such that any
 scientific field may take advantage of this toolbox.
 
-For the diffusion MRI package *MDT* to which is referred in this example, please see https://github.com/cbclab/MDT.
+For the diffusion MRI package *MDT* to which is referred in this example, please see https://github.com/robbert-harms/MDT.
 
 
 *******
@@ -46,7 +46,7 @@ Summary
 Links
 *****
 * Full documentation: https://mot.readthedocs.org
-* Project home: https://github.com/cbclab/MOT
+* Project home: https://github.com/robbert-harms/MOT
 * PyPi package: `PyPi <http://badge.fury.io/py/mot>`_
 
 

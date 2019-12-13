@@ -1,6 +1,6 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: mot
-Source: https://github.com/cbclab/MOT
+Source: https://github.com/robbert-harms/MOT
 
 Files: *
 Copyright: 2016-2017 Robbert Harms <robbert.harms@maastrichtuniversity.nl>
