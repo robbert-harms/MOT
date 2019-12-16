@@ -201,7 +201,7 @@ def device_supports_double(cl_device):
     return 'cl_khr_fp64' in dev_extensions
 
 
-def get_float_type_def(double_precision, include_complex=True):
+def get_cl_utility_definitions(double_precision, include_complex=True):
     """Get the model floating point type definition.
 
     Args:
@@ -225,6 +225,33 @@ def get_float_type_def(double_precision, include_complex=True):
         #define EULER 0.577215664901532860606512090082402431 /* Euler constant, from Scipy */
     '''
 
+    workitem_batch_func = '''
+        /**
+         * Utility function used in splitting work over workitems in a workgroup.
+         *
+         * This automatically loads the current local_id and local_size and will return
+         * batch offset and range accordingly.
+         *
+         * Args:
+         *  nmr_items (INPUT): the total number of items that must be processed
+         *  batch_range (OUTPUT): the number of elements the current workitem must process.
+         *
+         * Returns:
+         *  offset: the offset into the number of items, i.e. the start of processing for this workitem.
+         */
+        uint get_workitem_batch(uint nmr_items, uint* batch_range){
+            uint local_id = get_local_id(0);
+            uint workgroup_size = get_local_size(0);
+
+            uint full_runs = nmr_items / workgroup_size;
+            uint rest = nmr_items % workgroup_size;
+            uint offset = full_runs * local_id;
+
+            *batch_range = full_runs + !(local_id / rest);
+            return offset + min(local_id, rest);
+        }
+    '''
+
     if double_precision:
         return '''
             #if __OPENCL_VERSION__ <= CL_VERSION_1_1
@@ -242,7 +269,7 @@ def get_float_type_def(double_precision, include_complex=True):
             #define MOT_EPSILON DBL_EPSILON
             #define MOT_MIN DBL_MIN
             #define MOT_MAX DBL_MAX
-        ''' + scipy_constants + complex_number_support
+        ''' + scipy_constants + complex_number_support + workitem_batch_func
     else:
         return '''
             #if __OPENCL_VERSION__ <= CL_VERSION_1_1
@@ -258,7 +285,7 @@ def get_float_type_def(double_precision, include_complex=True):
             #define MOT_EPSILON FLT_EPSILON
             #define MOT_MIN FLT_MIN
             #define MOT_MAX FLT_MAX
-        ''' + scipy_constants + complex_number_support
+        ''' + scipy_constants + complex_number_support + workitem_batch_func
 
 
 def topological_sort(data):

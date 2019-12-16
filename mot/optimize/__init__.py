@@ -157,23 +157,16 @@ def maximize(func, x0, nmr_observations, **kwargs):
     wrapped_func = SimpleCLFunction.from_string('''
         double _negate_''' + func.get_cl_function_name() + '''(
                 local mot_float_type* x,
-                void* data, 
+                void* data,
                 local mot_float_type* objective_list){
 
-            double return_val = ''' + func.get_cl_function_name() + '''(x, data, objective_list);    
+            double return_val = ''' + func.get_cl_function_name() + '''(x, data, objective_list);
 
             if(objective_list){
-                const uint nmr_observations = ''' + str(nmr_observations) + ''';
-                uint local_id = get_local_id(0);
-                uint workgroup_size = get_local_size(0);
-
-                uint observation_ind;
-                for(uint i = 0; i < (nmr_observations + workgroup_size - 1) / workgroup_size; i++){
-                    observation_ind = i * workgroup_size + local_id;
-
-                    if(observation_ind < nmr_observations){
-                        objective_list[observation_ind] *= -1;    
-                    }
+                uint batch_range;
+                uint offset = get_workitem_batch(''' + str(nmr_observations) + ''', &batch_range);
+                for(uint i = offset; i < offset + batch_range; i++){
+                    objective_list[i] *= -1;
                 }
             }
             return -return_val;
@@ -260,20 +253,20 @@ def _minimize_powell(func, x0, cl_runtime_info, lower_bounds, upper_bounds,
     eval_func = SimpleCLFunction.from_string('''
         double evaluate(local mot_float_type* x, void* data){
             double penalty = _mle_penalty(
-                x, 
+                x,
                 ((_powell_eval_func_data*)data)->data,
                 ((_powell_eval_func_data*)data)->lower_bounds,
                 ((_powell_eval_func_data*)data)->upper_bounds,
-                ''' + str(options.get('penalty_weight', 1e30)) + ''',  
+                ''' + str(options.get('penalty_weight', 1e30)) + ''',
                 ((_powell_eval_func_data*)data)->penalty_data
             );
-            
+
             double func_val = ''' + func.get_cl_function_name() + '''(x, ((_powell_eval_func_data*)data)->data, 0);
-            
+
             if(isnan(func_val)){
                 return INFINITY;
             }
-            
+
             return func_val + penalty;
         }
     ''', dependencies=[func, penalty_func])
@@ -344,7 +337,7 @@ def _minimize_nmsimplex(func, x0, cl_runtime_info, lower_bounds, upper_bounds,
     eval_func = SimpleCLFunction.from_string('''
         double evaluate(local mot_float_type* x, void* data){
             double penalty = _mle_penalty(
-                x, 
+                x,
                 ((_nmsimplex_eval_func_data*)data)->data,
                 ((_nmsimplex_eval_func_data*)data)->lower_bounds,
                 ((_nmsimplex_eval_func_data*)data)->upper_bounds,
@@ -353,11 +346,11 @@ def _minimize_nmsimplex(func, x0, cl_runtime_info, lower_bounds, upper_bounds,
             );
 
             double func_val = ''' + func.get_cl_function_name() + '''(x, ((_nmsimplex_eval_func_data*)data)->data, 0);
-            
+
             if(isnan(func_val)){
                 return INFINITY;
             }
-            
+
             return func_val + penalty;
         }
     ''', dependencies=[func, penalty_func])
@@ -439,7 +432,7 @@ def _minimize_subplex(func, x0, cl_runtime_info, lower_bounds, upper_bounds,
     eval_func = SimpleCLFunction.from_string('''
         double evaluate(local mot_float_type* x, void* data){
             double penalty = _mle_penalty(
-                x, 
+                x,
                 ((_subplex_eval_func_data*)data)->data,
                 ((_subplex_eval_func_data*)data)->lower_bounds,
                 ((_subplex_eval_func_data*)data)->upper_bounds,
@@ -448,11 +441,11 @@ def _minimize_subplex(func, x0, cl_runtime_info, lower_bounds, upper_bounds,
             );
 
             double func_val = ''' + func.get_cl_function_name() + '''(x, ((_subplex_eval_func_data*)data)->data, 0);
-            
+
             if(isnan(func_val)){
                 return INFINITY;
             }
-            
+
             return func_val + penalty;
         }
     ''', dependencies=[func, penalty_func])
@@ -489,7 +482,7 @@ def _minimize_levenberg_marquardt(func, x0, nmr_observations, cl_runtime_info, l
     eval_func = SimpleCLFunction.from_string('''
         void evaluate(local mot_float_type* x, void* data, local mot_float_type* result){
             double penalty = _mle_penalty(
-                x, 
+                x,
                 ((_lm_eval_func_data*)data)->data,
                 ((_lm_eval_func_data*)data)->lower_bounds,
                 ((_lm_eval_func_data*)data)->upper_bounds,
@@ -498,13 +491,13 @@ def _minimize_levenberg_marquardt(func, x0, nmr_observations, cl_runtime_info, l
             );
 
             ''' + func.get_cl_function_name() + '''(x, ((_lm_eval_func_data*)data)->data, result);
-            
+
             if(get_local_id(0) == 0){
                 for(int j = 0; j < ''' + str(nmr_observations) + '''; j++){
-                    result[j] += penalty;    
+                    result[j] += penalty;
                 }
             }
-            barrier(CLK_LOCAL_MEM_FENCE);            
+            barrier(CLK_LOCAL_MEM_FENCE);
         }
     ''', dependencies=[func, penalty_func])
 
@@ -562,27 +555,27 @@ def _lm_numdiff_jacobian(eval_func, nmr_params, nmr_observations):
                                   void* data,
                                   local mot_float_type* fvec,
                                   local mot_float_type* const fjac){
-            
+
             const uint nmr_params = ''' + str(nmr_params) + ''';
             const uint nmr_observations = ''' + str(nmr_observations) + ''';
-            
+
             local mot_float_type* lower_bounds = ((_lm_eval_func_data*)data)->lower_bounds;
             local mot_float_type* upper_bounds = ((_lm_eval_func_data*)data)->upper_bounds;
             local mot_float_type* jacobian_x_tmp = ((_lm_eval_func_data*)data)->jacobian_x_tmp;
-            
+
             mot_float_type step_size = 30 * MOT_EPSILON;
-            
+
             for (int i = 0; i < nmr_params; i++) {
                 if(model_parameters[i] + step_size > upper_bounds[i]){
-                    _lm_numdiff_jacobian_backwards(model_parameters, i, step_size, data, fvec, 
+                    _lm_numdiff_jacobian_backwards(model_parameters, i, step_size, data, fvec,
                                                    fjac + i*nmr_observations, jacobian_x_tmp);
                 }
                 else if(model_parameters[i] - step_size < lower_bounds[i]){
-                    _lm_numdiff_jacobian_forwards(model_parameters, i, step_size, data, fvec, 
+                    _lm_numdiff_jacobian_forwards(model_parameters, i, step_size, data, fvec,
                                                   fjac + i*nmr_observations, jacobian_x_tmp);
                 }
                 else{
-                    _lm_numdiff_jacobian_centered(model_parameters, i, step_size, data, fvec,  
+                    _lm_numdiff_jacobian_centered(model_parameters, i, step_size, data, fvec,
                                                   fjac + i*nmr_observations, jacobian_x_tmp);
                 }
             }
@@ -596,42 +589,36 @@ def _lm_numdiff_jacobian(eval_func, nmr_params, nmr_observations):
                 local mot_float_type* fvec,
                 local mot_float_type* const fjac,
                 local mot_float_type* fjac_tmp){
-            
-            const uint nmr_observations = ''' + str(nmr_observations) + ''';
-            
-            uint observation_ind;
+
             mot_float_type temp;
-            
-            uint local_id = get_local_id(0);
-            uint workgroup_size = get_local_size(0);
-            
-            // F(x + h)     
-            if(get_local_id(0) == 0){
+            bool is_first_workitem = get_local_id(0) == 0;
+
+            // F(x + h)
+            if(is_first_workitem){
                 temp = model_parameters[px];
                 model_parameters[px] = temp + step_size;
             }
             barrier(CLK_LOCAL_MEM_FENCE);
             ''' + eval_func.get_cl_function_name() + '''(model_parameters, data, fjac);
-            
-            
+
+
             // F(x - h)
-            if(get_local_id(0) == 0){
+            if(is_first_workitem){
                 model_parameters[px] = temp - step_size;
             }
             barrier(CLK_LOCAL_MEM_FENCE);
             ''' + eval_func.get_cl_function_name() + '''(model_parameters, data, fjac_tmp);
-            
-            
+
+
             // combine
-            for(int i = 0; i < (nmr_observations + workgroup_size - 1) / workgroup_size; i++){
-                observation_ind = i * workgroup_size + local_id;
-                if(observation_ind < nmr_observations){
-                    fjac[observation_ind] = (fjac[observation_ind] - fjac_tmp[observation_ind]) / (2 * step_size);
-                }
+            uint batch_range;
+            uint offset = get_workitem_batch(''' + str(nmr_observations) + ''', &batch_range);
+            for(int i = offset; i < offset + batch_range; i++){
+                fjac[i] = (fjac[i] - fjac_tmp[i]) / (2 * step_size);
             }
-            
+
             // restore parameter vector
-            if(get_local_id(0) == 0){
+            if(is_first_workitem){
                 model_parameters[px] = temp;
             }
             barrier(CLK_LOCAL_MEM_FENCE);
@@ -646,42 +633,36 @@ def _lm_numdiff_jacobian(eval_func, nmr_params, nmr_observations):
                local mot_float_type* const fjac,
                local mot_float_type* fjac_tmp){
 
-            const uint nmr_observations = ''' + str(nmr_observations) + ''';
-            
-            uint observation_ind;
             mot_float_type temp;
-            
-            uint local_id = get_local_id(0);
-            uint workgroup_size = get_local_size(0);
-            
-            // F(x - h)     
-            if(get_local_id(0) == 0){
+            bool is_first_workitem = get_local_id(0) == 0;
+
+            // F(x - h)
+            if(is_first_workitem){
                temp = model_parameters[px];
                model_parameters[px] = temp - step_size;
             }
             barrier(CLK_LOCAL_MEM_FENCE);
             ''' + eval_func.get_cl_function_name() + '''(model_parameters, data, fjac);
-                        
-            
+
+
             // F(x - 2*h)
-            if(get_local_id(0) == 0){
+            if(is_first_workitem){
                model_parameters[px] = temp - 2 * step_size;
             }
             barrier(CLK_LOCAL_MEM_FENCE);
             ''' + eval_func.get_cl_function_name() + '''(model_parameters, data, fjac_tmp);
-            
+
             // combine
-            for(int i = 0; i < (nmr_observations + workgroup_size - 1) / workgroup_size; i++){
-               observation_ind = i * workgroup_size + local_id;
-               if(observation_ind < nmr_observations){
-                   fjac[observation_ind] = (  3 * fvec[observation_ind] 
-                                            - 4 * fjac[observation_ind] 
-                                            + fjac_tmp[observation_ind]) / (2 * step_size);
-               }
+            uint batch_range;
+            uint offset = get_workitem_batch(''' + str(nmr_observations) + ''', &batch_range);
+            for(int i = offset; i < offset + batch_range; i++){
+               fjac[i] = (  3 * fvec[i]
+                          - 4 * fjac[i]
+                              + fjac_tmp[i]) / (2 * step_size);
             }
-            
+
             // restore parameter vector
-            if(get_local_id(0) == 0){
+            if(is_first_workitem){
                model_parameters[px] = temp;
             }
             barrier(CLK_LOCAL_MEM_FENCE);
@@ -696,42 +677,36 @@ def _lm_numdiff_jacobian(eval_func, nmr_params, nmr_observations):
                local mot_float_type* const fjac,
                local mot_float_type* fjac_tmp){
 
-            const uint nmr_observations = ''' + str(nmr_observations) + ''';
-            
-            uint observation_ind;
             mot_float_type temp;
-            
-            uint local_id = get_local_id(0);
-            uint workgroup_size = get_local_size(0);
-            
-            // F(x + h)     
-            if(get_local_id(0) == 0){
+            bool is_first_workitem = get_local_id(0) == 0;
+
+            // F(x + h)
+            if(is_first_workitem){
                temp = model_parameters[px];
                model_parameters[px] = temp + step_size;
             }
             barrier(CLK_LOCAL_MEM_FENCE);
             ''' + eval_func.get_cl_function_name() + '''(model_parameters, data, fjac);
-            
-          
+
+
             // F(x + 2*h)
-            if(get_local_id(0) == 0){
+            if(is_first_workitem){
                model_parameters[px] = temp + 2 * step_size;
             }
             barrier(CLK_LOCAL_MEM_FENCE);
             ''' + eval_func.get_cl_function_name() + '''(model_parameters, data, fjac);
-            
+
             // combine
-            for(int i = 0; i < (nmr_observations + workgroup_size - 1) / workgroup_size; i++){
-               observation_ind = i * workgroup_size + local_id;
-               if(observation_ind < nmr_observations){
-                   fjac[observation_ind] = (- 3 * fvec[observation_ind] 
-                                            + 4 * fjac[observation_ind] 
-                                            - fjac_tmp[observation_ind]) / (2 * step_size);
-               }
+            uint batch_range;
+            uint offset = get_workitem_batch(''' + str(nmr_observations) + ''', &batch_range);
+            for(int i = offset; i < offset + batch_range; i++){
+               fjac[i] = (- 3 * fvec[i]
+                          + 4 * fjac[i]
+                          - fjac_tmp[i]) / (2 * step_size);
             }
-            
+
             // restore parameter vector
-            if(get_local_id(0) == 0){
+            if(is_first_workitem){
                model_parameters[px] = temp;
             }
             barrier(CLK_LOCAL_MEM_FENCE);
@@ -778,11 +753,11 @@ def _get_penalty_function(nmr_parameters, constraints_func=None):
 
         constraints_code = '''
             local mot_float_type* constraints = ((_mle_penalty_data*)scratch_data)->constraints;
-            
+
             ''' + constraints_func.get_cl_function_name() + '''(x, data, constraints);
-            
+
             for(int i = 0; i < ''' + str(nmr_constraints) + '''; i++){
-                *penalty_sum += pown(max((mot_float_type)0, constraints[i]), 2); 
+                *penalty_sum += pown(max((mot_float_type)0, constraints[i]), 2);
             }
         '''
 
@@ -790,21 +765,21 @@ def _get_penalty_function(nmr_parameters, constraints_func=None):
     func = SimpleCLFunction.from_string('''
         double _mle_penalty(
                 local mot_float_type* x,
-                void* data, 
-                local mot_float_type* lower_bounds, 
+                void* data,
+                local mot_float_type* lower_bounds,
                 local mot_float_type* upper_bounds,
                 float penalty_weight,
                 void* scratch_data){
-            
+
             local double* penalty_sum = ((_mle_penalty_data*)scratch_data)->scratch;
-            
+
             if(get_local_id(0) == 0){
                 *penalty_sum = 0;
-                
+
                 // boundary conditions
                 for(int i = 0; i < ''' + str(nmr_parameters) + '''; i++){
                     if(isfinite(upper_bounds[i])){
-                        *penalty_sum += pown(max((mot_float_type)0, x[i] - upper_bounds[i]), 2);    
+                        *penalty_sum += pown(max((mot_float_type)0, x[i] - upper_bounds[i]), 2);
                     }
                     if(isfinite(lower_bounds[i])){
                         *penalty_sum += pown(max((mot_float_type)0, lower_bounds[i] - x[i]), 2);
@@ -812,10 +787,10 @@ def _get_penalty_function(nmr_parameters, constraints_func=None):
                 }
             }
             barrier(CLK_LOCAL_MEM_FENCE);
-            
+
             // constraints
             ''' + constraints_code + '''
-            
+
             return penalty_weight * *penalty_sum;
         }
     ''', dependencies=dependencies)

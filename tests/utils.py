@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 import pyopencl as cl
 
-from mot.lib.utils import device_type_from_string, device_supports_double, get_float_type_def, is_scalar, \
+from mot.lib.utils import device_type_from_string, device_supports_double, is_scalar, \
     all_elements_equal, get_single_value, topological_sort
 
 __author__ = 'Robbert Harms'

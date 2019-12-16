@@ -11,7 +11,7 @@ from textwrap import dedent, indent
 
 from mot.configuration import CLRuntimeInfo
 from mot.lib.kernel_data import KernelData, Scalar, Array, Zeros
-from mot.lib.utils import is_scalar, get_float_type_def, split_cl_function, split_in_batches
+from mot.lib.utils import is_scalar, get_cl_utility_definitions, split_cl_function, split_in_batches
 
 __author__ = 'Robbert Harms'
 __date__ = '2017-08-31'
@@ -83,7 +83,7 @@ class CLFunction(CLCodeObject):
         """
         raise NotImplementedError()
 
-    def evaluate(self, inputs, nmr_instances, use_local_reduction=False, cl_runtime_info=None):
+    def evaluate(self, inputs, nmr_instances, use_local_reduction=False, local_size=None, cl_runtime_info=None):
         """Evaluate this function for each set of given parameters.
 
         Given a set of input parameters, this model will be evaluated for every parameter set.
@@ -100,6 +100,7 @@ class CLFunction(CLCodeObject):
             use_local_reduction (boolean): set this to True if you want to use local memory reduction in
                  evaluating this function. If this is set to True we will multiply the global size
                  (given by the nmr_instances) by the work group sizes.
+            local_size (int): can be used to specify the exact local size (workgroup size) the kernel must use.
             cl_runtime_info (mot.configuration.CLRuntimeInfo): the runtime information for execution
 
         Returns:
@@ -203,7 +204,7 @@ class SimpleCLFunction(CLFunction):
     def get_cl_body(self):
         return self._cl_body
 
-    def evaluate(self, inputs, nmr_instances, use_local_reduction=False, cl_runtime_info=None):
+    def evaluate(self, inputs, nmr_instances, use_local_reduction=False, local_size=None, cl_runtime_info=None):
         def wrap_input_data(input_data):
             def get_data_object(param):
                 if input_data[param.name] is None:
@@ -244,7 +245,9 @@ class SimpleCLFunction(CLFunction):
                                  'required parameters are: {}, given inputs are: {}'.format(names, inputs.keys()))
 
         return apply_cl_function(self, wrap_input_data(inputs), nmr_instances,
-                                 use_local_reduction=use_local_reduction, cl_runtime_info=cl_runtime_info)
+                                 use_local_reduction=use_local_reduction,
+                                 local_size=local_size,
+                                 cl_runtime_info=cl_runtime_info)
 
     def get_dependencies(self):
         return self._dependencies
@@ -574,7 +577,8 @@ class SimpleCLFunctionParameter(CLFunctionParameter):
         return len(self.array_sizes) > 0
 
 
-def apply_cl_function(cl_function, kernel_data, nmr_instances, use_local_reduction=False, cl_runtime_info=None):
+def apply_cl_function(cl_function, kernel_data, nmr_instances, use_local_reduction=False,
+                      local_size=None, cl_runtime_info=None):
     """Run the given function/procedure on the given set of data.
 
     This class will wrap the given CL function in a kernel call and execute that that for every data instance using
@@ -589,6 +593,7 @@ def apply_cl_function(cl_function, kernel_data, nmr_instances, use_local_reducti
         use_local_reduction (boolean): set this to True if you want to use local memory reduction in
              your CL procedure. If this is set to True we will multiply the global size (given by the nmr_instances)
              by the work group sizes.
+        local_size (int): can be used to specify the exact local size (workgroup size) the kernel must use.
         cl_runtime_info (mot.configuration.CLRuntimeInfo): the runtime information
     """
     cl_runtime_info = cl_runtime_info or CLRuntimeInfo()
@@ -606,7 +611,8 @@ def apply_cl_function(cl_function, kernel_data, nmr_instances, use_local_reducti
     workers = []
     for ind, cl_environment in enumerate(cl_environments):
         worker = _ProcedureWorker(cl_environment, cl_runtime_info.compile_flags,
-                                  cl_function, kernel_data, cl_runtime_info.double_precision, use_local_reduction)
+                                  cl_function, kernel_data, cl_runtime_info.double_precision,
+                                  use_local_reduction, local_size=local_size)
         workers.append(worker)
 
     for worker, (batch_start, batch_end) in zip(workers, split_in_batches(nmr_instances, nmr_batches=len(workers))):
@@ -623,7 +629,7 @@ def apply_cl_function(cl_function, kernel_data, nmr_instances, use_local_reducti
 class _ProcedureWorker:
 
     def __init__(self, cl_environment, compile_flags, cl_function,
-                 kernel_data, double_precision, use_local_reduction):
+                 kernel_data, double_precision, use_local_reduction, local_size=None):
 
         self._cl_environment = cl_environment
         self._cl_context = cl_environment.context
@@ -643,9 +649,12 @@ class _ProcedureWorker:
         self._kernel = self._build_kernel(self._get_kernel_source(), compile_flags)
 
         if self._use_local_reduction:
-            self._workgroup_size = self._kernel.run_procedure.get_work_group_info(
-                cl.kernel_work_group_info.PREFERRED_WORK_GROUP_SIZE_MULTIPLE,
-                self._cl_environment.device)
+            if local_size:
+                self._workgroup_size = local_size
+            else:
+                self._workgroup_size = self._kernel.run_procedure.get_work_group_info(
+                    cl.kernel_work_group_info.PREFERRED_WORK_GROUP_SIZE_MULTIPLE,
+                    self._cl_environment.device)
         else:
             self._workgroup_size = 1
 
@@ -719,7 +728,7 @@ class _ProcedureWorker:
             post_function_callbacks.append(data.post_function_callback(*call_args))
 
         kernel_source = ''
-        kernel_source += get_float_type_def(self._double_precision)
+        kernel_source += get_cl_utility_definitions(self._double_precision)
         kernel_source += '\n'.join(data.get_type_definitions() for data in self._kernel_data.values())
         kernel_source += self._cl_function.get_cl_code()
 
