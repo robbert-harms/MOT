@@ -2,6 +2,24 @@
 Changelog
 *********
 
+v0.9.5 (2019-12-16)
+===================
+
+Added
+-----
+- Adds switch to the minimize function to disable local reduction if so desired.
+- Adds a utility function for easy splitting work over the work items.
+
+Changed
+-------
+- Let the powell algorithm use local reduction.
+- CL function will now process all provided work instances in one batch instead of splitting it in batches.
+
+Other
+-----
+- Moved repository to private github account.
+
+
 v0.9.4 (2019-12-06)
 ===================
 
