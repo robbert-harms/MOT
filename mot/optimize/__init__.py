@@ -14,7 +14,7 @@ __licence__ = 'LGPL v3'
 
 
 def minimize(func, x0, data=None, method=None, lower_bounds=None, upper_bounds=None, constraints_func=None,
-             nmr_observations=None, cl_runtime_info=None, options=None):
+             nmr_observations=None, cl_runtime_info=None, options=None, use_local_reduction=True):
     """Minimization of one or more variables.
 
     For an easy wrapper of function maximization, see :func:`maximize`.
@@ -87,6 +87,9 @@ def minimize(func, x0, data=None, method=None, lower_bounds=None, upper_bounds=N
         options (dict): A dictionary of solver options. All methods accept the following generic options:
             - patience (int): Maximum number of iterations to perform.
             - penalty_weight (float): the weight of the penalty term for the boundary conditions
+        use_local_reduction (boolean): set this to False if you do not want to use local memory reduction in
+             the CL kernel. By default this is True and we use local reduction in the optimization routine and
+             model function.
 
     Returns:
         mot.optimize.base.OptimizeResults:
@@ -106,15 +109,19 @@ def minimize(func, x0, data=None, method=None, lower_bounds=None, upper_bounds=N
 
     if method == 'Powell':
         return _minimize_powell(func, x0, cl_runtime_info, lower_bounds, upper_bounds,
+                                use_local_reduction,
                                 constraints_func=constraints_func, data=data, options=options)
     elif method == 'Nelder-Mead':
         return _minimize_nmsimplex(func, x0, cl_runtime_info, lower_bounds, upper_bounds,
+                                   use_local_reduction,
                                    constraints_func=constraints_func, data=data, options=options)
     elif method == 'Levenberg-Marquardt':
         return _minimize_levenberg_marquardt(func, x0, nmr_observations, cl_runtime_info, lower_bounds, upper_bounds,
+                                             use_local_reduction,
                                              constraints_func=constraints_func, data=data, options=options)
     elif method == 'Subplex':
         return _minimize_subplex(func, x0, cl_runtime_info, lower_bounds, upper_bounds,
+                                 use_local_reduction,
                                  constraints_func=constraints_func, data=data, options=options)
     raise ValueError('Could not find the specified method "{}".'.format(method))
 
@@ -235,7 +242,7 @@ def _clean_options(method, provided_options):
     return result
 
 
-def _minimize_powell(func, x0, cl_runtime_info, lower_bounds, upper_bounds,
+def _minimize_powell(func, x0, cl_runtime_info, lower_bounds, upper_bounds, use_local_reduction,
                      constraints_func=None, data=None, options=None):
     """
     Options:
@@ -282,14 +289,14 @@ def _minimize_powell(func, x0, cl_runtime_info, lower_bounds, upper_bounds,
 
     return_code = optimizer_func.evaluate(
         kernel_data, nmr_problems,
-        use_local_reduction=all(env.is_gpu for env in cl_runtime_info.cl_environments),
-        cl_runtime_info=cl_runtime_info)
+        use_local_reduction=use_local_reduction and all(env.is_gpu for env in cl_runtime_info.cl_environments),
+        cl_runtime_info=cl_runtime_info,)
 
     return OptimizeResults({'x': kernel_data['model_parameters'].get_data(),
                             'status': return_code})
 
 
-def _minimize_nmsimplex(func, x0, cl_runtime_info, lower_bounds, upper_bounds,
+def _minimize_nmsimplex(func, x0, cl_runtime_info, lower_bounds, upper_bounds, use_local_reduction,
                         constraints_func=None, data=None, options=None):
     """Use the Nelder-Mead simplex method to calculate the optimimum.
 
@@ -367,14 +374,14 @@ def _minimize_nmsimplex(func, x0, cl_runtime_info, lower_bounds, upper_bounds,
 
     return_code = optimizer_func.evaluate(
         kernel_data, nmr_problems,
-        use_local_reduction=all(env.is_gpu for env in cl_runtime_info.cl_environments),
+        use_local_reduction=use_local_reduction and all(env.is_gpu for env in cl_runtime_info.cl_environments),
         cl_runtime_info=cl_runtime_info)
 
     return OptimizeResults({'x': kernel_data['model_parameters'].get_data(),
                             'status': return_code})
 
 
-def _minimize_subplex(func, x0, cl_runtime_info, lower_bounds, upper_bounds,
+def _minimize_subplex(func, x0, cl_runtime_info, lower_bounds, upper_bounds, use_local_reduction,
                       constraints_func=None, data=None, options=None):
     """Variation on the Nelder-Mead Simplex method by Thomas H. Rowan.
 
@@ -461,7 +468,7 @@ def _minimize_subplex(func, x0, cl_runtime_info, lower_bounds, upper_bounds,
 
     return_code = optimizer_func.evaluate(
         kernel_data, nmr_problems,
-        use_local_reduction=all(env.is_gpu for env in cl_runtime_info.cl_environments),
+        use_local_reduction=use_local_reduction and all(env.is_gpu for env in cl_runtime_info.cl_environments),
         cl_runtime_info=cl_runtime_info)
 
     return OptimizeResults({'x': kernel_data['model_parameters'].get_data(),
@@ -469,6 +476,7 @@ def _minimize_subplex(func, x0, cl_runtime_info, lower_bounds, upper_bounds,
 
 
 def _minimize_levenberg_marquardt(func, x0, nmr_observations, cl_runtime_info, lower_bounds, upper_bounds,
+                                  use_local_reduction,
                                   constraints_func=None, data=None, options=None):
     options = options or {}
     nmr_problems = x0.shape[0]
@@ -518,7 +526,7 @@ def _minimize_levenberg_marquardt(func, x0, nmr_observations, cl_runtime_info, l
 
     return_code = optimizer_func.evaluate(
         kernel_data, nmr_problems,
-        use_local_reduction=all(env.is_gpu for env in cl_runtime_info.cl_environments),
+        use_local_reduction=use_local_reduction and all(env.is_gpu for env in cl_runtime_info.cl_environments),
         cl_runtime_info=cl_runtime_info)
 
     return OptimizeResults({'x': kernel_data['model_parameters'].get_data(),
