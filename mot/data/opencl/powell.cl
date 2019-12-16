@@ -83,12 +83,15 @@ int brent(mot_float_type ax, mot_float_type bx, mot_float_type cx,
  *  search_directions (2d nxn array): the array with vectors to initialize)
  */
 void powell_init_search_directions(local mot_float_type* search_directions){
-    int i, j;
-    for(i=0; i < %(NMR_PARAMS)r; i++){
+    uint params_batch_range;
+    uint params_batch_offset = get_workitem_batch(%(NMR_PARAMS)r, &params_batch_range);
+    int j;
+    for(int i = params_batch_offset; i < params_batch_offset + params_batch_range; i++){
         for(j=0; j < %(NMR_PARAMS)r; j++){
             search_directions[i * %(NMR_PARAMS)r + j] = (i == j ? 1.0 : 0.0);
         }
     }
+    barrier(CLK_LOCAL_MEM_FENCE);
 }
 
 /**
@@ -149,11 +152,11 @@ mot_float_type powell_find_linear_minimum(
     mnbrack(&ax, &bx, &cx, &fa, &fb, &fc, (void*)&eval_data);
     brent(ax, bx, cx, &xmin, &fval, (void*)&eval_data);
 
-    if(get_local_id(0) == 0){
-        for(int j=0; j < %(NMR_PARAMS)r; j++){
-            point_1[j] *= xmin;
-            point_0[j] += point_1[j];
-        }
+    uint params_batch_range;
+    uint params_batch_offset = get_workitem_batch(%(NMR_PARAMS)r, &params_batch_range);
+    for(int i = params_batch_offset; i < params_batch_offset + params_batch_range; i++){
+        point_1[i] *= xmin;
+        point_0[i] += point_1[i];
     }
     barrier(CLK_LOCAL_MEM_FENCE);
 
@@ -178,10 +181,10 @@ double powell_linear_eval_function(mot_float_type x, void* eval_data){
     linear_function_data f_data = *((linear_function_data*)eval_data);
     local mot_float_type* xt = ((linear_function_data*)eval_data)->tmp_point;
 
-    if(get_local_id(0) == 0){
-        for(int j=0; j < %(NMR_PARAMS)r; j++){
-            xt[j] = f_data.point_0[j] + x * f_data.point_1[j];
-        }
+    uint params_batch_range;
+    uint params_batch_offset = get_workitem_batch(%(NMR_PARAMS)r, &params_batch_range);
+    for(int i = params_batch_offset; i < params_batch_offset + params_batch_range; i++){
+        xt[i] = f_data.point_0[i] + x * f_data.point_1[i];
     }
     barrier(CLK_LOCAL_MEM_FENCE);
 
@@ -229,12 +232,12 @@ mot_float_type powell_do_line_searches(
     *index_largest_decrease = 0;
 
     mot_float_type fval_previous;
+    uint params_batch_range;
+    uint params_batch_offset = get_workitem_batch(%(NMR_PARAMS)r, &params_batch_range);
 
     for(i = 0; i < %(NMR_PARAMS)r; i++){
-        if(get_local_id(0) == 0){
-            for(j = 0; j < %(NMR_PARAMS)r; j++){
-                tmp_point[j] = search_directions[j * %(NMR_PARAMS)r + i];
-            }
+        for(j = params_batch_offset; j < params_batch_offset + params_batch_range; j++){
+            tmp_point[j] = search_directions[j * %(NMR_PARAMS)r + i];
         }
         barrier(CLK_LOCAL_MEM_FENCE);
 
@@ -269,10 +272,11 @@ mot_float_type powell_evaluate_extrapolated(local mot_float_type* new_best_point
                                             local mot_float_type* old_point,
                                             void* data,
                                             local mot_float_type* tmp_point){
-    if(get_local_id(0) == 0){
-        for(int i = 0; i < %(NMR_PARAMS)r; i++){
-            tmp_point[i] = 2.0 * new_best_point[i] - old_point[i];
-        }
+
+    uint params_batch_range;
+    uint params_batch_offset = get_workitem_batch(%(NMR_PARAMS)r, &params_batch_range);
+    for(int i = params_batch_offset; i < params_batch_offset + params_batch_range; i++){
+        tmp_point[i] = 2.0 * new_best_point[i] - old_point[i];
     }
     barrier(CLK_LOCAL_MEM_FENCE);
 
@@ -322,20 +326,18 @@ int powell(local mot_float_type* model_parameters, void* data,
     int i, j, index_largest_decrease;
     int iteration = 0;
 
-    if(get_local_id(0) == 0){
-        powell_init_search_directions(search_directions);
-    }
-    barrier(CLK_LOCAL_MEM_FENCE);
+    uint params_batch_range;
+    uint params_batch_offset = get_workitem_batch(%(NMR_PARAMS)r, &params_batch_range);
+
+    powell_init_search_directions(search_directions);
 
     fval = %(FUNCTION_NAME)s(model_parameters, data);
 
     while(iteration++ < POWELL_MAX_ITERATIONS){
         fval_at_start_of_iteration = fval;
 
-        if(get_local_id(0) == 0){
-            for(i=0; i < %(NMR_PARAMS)r; i++){
-                parameters_at_start_of_iteration[i] = model_parameters[i];
-            }
+        for(i = params_batch_offset; i < params_batch_offset + params_batch_range; i++){
+            parameters_at_start_of_iteration[i] = model_parameters[i];
         }
         barrier(CLK_LOCAL_MEM_FENCE);
 
@@ -351,39 +353,36 @@ int powell(local mot_float_type* model_parameters, void* data,
         #endif
 
         if(SHOULD_EXCHANGE_SEARCH_DIRECTION){
+            #if POWELL_RESET_METHOD == POWELL_RESET_METHOD_EXTRAPOLATED_POINT
+                for(i = params_batch_offset; i < params_batch_offset + params_batch_range; i++){
+                    // remove the one with the largest increase (see Numerical Recipes)
+                    search_directions[i * %(NMR_PARAMS)r + index_largest_decrease] =
+                        search_directions[i * %(NMR_PARAMS)r + %(NMR_PARAMS)r-1];
 
-            if(get_local_id(0) == 0){
-                #if POWELL_RESET_METHOD == POWELL_RESET_METHOD_EXTRAPOLATED_POINT
-                    for(i = 0; i < %(NMR_PARAMS)r; i++){
-                        // remove the one with the largest increase (see Numerical Recipes)
-                        search_directions[i * %(NMR_PARAMS)r + index_largest_decrease] =
-                            search_directions[i * %(NMR_PARAMS)r + %(NMR_PARAMS)r-1];
+                    // add p_n - p_0, see Powell 1964.
+                    search_directions[i * %(NMR_PARAMS)r + %(NMR_PARAMS)r-1] =
+                        model_parameters[i] - parameters_at_start_of_iteration[i];
+                }
 
+            #elif POWELL_RESET_METHOD == POWELL_RESET_METHOD_RESET_TO_IDENTITY
+                if((iteration + 1) %% %(NMR_PARAMS)r == 0){
+                    powell_init_search_directions(search_directions);
+                }
+                else{
+                    for(i = params_batch_offset; i < params_batch_offset + params_batch_range; i++){
+                        for(j = 0; j < %(NMR_PARAMS)r - 1; j++){
+                            search_directions[i * %(NMR_PARAMS)r + j] = search_directions[i * %(NMR_PARAMS)r + j+1];
+                        }
                         // add p_n - p_0, see Powell 1964.
                         search_directions[i * %(NMR_PARAMS)r + %(NMR_PARAMS)r-1] =
                             model_parameters[i] - parameters_at_start_of_iteration[i];
                     }
-
-                #elif POWELL_RESET_METHOD == POWELL_RESET_METHOD_RESET_TO_IDENTITY
-                    if((iteration + 1) %% %(NMR_PARAMS)r == 0){
-                        powell_init_search_directions(search_directions);
-                    }
-                    else{
-                        for(i = 0; i < %(NMR_PARAMS)r; i++){
-                            for(j = 0; j < %(NMR_PARAMS)r - 1; j++){
-                                search_directions[i * %(NMR_PARAMS)r + j] = search_directions[i * %(NMR_PARAMS)r + j+1];
-                            }
-                            // add p_n - p_0, see Powell 1964.
-                            search_directions[i * %(NMR_PARAMS)r + %(NMR_PARAMS)r-1] =
-                                model_parameters[i] - parameters_at_start_of_iteration[i];
-                        }
-                    }
-                #endif
-
-                // this uses ``parameters_at_start_of_iteration`` to find the last function minimum, this saves an array
-                for(i = 0; i < %(NMR_PARAMS)r; i++){
-                    parameters_at_start_of_iteration[i] = model_parameters[i] - parameters_at_start_of_iteration[i];
                 }
+            #endif
+
+            // this uses ``parameters_at_start_of_iteration`` to find the last function minimum, this saves an array
+            for(i = params_batch_offset; i < params_batch_offset + params_batch_range; i++){
+                parameters_at_start_of_iteration[i] = model_parameters[i] - parameters_at_start_of_iteration[i];
             }
             barrier(CLK_LOCAL_MEM_FENCE);
 
