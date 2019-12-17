@@ -2,6 +2,19 @@
 Changelog
 *********
 
+v0.9.6 (2019-12-17)
+===================
+
+Fixed
+-----
+- Fixed bug when dividing work over multiple devices. The batch size was provided incorrectly after changes in v0.9.5.
+
+Other
+-----
+- Renamed the lib_ clfunctions to _spf functions. This formalizes the specialization a little bit better.
+- Moved the Bracket method outside the Powell routine, making it a standalone routine now.
+
+
 v0.9.5 (2019-12-16)
 ===================
 
