@@ -174,7 +174,7 @@ mot_float_type powell_find_linear_minimum(
     xa = 0.0;
     xb = 1.0;
 
-    bracket(&xa, &xb, &xc, &fa, &fb, &fc, (void*)&eval_data, 110.0);
+    %(BRACKET_FUNC_NAME)s(&xa, &xb, &xc, &fa, &fb, &fc, (void*)&eval_data, 110.0);
     brent(xa, xb, xc, &xmin, &fval, (void*)&eval_data);
 
     uint params_batch_range;

@@ -1,6 +1,3 @@
-#ifndef LIB_NMSIMPLEX_CL
-#define LIB_NMSIMPLEX_CL
-
 /**
  * Author = Robbert Harms
  * Date = 2014-09-29
@@ -63,7 +60,7 @@ double %(FUNCTION_NAME)s(local mot_float_type* x, void* data_void);
  * Create the initial simplex.
  * This sets x_0 = x_input to allow for proper restarts and set the remaining vertices to the initial simplex scale.
  */
-void _libnms_initialize_simplex(
+void _nms_initialize_simplex%(SPF_NAME)s(
         int nmr_parameters,
         local mot_float_type* vertices, // [n+1,n]
         local mot_float_type* const model_parameters, // [n]
@@ -100,7 +97,7 @@ void _libnms_initialize_simplex(
 }
 
 /* find the initial function values */
-void _libnms_initialize_function_values(
+void _nms_initialize_function_values%(SPF_NAME)s(
         int nmr_parameters,
         local mot_float_type* vertices, // [n+1,n],
         local mot_float_type* func_vals, // [n+1]
@@ -113,7 +110,7 @@ void _libnms_initialize_function_values(
 
 
 /* find the index of the largest and smallest value */
-void _libnms_find_worst_best_fvals(
+void _nms_find_worst_best_fvals%(SPF_NAME)s(
         int nmr_parameters,
         local mot_float_type* func_vals, // [n+1]
         int* ind_worst, int* ind_best){
@@ -138,14 +135,14 @@ void _libnms_find_worst_best_fvals(
 /*
  * Determine the indices of the worst, second worst and the best vertex in the current working simplex S
  */
-void _libnms_find_ordering_indices(int nmr_parameters,
+void _nms_find_ordering_indices%(SPF_NAME)s(int nmr_parameters,
                                    local mot_float_type* func_vals, // [n+1]
                                    int* ind_worst, int* ind_best,
                                    int* ind_second_worst){
 
     int i;
 
-    _libnms_find_worst_best_fvals(nmr_parameters, func_vals, ind_worst, ind_best);
+    _nms_find_worst_best_fvals%(SPF_NAME)s(nmr_parameters, func_vals, ind_worst, ind_best);
 
     /* find the index of the second largest value */
     *ind_second_worst=*ind_best;
@@ -160,7 +157,7 @@ void _libnms_find_ordering_indices(int nmr_parameters,
 /**
  * Calculate the variance of the given input values
  */
-mot_float_type _libnms_get_variance(local mot_float_type* values, int n){
+mot_float_type _nms_get_variance%(SPF_NAME)s(local mot_float_type* values, int n){
     /** Online variance algorithm by Welford
      *  B. P. Welford (1962)."Note on a method for calculating corrected sums of squares
      *      and products". Technometrics 4(3):419-420.
@@ -190,7 +187,7 @@ mot_float_type _libnms_get_variance(local mot_float_type* values, int n){
  *
  * Puts the result in the centroid array.
  */
-void _libnms_calculate_centroid(
+void _nms_calculate_centroid%(SPF_NAME)s(
         int nmr_parameters,
         local mot_float_type* vertices, // [n+1,n],
         local mot_float_type* centroid, // [n]
@@ -227,7 +224,7 @@ void _libnms_calculate_centroid(
  * Returns:
  *     true if the new point was accepted, false otherwise
  */
-bool _libnms_simplex_reflect(
+bool _nms_simplex_reflect%(SPF_NAME)s(
         int nmr_parameters,
         local mot_float_type* const vertices, // [n+1,n]
         local const mot_float_type* const centroid, // [n]
@@ -271,7 +268,7 @@ bool _libnms_simplex_reflect(
  *    vertices: updated with the new point
  *    func_vals: the worst index is updated with the new point
  */
-void _libnms_simplex_expand(
+void _nms_simplex_expand%(SPF_NAME)s(
         int nmr_parameters,
         local mot_float_type* vertices, // [n+1,n]
         local const mot_float_type* const centroid, // [n]
@@ -325,7 +322,7 @@ void _libnms_simplex_expand(
  * Returns:
  *     true if the new point was accepted, false otherwise
  */
-bool _libnms_simplex_contract(
+bool _nms_simplex_contract%(SPF_NAME)s(
         int nmr_parameters,
         local mot_float_type* const vertices, // [n+1,n]
         local const mot_float_type* const centroid, // [n]
@@ -384,7 +381,7 @@ bool _libnms_simplex_contract(
  * - alpha, beta, gamma, delta: simplex strategy.
  * - scratch: the scratch array containing the memory we can use for the operations, of size [nmr_parameters * 3 + (nmr_parameters + 1)^2]
  */
-int lib_nmsimplex(
+int nmsimplex%(SPF_NAME)s(
         int nmr_parameters,
         local mot_float_type* const model_parameters,
         void* data,
@@ -418,17 +415,17 @@ int lib_nmsimplex(
     *fdiff = HUGE_VAL;
 
     if(get_local_id(0) == 0){
-	    _libnms_initialize_simplex(nmr_parameters, vertices, model_parameters, initial_simplex_scale);
+	    _nms_initialize_simplex%(SPF_NAME)s(nmr_parameters, vertices, model_parameters, initial_simplex_scale);
 	}
 	barrier(CLK_LOCAL_MEM_FENCE);
 
-    _libnms_initialize_function_values(nmr_parameters, vertices, func_vals, data);
+    _nms_initialize_function_values%(SPF_NAME)s(nmr_parameters, vertices, func_vals, data);
 
     if(psi > 0){
         /* For the psi convergence test we need to compute the size of the initial simplex for later comparison.
          * This diameter is calculated by the Euclidean distance between the largest and smallest vertices.
          */
-        _libnms_find_worst_best_fvals(nmr_parameters, func_vals, &ind_worst, &ind_best);
+        _nms_find_worst_best_fvals%(SPF_NAME)s(nmr_parameters, func_vals, &ind_worst, &ind_best);
 
         if(get_local_id(0) == 0){
             for(i = 0; i < nmr_parameters; ++i){
@@ -442,11 +439,11 @@ int lib_nmsimplex(
 
 	/* begin the main loop of the minimization */
 	for (itr=0; itr <= max_iterations; itr++) {
-		_libnms_find_ordering_indices(nmr_parameters, func_vals, &ind_worst, &ind_best, &ind_second_worst);
-        _libnms_calculate_centroid(nmr_parameters, vertices, centroid, ind_worst);
+		_nms_find_ordering_indices%(SPF_NAME)s(nmr_parameters, func_vals, &ind_worst, &ind_best, &ind_second_worst);
+        _nms_calculate_centroid%(SPF_NAME)s(nmr_parameters, vertices, centroid, ind_worst);
 
         /* use the default NMSimplex convergence criteria */
-        if (sqrt(_libnms_get_variance(func_vals, nmr_parameters + 1)) < USER_TOL_X){
+        if (sqrt(_nms_get_variance%(SPF_NAME)s(func_vals, nmr_parameters + 1)) < USER_TOL_X){
             return_code = 1;
             break;
         }
@@ -465,14 +462,14 @@ int lib_nmsimplex(
         }
 
 		/* reflect worst vertex to new vertex tmp_vertex */
-		if(_libnms_simplex_reflect(nmr_parameters, vertices, centroid, tmp_vertex, func_vals, &reflection_fval, ind_best,
+		if(_nms_simplex_reflect%(SPF_NAME)s(nmr_parameters, vertices, centroid, tmp_vertex, func_vals, &reflection_fval, ind_best,
 		                           ind_second_worst, ind_worst, alpha, data)){
             continue;
         }
 
 		/* investigate a step further in this direction */
 		if(reflection_fval < func_vals[ind_best]){
-            _libnms_simplex_expand(nmr_parameters, vertices, centroid, tmp_vertex, func_vals, reflection_fval,
+            _nms_simplex_expand%(SPF_NAME)s(nmr_parameters, vertices, centroid, tmp_vertex, func_vals, reflection_fval,
                                    ind_best, ind_second_worst, ind_worst, gamma, data);
             // we always accept one of the expansion point, so to the next iteration
             continue;
@@ -480,7 +477,7 @@ int lib_nmsimplex(
 
 		/* check to see if a contraction is necessary */
 		if (reflection_fval >= func_vals[ind_second_worst]){
-            if(_libnms_simplex_contract(nmr_parameters, vertices, centroid, tmp_vertex, func_vals, reflection_fval, ind_best,
+            if(_nms_simplex_contract%(SPF_NAME)s(nmr_parameters, vertices, centroid, tmp_vertex, func_vals, reflection_fval, ind_best,
                                         ind_second_worst, ind_worst, beta, data)){
                 continue;
             }
@@ -509,7 +506,7 @@ int lib_nmsimplex(
 	/* end main loop of the minimization */
 
 	/* find the index of the smallest and largest value */
-	_libnms_find_worst_best_fvals(nmr_parameters, func_vals, &ind_worst, &ind_best);
+	_nms_find_worst_best_fvals%(SPF_NAME)s(nmr_parameters, func_vals, &ind_worst, &ind_best);
 
     /** set the results */
     if(get_local_id(0) == 0){
@@ -526,5 +523,3 @@ int lib_nmsimplex(
 }
 
 #undef USER_TOL_X
-
-#endif // LIB_NMSIMPLEX_CL

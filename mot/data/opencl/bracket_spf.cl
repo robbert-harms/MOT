@@ -1,6 +1,3 @@
-#ifndef LIB_BRACKET_CL
-#define LIB_BRACKET_CL
-
 /**
  * Author = Robbert Harms
  * Date = 2010-12-17
@@ -30,7 +27,7 @@
         xa, xb, xc: Bracket.
         fa, fb, fc: Objective function values in bracket.
  */
-void bracket(mot_float_type* xa, mot_float_type* xb, mot_float_type* xc,
+void bracket%(SPF_NAME)s(mot_float_type* xa, mot_float_type* xb, mot_float_type* xc,
              mot_float_type* fa, mot_float_type* fb, mot_float_type* fc,
              void* eval_data, float grow_limit){
 
@@ -114,5 +111,3 @@ void bracket(mot_float_type* xa, mot_float_type* xb, mot_float_type* xc,
 
 #undef BRACKET_GOLD
 #undef BRACKET_EPSILON
-
-#endif // LIB_BRACKET_CL

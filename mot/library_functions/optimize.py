@@ -17,10 +17,13 @@ __email__ = 'robbert.harms@maastrichtuniversity.nl'
 __licence__ = 'LGPL v3'
 
 
-class LibBracket(SimpleCLLibraryFromFile):
+class bracket_spf(SimpleCLLibraryFromFile):
 
     def __init__(self, function_name):
         """The Bracket algorithm as a reusable library component.
+
+        Since it is an ``_spf`` method, parts of the implementation are specialized for the given function name.
+        Query the :meth:`get_cl_function_name` for the function call name.
 
         Args:
             function_name (str): the name of the evaluation function to call, defaults to 'evaluate'.
@@ -29,12 +32,38 @@ class LibBracket(SimpleCLLibraryFromFile):
                     ``double evaluate(mot_float_type x, void* data_void);``
         """
         params = {
-            'FUNCTION_NAME': function_name
+            'FUNCTION_NAME': function_name,
+            'SPF_NAME': '_spf_' + function_name
         }
 
         super().__init__(
-            'int', 'lib_bracket', [],
-            resource_filename('mot', 'data/opencl/lib_bracket.cl'),
+            'int', 'bracket' + params['SPF_NAME'], [],
+            resource_filename('mot', 'data/opencl/bracket_spf.cl'),
+            var_replace_dict=params)
+
+
+class nmsimplex_spf(SimpleCLLibraryFromFile):
+
+    def __init__(self, function_name):
+        """The NMSimplex algorithm as a specialized function object.
+
+        Since it is an ``_spf`` method, parts of the implementation are specialized for the given function name.
+        Query the :meth:`get_cl_function_name` for the function call name.
+
+        Args:
+            function_name (str): the name of the evaluation function to call, defaults to 'evaluate'.
+                This should point to a function with signature:
+
+                    ``double evaluate(local mot_float_type* x, void* data_void);``
+        """
+        params = {
+            'FUNCTION_NAME': function_name,
+            'SPF_NAME': '_spf_' + function_name
+        }
+
+        super().__init__(
+            'int', 'nmsimplex' + params['SPF_NAME'], [],
+            resource_filename('mot', 'data/opencl/nmsimplex_spf.cl'),
             var_replace_dict=params)
 
 
@@ -58,13 +87,16 @@ class Powell(SimpleCLLibraryFromFile):
         dependencies.append(eval_func)
         kwargs['dependencies'] = dependencies
 
+        bracket_func = bracket_spf('powell_linear_eval_function')
+
         params = {
             'FUNCTION_NAME': eval_func.get_cl_function_name(),
             'NMR_PARAMS': nmr_parameters,
             'RESET_METHOD': reset_method.upper(),
             'PATIENCE': patience,
             'PATIENCE_LINE_SEARCH': patience if patience_line_search is None else patience_line_search,
-            'BRACKET_FUNC': LibBracket('powell_linear_eval_function').get_cl_code()
+            'BRACKET_FUNC': bracket_func.get_cl_code(),
+            'BRACKET_FUNC_NAME': bracket_func.get_cl_function_name()
         }
         super().__init__(
             'int', 'powell', [
@@ -83,27 +115,6 @@ class Powell(SimpleCLLibraryFromFile):
         }
 
 
-class LibNMSimplex(SimpleCLLibraryFromFile):
-
-    def __init__(self, function_name):
-        """The NMSimplex algorithm as a reusable library component.
-
-        Args:
-            function_name (str): the name of the evaluation function to call, defaults to 'evaluate'.
-                This should point to a function with signature:
-
-                    ``double evaluate(local mot_float_type* x, void* data_void);``
-        """
-        params = {
-            'FUNCTION_NAME': function_name
-        }
-
-        super().__init__(
-            'int', 'lib_nmsimplex', [],
-            resource_filename('mot', 'data/opencl/lib_nmsimplex.cl'),
-            var_replace_dict=params)
-
-
 class NMSimplex(SimpleCLLibrary):
 
     def __init__(self, function_name, nmr_parameters, patience=200, alpha=1.0, beta=0.5,
@@ -111,10 +122,12 @@ class NMSimplex(SimpleCLLibrary):
 
         self._nmr_parameters = nmr_parameters
 
+        simplex_func = nmsimplex_spf(function_name)
+
         if 'dependencies' in kwargs:
-            kwargs['dependencies'] = list(kwargs['dependencies']) + [LibNMSimplex(function_name)]
+            kwargs['dependencies'] = list(kwargs['dependencies']) + [simplex_func]
         else:
-            kwargs['dependencies'] = [LibNMSimplex(function_name)]
+            kwargs['dependencies'] = [simplex_func]
 
         params = {'NMR_PARAMS': nmr_parameters,
                   'PATIENCE': patience,
@@ -133,7 +146,7 @@ class NMSimplex(SimpleCLLibrary):
                  'DELTA': 1 - 1.0 / nmr_parameters}
             )
 
-        super().__init__('''
+        super().__init__(('''
             int nmsimplex(local mot_float_type* model_parameters, void* data,
                           local mot_float_type* initial_simplex_scale,
                           local mot_float_type* nmsimplex_scratch){
@@ -146,12 +159,13 @@ class NMSimplex(SimpleCLLibrary):
                 mot_float_type fdiff;
                 mot_float_type psi = 0;
 
-                return lib_nmsimplex(%(NMR_PARAMS)r, model_parameters, data, initial_simplex_scale,
-                                     &fdiff, psi, (int)(%(PATIENCE)r * (%(NMR_PARAMS)r+1)),
-                                     %(ALPHA)r, %(BETA)r, %(GAMMA)r, %(DELTA)r,
-                                     nmsimplex_scratch);
+                return ''' + simplex_func.get_cl_function_name() + '''(
+                    %(NMR_PARAMS)r, model_parameters, data, initial_simplex_scale,
+                    &fdiff, psi, (int)(%(PATIENCE)r * (%(NMR_PARAMS)r+1)),
+                    %(ALPHA)r, %(BETA)r, %(GAMMA)r, %(DELTA)r,
+                    nmsimplex_scratch);
             }
-        ''' % params, **kwargs)
+        ''') % params, **kwargs)
 
     def get_kernel_data(self):
         """Get the kernel data needed for this optimization routine to work."""
@@ -170,7 +184,10 @@ class Subplex(SimpleCLLibraryFromFile):
         """The Subplex optimization routines."""
         dependencies = list(kwargs.get('dependencies', []))
         dependencies.append(eval_func)
-        dependencies.append(LibNMSimplex('subspace_evaluate'))
+
+        simplex_func = nmsimplex_spf('subspace_evaluate')
+        dependencies.append(simplex_func)
+
         kwargs['dependencies'] = dependencies
 
         params = {
@@ -186,7 +203,8 @@ class Subplex(SimpleCLLibraryFromFile):
             'NMR_PARAMS': nmr_parameters,
             'ADAPTIVE_SCALES': int(bool(adaptive_scales)),
             'MIN_SUBSPACE_LENGTH': (min(2, nmr_parameters) if min_subspace_length == 'auto' else min_subspace_length),
-            'MAX_SUBSPACE_LENGTH': (min(5, nmr_parameters) if max_subspace_length == 'auto' else max_subspace_length)
+            'MAX_SUBSPACE_LENGTH': (min(5, nmr_parameters) if max_subspace_length == 'auto' else max_subspace_length),
+            'SIMPLEX_SPF': simplex_func.get_cl_function_name()
         }
 
         s = ''

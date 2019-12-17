@@ -305,7 +305,7 @@ int subplex_minimize(local mot_float_type* model_parameters, /* in: initial gues
                 delta = 1 - 1.0 / subspace_dimensions[i];
             }
 
-            lib_nmsimplex(subspace_dimensions[i], subspace_model_parameters, (void*)&subspace_data, subspace_xstep,
+            %(SIMPLEX_SPF)s(subspace_dimensions[i], subspace_model_parameters, (void*)&subspace_data, subspace_xstep,
                           &fdiff, PSI, %(PATIENCE_NMSIMPLEX)r * (subspace_dimensions[i] + 1),
                           alpha, beta, gamma, delta, nms_scratch);
 
