@@ -1,7 +1,6 @@
 import os
 
 from mot.lib.cl_function import SimpleCLCodeObject
-from mot.lib.kernel_data import LocalMemory
 from mot.library_functions.base import SimpleCLLibrary, SimpleCLLibraryFromFile, CLLibrary
 from pkg_resources import resource_filename
 
@@ -32,20 +31,20 @@ class Besseli0(SimpleCLLibrary):
         super().__init__('''
             double bessel_i0(double x){
                 double y;
-    
+
                 if(fabs(x) < 3.75){
-                    y = (x / 3.75) * (x / 3.75);                  
-    
-                    return 1.0 + y * (3.5156229 
+                    y = (x / 3.75) * (x / 3.75);
+
+                    return 1.0 + y * (3.5156229
                                       + y * (3.0899424
-                                             + y * (1.2067492 
+                                             + y * (1.2067492
                                                     + y * (0.2659732
-                                                           + y * (0.360768e-1 
+                                                           + y * (0.360768e-1
                                                                   + y * 0.45813e-2)))));
                 }
-    
+
                 y = 3.75 / fabs(x);
-                return (exp(fabs(x)) / sqrt(fabs(x))) 
+                return (exp(fabs(x)) / sqrt(fabs(x)))
                         * (0.39894228
                            + y * (0.1328592e-1
                                   + y * (0.225319e-2
@@ -184,7 +183,7 @@ class linear_cubic_interpolation(SimpleCLLibrary):
                 double c = 0.5 * (-p0 + p2);
                 double d = p1;
 
-                return d + u * (c + u * (b + u * a));                
+                return d + u * (c + u * (b + u * a));
             }
         ''')
 
@@ -211,23 +210,23 @@ class eigenvalues_3x3_symmetric(SimpleCLLibrary):
         super().__init__('''
             void eigenvalues_3x3_symmetric(double* A, double* v){
                 double p1 = (A[1] * A[1]) + (A[2] * A[2]) + (A[4] * A[4]);
-        
+
                 if (p1 == 0.0){
                     v[0] = A[0];
                     v[1] = A[3];
                     v[2] = A[5];
                     return;
                 }
-        
+
                 double q = (A[0] + A[3] + A[5]) / 3.0;
                 double p = sqrt(((A[0] - q)*(A[0] - q) + (A[3] - q)*(A[3] - q) + (A[5] - q)*(A[5] - q) + 2*p1) / 6.0);
-        
+
                 double r = (
-                     ((A[0] - q)/p) * ((((A[3] - q)/p) * ((A[5] - q)/p)) - ((A[4]/p) * (A[4]/p))) 
-                    - (A[1]/p)      * ((A[1]/p) * ((A[5] - q)/p) - (A[2]/p) * (A[4]/p)) 
+                     ((A[0] - q)/p) * ((((A[3] - q)/p) * ((A[5] - q)/p)) - ((A[4]/p) * (A[4]/p)))
+                    - (A[1]/p)      * ((A[1]/p) * ((A[5] - q)/p) - (A[2]/p) * (A[4]/p))
                     + (A[2]/p)      * ((A[1]/p) * (A[4]/p) - (A[2]/p) * ((A[3] - q)/p))
                 ) / 2.0;
-        
+
                 double phi;
                 if(r <= -1){
                     phi = M_PI / 3.0;
@@ -238,10 +237,10 @@ class eigenvalues_3x3_symmetric(SimpleCLLibrary):
                 else{
                     phi = acos(r) / 3;
                 }
-        
+
                 v[0] = q + 2 * p * cos(phi);
                 v[2] = q + 2 * p * cos(phi + (2*M_PI/3.0));
-                v[1] = 3 * q - v[0] - v[2];            
+                v[1] = 3 * q - v[0] - v[2];
             }
         ''')
 
@@ -304,10 +303,10 @@ class eigen_decompose_real_symmetric_matrix(SimpleCLLibrary):
         """
         super().__init__('''
             int eigen_decompose_real_symmetric_matrix(int n, double* A, double* w, double* Z, double* scratch){
-                
+
                 // tri-diagonalize the matrix
                 eispack_tred2 ( n, A, w, scratch, Z );
-                
+
                 // QR decompose the tri-diagonal
                 return eispack_tql2 ( n, w, scratch, Z );
             }
@@ -330,12 +329,12 @@ class pseudo_inverse_real_symmetric_matrix_upper_triangular(SimpleCLLibrary):
             void pseudo_inverse_real_symmetric_matrix_upper_triangular(uint n, double* A, double* scratch){
                 int i, j, z, ind_counter;
                 double sum;
-                
+
                 double* w = scratch;
                 double* Z = w + n;
                 double* decomposition_scratch = Z + n * n;
                 double* Z_transpose_w = decomposition_scratch + n;
-                
+
                 ind_counter = 0;
                 for (j = 0; j < n; j++){
                     for (i = j; i < n; i++){
@@ -345,8 +344,8 @@ class pseudo_inverse_real_symmetric_matrix_upper_triangular(SimpleCLLibrary):
                 }
 
                 eigen_decompose_real_symmetric_matrix(n, Z, w, Z, decomposition_scratch);
-                
-                // inverse the eigenvalues                
+
+                // inverse the eigenvalues
                 for(i = 0; i < n; i++){
                     if(w[i] == 0.){
                         w[i] = 0;
@@ -355,14 +354,14 @@ class pseudo_inverse_real_symmetric_matrix_upper_triangular(SimpleCLLibrary):
                         w[i] = fabs(1/w[i]);
                     }
                 }
-                
+
                 // prepare the left matrix Z.T*w
                 for(i = 0; i < n; i++){
                     for(j = 0; j < n; j++){
                         Z_transpose_w[i * n + j] = Z[j * n + i] * w[j];
                     }
                 }
-                
+
                 // matrix multiplication of (Z.T*w) * Z
                 ind_counter = 0;
                 for(i = 0; i < n; i++){
@@ -379,236 +378,3 @@ class pseudo_inverse_real_symmetric_matrix_upper_triangular(SimpleCLLibrary):
                 }
             }
         ''', dependencies=[eigen_decompose_real_symmetric_matrix()])
-
-
-class Powell(SimpleCLLibraryFromFile):
-
-    def __init__(self, eval_func, nmr_parameters, patience=2, patience_line_search=None,
-                 reset_method='EXTRAPOLATED_POINT', **kwargs):
-        """The Powell CL implementation.
-
-        Args:
-            eval_func (mot.lib.cl_function.CLFunction): the function we want to optimize, Should be of signature:
-                ``double evaluate(local mot_float_type* x, void* data_void);``
-            nmr_parameters (int): the number of parameters in the model, this will be hardcoded in the method
-            patience (int): the patience of the Powell algorithm
-            patience_line_search (int): the patience of the line search algorithm. If None, we set it equal to the
-                patience.
-            reset_method (str): one of ``RESET_TO_IDENTITY`` or ``EXTRAPOLATED_POINT``. The method used to
-                reset the search directions every iteration.
-        """
-        dependencies = list(kwargs.get('dependencies', []))
-        dependencies.append(eval_func)
-        kwargs['dependencies'] = dependencies
-
-        params = {
-            'FUNCTION_NAME': eval_func.get_cl_function_name(),
-            'NMR_PARAMS': nmr_parameters,
-            'RESET_METHOD': reset_method.upper(),
-            'PATIENCE': patience,
-            'PATIENCE_LINE_SEARCH': patience if patience_line_search is None else patience_line_search
-        }
-        super().__init__(
-            'int', 'powell', [
-                'local mot_float_type* model_parameters',
-                'void* data',
-                'local mot_float_type* scratch_mot_float_type'
-            ],
-            resource_filename('mot', 'data/opencl/powell.cl'),
-            var_replace_dict=params, **kwargs)
-
-    def get_kernel_data(self):
-        """Get the kernel data needed for this optimization routine to work."""
-        return {
-            'scratch_mot_float_type': LocalMemory(
-                'mot_float_type',  3 * self._var_replace_dict['NMR_PARAMS'] + self._var_replace_dict['NMR_PARAMS']**2)
-        }
-
-
-class LibNMSimplex(SimpleCLLibraryFromFile):
-
-    def __init__(self, function_name):
-        """The NMSimplex algorithm as a reusable library component.
-
-        Args:
-            function_name (str): the name of the evaluation function to call, defaults to 'evaluate'.
-                This should point to a function with signature:
-
-                    ``double evaluate(local mot_float_type* x, void* data_void);``
-        """
-        params = {
-            'FUNCTION_NAME': function_name
-        }
-
-        super().__init__(
-            'int', 'lib_nmsimplex', [],
-            resource_filename('mot', 'data/opencl/lib_nmsimplex.cl'),
-            var_replace_dict=params)
-
-
-class NMSimplex(SimpleCLLibrary):
-
-    def __init__(self, function_name, nmr_parameters, patience=200, alpha=1.0, beta=0.5,
-                 gamma=2.0, delta=0.5, scale=0.1, adaptive_scales=True, **kwargs):
-
-        self._nmr_parameters = nmr_parameters
-
-        if 'dependencies' in kwargs:
-            kwargs['dependencies'] = list(kwargs['dependencies']) + [LibNMSimplex(function_name)]
-        else:
-            kwargs['dependencies'] = [LibNMSimplex(function_name)]
-
-        params = {'NMR_PARAMS': nmr_parameters,
-                  'PATIENCE': patience,
-                  'ALPHA': alpha,
-                  'BETA': beta,
-                  'GAMMA': gamma,
-                  'DELTA': delta,
-                  'INITIAL_SIMPLEX_SCALES': '\n'.join('initial_simplex_scale[{}] = {};'.format(ind, scale)
-                                                      for ind in range(nmr_parameters))}
-
-        if adaptive_scales:
-            params.update(
-                {'ALPHA': 1,
-                 'BETA': 0.75 - 1.0 / (2 * nmr_parameters),
-                 'GAMMA': 1 + 2.0 / nmr_parameters,
-                 'DELTA': 1 - 1.0 / nmr_parameters}
-            )
-
-        super().__init__('''
-            int nmsimplex(local mot_float_type* model_parameters, void* data, 
-                          local mot_float_type* initial_simplex_scale, 
-                          local mot_float_type* nmsimplex_scratch){
-
-                if(get_local_id(0) == 0){
-                    %(INITIAL_SIMPLEX_SCALES)s
-                }
-                barrier(CLK_LOCAL_MEM_FENCE);
-
-                mot_float_type fdiff;
-                mot_float_type psi = 0;
-
-                return lib_nmsimplex(%(NMR_PARAMS)r, model_parameters, data, initial_simplex_scale,
-                                     &fdiff, psi, (int)(%(PATIENCE)r * (%(NMR_PARAMS)r+1)),
-                                     %(ALPHA)r, %(BETA)r, %(GAMMA)r, %(DELTA)r,
-                                     nmsimplex_scratch);
-            }
-        ''' % params, **kwargs)
-
-    def get_kernel_data(self):
-        """Get the kernel data needed for this optimization routine to work."""
-        return {
-            'nmsimplex_scratch': LocalMemory(
-                'mot_float_type', self._nmr_parameters * 2 + (self._nmr_parameters + 1) ** 2 + 1),
-            'initial_simplex_scale': LocalMemory('mot_float_type', self._nmr_parameters)
-        }
-
-
-class Subplex(SimpleCLLibraryFromFile):
-
-    def __init__(self, eval_func, nmr_parameters, patience=10,
-                 patience_nmsimplex=100, alpha=1.0, beta=0.5, gamma=2.0, delta=0.5, scale=1.0, psi=0.001, omega=0.01,
-                 adaptive_scales=True, min_subspace_length='auto', max_subspace_length='auto', **kwargs):
-        """The Subplex optimization routines."""
-        dependencies = list(kwargs.get('dependencies', []))
-        dependencies.append(eval_func)
-        dependencies.append(LibNMSimplex('subspace_evaluate'))
-        kwargs['dependencies'] = dependencies
-
-        params = {
-            'FUNCTION_NAME': eval_func.get_cl_function_name(),
-            'PATIENCE': patience,
-            'PATIENCE_NMSIMPLEX': patience_nmsimplex,
-            'ALPHA': alpha,
-            'BETA': beta,
-            'GAMMA': gamma,
-            'DELTA': delta,
-            'PSI': psi,
-            'OMEGA': omega,
-            'NMR_PARAMS': nmr_parameters,
-            'ADAPTIVE_SCALES': int(bool(adaptive_scales)),
-            'MIN_SUBSPACE_LENGTH': (min(2, nmr_parameters) if min_subspace_length == 'auto' else min_subspace_length),
-            'MAX_SUBSPACE_LENGTH': (min(5, nmr_parameters) if max_subspace_length == 'auto' else max_subspace_length)
-        }
-
-        s = ''
-        for ind in range(nmr_parameters):
-            s += 'initial_simplex_scale[{}] = {};'.format(ind, scale)
-        params['INITIAL_SIMPLEX_SCALES'] = s
-
-        super().__init__(
-            'int', 'subplex', [
-                'local mot_float_type* const model_parameters',
-                'void* data',
-                'local mot_float_type* initial_simplex_scale',
-                'local mot_float_type* subplex_scratch_float',
-                'local int* subplex_scratch_int'
-            ],
-            resource_filename('mot', 'data/opencl/subplex.cl'), var_replace_dict=params, **kwargs)
-
-    def get_kernel_data(self):
-        """Get the kernel data needed for this optimization routine to work."""
-        return {
-            'subplex_scratch_float': LocalMemory(
-                'mot_float_type', 4 + self._var_replace_dict['NMR_PARAMS'] * 2
-                                    + self._var_replace_dict['MAX_SUBSPACE_LENGTH'] * 2
-                                    + (self._var_replace_dict['MAX_SUBSPACE_LENGTH'] * 2
-                                       + self._var_replace_dict['MAX_SUBSPACE_LENGTH']+1)**2 + 1),
-            'subplex_scratch_int': LocalMemory(
-                'int', 2 + self._var_replace_dict['NMR_PARAMS']
-                         + (self._var_replace_dict['NMR_PARAMS'] // self._var_replace_dict['MIN_SUBSPACE_LENGTH'])),
-            'initial_simplex_scale': LocalMemory('mot_float_type', self._var_replace_dict['NMR_PARAMS'])
-        }
-
-
-class LevenbergMarquardt(SimpleCLLibraryFromFile):
-
-    def __init__(self, eval_func, nmr_parameters, nmr_observations, jacobian_func, patience=250,
-                 step_bound=100.0, scale_diag=1, usertol_mult=30, **kwargs):
-        """The Powell CL implementation.
-
-        Args:
-            eval_func (mot.lib.cl_function.CLFunction): the function we want to optimize, Should be of signature:
-                ``void evaluate(local mot_float_type* x, void* data_void, local mot_float_type* result);``
-            nmr_parameters (int): the number of parameters in the model, this will be hardcoded in the method
-            nmr_observations (int): the number of observations in the model
-            jacobian_func (mot.lib.cl_function.CLFunction): the function used to compute the Jacobian.
-            patience (int): the patience of the Powell algorithm
-            patience_line_search (int): the patience of the line search algorithm
-            reset_method (str): one of ``RESET_TO_IDENTITY`` or ``EXTRAPOLATED_POINT``. The method used to
-                reset the search directions every iteration.
-        """
-        dependencies = list(kwargs.get('dependencies', []))
-        dependencies.append(eval_func)
-        dependencies.append(jacobian_func)
-        kwargs['dependencies'] = dependencies
-
-        var_replace_dict = {
-            'FUNCTION_NAME': eval_func.get_cl_function_name(),
-            'JACOBIAN_FUNCTION_NAME': jacobian_func.get_cl_function_name(),
-            'NMR_PARAMS': nmr_parameters,
-            'PATIENCE': patience,
-            'NMR_OBSERVATIONS': nmr_observations,
-            'SCALE_DIAG': int(bool(scale_diag)),
-            'STEP_BOUND': step_bound,
-            'USERTOL_MULT': usertol_mult
-        }
-
-        super().__init__(
-            'int', 'lmmin', ['local mot_float_type* const model_parameters',
-                             'void* data',
-                             'mot_float_type* scratch_mot_float_type',
-                             'int* scratch_int'],
-            resource_filename('mot', 'data/opencl/lmmin.cl'),
-            var_replace_dict=var_replace_dict, **kwargs)
-
-    def get_kernel_data(self):
-        """Get the kernel data needed for this optimization routine to work."""
-        return {
-            'scratch_mot_float_type': LocalMemory(
-                'mot_float_type', 8 +
-                                  2 * self._var_replace_dict['NMR_OBSERVATIONS'] +
-                                  5 * self._var_replace_dict['NMR_PARAMS'] +
-                                  self._var_replace_dict['NMR_PARAMS'] * self._var_replace_dict['NMR_OBSERVATIONS']),
-            'scratch_int': LocalMemory('int', self._var_replace_dict['NMR_PARAMS'])
-        }

@@ -32,10 +32,6 @@
 #define POWELL_MAX_ITERATIONS (%(PATIENCE)r * (%(NMR_PARAMS)r+1))
 #define POWELL_FUNCTION_TOLERANCE 30*MOT_EPSILON
 
-#define MNBRACK_GOLD 1.618034 /* the default ratio by which successive intervals are magnified in Bracketing */
-#define MNBRACK_GLIMIT 100.0 /* the maximum magnification allowed for a parabolic-fit step in Bracketing */
-#define MNBRACK_EPSILON 30*MOT_EPSILON
-
 #define BRENT_MAX_ITERATIONS (%(PATIENCE_LINE_SEARCH)r * (%(NMR_PARAMS)r+1))
 #define BRENT_TOL 2 * 30 * MOT_EPSILON
 #define BRENT_GOLD 0.3819660 /* golden ratio = (3 - sqrt(5))/2 */
@@ -67,10 +63,7 @@ typedef struct{
 double %(FUNCTION_NAME)s(local mot_float_type* x, void* data_void);
 
 
-void mnbrack(mot_float_type* ax, mot_float_type* bx, mot_float_type* cx,
-             mot_float_type* fa, mot_float_type* fb, mot_float_type* fc,
-             void* eval_data);
-int brent(mot_float_type ax, mot_float_type bx, mot_float_type cx,
+int brent(mot_float_type ax, mot_float_type xb, mot_float_type xc,
           mot_float_type* xmin, mot_float_type* fmin, void* eval_data);
 
 
@@ -113,6 +106,36 @@ bool powell_fval_diff_within_threshold(mot_float_type previous_fval, mot_float_t
 
 
 /**
+ * The linear evaluation function used by the 1d line optimization routine.
+ *
+ * For its usage and reason of existence please check the docs of the function :ref:`powell_find_linear_minimum`.
+ *
+ * Args:
+ *  x: the point at which to evaluate the function
+ *  eval_data: the data used to evaluate the function.
+ *
+ * Returns:
+ *  the function value at the given point
+ */
+double powell_linear_eval_function(mot_float_type x, void* eval_data){
+
+    linear_function_data f_data = *((linear_function_data*)eval_data);
+    local mot_float_type* xt = ((linear_function_data*)eval_data)->tmp_point;
+
+    uint params_batch_range;
+    uint params_batch_offset = get_workitem_batch(%(NMR_PARAMS)r, &params_batch_range);
+    for(int i = params_batch_offset; i < params_batch_offset + params_batch_range; i++){
+        xt[i] = f_data.point_0[i] + x * f_data.point_1[i];
+    }
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    return %(FUNCTION_NAME)s(xt, f_data.data);
+}
+
+
+%(BRACKET_FUNC)s
+
+/**
  * Finds the linear minimum on the line joining the first and the second data points.
  *
  * Suppose you have two points, ``p_0`` and ``p_1``, both in R^n.
@@ -147,10 +170,12 @@ mot_float_type powell_find_linear_minimum(
 
     mot_float_type xmin;
     mot_float_type fval;
-    mot_float_type ax, bx, cx, fa, fb, fc;
+    mot_float_type xa, xb, xc, fa, fb, fc;
+    xa = 0.0;
+    xb = 1.0;
 
-    mnbrack(&ax, &bx, &cx, &fa, &fb, &fc, (void*)&eval_data);
-    brent(ax, bx, cx, &xmin, &fval, (void*)&eval_data);
+    bracket(&xa, &xb, &xc, &fa, &fb, &fc, (void*)&eval_data, 110.0);
+    brent(xa, xb, xc, &xmin, &fval, (void*)&eval_data);
 
     uint params_batch_range;
     uint params_batch_offset = get_workitem_batch(%(NMR_PARAMS)r, &params_batch_range);
@@ -161,34 +186,6 @@ mot_float_type powell_find_linear_minimum(
     barrier(CLK_LOCAL_MEM_FENCE);
 
     return fval;
-}
-
-
-/**
- * The linear evaluation function used by the 1d line optimization routine.
- *
- * For its usage and reason of existence please check the docs of the function :ref:`powell_find_linear_minimum`.
- *
- * Args:
- *  x: the point at which to evaluate the function
- *  eval_data: the data used to evaluate the function.
- *
- * Returns:
- *  the function value at the given point
- */
-double powell_linear_eval_function(mot_float_type x, void* eval_data){
-
-    linear_function_data f_data = *((linear_function_data*)eval_data);
-    local mot_float_type* xt = ((linear_function_data*)eval_data)->tmp_point;
-
-    uint params_batch_range;
-    uint params_batch_offset = get_workitem_batch(%(NMR_PARAMS)r, &params_batch_range);
-    for(int i = params_batch_offset; i < params_batch_offset + params_batch_range; i++){
-        xt[i] = f_data.point_0[i] + x * f_data.point_1[i];
-    }
-    barrier(CLK_LOCAL_MEM_FENCE);
-
-    return %(FUNCTION_NAME)s(xt, f_data.data);
 }
 
 
@@ -393,114 +390,25 @@ int powell(local mot_float_type* model_parameters, void* data,
 }
 
 /**
- * Bracket the minimum of a function.
- */
-void mnbrack(mot_float_type* ax, mot_float_type* bx, mot_float_type* cx,
-             mot_float_type* fa, mot_float_type* fb, mot_float_type* fc,
-             void* eval_data){
-    *ax = 0.0;
-    *bx = 1.0;
-    *fa = 0.0;
-    *fb = 0.0;
-    *fc = 0.0;
-
-    mot_float_type ulim, u, r, q, fu, tmp;
-    mot_float_type maxarg = 0.0;
-
-    *fa = powell_linear_eval_function(*ax, eval_data);
-    *fb = powell_linear_eval_function(*bx, eval_data);
-
-    if(*fb > *fa){
-        tmp = *bx;
-        *bx = *ax;
-        *ax = tmp;
-
-        tmp = *fb;
-        *fb = *fa;
-        *fa = tmp;
-    }
-
-    *cx = *bx + MNBRACK_GOLD * (*bx - *ax);
-    *fc = powell_linear_eval_function(*cx, eval_data);
-
-    while(*fb > *fc){
-        r = (*bx - *ax) * (*fb - *fc);
-        q = (*bx - *cx) * (*fb - *fa);
-
-        maxarg = fmax(fabs(q-r), (mot_float_type)MNBRACK_EPSILON);
-
-        u = (*bx) - ((*bx - *cx) * q - (*bx - *ax) * r) / (2.0 * copysign(maxarg, q-r));
-        ulim = (*bx) + MNBRACK_GLIMIT * (*cx - *bx);
-
-        if((*bx - u) * (u - *cx) > 0.0){
-            fu = powell_linear_eval_function(u, eval_data);
-
-            if(fu < *fc){
-                *ax = *bx;
-                *bx = u;
-                *fa = *fb;
-                *fb = fu;
-                break;
-            }
-            else if(fu > *fb){
-                *cx = u;
-                *fc = fu;
-                break;
-            }
-            u = (*cx) + MNBRACK_GOLD * (*cx - *bx);
-            fu = powell_linear_eval_function(u, eval_data);
-        }
-        else if((*cx - u) * (u - ulim) > 0.0){
-            fu = powell_linear_eval_function(u, eval_data);
-
-            if(fu < *fc){
-                *bx = *cx;
-                *cx = u;
-                u = *cx + MNBRACK_GOLD * (*cx - *bx);
-
-                *fb = *fc;
-                *fc = fu;
-                fu = powell_linear_eval_function(u, eval_data);
-            }
-        }
-        else if((u - ulim) * (ulim - *cx) >= 0.0){
-            u = ulim;
-            fu = powell_linear_eval_function(u, eval_data);
-        }
-        else{
-            u = (*cx) + MNBRACK_GOLD * (*cx - *bx);
-            fu = powell_linear_eval_function(u, eval_data);
-        }
-        *ax = *bx;
-        *bx = *cx;
-        *cx = u;
-
-        *fa = *fb;
-        *fb = *fc;
-        *fc = fu;
-    }
-}
-
-/**
  * Line search using Brent's method.
- * Given a function f, and given a bracketing triplet of abscissas ax, bx, cx (such that bx is between ax and cx,
- * and f(bx) is less than both f(ax) and (cx)), this routine isolates the minimum to a fractional precision of about
+ * Given a function f, and given a bracketing triplet of abscissas xa, xb, xc (such that xb is between xa and xc,
+ * and f(xb) is less than both f(xa) and (xc)), this routine isolates the minimum to a fractional precision of about
  * tol using Brent's method. The abscissa of the minimum is returned as xmin, and the minimum function value is
  * returned as fmin.
  *
  * The return value signifies the return code.
  */
-int brent(mot_float_type ax, mot_float_type bx, mot_float_type cx, mot_float_type* xmin,
+int brent(mot_float_type xa, mot_float_type xb, mot_float_type xc, mot_float_type* xmin,
           mot_float_type* fmin, void* eval_data){
     mot_float_type u, r, q, fu, tmp;
     mot_float_type d, fx, fv, fw;
     mot_float_type p, tol1, tol2, v, w, x, xm;
     mot_float_type e=0.0;
 
-    mot_float_type a=(ax < cx ? ax : cx);
-    mot_float_type b=(ax > cx ? ax : cx);
+    mot_float_type a=(xa < xc ? xa : xc);
+    mot_float_type b=(xa > xc ? xa : xc);
 
-    x=w=v=bx;
+    x=w=v=xb;
     fw=fv=fx=powell_linear_eval_function(x, eval_data);
 
     for(uint iter = 0; iter < BRENT_MAX_ITERATIONS; iter++){
@@ -594,9 +502,6 @@ int brent(mot_float_type ax, mot_float_type bx, mot_float_type cx, mot_float_typ
 #undef BRENT_ZEPS
 
 #undef MAX_ITERATIONS
-#undef MNBRACK_GOLD
-#undef MNBRACK_GLIMIT
-#undef MNBRACK_EPSILON
 #undef POWELL_FUNCTION_TOLERANCE
 #undef POWELL_EPSILON
 #undef POWELL_RESET_METHOD_RESET_TO_IDENTITY

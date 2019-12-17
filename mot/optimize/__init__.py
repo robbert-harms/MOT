@@ -2,7 +2,7 @@ from mot.lib.cl_function import SimpleCLFunction
 from mot.configuration import CLRuntimeInfo
 from mot.lib.kernel_data import Array, Scalar, CompositeArray, Struct, LocalMemory
 from mot.lib.utils import all_elements_equal, get_single_value
-from mot.library_functions import Powell, Subplex, NMSimplex, LevenbergMarquardt
+from mot.library_functions.optimize import Powell, NMSimplex, Subplex, LevenbergMarquardt
 from mot.optimize.base import OptimizeResults
 import numpy as np
 
