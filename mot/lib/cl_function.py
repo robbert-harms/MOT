@@ -616,7 +616,7 @@ def apply_cl_function(cl_function, kernel_data, nmr_instances, use_local_reducti
         workers.append(worker)
 
     for worker, (batch_start, batch_end) in zip(workers, split_in_batches(nmr_instances, nmr_batches=len(workers))):
-        worker.calculate(batch_start, batch_end - batch_start)
+        worker.calculate(batch_start, batch_end)
         worker.cl_queue.flush()
 
     for worker in workers:
