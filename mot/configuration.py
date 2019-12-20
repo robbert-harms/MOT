@@ -15,6 +15,8 @@ using :py:func:`config_context`. Example:
 import collections
 from contextlib import contextmanager
 import numpy as np
+
+from mot.lib.load_balancers import EvenDistribution, FractionalLoad
 from .lib.cl_environments import CLEnvironmentFactory
 
 __author__ = 'Robbert Harms'
@@ -31,7 +33,8 @@ module. This entire module acts as a singleton containing the current runtime co
 _config = {
     'cl_environments': CLEnvironmentFactory.smart_device_selection(preferred_device_type='GPU'),
     'compile_flags': ['-cl-denorms-are-zero', '-cl-mad-enable', '-cl-no-signed-zeros'],
-    'double_precision': False
+    'double_precision': False,
+    'load_balancer': EvenDistribution()
 }
 
 
@@ -110,6 +113,26 @@ def set_use_double_precision(double_precision):
     _config['double_precision'] = double_precision
 
 
+def get_load_balancer():
+    """Get the current load balancing settings.
+
+    The load balancing determines how much work each of the CLEnvironments (i.e. devices) will perform.
+
+    Returns:
+        mot.lib.load_balancers.LoadBalancer: the current load balancing strategy
+    """
+    return _config['load_balancer']
+
+
+def set_load_balancer(load_balancer):
+    """Set the default load balancer.
+
+    Args:
+        mot.lib.load_balancers.LoadBalancer: the new load balancing strategy
+    """
+    _config['load_balancer'] = load_balancer
+
+
 @contextmanager
 def config_context(config_action):
     """Creates a context in which the config action is applied and unapplies the configuration after execution.
@@ -186,18 +209,20 @@ class CLRuntimeAction(SimpleConfigAction):
 
 class RuntimeConfigurationAction(SimpleConfigAction):
 
-    def __init__(self, cl_environments=None, compile_flags=None, double_precision=None):
+    def __init__(self, cl_environments=None, compile_flags=None, double_precision=None, load_balancer=None):
         """Updates the runtime settings.
 
         Args:
             cl_environments (list of CLEnvironment): the new CL environments we wish to use for future computations
             compile_flags (list): the list of compile flags to use during analysis.
             double_precision (boolean): if we compute in double precision or not
+            load_balancer (mot.lib.load_balancers.LoadBalancer): the new load balancing strategy
         """
         super().__init__()
         self._cl_environments = cl_environments
         self._compile_flags = compile_flags
         self._double_precision = double_precision
+        self._load_balancer = load_balancer
 
     def _apply(self):
         if self._cl_environments is not None:
@@ -208,6 +233,9 @@ class RuntimeConfigurationAction(SimpleConfigAction):
 
         if self._double_precision is not None:
             set_use_double_precision(self._double_precision)
+
+        if self._load_balancer is not None:
+            set_load_balancer(self._load_balancer)
 
 
 class VoidConfigurationAction(ConfigAction):
@@ -220,7 +248,7 @@ class VoidConfigurationAction(ConfigAction):
 
 class CLRuntimeInfo:
 
-    def __init__(self, cl_environments=None, compile_flags=None, double_precision=None):
+    def __init__(self, cl_environments=None, compile_flags=None, double_precision=None, load_balancer=None):
         """All information necessary for applying operations using OpenCL.
 
         Args:
@@ -232,16 +260,20 @@ class CLRuntimeInfo:
             compile_flags (list): the list of compile flags to use during analysis.
             double_precision (boolean): if we apply the computations in double precision or in single float precision.
                 By default we go for single float precision.
+            load_balancer (mot.lib.load_balancers.LoadBalancer or Tuple[float]): the load balancer to use
+                for the computations. Can either be a load balancer or a tuple with fractional loads per device.
         """
-        self._cl_environments = self._prepare_environments(cl_environments)
+        self._cl_environments = self._load_environments(cl_environments)
         self._compile_flags = compile_flags or get_compile_flags()
         self._double_precision = double_precision
+        self._load_balancer = self._prepare_load_balancer(load_balancer)
 
         if self._double_precision is None:
             self._double_precision = use_double_precision()
 
     @staticmethod
-    def _prepare_environments(environments):
+    def _load_environments(environments):
+        """Load the environments from a polymorphic datatype."""
         if environments is None:
             environments = get_cl_environments()
 
@@ -258,6 +290,14 @@ class CLRuntimeInfo:
                 final_environments.append(environment)
 
         return final_environments
+
+    @staticmethod
+    def _prepare_load_balancer(load_balancer):
+        """Load the load balancer from a polymorphic datatype.
+        """
+        if isinstance(load_balancer, collections.Iterable):
+            return FractionalLoad(load_balancer)
+        return load_balancer
 
     @property
     def cl_environments(self):
