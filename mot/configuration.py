@@ -297,7 +297,7 @@ class CLRuntimeInfo:
         """
         if isinstance(load_balancer, collections.Iterable):
             return FractionalLoad(load_balancer)
-        return load_balancer
+        return load_balancer or EvenDistribution()
 
     @property
     def cl_environments(self):
@@ -317,3 +317,7 @@ class CLRuntimeInfo:
     def compile_flags(self):
         """Get all defined compile flags."""
         return self._compile_flags
+
+    @property
+    def load_balancer(self):
+        return self._load_balancer
