@@ -42,6 +42,8 @@ class gamma_logpdf(SimpleCLLibrary):
 
 
         With :math:`x` the desired position, :math:`k` the shape and :math:`\theta` the scale.
+
+        This implementation is copied from SciPy (05-05-2018).
         """
         super().__init__('''
             double gamma_logpdf(double x, double shape, double scale){
@@ -59,11 +61,12 @@ class gamma_cdf(SimpleCLLibrary):
         With k the shape parameter, theta the scale parameter, lower_incomplete_gamma the lower incomplete gamma
         function and gamma the complete gamma function.
 
+        This implementation is copied from SciPy (05-05-2018).
+
         Function arguments:
 
          * shape: the shape parameter of the gamma distribution (often denoted :math:`k`)
          * scale: the scale parameter of the gamma distribution (often denoted :math:`\theta`)
-
         """
         super().__init__('''
             double gamma_cdf(double x, double shape, double scale){
@@ -82,14 +85,13 @@ class gamma_ppf(SimpleCLLibrary):
         super().__init__('''
             double gamma_ppf(double y, double shape, double scale){
                 double retval = igami(shape, y) * scale;
-                
+
                 if(fabs(retval) < 1e-150){
                     return 0;
                 }
                 return retval;
             }
         ''', dependencies=(igami(),))
-
 
 
 class gamma_cdf_approx(SimpleCLLibrary):
@@ -112,7 +114,7 @@ class gamma_cdf_approx(SimpleCLLibrary):
         """
         super().__init__('''
             double gamma_cdf_approx(double x, double shape, double scale){
-                double R = 1/(12 * shape) - 1/(360 * pown(shape, 3)) 
+                double R = 1/(12 * shape) - 1/(360 * pown(shape, 3))
                            + 1/(1260 * pown(shape, 5)) - 1/(1680 * pown(shape, 7));
 
                 double _w = (14 - 9 * log(x / (shape * scale))) / 4.;
@@ -151,7 +153,7 @@ class gamma_ppf_approx(SimpleCLLibrary):
         """
         super().__init__('''
             double gamma_ppf_approx(double y, double shape, double scale){
-                double R = 1/(12 * shape) - 1/(360 * pown(shape, 3)) 
+                double R = 1/(12 * shape) - 1/(360 * pown(shape, 3))
                            + 1/(1260 * pown(shape, 5)) - 1/(1680 * pown(shape, 7));
 
                 double A = 1 + 1 / (12 * shape);
@@ -166,7 +168,7 @@ class gamma_ppf_approx(SimpleCLLibrary):
                 while(fabs(h) >= 1e-4){
                     phi = exp(-(z * z) / 2) / sqrt(2 * M_PI);
                     PHI = 1 / (1 + exp(-2 * z * (sqrt(M_2_PI) + z * z / 28.0)));
-                    B = (-1 + z / (4 * sqrt(shape)) - 2 * (z * z + 2) / (45 * shape)) / (3 * sqrt(shape));   
+                    B = (-1 + z / (4 * sqrt(shape)) - 2 * (z * z + 2) / (45 * shape)) / (3 * sqrt(shape));
                     B_prime = 1 / (12 * shape) - (8 * z) / (270 * pow(shape, 3 / 2.));
 
                     f_z = A * PHI - B * phi - exp(R) * y;
@@ -205,7 +207,7 @@ class _find_inverse_s(SimpleCLLibrary):
                        11.6616720288968, 3.31125922108741};
                 double b[5] = {0.3611708101884203e-1, 1.27364489782223,
                        6.40691597760039, 6.61053765625462, 1};
-            
+
                 if (p < 0.5) {
                     t = sqrt(-2 * log(p));
                 }
@@ -215,7 +217,7 @@ class _find_inverse_s(SimpleCLLibrary):
                 s = t - polevl(t, a, 3) / polevl(t, b, 4);
                 if(p < 0.5)
                     s = -s;
-                return s;    
+                return s;
             }
         ''', dependencies=(polevl(),))
 
@@ -235,13 +237,13 @@ class _didonato_SN(SimpleCLLibrary):
         Copied from Scipy (https://github.com/scipy/scipy/blob/master/scipy/special/cephes/igami.c), 05-05-2018.
         """
         super().__init__('''
-            double _didonato_SN(double a, double x, uint N, double tolerance){ 
+            double _didonato_SN(double a, double x, uint N, double tolerance){
                 double sum = 1.0;
-            
+
                 if (N >= 1) {
                     uint i;
                     double partial = x / (a + 1);
-            
+
                     sum += partial;
                     for(i = 2; i <= N; ++i) {
                         partial *= x / (a + i);
@@ -275,7 +277,7 @@ class _find_inverse_gamma(SimpleCLLibrary):
         super().__init__('''
             double _find_inverse_gamma(double a, double p, double q){
                 double result;
-            
+
                 if (a == 1) {
                     if (q > 0.9) {
                         result = -log1p(-p);
@@ -287,7 +289,7 @@ class _find_inverse_gamma(SimpleCLLibrary):
                 else if (a < 1) {
                     double g = tgamma(a);
                     double b = q * g;
-            
+
                     if ((b > 0.6) || ((b >= 0.45) && (a >= 0.3))) {
                         /* DiDonato & Morris Eq 21:
                          *
@@ -334,7 +336,7 @@ class _find_inverse_gamma(SimpleCLLibrary):
                         double c1_4 = c1_2 * c1_2;
                         double a_2 = a * a;
                         double a_3 = a_2 * a;
-            
+
                         double c2 = (a - 1) * (1 + c1);
                         double c3 = (a - 1) * (-(c1_2 / 2)
                                                + (a - 2) * c1
@@ -347,7 +349,7 @@ class _find_inverse_gamma(SimpleCLLibrary):
                                                + (-3 * a_2 + 13 * a -13) * c1_2
                                                + (2 * a_3 - 25 * a_2 + 72 * a - 61) * c1 / 2
                                                + (25 * a_3 - 195 * a_2 + 477 * a - 379) / 12);
-            
+
                         double y_2 = y * y;
                         double y_3 = y_2 * y;
                         double y_4 = y_2 * y_2;
@@ -357,18 +359,18 @@ class _find_inverse_gamma(SimpleCLLibrary):
                 else {
                     /* DiDonato and Morris Eq 31: */
                     double s = _find_inverse_s(p, q);
-            
+
                     double s_2 = s * s;
                     double s_3 = s_2 * s;
                     double s_4 = s_2 * s_2;
                     double s_5 = s_4 * s;
                     double ra = sqrt(a);
-            
+
                     double w = a + s * ra + (s_2 - 1) / 3;
                     w += (s_3 - 7 * s) / (36 * ra);
                     w -= (3 * s_4 + 7 * s_2 - 16) / (810 * a);
                     w += (9 * s_5 + 256 * s_3 - 433 * s) / (38880 * a * ra);
-            
+
                     if ((a >= 500) && (fabs(1 - w / a) < 1e-6)) {
                         result = w;
                     }
@@ -389,7 +391,7 @@ class _find_inverse_gamma(SimpleCLLibrary):
                             double c1_4 = c1_2 * c1_2;
                         double a_2 = a * a;
                         double a_3 = a_2 * a;
-            
+
                         double c2 = (a - 1) * (1 + c1);
                         double c3 = (a - 1) * (-(c1_2 / 2)
                                    + (a - 2) * c1
@@ -403,7 +405,7 @@ class _find_inverse_gamma(SimpleCLLibrary):
                                    + (-3 * a_2 + 13 * a -13) * c1_2
                                    + (2 * a_3 - 25 * a_2 + 72 * a - 61) * c1 / 2
                                    + (25 * a_3 - 195 * a_2 + 477 * a - 379) / 12);
-            
+
                         double y_2 = y * y;
                         double y_3 = y_2 * y;
                         double y_4 = y_2 * y_2;
@@ -431,7 +433,7 @@ class _find_inverse_gamma(SimpleCLLibrary):
                     s = log1p(z / ap1 * (1 + z / ap2 * (1 + z / (a + 3))));
                     z = exp((v + z - s) / a);
                     }
-            
+
                     if ((z <= 0.01 * ap1) || (z > 0.7 * ap1)) {
                     result = z;
                     }
@@ -445,7 +447,7 @@ class _find_inverse_gamma(SimpleCLLibrary):
                 }
                 }
                 return result;
-            } 
+            }
         ''', dependencies=(_find_inverse_s(), _didonato_SN()))
 
 
@@ -458,7 +460,7 @@ class igami(SimpleCLLibrary):
             double igami(double a, double p){
                 int i;
                 double x, fac, f_fp, fpp_fp;
-            
+
                 if (isnan(a) || isnan(p)) {
                     return NAN;
                 }
@@ -474,7 +476,7 @@ class igami(SimpleCLLibrary):
                 else if (p > 0.9) {
                     return _igamci_impl(a, 1 - p);
                 }
-                
+
                 return _igami_impl(a, p);
             }
         ''', dependencies=(_igami_impl(), _igamci_impl(), _find_inverse_gamma(), igam_fac(), igam()))
@@ -489,7 +491,7 @@ class _igami_impl(SimpleCLLibrary):
             double _igami_impl(double a, double p){
                 int i;
                 double x, fac, f_fp, fpp_fp;
-    
+
                 x = _find_inverse_gamma(a, p, 1 - p);
                 /* Halley's method */
                 for (i = 0; i < 3; i++) {
@@ -508,7 +510,7 @@ class _igami_impl(SimpleCLLibrary):
                         x = x - f_fp / (1.0 - 0.5 * f_fp * fpp_fp);
                     }
                 }
-    
+
                 return x;
             }
         ''', dependencies=(_find_inverse_gamma(), igam_fac(), igam()))
@@ -523,7 +525,7 @@ class _igamci_impl(SimpleCLLibrary):
             double _igamci_impl(double a, double q){
                 int i;
                 double x, fac, f_fp, fpp_fp;
-            
+
                 x = _find_inverse_gamma(a, 1 - q, q);
                 for (i = 0; i < 3; i++) {
                     fac = igam_fac(a, x);
@@ -539,7 +541,7 @@ class _igamci_impl(SimpleCLLibrary):
                         x = x - f_fp / (1.0 - 0.5 * f_fp * fpp_fp);
                     }
                 }
-                
+
                 return x;
             }
         ''', dependencies=(_find_inverse_gamma(), igam_fac(), igam()))
@@ -554,7 +556,7 @@ class igamci(SimpleCLLibrary):
             double igamci(double a, double q){
                 int i;
                 double x, fac, f_fp, fpp_fp;
-            
+
                 if (isnan(a) || isnan(q)) {
                     return NAN;
                 }
@@ -570,7 +572,7 @@ class igamci(SimpleCLLibrary):
                 else if (q > 0.9) {
                     return _igami_impl(a, 1 - q);
                 }
-                
+
                 return _igamci_impl(a, q);
             }
             ''', dependencies=(_igami_impl(), _igamci_impl(), _find_inverse_gamma(), igam_fac(), igamc()))
@@ -631,17 +633,17 @@ class igam(SimpleCLLibrary):
                 float LARGE = 200;
                 float SMALLRATIO = 0.3;
                 float LARGERATIO = 4.5;
-    
+
                 double absxma_a;
-    
+
                 /* Check zero integration limit first */
                 if (x == 0)
                     return (0.0);
-    
+
                 if ((x < 0) || (a <= 0)) {
                     return (NAN);
                 }
-    
+
                 /* Asymptotic regime where a ~ x; see [2]. */
                 absxma_a = fabs(x - a) / a;
                 if ((a > SMALL) && (a < LARGE) && (absxma_a < SMALLRATIO)) {
@@ -649,11 +651,11 @@ class igam(SimpleCLLibrary):
                 } else if ((a > LARGE) && (absxma_a < LARGERATIO / sqrt(a))) {
                     return igam_igamc_asymptotic_series(a, x, IGAM);
                 }
-    
+
                 if ((x > 1.0) && (x > a)) {
                     return (1.0 - igamc(a, x));
                 }
-    
+
                 return igam_series(a, x);
             }
         ''', dependencies=(igam_series(), igamc(), igam_igamc_asymptotic_series()))
@@ -718,9 +720,9 @@ class igamc(SimpleCLLibrary):
                 float LARGE = 200;
                 float SMALLRATIO = 0.3;
                 float LARGERATIO = 4.5;
-    
+
                 double absxma_a;
-    
+
                 if ((x < 0) || (a <= 0)) {
                     return (NAN);
                 } else if (x == 0) {
@@ -728,7 +730,7 @@ class igamc(SimpleCLLibrary):
                 } else if (isinf(x)) {
                     return 0.0;
                 }
-    
+
                 /* Asymptotic regime where a ~ x; see [2]. */
                 absxma_a = fabs(x - a) / a;
                 if ((a > SMALL) && (a < LARGE) && (absxma_a < SMALLRATIO)) {
@@ -736,7 +738,7 @@ class igamc(SimpleCLLibrary):
                 } else if ((a > LARGE) && (absxma_a < LARGERATIO / sqrt(a))) {
                     return igam_igamc_asymptotic_series(a, x, IGAMC);
                 }
-    
+
                 /* Everywhere else; see [2]. */
                 if (x > 1.1) {
                     if (x < a) {
@@ -771,7 +773,7 @@ class igam_fac(SimpleCLLibrary):
         super().__init__('''
             double igam_fac(double a, double x){
                 double ax, fac, res, num;
-    
+
                 if (fabs(a - x) > 0.4 * fabs(a)) {
                     ax = a * log(x) - x - lgamma(a);
                     if (ax < -MAXLOG) {
@@ -779,17 +781,17 @@ class igam_fac(SimpleCLLibrary):
                     }
                     return exp(ax);
                 }
-    
+
                 fac = a + LANCZOS_G - 0.5;
                 res = sqrt(fac / exp(1.0)) / lanczos_sum_expg_scaled(a);
-    
+
                 if ((a < 200) && (x < 200)) {
                     res *= exp(a - x) * pow(x / fac, a);
                 } else {
                     num = x - a - LANCZOS_G + 0.5;
                     res *= exp(a * log1pmx(num / fac) + x * (0.5 - LANCZOS_G) / fac);
                 }
-    
+
                 return res;
             }
         ''', dependencies=(log1pmx(), lanczos_sum_expg_scaled()))
@@ -806,16 +808,16 @@ class igamc_continued_fraction(SimpleCLLibrary):
                 int MAXITER = 500;
                 double biginv = 2.22044604925031308085e-16;
                 double big = 4.503599627370496e15;
-    
+
                 int i;
                 double ans, ax, c, yc, r, t, y, z;
                 double pk, pkm1, pkm2, qk, qkm1, qkm2;
-    
+
                 ax = igam_fac(a, x);
                 if (ax == 0.0) {
                     return 0.0;
                 }
-    
+
                 /* continued fraction */
                 y = 1.0 - a;
                 z = x + y + 1.0;
@@ -825,7 +827,7 @@ class igamc_continued_fraction(SimpleCLLibrary):
                 pkm1 = x + 1.0;
                 qkm1 = z * x;
                 ans = pkm1 / qkm1;
-    
+
                 for (i = 0; i < MAXITER; i++) {
                     c += 1.0;
                     y += 1.0;
@@ -854,7 +856,7 @@ class igamc_continued_fraction(SimpleCLLibrary):
                         break;
                     }
                 }
-    
+
                 return (ans * ax);
             }
         ''', dependencies=(igam_fac(),))
@@ -869,20 +871,20 @@ class igam_series(SimpleCLLibrary):
         super().__init__('''
             double igam_series(double a, double x){
                 int MAXITER = 500;
-    
+
                 int i;
                 double ans, ax, c, r;
-    
+
                 ax = igam_fac(a, x);
                 if (ax == 0.0) {
                     return 0.0;
                 }
-    
+
                 /* power series */
                 r = a;
                 c = 1.0;
                 ans = 1.0;
-    
+
                 for (i = 0; i < MAXITER; i++) {
                     r += 1.0;
                     c *= x / r;
@@ -907,12 +909,12 @@ class igamc_series(SimpleCLLibrary):
         super().__init__('''
             double igamc_series(double a, double x){
                 int MAXITER = 500;
-    
+
                 int n;
                 double fac = 1;
                 double sum = 0;
                 double term, logx;
-    
+
                 for (n = 1; n < MAXITER; n++) {
                     fac *= -x / n;
                     term = fac / (a + n);
@@ -921,7 +923,7 @@ class igamc_series(SimpleCLLibrary):
                         break;
                     }
                 }
-    
+
                 logx = log(x);
                 term = -expm1(a * logx - lgam1p(a));
                 return term - exp(a * logx - lgamma(a)) * sum;
@@ -941,10 +943,10 @@ class igam_igamc_asymptotic_series(SimpleCLLibrary):
             double igam_igamc_asymptotic_series(double a, double x, int func){
                 int IGAM = 1;
                 int IGAMC = 0;
-    
+
                 int K = 25;
                 int N = 25;
-    
+
                 double d[25/*K*/][25/*N*/] =
                 {{-3.3333333333333333e-1, 8.3333333333333333e-2, -1.4814814814814815e-2, 1.1574074074074074e-3, 3.527336860670194e-4, -1.7875514403292181e-4, 3.9192631785224378e-5, -2.1854485106799922e-6, -1.85406221071516e-6, 8.296711340953086e-7, -1.7665952736826079e-7, 6.7078535434014986e-9, 1.0261809784240308e-8, -4.3820360184533532e-9, 9.1476995822367902e-10, -2.551419399494625e-11, -5.8307721325504251e-11, 2.4361948020667416e-11, -5.0276692801141756e-12, 1.1004392031956135e-13, 3.3717632624009854e-13, -1.3923887224181621e-13, 2.8534893807047443e-14, -5.1391118342425726e-16, -1.9752288294349443e-15},
                 {-1.8518518518518519e-3, -3.4722222222222222e-3, 2.6455026455026455e-3, -9.9022633744855967e-4, 2.0576131687242798e-4, -4.0187757201646091e-7, -1.8098550334489978e-5, 7.6491609160811101e-6, -1.6120900894563446e-6, 4.6471278028074343e-9, 1.378633446915721e-7, -5.752545603517705e-8, 1.1951628599778147e-8, -1.7543241719747648e-11, -1.0091543710600413e-9, 4.1627929918425826e-10, -8.5639070264929806e-11, 6.0672151016047586e-14, 7.1624989648114854e-12, -2.9331866437714371e-12, 5.9966963656836887e-13, -2.1671786527323314e-16, -4.9783399723692616e-14, 2.0291628823713425e-14, -4.13125571381061e-15},
@@ -971,25 +973,25 @@ class igam_igamc_asymptotic_series(SimpleCLLibrary):
                 {7.389033153567425e+1, -1.5680141270402273e+2, 1.322177542759164e+2, 1.3692876877324546e-2, -1.2366496885920151e+2, 1.4620689391062729e+2, -8.0365587724865346e+1, -1.1259851148881298e-4, 4.0770132196179938e+1, -3.8210340013273034e+1, 1.719522294277362e+1, 9.3519707955168356e-7, -6.2716159907747034, 5.1168999071852637, -2.0319658112299095, -4.9507215582761543e-9, 5.9626397294332597e-1, -4.4220765337238094e-1, 1.6079998700166273e-1, -2.4733786203223402e-8, -4.0307574759979762e-2, 2.7849050747097869e-2, -9.4751858992054221e-3, 6.419922235909132e-6, 2.1250180774699461e-3},
                 {2.1216837098382522e+2, 1.3107863022633868e+1, -4.9698285932871748e+2, 7.3121595266969204e+2, -4.8213821720890847e+2, -2.8817248692894889e-2, 3.2616720302947102e+2, -3.4389340280087117e+2, 1.7195193870816232e+2, 1.4038077378096158e-4, -7.52594195897599e+1, 6.651969984520934e+1, -2.8447519748152462e+1, -7.613702615875391e-7, 9.5402237105304373, -7.5175301113311376, 2.8943997568871961, -4.6612194999538201e-7, -8.0615149598794088e-1, 5.8483006570631029e-1, -2.0845408972964956e-1, 1.4765818959305817e-4, 5.1000433863753019e-2, -3.3066252141883665e-2, 1.5109265210467774e-2},
                 {-9.8959643098322368e+2, 2.1925555360905233e+3, -1.9283586782723356e+3, -1.5925738122215253e-1, 1.9569985945919857e+3, -2.4072514765081556e+3, 1.3756149959336496e+3, 1.2920735237496668e-3, -7.525941715948055e+2, 7.3171668742208716e+2, -3.4137023466220065e+2, -9.9857390260608043e-6, 1.3356313181291573e+2, -1.1276295161252794e+2, 4.6310396098204458e+1, -7.9237387133614756e-6, -1.4510726927018646e+1, 1.1111771248100563e+1, -4.1690817945270892, 3.1008219800117808e-3, 1.1220095449981468, -7.6052379926149916e-1, 3.6262236505085254e-1, 2.216867741940747e-1, 4.8683443692930507e-1}};
-    
+
                 double etapow[25/*N*/] = {1};
-    
+
                 int k, n, sgn;
                 int maxpow = 0;
                 double lambda = x / a;
                 double sigma = (x - a) / a;
                 double eta, res, ck, ckterm, term, absterm;
                 double absoldterm = INFINITY;
-    
+
                 double sum = 0;
                 double afac = 1;
-    
+
                 if (func == IGAM) {
                     sgn = -1;
                 } else {
                     sgn = 1;
                 }
-    
+
                 if (lambda > 1) {
                     eta = sqrt(-2 * log1pmx(sigma));
                 } else if (lambda < 1) {
@@ -998,7 +1000,7 @@ class igam_igamc_asymptotic_series(SimpleCLLibrary):
                     eta = 0;
                 }
                 res = 0.5 * erfc(sgn * eta * sqrt(a / 2));
-    
+
                 for (k = 0; k < K; k++) {
                     ck = d[k][0];
                     for (n = 1; n < N; n++) {
@@ -1025,7 +1027,7 @@ class igam_igamc_asymptotic_series(SimpleCLLibrary):
                     afac /= a;
                 }
                 res += sgn * exp(-0.5 * a * eta * eta) * sum / sqrt(2 * M_PI * a);
-    
+
                 return res;
             }
         ''', dependencies=(log1pmx(),))
