@@ -12,6 +12,7 @@ using :py:func:`config_context`. Example:
         ...
 
 """
+import collections
 from contextlib import contextmanager
 import numpy as np
 from .lib.cl_environments import CLEnvironmentFactory
@@ -223,24 +224,40 @@ class CLRuntimeInfo:
         """All information necessary for applying operations using OpenCL.
 
         Args:
-            cl_environments (list of mot.lib.cl_environments.CLEnvironment): The list of CL environments used by
-                this routine. If None is given we use the defaults in the current configuration.
+            cl_environments (List[Union[mot.lib.cl_environments.CLEnvironment, int]]
+                             or mot.lib.cl_environments.CLEnvironment or int): The list of CL environments
+                used by this routine. If None is given we use the defaults in the current configuration.
+                Elements can either be a CLEnvironment object or an integer indexing the devices returned by
+                :func:`mot.smart_device_selection`.
             compile_flags (list): the list of compile flags to use during analysis.
             double_precision (boolean): if we apply the computations in double precision or in single float precision.
                 By default we go for single float precision.
         """
-        self._cl_environments = cl_environments
-        self._compile_flags = compile_flags
+        self._cl_environments = self._prepare_environments(cl_environments)
+        self._compile_flags = compile_flags or get_compile_flags()
         self._double_precision = double_precision
-
-        if self._cl_environments is None:
-            self._cl_environments = get_cl_environments()
-
-        if self._compile_flags is None:
-            self._compile_flags = get_compile_flags()
 
         if self._double_precision is None:
             self._double_precision = use_double_precision()
+
+    @staticmethod
+    def _prepare_environments(environments):
+        if environments is None:
+            environments = get_cl_environments()
+
+        if not isinstance(environments, collections.Iterable):
+            environments = [environments]
+
+        final_environments = []
+        all_environments = CLEnvironmentFactory.smart_device_selection()
+
+        for environment in environments:
+            if isinstance(environment, int):
+                final_environments.append(all_environments[environment])
+            else:
+                final_environments.append(environment)
+
+        return final_environments
 
     @property
     def cl_environments(self):
