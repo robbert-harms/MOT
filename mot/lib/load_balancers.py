@@ -1,3 +1,4 @@
+import numpy as np
 from mot.lib.utils import split_in_batches
 
 __author__ = 'Robbert Harms'
@@ -42,13 +43,23 @@ class FractionalLoad(LoadBalancer):
         This class will round the work items such that all work gets done.
 
         Args:
-            fractions (Tuple[float]): for each device the fraction of work that device must do.
+            fractions (Tuple[float]): for each device the fraction of work for that device
         """
-        self._fractions = fractions
+        fractions = np.array(fractions)
+        self._fractions = fractions / np.sum(fractions)
 
     def get_division(self, cl_environments, nmr_instances):
         if len(cl_environments) != len(self._fractions):
             raise ValueError('The number of devices does not match the number of specified loads.')
 
-        return NotImplementedError()
-        # todo
+        batches = []
+        offset = 0
+        elements_left = nmr_instances
+        for fraction in self._fractions[:-1]:
+            batch_size = min(elements_left, int(np.round(fraction * nmr_instances)))
+            batches.append((offset, offset + batch_size))
+            elements_left -= batch_size
+            offset += batch_size
+
+        batches.append((offset, offset + elements_left))
+        return batches

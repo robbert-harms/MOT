@@ -205,6 +205,7 @@ class CLRuntimeAction(SimpleConfigAction):
         set_cl_environments(self._cl_runtime_info.cl_environments)
         set_compile_flags(self._cl_runtime_info._compile_flags)
         set_use_double_precision(self._cl_runtime_info.double_precision)
+        set_load_balancer(self._cl_runtime_info.load_balancer)
 
 
 class RuntimeConfigurationAction(SimpleConfigAction):
@@ -293,8 +294,9 @@ class CLRuntimeInfo:
 
     @staticmethod
     def _prepare_load_balancer(load_balancer):
-        """Load the load balancer from a polymorphic datatype.
-        """
+        """Load the load balancer from a polymorphic datatype."""
+        if load_balancer is None:
+            return get_load_balancer()
         if isinstance(load_balancer, collections.Iterable):
             return FractionalLoad(load_balancer)
         return load_balancer or EvenDistribution()
