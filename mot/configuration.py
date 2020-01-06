@@ -32,7 +32,7 @@ module. This entire module acts as a singleton containing the current runtime co
 """
 _config = {
     'cl_environments': CLEnvironmentFactory.smart_device_selection(preferred_device_type='GPU'),
-    'compile_flags': ['-cl-denorms-are-zero', '-cl-mad-enable', '-cl-no-signed-zeros'],
+    'compile_flags': ['-cl-denorms-are-zero', '-cl-mad-enable', '-cl-no-signed-zeros', '-cl-std=CL2.0'],
     'double_precision': False,
     'load_balancer': EvenDistribution()
 }

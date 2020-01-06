@@ -1,3 +1,6 @@
+import os
+from pkg_resources import resource_filename
+
 from collections import Iterable, Mapping
 from collections.__init__ import OrderedDict
 
@@ -83,7 +86,8 @@ class CLFunction(CLCodeObject):
         """
         raise NotImplementedError()
 
-    def evaluate(self, inputs, nmr_instances, use_local_reduction=False, local_size=None, cl_runtime_info=None):
+    def evaluate(self, inputs, nmr_instances, use_local_reduction=False, local_size=None,
+                 context_variables=None, enable_rng=False, cl_runtime_info=None):
         """Evaluate this function for each set of given parameters.
 
         Given a set of input parameters, this model will be evaluated for every parameter set.
@@ -97,6 +101,11 @@ class CLFunction(CLCodeObject):
                 If an ndarray is given we will load it read/write by default. You can provide either an iterable
                 with one value per parameter, or a mapping with for every parameter a corresponding value.
             nmr_instances (int): the number of parallel processes to run.
+            context_variables (dict[str: mot.lib.kernel_data.KernelData]): data structures that will be loaded
+                as program scope global variables. Note that not all KernelData types are allowed, only the
+                global variables are allowed.
+            enable_rng (boolean): if this function wants to use random numbers. If set to true we prepare the random
+                number generator for use in this function.
             use_local_reduction (boolean): set this to True if you want to use local memory reduction in
                  evaluating this function. If this is set to True we will multiply the global size
                  (given by the nmr_instances) by the work group sizes.
@@ -204,7 +213,8 @@ class SimpleCLFunction(CLFunction):
     def get_cl_body(self):
         return self._cl_body
 
-    def evaluate(self, inputs, nmr_instances, use_local_reduction=False, local_size=None, cl_runtime_info=None):
+    def evaluate(self, inputs, nmr_instances, use_local_reduction=False, local_size=None,
+                 context_variables=None, enable_rng=False, cl_runtime_info=None):
         def wrap_input_data(input_data):
             def get_data_object(param):
                 if input_data[param.name] is None:
@@ -247,6 +257,7 @@ class SimpleCLFunction(CLFunction):
         return apply_cl_function(self, wrap_input_data(inputs), nmr_instances,
                                  use_local_reduction=use_local_reduction,
                                  local_size=local_size,
+                                 context_variables=context_variables, enable_rng=enable_rng,
                                  cl_runtime_info=cl_runtime_info)
 
     def get_dependencies(self):
@@ -578,7 +589,7 @@ class SimpleCLFunctionParameter(CLFunctionParameter):
 
 
 def apply_cl_function(cl_function, kernel_data, nmr_instances, use_local_reduction=False,
-                      local_size=None, cl_runtime_info=None):
+                      local_size=None, context_variables=None, enable_rng=None, cl_runtime_info=None):
     """Run the given function/procedure on the given set of data.
 
     This class will wrap the given CL function in a kernel call and execute that that for every data instance using
@@ -590,6 +601,11 @@ def apply_cl_function(cl_function, kernel_data, nmr_instances, use_local_reducti
             run on the datasets. Either a name function tuple or an actual CLFunction object.
         kernel_data (dict[str: mot.lib.kernel_data.KernelData]): the data to use as input to the function.
         nmr_instances (int): the number of parallel threads to run (used as ``global_size``)
+        context_variables (dict[str: mot.lib.kernel_data.KernelData]): data structures that will be loaded
+            as program scope global variables. Note that not all KernelData types are allowed, only the
+            global variables are allowed.
+        enable_rng (boolean): if this function wants to use random numbers. If set to true we prepare the random
+            number generator for use in this function.
         use_local_reduction (boolean): set this to True if you want to use local memory reduction in
              your CL procedure. If this is set to True we will multiply the global size (given by the nmr_instances)
              by the work group sizes.
@@ -605,14 +621,23 @@ def apply_cl_function(cl_function, kernel_data, nmr_instances, use_local_reducti
             raise ValueError('Some parameters are missing an input value, '
                              'required parameters are: {}, given items are: {}'.format(names, kernel_data.keys()))
 
+    context_variables = context_variables or {}
+
+    if enable_rng:
+        rng_state = np.random.uniform(low=np.iinfo(np.uint32).min, high=np.iinfo(np.uint32).max + 1,
+                                      size=(nmr_instances, 8)).astype(np.uint32)
+        context_variables['__rng_state'] = Array(rng_state, 'uint', mode='rw', warn_extra_copy=True)
+
     if cl_function.get_return_type() != 'void':
         kernel_data['_results'] = Zeros((nmr_instances,), cl_function.get_return_type())
 
     workers = []
     for ind, cl_environment in enumerate(cl_environments):
         worker = _ProcedureWorker(cl_environment, cl_runtime_info.compile_flags,
-                                  cl_function, kernel_data, cl_runtime_info.double_precision,
-                                  use_local_reduction, local_size=local_size)
+                                  cl_function, kernel_data, context_variables,
+                                  cl_runtime_info.double_precision,
+                                  use_local_reduction, local_size=local_size,
+                                  enable_rng=enable_rng)
         workers.append(worker)
 
     batches = cl_runtime_info.load_balancer.get_division(cl_environments, nmr_instances)
@@ -631,22 +656,36 @@ def apply_cl_function(cl_function, kernel_data, nmr_instances, use_local_reducti
 class _ProcedureWorker:
 
     def __init__(self, cl_environment, compile_flags, cl_function,
-                 kernel_data, double_precision, use_local_reduction, local_size=None):
+                 kernel_data, context_variables,
+                 double_precision, use_local_reduction,
+                 local_size=None, enable_rng=False):
 
         self._cl_environment = cl_environment
         self._cl_context = cl_environment.context
         self._cl_queue = cl_environment.queue
         self._cl_function = cl_function
         self._kernel_data = OrderedDict(sorted(kernel_data.items()))
+        self._context_variables = OrderedDict(sorted(context_variables.items()))
         self._double_precision = double_precision
         self._use_local_reduction = use_local_reduction
+        self._enable_rng = enable_rng
 
         self._mot_float_dtype = np.float32
         if double_precision:
             self._mot_float_dtype = np.float64
 
-        for data in self._kernel_data.values():
+        self._scalar_arg_dtypes = []
+        self._kernel_arguments = []
+
+        for name, data in self._kernel_data.items():
             data.set_mot_float_dtype(self._mot_float_dtype)
+            self._scalar_arg_dtypes.extend(data.get_scalar_arg_dtypes())
+            self._kernel_arguments.extend(data.get_kernel_parameters('_' + name))
+
+        for name, data in self._context_variables.items():
+            data.set_mot_float_dtype(self._mot_float_dtype)
+            self._scalar_arg_dtypes.extend(data.get_scalar_arg_dtypes())
+            self._kernel_arguments.extend(data.get_kernel_parameters('_context_' + name))
 
         self._kernel = self._build_kernel(self._get_kernel_source(), compile_flags)
 
@@ -660,8 +699,16 @@ class _ProcedureWorker:
         else:
             self._workgroup_size = 1
 
-        self._kernel_inputs = {name: data.get_kernel_inputs(self._cl_context, self._workgroup_size)
-                               for name, data in self._kernel_data.items()}
+        self._kernel_inputs = {}
+        self._kernel_inputs_order = []
+
+        for name, data in self._kernel_data.items():
+            self._kernel_inputs[name] = data.get_kernel_inputs(self._cl_context, self._workgroup_size)
+            self._kernel_inputs_order.append(name)
+
+        for name, data in self._context_variables.items():
+            self._kernel_inputs['_context_' + name] = data.get_kernel_inputs(self._cl_context, self._workgroup_size)
+            self._kernel_inputs_order.append('_context_' + name)
 
     @property
     def cl_environment(self):
@@ -687,10 +734,10 @@ class _ProcedureWorker:
         nmr_problems = range_end - range_start
 
         func = self._kernel.run_procedure
-        func.set_scalar_arg_dtypes(self.get_scalar_arg_dtypes())
+        func.set_scalar_arg_dtypes(self._scalar_arg_dtypes)
 
         kernel_inputs_list = []
-        for inputs in [self._kernel_inputs[name] for name in self._kernel_data]:
+        for inputs in [self._kernel_inputs[name] for name in self._kernel_inputs_order]:
             kernel_inputs_list.extend(inputs)
 
         func(self._cl_queue,
@@ -720,55 +767,48 @@ class _ProcedureWorker:
 
         variable_inits = []
         function_call_inputs = []
-        post_function_callbacks = []
         for parameter in self._cl_function.get_parameters():
             data = self._kernel_data[parameter.name]
-            call_args = (parameter.name, '_' + parameter.name, 'gid', parameter.address_space)
+            call_args = (parameter.name, '_' + parameter.name, 'gid')
 
             variable_inits.append(data.initialize_variable(*call_args))
             function_call_inputs.append(data.get_function_call_input(*call_args))
-            post_function_callbacks.append(data.post_function_callback(*call_args))
+
+        context_inits = []
+        for name, data in self._context_variables.items():
+            context_inits.append(data.get_context_variable_initialization(name, '_context_' + name))
 
         kernel_source = ''
         kernel_source += get_cl_utility_definitions(self._double_precision)
         kernel_source += '\n'.join(data.get_type_definitions() for data in self._kernel_data.values())
+        kernel_source += '\n'.join(data.get_type_definitions() for data in self._context_variables.values())
+        kernel_source += '\n'.join(data.get_context_variable_declaration(name)
+                                   for name, data in self._context_variables.items())
+        if self._enable_rng:
+            kernel_source += self._get_rng_cl_code()
         kernel_source += self._cl_function.get_cl_code()
 
         kernel_source += '''
-            __kernel void run_procedure(''' + ",\n".join(self._get_kernel_arguments()) + '''){
+            __kernel void run_procedure(''' + ",\n".join(self._kernel_arguments) + '''){
                 ulong gid = (ulong)(get_global_id(0) / get_local_size(0));
 
                 ''' + '\n'.join(variable_inits) + '''
+                ''' + '\n'.join(context_inits) + '''
 
                 ''' + assignment + ' ' + self._cl_function.get_cl_function_name() + '(' + \
                          ', '.join(function_call_inputs) + ''');
-
-                ''' + '\n'.join(post_function_callbacks) + '''
             }
         '''
         return kernel_source
 
-    def _get_kernel_arguments(self):
-        """Get the list of kernel arguments for loading the kernel data elements into the kernel.
+    def _get_rng_cl_code(self):
+        generator = 'threefry'
 
-        This will use the sorted keys for looping through the kernel input items.
+        src = open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/openclfeatures.h'), ), 'r').read()
+        src += open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/array.h'), ), 'r').read()
+        src += open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/{}.h'.format(generator)), ),
+                    'r').read()
+        src += (open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/rand123.h'), ), 'r').read() % {
+            'GENERATOR_NAME': generator})
 
-        Returns:
-            list of str: the list of parameter definitions
-        """
-        declarations = []
-        for name, data in self._kernel_data.items():
-            declarations.extend(data.get_kernel_parameters('_' + name))
-        return declarations
-
-    def get_scalar_arg_dtypes(self):
-        """Get the location and types of the input scalars.
-
-        Returns:
-            list: for every kernel input element either None if the data is a buffer or the numpy data type if
-                if is a scalar.
-        """
-        dtypes = []
-        for name, data in self._kernel_data.items():
-            dtypes.extend(data.get_scalar_arg_dtypes())
-        return dtypes
+        return src
