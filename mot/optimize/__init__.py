@@ -99,6 +99,8 @@ def minimize(func, x0, data=None, method=None, lower_bounds=None, upper_bounds=N
     if not method:
         method = 'Powell'
 
+    data = data or {}
+
     cl_runtime_info = cl_runtime_info or CLRuntimeInfo()
 
     if len(x0.shape) < 2:
