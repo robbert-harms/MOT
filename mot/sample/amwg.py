@@ -64,28 +64,28 @@ class AdaptiveMetropolisWithinGibbs(AbstractRWMSampler):
     def _get_proposal_update_function(self, nmr_samples, thinning, return_output):
         kernel_source = '''
             void _updateProposalState(_mcmc_method_data* method_data, ulong current_iteration,
-                                      global mot_float_type* current_position){    
+                                      mot_float_type* current_position){
                 if(current_iteration > 0 && current_iteration % ''' + str(self._batch_size) + ''' == 0){
                     mot_float_type delta = sqrt(1.0/
-                            (''' + str(self._damping_factor) + ''' * 
+                            (''' + str(self._damping_factor) + ''' *
                                 (current_iteration / ''' + str(self._batch_size) + ''')));
-                    
+
                     for(uint k = 0; k < ''' + str(self._nmr_params) + '''; k++){
-                        if(method_data->acceptance_counter[k] / (mot_float_type)''' + str(self._batch_size) + ''' 
+                        if(method_data->acceptance_counter[k] / (mot_float_type)''' + str(self._batch_size) + '''
                                 > ''' + str(self._target_acceptance_rate) + '''){
                             method_data->proposal_stds[k] *= exp(delta);
                         }
                         else{
                             method_data->proposal_stds[k] /= exp(delta);
                         }
-        
-                        method_data->proposal_stds[k] = clamp(method_data->proposal_stds[k], 
-                                                        (mot_float_type)''' + str(self._min_val) + ''', 
+
+                        method_data->proposal_stds[k] = clamp(method_data->proposal_stds[k],
+                                                        (mot_float_type)''' + str(self._min_val) + ''',
                                                         (mot_float_type)''' + str(self._max_val) + ''');
-        
+
                         method_data->acceptance_counter[k] = 0;
                     }
-                }             
+                }
             }
         '''
         return kernel_source

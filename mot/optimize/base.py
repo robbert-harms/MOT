@@ -59,9 +59,9 @@ class ConstraintFunction(CLFunction):
 
     .. code-block:: c
 
-        void <func_name>(local const mot_float_type* const x,
+        void <func_name>(const mot_float_type* const x,
                          void* data,
-                         local mot_float_type* constraints);
+                         mot_float_type* constraints);
 
     Although this is not enforced for general usage of this class.
 

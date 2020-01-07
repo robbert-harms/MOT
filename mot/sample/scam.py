@@ -89,9 +89,9 @@ class SingleComponentAdaptiveMetropolis(AbstractRWMSampler):
              */
             void _update_chain_statistics(ulong current_iteration,
                                           const mot_float_type new_param_value,
-                                          global mot_float_type* const parameter_mean,
-                                          global mot_float_type* const parameter_variance,
-                                          global mot_float_type* const parameter_variance_update_m2){
+                                          mot_float_type* const parameter_mean,
+                                          mot_float_type* const parameter_variance,
+                                          mot_float_type* const parameter_variance_update_m2){
 
                 mot_float_type previous_mean = *parameter_mean;
                 *parameter_mean += (new_param_value - *parameter_mean) / (current_iteration + 1);
@@ -102,20 +102,20 @@ class SingleComponentAdaptiveMetropolis(AbstractRWMSampler):
                     *parameter_variance = *parameter_variance_update_m2 / (current_iteration - 1);
                 }
             }
-            
-            void _updateProposalState(_mcmc_method_data* method_data, ulong current_iteration, 
-                                      global mot_float_type* current_position){    
+
+            void _updateProposalState(_mcmc_method_data* method_data, ulong current_iteration,
+                                      mot_float_type* current_position){
                 for(uint k = 0; k < ''' + str(self._nmr_params) + '''; k++){
                     _update_chain_statistics(current_iteration, current_position[k],
-                                             method_data->parameter_means + k, 
+                                             method_data->parameter_means + k,
                                              method_data->parameter_variances + k,
                                              method_data->parameter_variance_update_m2s + k);
-                    
+
                     if(current_iteration > ''' + str(self._waiting_period) + '''){
-                        method_data->proposal_stds[k] = ''' + str(self._scaling_factor) + ''' 
+                        method_data->proposal_stds[k] = ''' + str(self._scaling_factor) + '''
                             * (sqrt(method_data->parameter_variances[k]) + method_data->epsilons[k]);
                     }
-                }                        
+                }
             }
         '''
         return kernel_source

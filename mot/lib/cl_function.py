@@ -626,7 +626,7 @@ def apply_cl_function(cl_function, kernel_data, nmr_instances, use_local_reducti
     if enable_rng:
         rng_state = np.random.uniform(low=np.iinfo(np.uint32).min, high=np.iinfo(np.uint32).max + 1,
                                       size=(nmr_instances, 8)).astype(np.uint32)
-        context_variables['__rng_state'] = Array(rng_state, 'uint', mode='rw', warn_extra_copy=True)
+        context_variables['__rng_state'] = Array(rng_state, 'uint', mode='rw', ensure_zero_copy=True)
 
     if cl_function.get_return_type() != 'void':
         kernel_data['_results'] = Zeros((nmr_instances,), cl_function.get_return_type())
