@@ -608,6 +608,13 @@ def apply_cl_function(cl_function, kernel_data, nmr_instances, use_local_reducti
     if cl_function.get_return_type() != 'void':
         kernel_data['_results'] = Zeros((nmr_instances,), cl_function.get_return_type())
 
+    mot_float_dtype = np.float32
+    if cl_runtime_info.double_precision:
+        mot_float_dtype = np.float64
+
+    for data in kernel_data.values():
+        data.set_mot_float_dtype(mot_float_dtype)
+
     workers = []
     for ind, cl_environment in enumerate(cl_environments):
         worker = _ProcedureWorker(cl_environment, cl_runtime_info.compile_flags,
@@ -640,13 +647,6 @@ class _ProcedureWorker:
         self._kernel_data = OrderedDict(sorted(kernel_data.items()))
         self._double_precision = double_precision
         self._use_local_reduction = use_local_reduction
-
-        self._mot_float_dtype = np.float32
-        if double_precision:
-            self._mot_float_dtype = np.float64
-
-        for data in self._kernel_data.values():
-            data.set_mot_float_dtype(self._mot_float_dtype)
 
         self._kernel = self._build_kernel(self._get_kernel_source(), compile_flags)
 
