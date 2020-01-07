@@ -629,6 +629,8 @@ def parse_cl_function(cl_code, dependencies=()):
                 return self._functions
 
             def arglist(self, ast):
+                if ast == '()':
+                    return '()'
                 return '({})'.format(', '.join(ast))
 
             def function(self, ast):

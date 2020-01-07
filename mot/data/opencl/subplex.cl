@@ -32,14 +32,14 @@
 #define USER_TOL_X  30*MOT_EPSILON
 
 /** The evaluation function we are expecting. */
-double %(FUNCTION_NAME)s(local mot_float_type* x, void* data_void);
+double %(FUNCTION_NAME)s(mot_float_type* x, void* data_void);
 
 // We define the header now and import the body later after having defined the subspace evaluation function
 int lib_nmsimplex(
         int nmr_parameters,
-        local mot_float_type* const model_parameters,
+        mot_float_type* const model_parameters,
         void* data,
-        local mot_float_type* initial_simplex_scale,
+        mot_float_type* initial_simplex_scale,
         mot_float_type* fdiff,
         mot_float_type psi,
         int max_iterations,
@@ -47,15 +47,15 @@ int lib_nmsimplex(
         mot_float_type beta,
         mot_float_type gamma,
         mot_float_type delta,
-        local mot_float_type* scratch);
+        mot_float_type* scratch);
 
 
 // the data wrapper used for the subspace evaluation function
 typedef struct {
-     local int *x_indices; /* subspace index permutation */
+     int *x_indices; /* subspace index permutation */
      int subspace_starting_index; /* starting index for this subspace */
      int subspace_length; /* dimension of subspace */
-     local mot_float_type *x; /* current x vector */
+     mot_float_type *x; /* current x vector */
      void* data; /* the "actual" underlying function data */
 } SubspaceData;
 
@@ -67,10 +67,10 @@ typedef struct {
  *
  */
 
-double subspace_evaluate(local mot_float_type* subspace_model_parameters, void* subspace_data){
+double subspace_evaluate(mot_float_type* subspace_model_parameters, void* subspace_data){
 
     SubspaceData* d = (SubspaceData*) subspace_data;
-    local mot_float_type* x = d->x;
+    mot_float_type* x = d->x;
 
     if(get_local_id(0) == 0){
         for(int i = d->subspace_starting_index; i < d->subspace_starting_index + d->subspace_length; i++){
@@ -88,7 +88,7 @@ double subspace_evaluate(local mot_float_type* subspace_model_parameters, void* 
  *
  * Before sorting the indices are reset to range(n).
  */
-void _subplex_sort_indices(local const mot_float_type* const values, local int* indices, int n) {
+void _subplex_sort_indices(const mot_float_type* const values, int* indices, int n) {
     int h, i, j, tmp_ind;
     mot_float_type tmp_val;
 
@@ -120,8 +120,8 @@ void _subplex_sort_indices(local const mot_float_type* const values, local int* 
  * Returns:
  *  the l1norm
  */
-mot_float_type _subplex_l1norm_subset(local const mot_float_type* const values,
-                                     local const int* const indices, int start, int end){
+mot_float_type _subplex_l1norm_subset(const mot_float_type* const values,
+                                      const int* const indices, int start, int end){
     mot_float_type l1norm = 0;
     for(int i = start; i < end; i++){
         l1norm += fabs(values[indices[i]]);
@@ -143,8 +143,8 @@ mot_float_type _subplex_l1norm_subset(local const mot_float_type* const values,
  * Returns:
  *  the size of the next dimension, counted from the given starting index
  */
-int _subplex_find_next_subspace_length(local const mot_float_type* const delta_x,
-                                      local const int* const x_indices,
+int _subplex_find_next_subspace_length(const mot_float_type* const delta_x,
+                                      const int* const x_indices,
                                       int nmr_parameters, int min_subspace_length, int max_subspace_length,
                                       int starting_index){
 
@@ -191,10 +191,10 @@ int _subplex_find_next_subspace_length(local const mot_float_type* const delta_x
  *  - min_subspace_length: the minimum subspace size
  *  - max_subspace_length: the maximum subspace size
  */
-void _subplex_get_subspaces(local const mot_float_type* const delta_x,
-                            local int* x_indices,
-                            local int* subspace_dimensions,
-                            local int* nmr_subspaces,
+void _subplex_get_subspaces(const mot_float_type* const delta_x,
+                            int* x_indices,
+                            int* subspace_dimensions,
+                            int* nmr_subspaces,
                             int nmr_parameters,
                             int min_subspace_length,
                             int max_subspace_length){
@@ -207,7 +207,7 @@ void _subplex_get_subspaces(local const mot_float_type* const delta_x,
 
     while(total_subspace_length != nmr_parameters){
         next_length = _subplex_find_next_subspace_length(delta_x, x_indices, nmr_parameters, min_subspace_length,
-                                                        max_subspace_length, total_subspace_length);
+                                                         max_subspace_length, total_subspace_length);
         total_subspace_length += next_length;
         subspace_dimensions[*nmr_subspaces] = next_length;
         (*nmr_subspaces)++;
@@ -215,32 +215,32 @@ void _subplex_get_subspaces(local const mot_float_type* const delta_x,
 }
 
 
-int subplex_minimize(local mot_float_type* model_parameters, /* in: initial guess, out: minimizer */
+int subplex_minimize(mot_float_type* model_parameters, /* in: initial guess, out: minimizer */
 			       void* data,
-			       local const mot_float_type* const xstep0,/* initial step sizes */
-			       local mot_float_type* subplex_scratch_float,
-			       local int* subplex_scratch_int){
+			       const mot_float_type* const xstep0,/* initial step sizes */
+			       mot_float_type* subplex_scratch_float,
+			       int* subplex_scratch_int){
 
-    local mot_float_type* scratch_ind_float = subplex_scratch_float;
+    mot_float_type* scratch_ind_float = subplex_scratch_float;
 
-    local mot_float_type* fdiff_max = scratch_ind_float;                    scratch_ind_float += 1;
-    local mot_float_type* step_size_scale = scratch_ind_float;              scratch_ind_float += 1;
-    local mot_float_type* stepnorm = scratch_ind_float;                     scratch_ind_float += 1;
-    local mot_float_type* dxnorm = scratch_ind_float;                       scratch_ind_float += 1;
+    mot_float_type* fdiff_max = scratch_ind_float;                    scratch_ind_float += 1;
+    mot_float_type* step_size_scale = scratch_ind_float;              scratch_ind_float += 1;
+    mot_float_type* stepnorm = scratch_ind_float;                     scratch_ind_float += 1;
+    mot_float_type* dxnorm = scratch_ind_float;                       scratch_ind_float += 1;
 
-    local mot_float_type* xstep = scratch_ind_float;                        scratch_ind_float += %(NMR_PARAMS)r;
-    local mot_float_type* delta_x = scratch_ind_float;                      scratch_ind_float += %(NMR_PARAMS)r;
-    local mot_float_type* subspace_model_parameters = scratch_ind_float;    scratch_ind_float += MAX_SUBSPACE_LENGTH;
-    local mot_float_type* subspace_xstep = scratch_ind_float;               scratch_ind_float += MAX_SUBSPACE_LENGTH;
-    local mot_float_type* nms_scratch = scratch_ind_float;
+    mot_float_type* xstep = scratch_ind_float;                        scratch_ind_float += %(NMR_PARAMS)r;
+    mot_float_type* delta_x = scratch_ind_float;                      scratch_ind_float += %(NMR_PARAMS)r;
+    mot_float_type* subspace_model_parameters = scratch_ind_float;    scratch_ind_float += MAX_SUBSPACE_LENGTH;
+    mot_float_type* subspace_xstep = scratch_ind_float;               scratch_ind_float += MAX_SUBSPACE_LENGTH;
+    mot_float_type* nms_scratch = scratch_ind_float;
 
-    local int* scratch_ind_int = subplex_scratch_int;
+    int* scratch_ind_int = subplex_scratch_int;
 
-    local int* nmr_subspaces = scratch_ind_int;             scratch_ind_int += 1;
-    local int* subspace_starting_index = scratch_ind_int;   scratch_ind_int += 1;
+    int* nmr_subspaces = scratch_ind_int;             scratch_ind_int += 1;
+    int* subspace_starting_index = scratch_ind_int;   scratch_ind_int += 1;
     /* permuted indices of model_parameters sorted by decreasing magnitude |delta_x| */
-    local int* x_indices = scratch_ind_int;                 scratch_ind_int += %(NMR_PARAMS)r;
-    local int* subspace_dimensions = scratch_ind_int;
+    int* x_indices = scratch_ind_int;                 scratch_ind_int += %(NMR_PARAMS)r;
+    int* subspace_dimensions = scratch_ind_int;
 
     int i, k;
     int itr;
@@ -383,10 +383,10 @@ int subplex_minimize(local mot_float_type* model_parameters, /* in: initial gues
     return 6;
 }
 
-int subplex(local mot_float_type* const model_parameters, void* data,
-            local mot_float_type* initial_simplex_scale,
-            local mot_float_type* subplex_scratch_float,
-            local int* subplex_scratch_int){
+int subplex(mot_float_type* const model_parameters, void* data,
+            mot_float_type* initial_simplex_scale,
+            mot_float_type* subplex_scratch_float,
+            int* subplex_scratch_int){
 
     if(get_local_id(0) == 0){
         %(INITIAL_SIMPLEX_SCALES)s

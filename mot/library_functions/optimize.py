@@ -54,7 +54,7 @@ class nmsimplex_spf(SimpleCLLibraryFromFile):
             function_name (str): the name of the evaluation function to call, defaults to 'evaluate'.
                 This should point to a function with signature:
 
-                    ``double evaluate(local mot_float_type* x, void* data_void);``
+                    ``double evaluate(mot_float_type* x, void* data_void);``
         """
         params = {
             'FUNCTION_NAME': function_name,
@@ -75,7 +75,7 @@ class Powell(SimpleCLLibraryFromFile):
 
         Args:
             eval_func (mot.lib.cl_function.CLFunction): the function we want to optimize, Should be of signature:
-                ``double evaluate(local mot_float_type* x, void* data_void);``
+                ``double evaluate(mot_float_type* x, void* data_void);``
             nmr_parameters (int): the number of parameters in the model, this will be hardcoded in the method
             patience (int): the patience of the Powell algorithm
             patience_line_search (int): the patience of the line search algorithm. If None, we set it equal to the
@@ -100,9 +100,9 @@ class Powell(SimpleCLLibraryFromFile):
         }
         super().__init__(
             'int', 'powell', [
-                'local mot_float_type* model_parameters',
+                'mot_float_type* model_parameters',
                 'void* data',
-                'local mot_float_type* scratch_mot_float_type'
+                'mot_float_type* scratch_mot_float_type'
             ],
             resource_filename('mot', 'data/opencl/powell.cl'),
             var_replace_dict=params, **kwargs)
@@ -147,9 +147,9 @@ class NMSimplex(SimpleCLLibrary):
             )
 
         super().__init__(('''
-            int nmsimplex(local mot_float_type* model_parameters, void* data,
-                          local mot_float_type* initial_simplex_scale,
-                          local mot_float_type* nmsimplex_scratch){
+            int nmsimplex(mot_float_type* model_parameters, void* data,
+                          mot_float_type* initial_simplex_scale,
+                          mot_float_type* nmsimplex_scratch){
 
                 if(get_local_id(0) == 0){
                     %(INITIAL_SIMPLEX_SCALES)s
@@ -214,11 +214,11 @@ class Subplex(SimpleCLLibraryFromFile):
 
         super().__init__(
             'int', 'subplex', [
-                'local mot_float_type* const model_parameters',
+                'mot_float_type* const model_parameters',
                 'void* data',
-                'local mot_float_type* initial_simplex_scale',
-                'local mot_float_type* subplex_scratch_float',
-                'local int* subplex_scratch_int'
+                'mot_float_type* initial_simplex_scale',
+                'mot_float_type* subplex_scratch_float',
+                'int* subplex_scratch_int'
             ],
             resource_filename('mot', 'data/opencl/subplex.cl'), var_replace_dict=params, **kwargs)
 
@@ -245,7 +245,7 @@ class LevenbergMarquardt(SimpleCLLibraryFromFile):
 
         Args:
             eval_func (mot.lib.cl_function.CLFunction): the function we want to optimize, Should be of signature:
-                ``void evaluate(local mot_float_type* x, void* data_void, local mot_float_type* result);``
+                ``void evaluate(mot_float_type* x, void* data_void, mot_float_type* result);``
             nmr_parameters (int): the number of parameters in the model, this will be hardcoded in the method
             nmr_observations (int): the number of observations in the model
             jacobian_func (mot.lib.cl_function.CLFunction): the function used to compute the Jacobian.
@@ -271,7 +271,7 @@ class LevenbergMarquardt(SimpleCLLibraryFromFile):
         }
 
         super().__init__(
-            'int', 'lmmin', ['local mot_float_type* const model_parameters',
+            'int', 'lmmin', ['mot_float_type* const model_parameters',
                              'void* data',
                              'mot_float_type* scratch_mot_float_type',
                              'int* scratch_int'],

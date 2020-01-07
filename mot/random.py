@@ -22,7 +22,6 @@ In this implementation we generate a counter and key automatically from a single
 import numpy as np
 
 from mot.lib.cl_function import SimpleCLFunction
-from mot.library_functions import Rand123
 from mot.lib.utils import is_scalar
 from mot.lib.kernel_data import Array, Zeros
 
@@ -53,24 +52,19 @@ def uniform(nmr_distributions, nmr_samples, low=0, high=1, ctype='float', seed=N
         high = np.ones((nmr_distributions, 1)) * high
 
     kernel_data = {'low': Array(low, as_scalar=True),
-                   'high': Array(high, as_scalar=True)}
+                   'high': Array(high, as_scalar=True),
+                   'samples': Zeros((nmr_distributions, nmr_samples), ctype)}
 
     kernel = SimpleCLFunction.from_string('''
-        void compute(double low, double high, global uint* rng_state, global ''' + ctype + '''* samples){
-        
-            rand123_data rand123_rng_data = rand123_initialize_data((uint[]){
-                rng_state[0], rng_state[1], rng_state[2], rng_state[3], 
-                rng_state[4], rng_state[5], 0});
-            void* rng_data = (void*)&rand123_rng_data;
-
+        void compute(double low, double high, ''' + ctype + '''* samples){
             for(uint i = 0; i < ''' + str(nmr_samples) + '''; i++){
-                double4 randomnr = rand4(rng_data);
-                samples[i] = (''' + ctype + ''')(low + randomnr.x * (high - low));
+                samples[i] = (''' + ctype + ''')(low + rand() * (high - low));
             }
         }
-    ''', dependencies=[Rand123()])
+    ''')
 
-    return _generate_samples(kernel, nmr_distributions, nmr_samples, ctype, kernel_data, seed=seed)
+    kernel.evaluate(kernel_data, nmr_distributions, enable_rng=True)
+    return kernel_data['samples'].get_data()
 
 
 def normal(nmr_distributions, nmr_samples, mean=0, std=1, ctype='float', seed=None):
@@ -93,32 +87,16 @@ def normal(nmr_distributions, nmr_samples, mean=0, std=1, ctype='float', seed=No
         std = np.ones((nmr_distributions, 1)) * std
 
     kernel_data = {'mean': Array(mean, as_scalar=True),
-                   'std': Array(std, as_scalar=True)}
+                   'std': Array(std, as_scalar=True),
+                   'samples': Zeros((nmr_distributions, nmr_samples), ctype)}
 
     kernel = SimpleCLFunction.from_string('''
-        void compute(double mean, double std, global uint* rng_state, global ''' + ctype + '''* samples){
-            rand123_data rand123_rng_data = rand123_initialize_data((uint[]){
-                rng_state[0], rng_state[1], rng_state[2], rng_state[3], 
-                rng_state[4], rng_state[5], 0});
-            void* rng_data = (void*)&rand123_rng_data;
-
+        void compute(double mean, double std, ''' + ctype + '''* samples){
             for(uint i = 0; i < ''' + str(nmr_samples) + '''; i++){
-                double4 randomnr = randn4(rng_data);
-                samples[i] = (''' + ctype + ''')(mean + randomnr.x * std);
+                samples[i] = (''' + ctype + ''')(mean + randn() * std);
             }
         }
-    ''', dependencies=[Rand123()])
+    ''')
 
-    return _generate_samples(kernel, nmr_distributions, nmr_samples, ctype, kernel_data, seed=seed)
-
-
-def _generate_samples(cl_function, nmr_distributions, nmr_samples, ctype, kernel_data, seed=None):
-    np.random.seed(seed)
-    rng_state = np.random.uniform(low=np.iinfo(np.uint32).min, high=np.iinfo(np.uint32).max + 1,
-                                  size=(nmr_distributions, 6)).astype(np.uint32)
-
-    kernel_data.update({'samples': Zeros((nmr_distributions, nmr_samples), ctype),
-                        'rng_state': Array(rng_state, 'uint')})
-
-    cl_function.evaluate(kernel_data, nmr_distributions)
+    kernel.evaluate(kernel_data, nmr_distributions, enable_rng=True)
     return kernel_data['samples'].get_data()

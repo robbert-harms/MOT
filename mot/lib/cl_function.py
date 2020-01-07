@@ -86,8 +86,8 @@ class CLFunction(CLCodeObject):
         """
         raise NotImplementedError()
 
-    def evaluate(self, inputs, nmr_instances, use_local_reduction=False, local_size=None,
-                 context_variables=None, enable_rng=False, cl_runtime_info=None):
+    def evaluate(self, inputs, nmr_instances, context_variables=None, enable_rng=False,
+                 use_local_reduction=False, local_size=None, cl_runtime_info=None):
         """Evaluate this function for each set of given parameters.
 
         Given a set of input parameters, this model will be evaluated for every parameter set.
@@ -648,6 +648,9 @@ def apply_cl_function(cl_function, kernel_data, nmr_instances, use_local_reducti
 
     for worker in workers:
         worker.cl_queue.finish()
+
+    for data in kernel_data.values():
+        data.finalize()
 
     if cl_function.get_return_type() != 'void':
         return kernel_data['_results'].get_data()

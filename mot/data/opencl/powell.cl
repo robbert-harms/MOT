@@ -52,15 +52,15 @@
  * The linear optimizer in turn should pass it to the linear evaluation function.
  */
 typedef struct{
-    local const mot_float_type* const point_0;
-    local const mot_float_type* const point_1;
-    local mot_float_type* tmp_point;
+    const mot_float_type* const point_0;
+    const mot_float_type* const point_1;
+    mot_float_type* tmp_point;
     void* data;
 } linear_function_data;
 
 
 /** The evaluation function we are expecting. */
-double %(FUNCTION_NAME)s(local mot_float_type* x, void* data_void);
+double %(FUNCTION_NAME)s(mot_float_type* x, void* data_void);
 
 
 int brent(mot_float_type ax, mot_float_type xb, mot_float_type xc,
@@ -75,7 +75,7 @@ int brent(mot_float_type ax, mot_float_type xb, mot_float_type xc,
  * Args:
  *  search_directions (2d nxn array): the array with vectors to initialize)
  */
-void powell_init_search_directions(local mot_float_type* search_directions){
+void powell_init_search_directions(mot_float_type* search_directions){
     uint params_batch_range;
     uint params_batch_offset = get_workitem_batch(%(NMR_PARAMS)r, &params_batch_range);
     int j;
@@ -120,7 +120,7 @@ bool powell_fval_diff_within_threshold(mot_float_type previous_fval, mot_float_t
 double powell_linear_eval_function(mot_float_type x, void* eval_data){
 
     linear_function_data f_data = *((linear_function_data*)eval_data);
-    local mot_float_type* xt = ((linear_function_data*)eval_data)->tmp_point;
+    mot_float_type* xt = ((linear_function_data*)eval_data)->tmp_point;
 
     uint params_batch_range;
     uint params_batch_offset = get_workitem_batch(%(NMR_PARAMS)r, &params_batch_range);
@@ -161,10 +161,10 @@ double powell_linear_eval_function(mot_float_type x, void* eval_data){
  *  the function value at the optimum point found on the line.
  */
 mot_float_type powell_find_linear_minimum(
-        local mot_float_type* const point_0,
-        local mot_float_type* const point_1,
+        mot_float_type* const point_0,
+        mot_float_type* const point_1,
         void* data,
-        local mot_float_type* tmp_point){
+        mot_float_type* tmp_point){
 
     linear_function_data eval_data = {point_0, point_1, tmp_point, data};
 
@@ -214,14 +214,14 @@ mot_float_type powell_find_linear_minimum(
  *   the new lowest function value
  */
 mot_float_type powell_do_line_searches(
-        local mot_float_type* search_directions,
+        mot_float_type* search_directions,
         void* data,
         mot_float_type fval,
-        local mot_float_type* starting_point,
+        mot_float_type* starting_point,
         mot_float_type* largest_decrease,
         int* index_largest_decrease,
-        local mot_float_type* tmp_point,
-        local mot_float_type* tmp_point2){
+        mot_float_type* tmp_point,
+        mot_float_type* tmp_point2){
 
     int i, j;
 
@@ -265,10 +265,10 @@ mot_float_type powell_do_line_searches(
  * Returns:
  *  the function value at the extrapolated point
  */
-mot_float_type powell_evaluate_extrapolated(local mot_float_type* new_best_point,
-                                            local mot_float_type* old_point,
+mot_float_type powell_evaluate_extrapolated(mot_float_type* new_best_point,
+                                            mot_float_type* old_point,
                                             void* data,
-                                            local mot_float_type* tmp_point){
+                                            mot_float_type* tmp_point){
 
     uint params_batch_range;
     uint params_batch_offset = get_workitem_batch(%(NMR_PARAMS)r, &params_batch_range);
@@ -309,14 +309,14 @@ bool powell_should_exchange_search_directions(
 #define SHOULD_EXCHANGE_SEARCH_DIRECTION true
 #endif
 
-int powell(local mot_float_type* model_parameters, void* data,
-           local mot_float_type* scratch_mot_float_type){
+int powell(mot_float_type* model_parameters, void* data,
+           mot_float_type* scratch_mot_float_type){
 
-    local mot_float_type* scratch_ind = scratch_mot_float_type;
-    local mot_float_type* parameters_at_start_of_iteration = scratch_ind;  scratch_ind += %(NMR_PARAMS)r;
-    local mot_float_type* search_directions = scratch_ind;                 scratch_ind += %(NMR_PARAMS)r * %(NMR_PARAMS)r;
-    local mot_float_type* tmp_point = scratch_ind;                         scratch_ind += %(NMR_PARAMS)r;
-    local mot_float_type* tmp_point2 = scratch_ind;                        scratch_ind += %(NMR_PARAMS)r;
+    mot_float_type* scratch_ind = scratch_mot_float_type;
+    mot_float_type* parameters_at_start_of_iteration = scratch_ind;  scratch_ind += %(NMR_PARAMS)r;
+    mot_float_type* search_directions = scratch_ind;                 scratch_ind += %(NMR_PARAMS)r * %(NMR_PARAMS)r;
+    mot_float_type* tmp_point = scratch_ind;                         scratch_ind += %(NMR_PARAMS)r;
+    mot_float_type* tmp_point2 = scratch_ind;                        scratch_ind += %(NMR_PARAMS)r;
 
     mot_float_type fval, fval_extrapolated, fval_at_start_of_iteration, largest_decrease;
 

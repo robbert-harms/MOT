@@ -23,7 +23,7 @@ def compute_log_likelihood(ll_func, parameters, data=None, cl_runtime_info=None)
 
                 .. code-block:: c
 
-                        double <func_name>(local const mot_float_type* const x, void* data);
+                        double <func_name>(const mot_float_type* const x, void* data);
 
         parameters (ndarray): The parameters to use in the evaluation of the model. This is either an (d, p) matrix
             or (d, p, n) matrix with d problems, p parameters and n samples.
@@ -39,17 +39,17 @@ def compute_log_likelihood(ll_func, parameters, data=None, cl_runtime_info=None)
 
         if len(parameters.shape) > 2:
             return SimpleCLFunction.from_string('''
-                void compute(global mot_float_type* parameters, 
-                             global mot_float_type* log_likelihoods,
+                void compute(mot_float_type* parameters,
+                             mot_float_type* log_likelihoods,
                              void* data){
-                             
-                    local mot_float_type x[''' + str(nmr_params) + '''];
+
+                    mot_float_type x[''' + str(nmr_params) + '''];
 
                     for(uint sample_ind = 0; sample_ind < ''' + str(parameters.shape[2]) + '''; sample_ind++){
                         for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
                             x[i] = parameters[i *''' + str(parameters.shape[2]) + ''' + sample_ind];
                         }
-                        
+
                         double ll = ''' + ll_func.get_cl_function_name() + '''(x, data);
                         if(get_local_id(0) == 0){
                             log_likelihoods[sample_ind] = ll;
@@ -59,10 +59,10 @@ def compute_log_likelihood(ll_func, parameters, data=None, cl_runtime_info=None)
             ''', dependencies=[ll_func])
 
         return SimpleCLFunction.from_string('''
-            void compute(local mot_float_type* parameters, 
-                         global mot_float_type* log_likelihoods,
+            void compute(mot_float_type* parameters,
+                         mot_float_type* log_likelihoods,
                          void* data){
-                         
+
                 double ll = ''' + ll_func.get_cl_function_name() + '''(parameters, data);
                 if(get_local_id(0) == 0){
                     *(log_likelihoods) = ll;
@@ -97,9 +97,9 @@ def compute_objective_value(objective_func, parameters, data=None, cl_runtime_in
 
             .. code-block:: c
 
-                double <func_name>(local const mot_float_type* const x,
+                double <func_name>(const mot_float_type* const x,
                                    void* data,
-                                   local mot_float_type* objective_list);
+                                   mot_float_type* objective_list);
 
         parameters (ndarray): The parameters to use in the evaluation of the model, an (d, p) matrix
             with d problems and p parameters.

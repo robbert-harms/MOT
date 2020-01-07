@@ -38,13 +38,13 @@ def fit_circular_gaussian(samples, high=np.pi, low=0):
         low (float): The minimum wrap point
     """
     cl_func = SimpleCLFunction.from_string('''
-        void compute(global mot_float_type* samples,
-                     global mot_float_type* means,
-                     global mot_float_type* stds,
+        void compute(mot_float_type* samples,
+                     mot_float_type* means,
+                     mot_float_type* stds,
                      int nmr_samples,
                      int low,
-                     int high){ 
-        
+                     int high){
+
             double cos_mean = 0;
             double sin_mean = 0;
             double ang;

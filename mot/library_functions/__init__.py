@@ -1,9 +1,4 @@
-import os
-
-from mot.lib.cl_function import SimpleCLCodeObject
 from mot.library_functions.base import SimpleCLLibrary, SimpleCLLibraryFromFile, CLLibrary
-from pkg_resources import resource_filename
-
 from mot.library_functions.eispack import eispack_tred2, eispack_tql2
 from mot.library_functions.unity import log1pmx
 from mot.library_functions.polynomials import p1evl, polevl, ratevl, real_zeros_cubic_pol
@@ -13,7 +8,6 @@ from mot.library_functions.continuous_distributions.gamma import gamma_pdf, gamm
 from mot.library_functions.error_functions import dawson, CerfImWOfX, erfi
 from mot.library_functions.legendre_polynomial import FirstLegendreTerm, LegendreTerms, \
     EvenLegendreTerms, OddLegendreTerms
-
 
 __author__ = 'Robbert Harms'
 __date__ = '2018-05-07'
@@ -89,36 +83,6 @@ class LogCosh(SimpleCLLibrary):
         ''')
 
 
-class Rand123(SimpleCLCodeObject):
-    def __init__(self):
-        generator = 'threefry'
-
-        src = open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/openclfeatures.h'), ), 'r').read()
-        src += open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/array.h'), ), 'r').read()
-        src += open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/{}.h'.format(generator)), ),
-                    'r').read()
-        src += (open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/rand123.h'), ), 'r').read() % {
-            'GENERATOR_NAME': (generator)
-        })
-        super().__init__(src)
-
-
-class EuclidianNormFunction(SimpleCLLibraryFromFile):
-    def __init__(self, memspace='private', memtype='mot_float_type'):
-        """A CL functions for calculating the Euclidian distance between n values.
-
-        Args:
-            memspace (str): The memory space of the memtyped array (private, constant, global).
-            memtype (str): the memory type to use, double, float, mot_float_type, ...
-        """
-        super().__init__(
-            memtype,
-            self.__class__.__name__ + '_' + memspace + '_' + memtype,
-            [],
-            resource_filename('mot', 'data/opencl/euclidian_norm.cl'),
-            var_replace_dict={'MEMSPACE': memspace, 'MEMTYPE': memtype})
-
-
 class simpsons_rule(SimpleCLLibrary):
 
     def __init__(self, function_name):
@@ -165,11 +129,11 @@ class linear_cubic_interpolation(SimpleCLLibrary):
         For more information on this method, see https://en.wikipedia.org/wiki/Cubic_Hermite_spline.
 
         Example usage:
-            constant float data[] = {1.0, 2.0, 5.0, 6.0};
+            float data[] = {1.0, 2.0, 5.0, 6.0};
             linear_cubic_interpolation(1.5, 4, data);
         """
         super().__init__('''
-            double linear_cubic_interpolation(double x, int y_len, constant float* y_values){
+            double linear_cubic_interpolation(double x, int y_len, float* y_values){
                 int n = x;
                 double u = x - n;
 

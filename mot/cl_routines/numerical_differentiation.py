@@ -51,7 +51,7 @@ def estimate_hessian(objective_func, parameters,
 
             .. code-block:: c
 
-                double <func_name>(local const mot_float_type* const x, void* data);
+                double <func_name>(const mot_float_type* const x, void* data);
 
             The objective function has the same signature as the minimization function in MOT. For the numerical
             hessian, the ``objective_list`` parameter is ignored.
@@ -98,13 +98,13 @@ def estimate_hessian(objective_func, parameters,
 
     hessian_kernel = SimpleCLFunction.from_string('''
         void _numdiff_hessian(
-                global mot_float_type* parameters,
-                global float* initial_step,
-                global double* derivatives,
-                global double* errors,
-                local mot_float_type* x_tmp,
+                mot_float_type* parameters,
+                float* initial_step,
+                double* derivatives,
+                double* errors,
+                mot_float_type* x_tmp,
                 void* data,
-                local double* scratch){
+                double* scratch){
 
             if(get_local_id(0) == 0){
                 for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
@@ -142,17 +142,17 @@ def _get_numdiff_hessian_element_func(objective_func, nmr_steps, step_ratio):
          * Compute the Hessian using (possibly) multiple steps with various interpolations.
          */
         void _numdiff_hessian_element(
-                void* data, local mot_float_type* x_tmp, mot_float_type f_x_input,
-                uint px, uint py, global float* initial_step, global double* derivative,
-                global double* error, local double* scratch){
+                void* data, mot_float_type* x_tmp, mot_float_type f_x_input,
+                uint px, uint py, float* initial_step, double* derivative,
+                double* error, double* scratch){
 
             const uint nmr_steps = ''' + str(nmr_steps) + ''';
             uint nmr_steps_remaining = nmr_steps;
 
-            local double* scratch_ind = scratch;
-            local double* steps = scratch_ind;      scratch_ind += nmr_steps;
-            local double* errors = scratch_ind;     scratch_ind += nmr_steps - 1;
-            local double* steps_tmp = scratch_ind;  scratch_ind += nmr_steps;
+            double* scratch_ind = scratch;
+            double* steps = scratch_ind;      scratch_ind += nmr_steps;
+            double* errors = scratch_ind;     scratch_ind += nmr_steps - 1;
+            double* steps_tmp = scratch_ind;  scratch_ind += nmr_steps;
 
             if(get_local_id(0) == 0){
                 for(int i = 0; i < nmr_steps - 1; i++){
@@ -209,11 +209,11 @@ def _get_numdiff_hessian_steps_func(objective_func, nmr_steps, step_ratio):
          *  steps: storage location for the output steps
          *  initial_step: the initial steps, array of same length as x_temp
          */
-        void _numdiff_hessian_steps(void* data, local mot_float_type* x_tmp,
+        void _numdiff_hessian_steps(void* data, mot_float_type* x_tmp,
                                     mot_float_type f_x_input,
                                     uint px, uint py,
-                                    local double* steps,
-                                    global float* initial_step){
+                                    double* steps,
+                                    float* initial_step){
 
             double step_x;
             double step_y;
@@ -268,7 +268,7 @@ def _get_numdiff_hessian_steps_func(objective_func, nmr_steps, step_ratio):
          *  the function evaluated at the parameters plus their perturbation.
          */
         double _numdiff_hessian_eval_step_mono(
-                void* data, local mot_float_type* x_tmp,
+                void* data, mot_float_type* x_tmp,
                 uint perturb_dim_0, mot_float_type perturb_0){
 
             mot_float_type old_0;
@@ -307,7 +307,7 @@ def _get_numdiff_hessian_steps_func(objective_func, nmr_steps, step_ratio):
          *  the function evaluated at the parameters plus their perturbation.
          */
         double _numdiff_hessian_eval_step_bi(
-                void* data, local mot_float_type* x_tmp,
+                void* data, mot_float_type* x_tmp,
                 uint perturb_dim_0, mot_float_type perturb_0,
                 uint perturb_dim_1, mot_float_type perturb_1){
 
@@ -358,7 +358,7 @@ def _get_numdiff_hessian_richardson_extrapolation_func(nmr_steps, step_ratio):
          * Returns:
          *  nmr_steps: the number of steps remaining after convolution
          */
-        uint _numdiff_hessian_richardson_extrapolation(local double* steps){
+        uint _numdiff_hessian_richardson_extrapolation(double* steps){
 
             const uint nmr_steps = ''' + str(nmr_steps) + ''';
             uint nmr_steps_remaining = nmr_steps;
@@ -397,7 +397,7 @@ def _get_numdiff_find_best_step_func():
          *  scratch: temporary array of the same length as the steps array
          *  nmr_steps: the number of steps in the input array
          */
-        void _numdiff_find_best_step(local double* steps, local double* errors, local double* scratch, uint nmr_steps){
+        void _numdiff_find_best_step(double* steps, double* errors, double* scratch, uint nmr_steps){
             if(get_local_id(0) == 0){
                 bool all_nan = true;
                 for(int i = 0; i < nmr_steps; i++){
@@ -443,11 +443,11 @@ def _get_numdiff_find_best_step_func():
          *  steps:
          *
          */
-        void _get_median_outlier_error(local double* steps, local double* median_errors, uint nmr_steps){
+        void _get_median_outlier_error(double* steps, double* median_errors, uint nmr_steps){
             float trim_factor = 10;
             int i;
 
-            local double* sorted_values = median_errors;
+            double* sorted_values = median_errors;
             for(int i = 0; i < nmr_steps; i++){
                 sorted_values[i] = steps[i];
             }
@@ -475,7 +475,7 @@ def _get_numdiff_find_best_step_func():
              * Uses bubblesort to sort the given values in ascending order.
              *
              */
-            void _numdiff_sort_values(local double* values, int n){
+            void _numdiff_sort_values(double* values, int n){
                 int i, j;
                 double tmp;
 
@@ -504,7 +504,7 @@ def _get_numdiff_find_best_step_func():
              * Returns:
              *  the value for the percentile
              */
-            double _numdiff_get_percentile(local double* sorted_values, int nmr_values, double percentile){
+            double _numdiff_get_percentile(double* sorted_values, int nmr_values, double percentile){
                 double rank = percentile * (nmr_values - 1);
                 int rank_int = (int) rank;
                 double fraction = rank - rank_int;
@@ -545,7 +545,7 @@ def _get_numdiff_wynn_extrapolation_func():
          * Returns:
          *  the number of steps in the output
          */
-        uint _numdiff_wynn_extrapolation(local double* steps, local double* errors, uint nmr_steps){
+        uint _numdiff_wynn_extrapolation(double* steps, double* errors, uint nmr_steps){
             if(get_local_id(0) == 0){
                 double v0, v1, v2;
 

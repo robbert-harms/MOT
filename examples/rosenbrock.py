@@ -13,16 +13,16 @@ __licence__ = 'LGPL v3'
 
 def get_objective_function(nmr_parameters):
     return SimpleCLFunction.from_string('''
-        double rosenbrock_MLE_func(local const mot_float_type* const x,
-                                   void* data, 
-                                   local mot_float_type* objective_list){
-            
+        double rosenbrock_MLE_func(const mot_float_type* const x,
+                                   void* data,
+                                   mot_float_type* objective_list){
+
             double sum = 0;
             double eval;
             for(uint i = 0; i < ''' + str(nmr_parameters) + ''' - 1; i++){
                 eval = 100 * pown(x[i + 1] - pown(x[i], 2), 2) + pown(1 - x[i], 2);
                 sum += eval;
-                
+
                 if(objective_list){
                     objective_list[i] = eval;
                 }
@@ -34,7 +34,7 @@ def get_objective_function(nmr_parameters):
 
 def get_log_likelihood_function(nmr_parameters):
     return SimpleCLFunction.from_string('''
-        double rosenbrock_logLikelihood(local const mot_float_type* const x, void* data){
+        double rosenbrock_logLikelihood(const mot_float_type* const x, void* data){
             double sum = 0;
             double eval;
             for(uint i = 0; i < ''' + str(nmr_parameters) + ''' - 1; i++){
@@ -48,7 +48,7 @@ def get_log_likelihood_function(nmr_parameters):
 
 def get_log_prior_function(nmr_parameters):
     return SimpleCLFunction.from_string('''
-        double rosenbrock_logPrior(local const mot_float_type* const x, void* data){
+        double rosenbrock_logPrior(const mot_float_type* const x, void* data){
             for(uint i = 0; i < ''' + str(nmr_parameters) + '''; i++){
                 if(fabs(x[i]) > 10){
                     return log(0.0);

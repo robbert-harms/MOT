@@ -51,7 +51,7 @@ def get_simulated_data(nmr_problems):
 
 def get_log_likelihood_function(nmr_observed_tanks):
     return SimpleCLFunction.from_string('''
-        double germanTank_logLikelihood(local const mot_float_type* const x, void* data){
+        double germanTank_logLikelihood(const mot_float_type* const x, void* data){
 
             uint nmr_tanks = (uint)round(x[0]);
             double sum = 0;
@@ -60,14 +60,14 @@ def get_log_likelihood_function(nmr_observed_tanks):
                 eval = discrete_uniform(((_model_data*)data)->observed_tanks[i], 1, nmr_tanks);
                 sum += eval;
             }
-            return sum;   
+            return sum;
         }
         ''', dependencies=[discrete_uniform_func()])
 
 
 def get_log_prior_function():
     return SimpleCLFunction.from_string('''
-        double germanTank_logPrior(local const mot_float_type* const x, void* data){
+        double germanTank_logPrior(const mot_float_type* const x, void* data){
             uint nmr_tanks = (uint)round(x[0]);
             return discrete_uniform(
                 nmr_tanks, ((_model_data*)data)->lower_bounds[0], ((_model_data*)data)->upper_bounds[0]);

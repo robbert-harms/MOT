@@ -36,9 +36,9 @@ def minimize(func, x0, data=None, method=None, lower_bounds=None, upper_bounds=N
 
             .. code-block:: c
 
-                double <func_name>(local const mot_float_type* const x,
+                double <func_name>(const mot_float_type* const x,
                                    void* data,
-                                   local mot_float_type* objective_list);
+                                   mot_float_type* objective_list);
 
             The objective list needs to be filled when the provided pointer is not null. It should contain
             the function values for each observation. This list is used by non-linear least-squares routines,
@@ -68,9 +68,9 @@ def minimize(func, x0, data=None, method=None, lower_bounds=None, upper_bounds=N
 
             .. code-block:: c
 
-                void <func_name>(local const mot_float_type* const x,
+                void <func_name>(const mot_float_type* const x,
                                  void* data,
-                                 local mot_float_type* constraints);
+                                 mot_float_type* constraints);
 
             Where ``constraints_values`` is filled as:
 
@@ -98,6 +98,8 @@ def minimize(func, x0, data=None, method=None, lower_bounds=None, upper_bounds=N
     """
     if not method:
         method = 'Powell'
+
+    data = data or {}
 
     cl_runtime_info = cl_runtime_info or CLRuntimeInfo()
 
@@ -148,9 +150,9 @@ def maximize(func, x0, nmr_observations, **kwargs):
 
             .. code-block:: c
 
-                double <func_name>(local const mot_float_type* const x,
+                double <func_name>(const mot_float_type* const x,
                                    void* data,
-                                   local mot_float_type* objective_list);
+                                   mot_float_type* objective_list);
 
             The objective list needs to be filled when the provided pointer is not null. It should contain
             the function values for each observation. This list is used by non-linear least-squares routines,
@@ -163,9 +165,9 @@ def maximize(func, x0, nmr_observations, **kwargs):
     """
     wrapped_func = SimpleCLFunction.from_string('''
         double _negate_''' + func.get_cl_function_name() + '''(
-                local mot_float_type* x,
+                mot_float_type* x,
                 void* data,
-                local mot_float_type* objective_list){
+                mot_float_type* objective_list){
 
             double return_val = ''' + func.get_cl_function_name() + '''(x, data, objective_list);
 
@@ -258,7 +260,7 @@ def _minimize_powell(func, x0, cl_runtime_info, lower_bounds, upper_bounds, use_
     penalty_data, penalty_func = _get_penalty_function(nmr_parameters, constraints_func)
 
     eval_func = SimpleCLFunction.from_string('''
-        double evaluate(local mot_float_type* x, void* data){
+        double evaluate(mot_float_type* x, void* data){
             double penalty = _mle_penalty(
                 x,
                 ((_powell_eval_func_data*)data)->data,
@@ -342,7 +344,7 @@ def _minimize_nmsimplex(func, x0, cl_runtime_info, lower_bounds, upper_bounds, u
     penalty_data, penalty_func = _get_penalty_function(nmr_parameters, constraints_func)
 
     eval_func = SimpleCLFunction.from_string('''
-        double evaluate(local mot_float_type* x, void* data){
+        double evaluate(mot_float_type* x, void* data){
             double penalty = _mle_penalty(
                 x,
                 ((_nmsimplex_eval_func_data*)data)->data,
@@ -437,7 +439,7 @@ def _minimize_subplex(func, x0, cl_runtime_info, lower_bounds, upper_bounds, use
     penalty_data, penalty_func = _get_penalty_function(nmr_parameters, constraints_func)
 
     eval_func = SimpleCLFunction.from_string('''
-        double evaluate(local mot_float_type* x, void* data){
+        double evaluate(mot_float_type* x, void* data){
             double penalty = _mle_penalty(
                 x,
                 ((_subplex_eval_func_data*)data)->data,
@@ -488,7 +490,7 @@ def _minimize_levenberg_marquardt(func, x0, nmr_observations, cl_runtime_info, l
     penalty_data, penalty_func = _get_penalty_function(nmr_parameters, constraints_func)
 
     eval_func = SimpleCLFunction.from_string('''
-        void evaluate(local mot_float_type* x, void* data, local mot_float_type* result){
+        void evaluate(mot_float_type* x, void* data, mot_float_type* result){
             double penalty = _mle_penalty(
                 x,
                 ((_lm_eval_func_data*)data)->data,
@@ -559,17 +561,17 @@ def _lm_numdiff_jacobian(eval_func, nmr_params, nmr_observations):
          *   fvec: (nmr_observations,), the function values corresponding to the current model parameters
          *   fjac: (nmr_parameters, nmr_observations), the memory location for the Jacobian
          */
-        void _lm_numdiff_jacobian(local mot_float_type* model_parameters,
+        void _lm_numdiff_jacobian(mot_float_type* model_parameters,
                                   void* data,
-                                  local mot_float_type* fvec,
-                                  local mot_float_type* const fjac){
+                                  mot_float_type* fvec,
+                                  mot_float_type* const fjac){
 
             const uint nmr_params = ''' + str(nmr_params) + ''';
             const uint nmr_observations = ''' + str(nmr_observations) + ''';
 
-            local mot_float_type* lower_bounds = ((_lm_eval_func_data*)data)->lower_bounds;
-            local mot_float_type* upper_bounds = ((_lm_eval_func_data*)data)->upper_bounds;
-            local mot_float_type* jacobian_x_tmp = ((_lm_eval_func_data*)data)->jacobian_x_tmp;
+            mot_float_type* lower_bounds = ((_lm_eval_func_data*)data)->lower_bounds;
+            mot_float_type* upper_bounds = ((_lm_eval_func_data*)data)->upper_bounds;
+            mot_float_type* jacobian_x_tmp = ((_lm_eval_func_data*)data)->jacobian_x_tmp;
 
             mot_float_type step_size = 30 * MOT_EPSILON;
 
@@ -590,13 +592,13 @@ def _lm_numdiff_jacobian(eval_func, nmr_params, nmr_observations):
         }
     ''', dependencies=[eval_func, SimpleCLFunction.from_string('''
         void _lm_numdiff_jacobian_centered(
-                local mot_float_type* model_parameters,
+                mot_float_type* model_parameters,
                 uint px,
                 float step_size,
                 void* data,
-                local mot_float_type* fvec,
-                local mot_float_type* const fjac,
-                local mot_float_type* fjac_tmp){
+                mot_float_type* fvec,
+                mot_float_type* const fjac,
+                mot_float_type* fjac_tmp){
 
             mot_float_type temp;
             bool is_first_workitem = get_local_id(0) == 0;
@@ -633,13 +635,13 @@ def _lm_numdiff_jacobian(eval_func, nmr_params, nmr_observations):
         }
     '''), SimpleCLFunction.from_string('''
         void _lm_numdiff_jacobian_backwards(
-               local mot_float_type* model_parameters,
+               mot_float_type* model_parameters,
                uint px,
                float step_size,
                void* data,
-               local mot_float_type* fvec,
-               local mot_float_type* const fjac,
-               local mot_float_type* fjac_tmp){
+               mot_float_type* fvec,
+               mot_float_type* const fjac,
+               mot_float_type* fjac_tmp){
 
             mot_float_type temp;
             bool is_first_workitem = get_local_id(0) == 0;
@@ -677,13 +679,13 @@ def _lm_numdiff_jacobian(eval_func, nmr_params, nmr_observations):
         }
     '''), SimpleCLFunction.from_string('''
         void _lm_numdiff_jacobian_forwards(
-               local mot_float_type* model_parameters,
+               mot_float_type* model_parameters,
                uint px,
                float step_size,
                void* data,
-               local mot_float_type* fvec,
-               local mot_float_type* const fjac,
-               local mot_float_type* fjac_tmp){
+               mot_float_type* fvec,
+               mot_float_type* const fjac,
+               mot_float_type* fjac_tmp){
 
             mot_float_type temp;
             bool is_first_workitem = get_local_id(0) == 0;
@@ -734,9 +736,9 @@ def _get_penalty_function(nmr_parameters, constraints_func=None):
 
             .. code-block:: c
 
-                void <func_name>(local const mot_float_type* const x,
+                void <func_name>(const mot_float_type* const x,
                                  void* data,
-                                 local mot_float_type* constraint_values);
+                                 mot_float_type* constraint_values);
 
             Where ``constraints_values`` is filled as:
 
@@ -760,7 +762,7 @@ def _get_penalty_function(nmr_parameters, constraints_func=None):
         data_requirements['constraints'] = LocalMemory('mot_float_type', nmr_constraints)
 
         constraints_code = '''
-            local mot_float_type* constraints = ((_mle_penalty_data*)scratch_data)->constraints;
+            mot_float_type* constraints = ((_mle_penalty_data*)scratch_data)->constraints;
 
             ''' + constraints_func.get_cl_function_name() + '''(x, data, constraints);
 
@@ -772,14 +774,14 @@ def _get_penalty_function(nmr_parameters, constraints_func=None):
     data = Struct(data_requirements, '_mle_penalty_data')
     func = SimpleCLFunction.from_string('''
         double _mle_penalty(
-                local mot_float_type* x,
+                mot_float_type* x,
                 void* data,
-                local mot_float_type* lower_bounds,
-                local mot_float_type* upper_bounds,
+                mot_float_type* lower_bounds,
+                mot_float_type* upper_bounds,
                 float penalty_weight,
                 void* scratch_data){
 
-            local double* penalty_sum = ((_mle_penalty_data*)scratch_data)->scratch;
+            double* penalty_sum = ((_mle_penalty_data*)scratch_data)->scratch;
 
             if(get_local_id(0) == 0){
                 *penalty_sum = 0;
