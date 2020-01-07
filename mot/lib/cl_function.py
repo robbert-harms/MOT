@@ -631,6 +631,16 @@ def apply_cl_function(cl_function, kernel_data, nmr_instances, use_local_reducti
     if cl_function.get_return_type() != 'void':
         kernel_data['_results'] = Zeros((nmr_instances,), cl_function.get_return_type())
 
+    mot_float_dtype = np.float32
+    if cl_runtime_info.double_precision:
+        mot_float_dtype = np.float64
+
+    for data in kernel_data.values():
+        data.set_mot_float_dtype(mot_float_dtype)
+
+    for data in context_variables.values():
+        data.set_mot_float_dtype(mot_float_dtype)
+
     workers = []
     for ind, cl_environment in enumerate(cl_environments):
         worker = _ProcedureWorker(cl_environment, cl_runtime_info.compile_flags,
@@ -673,20 +683,14 @@ class _ProcedureWorker:
         self._use_local_reduction = use_local_reduction
         self._enable_rng = enable_rng
 
-        self._mot_float_dtype = np.float32
-        if double_precision:
-            self._mot_float_dtype = np.float64
-
         self._scalar_arg_dtypes = []
         self._kernel_arguments = []
 
         for name, data in self._kernel_data.items():
-            data.set_mot_float_dtype(self._mot_float_dtype)
             self._scalar_arg_dtypes.extend(data.get_scalar_arg_dtypes())
             self._kernel_arguments.extend(data.get_kernel_parameters('_' + name))
 
         for name, data in self._context_variables.items():
-            data.set_mot_float_dtype(self._mot_float_dtype)
             self._scalar_arg_dtypes.extend(data.get_scalar_arg_dtypes())
             self._kernel_arguments.extend(data.get_kernel_parameters('_context_' + name))
 

@@ -46,7 +46,7 @@ if __name__ == '__main__':
     be perfect for every simulated distribution. In general though, fit results should match the ground truth.
     """
     # The number of unique distributions, this is typically very large
-    nmr_simulations = 1000
+    nmr_simulations = 2
 
     # How many data points per distribution, this is typically small
     nmr_datapoints = 25
@@ -66,10 +66,10 @@ if __name__ == '__main__':
     # Minimize the parameters of the model given the starting points.
     opt_output = minimize(get_objective_function(nmr_datapoints),
                           x0,
-                          data=Array(gamma_random, 'float'),
-                          cl_runtime_info=CLRuntimeInfo(cl_environments=[0, 1]))
+                          data=Array(gamma_random, ctype='float'),
+                          cl_runtime_info=CLRuntimeInfo(cl_environments=[0, 1]), use_local_reduction=False)
 
     # Print the output
-    print(np.column_stack([shape, scale]))
+    # print(np.column_stack([shape, scale]))
     print(opt_output.x)
-    print(np.abs(opt_output.x - np.column_stack([shape, scale])))
+    # print(np.abs(opt_output.x - np.column_stack([shape, scale])))
