@@ -30,6 +30,12 @@ class CLEnvironment:
         self._context = _context_cache[(self._platform, self._device)]
         self._queue = cl.CommandQueue(self._context, device=device)
 
+        properties = cl.command_queue_properties.OUT_OF_ORDER_EXEC_MODE_ENABLE | \
+                     cl.command_queue_properties.ON_DEVICE | \
+                     cl.command_queue_properties.ON_DEVICE_DEFAULT
+        self._device_queue = cl.CommandQueue(self._context, self._device,
+                                             [cl.queue_properties.PROPERTIES, properties])
+
     @property
     def context(self):
         """Get a CL context containing this device.
@@ -271,5 +277,5 @@ class CLEnvironmentFactory:
 
         if preferred_device_type is not None and not len(cl_environments):
             return CLEnvironmentFactory.all_devices()
-        
+
         return cl_environments

@@ -574,7 +574,7 @@ def multiprocess_mapping(func, iterable):
 
 
 _tatsu_cl_function = '''
-    function = {documentation}* [address_space] data_type function_name arglist body;
+    function = {documentation}* ['kernel'] [address_space] data_type function_name arglist body;
     documentation = '/*' ->'*/';
     address_space = ['__'] ('local' | 'global' | 'constant' | 'private');
     data_type = /\w+(\s*(\*)?)+/;
