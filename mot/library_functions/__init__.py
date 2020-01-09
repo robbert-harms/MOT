@@ -5,6 +5,8 @@ from mot.library_functions.polynomials import p1evl, polevl, ratevl, real_zeros_
 from mot.library_functions.continuous_distributions.normal import normal_cdf, normal_pdf, normal_logpdf, normal_ppf
 from mot.library_functions.continuous_distributions.gamma import gamma_pdf, gamma_logpdf, gamma_ppf, gamma_cdf, \
     gamma_cdf_approx, gamma_ppf_approx
+from mot.library_functions.continuous_distributions.invgamma import invgamma_pdf, invgamma_logpdf, \
+    invgamma_cdf, invgamma_ppf
 from mot.library_functions.error_functions import dawson, CerfImWOfX, erfi
 from mot.library_functions.legendre_polynomial import FirstLegendreTerm, LegendreTerms, \
     EvenLegendreTerms, OddLegendreTerms
