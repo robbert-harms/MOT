@@ -574,8 +574,9 @@ def multiprocess_mapping(func, iterable):
 
 
 _tatsu_cl_function = '''
-    function = {documentation}* ['kernel'] [address_space] data_type function_name arglist body;
+    function = {documentation}* [kernel] [address_space] data_type function_name arglist body;
     documentation = '/*' ->'*/';
+    kernel = ['__'] 'kernel';
     address_space = ['__'] ('local' | 'global' | 'constant' | 'private');
     data_type = /\w+(\s*(\*)?)+/;
     function_name = /\w+/;
@@ -665,13 +666,18 @@ def split_cl_function(cl_str):
     class Semantics:
 
         def __init__(self):
+            self._is_kernel_func = False
             self._return_type = ''
             self._function_name = ''
             self._parameter_list = []
             self._cl_body = ''
 
         def result(self, ast):
-            return self._return_type, self._function_name, self._parameter_list, self._cl_body
+            return self._is_kernel_func, self._return_type, self._function_name, self._parameter_list, self._cl_body
+
+        def kernel(self, ast):
+            self._is_kernel_func = True
+            return ast
 
         def address_space(self, ast):
             self._return_type = ast.strip() + ' '
