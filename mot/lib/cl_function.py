@@ -825,7 +825,6 @@ class _ProcedureWorker:
                          ', '.join(function_call_inputs) + ''');
             }
         '''
-        print(kernel_source)
         return kernel_source
 
     def _get_rng_cl_code(self):
