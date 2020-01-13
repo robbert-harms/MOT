@@ -678,9 +678,6 @@ def apply_cl_function(cl_function, kernel_data, nmr_instances, use_local_reducti
     for worker in workers:
         worker.cl_queue.finish()
 
-    for data in kernel_data.values():
-        data.finalize()
-
     if cl_function.get_return_type() != 'void':
         return kernel_data['_results'].get_data()
 

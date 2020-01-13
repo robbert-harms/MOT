@@ -201,14 +201,6 @@ class KernelData:
         """
         raise NotImplementedError()
 
-    def finalize(self):
-        """Finalize the processing.
-
-        This is called after every kernel execution. It allows the kernel data elements to post-process the data
-        structures.
-        """
-        raise NotImplementedError()
-
 
 class Struct(KernelData):
 
@@ -347,10 +339,6 @@ class Struct(KernelData):
     def get_nmr_kernel_inputs(self):
         return sum(element.get_nmr_kernel_inputs() for element in self._elements.values())
 
-    def finalize(self):
-        for d in self._elements.values():
-            d.finalize()
-
     def __getitem__(self, key):
         return self._elements[key]
 
@@ -444,9 +432,6 @@ class Scalar(KernelData):
             assignment = str(np.squeeze(self._value))
         return assignment
 
-    def finalize(self):
-        pass
-
 
 class PrivateMemory(KernelData):
 
@@ -509,9 +494,6 @@ class PrivateMemory(KernelData):
 
     def get_nmr_kernel_inputs(self):
         return 0
-
-    def finalize(self):
-        pass
 
 
 class LocalMemory(KernelData):
@@ -582,9 +564,6 @@ class LocalMemory(KernelData):
 
     def get_nmr_kernel_inputs(self):
         return 1
-
-    def finalize(self):
-        pass
 
 
 class Array(KernelData):
@@ -756,10 +735,6 @@ class Array(KernelData):
             offset_str = '0'
         return offset_str.replace('{problem_id}', problem_id_substitute)
 
-    def finalize(self):
-        if self._data_copied and self._is_writable:
-            self._backup_data_reference[:] = self._data
-
 
 class Zeros(Array):
 
@@ -876,6 +851,3 @@ class CompositeArray(KernelData):
     def get_nmr_kernel_inputs(self):
         return self._composite_array.get_nmr_kernel_inputs() + \
                sum(element.get_nmr_kernel_inputs() for element in self._elements)
-
-    def finalize(self):
-        pass
