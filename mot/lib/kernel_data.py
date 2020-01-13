@@ -746,8 +746,13 @@ class Zeros(Array):
 
         Args:
             shape (int or tuple): the shape of the output array
+            ctype (str): the desired C-type for this zero's array
             mode (str): one of 'r', 'w' or 'rw', for respectively read, write or read and write. This sets the
                 mode of how the data is loaded into the compute device's memory.
+            parallelize_over_first_dimension (boolean): only applicable for multi-dimensional arrays (n, m, k, ...)
+                where ``n`` is expected to correspond to problem instances. If True, we will load the data as
+                (m, k, ...) arrays for each problem instance. If False, the data will be loaded as is, and each problem
+                instance will have a reference to the complete array.
         """
         super().__init__(np.zeros(shape, dtype=ctype_to_dtype(ctype)), ctype,
                          parallelize_over_first_dimension=parallelize_over_first_dimension,
