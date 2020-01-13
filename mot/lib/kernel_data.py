@@ -615,9 +615,10 @@ class Array(KernelData):
         self._mot_float_dtype = None
         self._backup_data_reference = None
         self._ensure_zero_copy = ensure_zero_copy
-        self._data_copied = False
         self._as_scalar = as_scalar
         self._parallelize_over_first_dimension = parallelize_over_first_dimension
+
+        self._buffer_cache = {}  # caching the buffers per context
 
         self._data_length = 1
         if len(self._data.shape):
@@ -656,7 +657,7 @@ class Array(KernelData):
             if new_data is not self._data:
                 self._backup_data_reference = self._data
                 self._data = new_data
-                self._data_copied = True
+                self._buffer_cache = {}  # cache is invalidated
 
                 if self._is_writable and self._ensure_zero_copy:
                     raise ValueError('We had to make a copy of the data while zero copy was set to True.')
@@ -715,15 +716,18 @@ class Array(KernelData):
         return ['global {}* restrict {}'.format(self._ctype, kernel_param_name)]
 
     def get_kernel_inputs(self, cl_context, workgroup_size):
-        if self._is_writable:
-            if self._is_readable:
-                flags = cl.mem_flags.READ_WRITE
+        if cl_context not in self._buffer_cache:
+            if self._is_writable:
+                if self._is_readable:
+                    flags = cl.mem_flags.READ_WRITE
+                else:
+                    flags = cl.mem_flags.WRITE_ONLY
             else:
-                flags = cl.mem_flags.WRITE_ONLY
-        else:
-            flags = cl.mem_flags.READ_ONLY
+                flags = cl.mem_flags.READ_ONLY
+            flags = flags | cl.mem_flags.USE_HOST_PTR
+            self._buffer_cache[cl_context] = cl.Buffer(cl_context, flags, hostbuf=self._data)
 
-        return [cl.Buffer(cl_context, flags | cl.mem_flags.USE_HOST_PTR, hostbuf=self._data)]
+        return [self._buffer_cache[cl_context]]
 
     def get_nmr_kernel_inputs(self):
         return 1
