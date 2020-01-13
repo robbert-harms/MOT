@@ -1,5 +1,5 @@
 import pyopencl as cl
-from .utils import device_supports_double, device_type_from_string
+from mot.lib.utils import device_supports_double, device_type_from_string
 
 __author__ = 'Robbert Harms'
 __date__ = "2014-11-14"
@@ -8,26 +8,37 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-_context_cache = {}
+def _initialize_context_devices_cache():
+    """Initialize the CL Contexts and devices cache.
+
+    This cache holds, per platform a cache with a context and list of devices in that context.
+
+    Returns:
+        dict: a dictionary mapping platforms to a tuple of a context and list of devices.
+    """
+    device_contexts_cache = {}
+    for platform in cl.get_platforms():
+        devices = platform.get_devices()
+        device_contexts_cache[platform] = (cl.Context(devices), devices)
+    return device_contexts_cache
+
+
+_context_devices_cache = _initialize_context_devices_cache()
 
 
 class CLEnvironment:
 
-    def __init__(self, platform, device):
+    def __init__(self, platform, context, device):
         """Storage unit for an OpenCL environment.
 
         Args:
-            platform (pyopencl platform): An PyOpenCL platform.
-            device (pyopencl device): An PyOpenCL device
+            platform (cl.Platform): An PyOpenCL platform.
+            context (cl.Context): The CL context
+            device (cl.Device): The CL device
         """
         self._platform = platform
+        self._context = context
         self._device = device
-
-        if (self._platform, self._device) not in _context_cache:
-            context = cl.Context([device])
-            _context_cache[(self._platform, self._device)] = context
-
-        self._context = _context_cache[(self._platform, self._device)]
         self._queue = cl.CommandQueue(self._context, device=device)
 
         properties = cl.command_queue_properties.OUT_OF_ORDER_EXEC_MODE_ENABLE | \
@@ -188,24 +199,31 @@ class CLEnvironmentFactory:
         device = None
 
         if platform is None:
-            platforms = cl.get_platforms()
+            platforms = _context_devices_cache.keys()
         else:
             platforms = [platform]
 
         for platform in platforms:
-            devices = platform.get_devices(device_type=cl_device_type)
+            context, devices = _context_devices_cache[platform]
 
-            for dev in devices:
-                if device_supports_double(dev):
+            if cl_device_type:
+                devices_of_type = []
+                for device in devices:
+                    if device.get_info(cl.device_info.TYPE) == cl_device_type:
+                        devices_of_type.append(device)
+                devices = devices_of_type
+
+            for device in devices:
+                if device_supports_double(device):
                     try:
-                        env = CLEnvironment(platform, dev)
+                        env = CLEnvironment(platform, context, device)
                         return [env]
                     except cl.RuntimeError:
                         pass
 
         if not device:
             if fallback_to_any_device_type:
-                return cl.get_platforms()[0].get_devices()
+                return CLEnvironmentFactory.single_device(cl_device_type=None)
             else:
                 raise ValueError('No devices of the specified type ({}) found.'.format(
                     cl.device_type.to_string(cl_device_type)))
@@ -232,19 +250,23 @@ class CLEnvironmentFactory:
         runtime_list = []
 
         if platform is None:
-            platforms = cl.get_platforms()
+            platforms = _context_devices_cache.keys()
         else:
             platforms = [platform]
 
         for platform in platforms:
+            context, devices = _context_devices_cache[platform]
+
             if cl_device_type:
-                devices = platform.get_devices(device_type=cl_device_type)
-            else:
-                devices = platform.get_devices()
+                devices_of_type = []
+                for device in devices:
+                    if device.get_info(cl.device_info.TYPE) == cl_device_type:
+                        devices_of_type.append(device)
+                devices = devices_of_type
 
             for device in devices:
                 if device_supports_double(device):
-                    env = CLEnvironment(platform, device)
+                    env = CLEnvironment(platform, context, device)
                     runtime_list.append(env)
 
         return runtime_list
