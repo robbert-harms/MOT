@@ -763,6 +763,9 @@ class _ProcedureWorker:
         for inputs in [self._kernel_inputs[name] for name in self._kernel_inputs_order]:
             kernel_inputs_list.extend(inputs)
 
+        for name, data in self._kernel_data.items():
+            data.enqueue_device_access(self._cl_queue, self._kernel_inputs[name], range_start, range_end)
+
         func(self._cl_queue,
              (int(nmr_problems * self._workgroup_size),),
              (int(self._workgroup_size),),
@@ -770,7 +773,7 @@ class _ProcedureWorker:
              global_offset=(int(range_start * self._workgroup_size),))
 
         for name, data in self._kernel_data.items():
-            data.enqueue_readouts(self._cl_queue, self._kernel_inputs[name], range_start, range_end)
+            data.enqueue_host_access(self._cl_queue, self._kernel_inputs[name], range_start, range_end)
 
     def _build_kernel(self, kernel_source, compile_flags=()):
         """Convenience function for building the kernel for this worker.
