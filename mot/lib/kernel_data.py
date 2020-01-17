@@ -677,12 +677,18 @@ class Array(KernelData):
 
     def enqueue_readouts(self, queue, buffers, range_start, range_end):
         if self._is_writable:
-            nmr_problems = int(range_end - range_start)
-            cl.enqueue_map_buffer(
-                queue, buffers[0], cl.map_flags.READ,
-                int(range_start * self._data.strides[0]),
-                (nmr_problems,) + self._data.shape[1:], self._data.dtype,
-                order="C", wait_for=None, is_blocking=False)
+            if self._parallelize_over_first_dimension:
+                nmr_problems = int(range_end - range_start)
+                cl.enqueue_map_buffer(
+                    queue, buffers[0], cl.map_flags.READ,
+                    int(range_start * self._data.strides[0]),
+                    (nmr_problems,) + self._data.shape[1:], self._data.dtype,
+                    order="C", wait_for=None, is_blocking=False)
+            else:
+                cl.enqueue_map_buffer(
+                    queue, buffers[0], cl.map_flags.READ,
+                    0, self._data.shape, self._data.dtype,
+                    order="C", wait_for=None, is_blocking=False)
 
     def get_type_definitions(self):
         return ''
