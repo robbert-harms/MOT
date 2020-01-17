@@ -63,17 +63,31 @@ class KernelData:
         """
         raise NotImplementedError()
 
-    def enqueue_readouts(self, queue, buffers, range_start, range_end):
-        """Enqueue readouts for this kernel input data object.
+    def enqueue_host_access(self, queue, buffers, range_start, range_end):
+        """Enqueue either a map or write operation for this kernel input data object.
 
-        This should add non-blocking readouts to the given queue.
+        This should add non-blocking maps or write operations to the given queue.
 
         Args:
             queue (opencl queue): the queue on which to add the unmap buffer command
             buffers (List[pyopencl._cl.Buffer.Buffer]): the list of buffers corresponding to this kernel data.
                 These buffers are obtained earlier from the method :meth:`get_kernel_inputs`.
-            range_start (int): the start of the range to read out (in the first dimension)
-            range_end (int): the end of the range to read out (in the first dimension)
+            range_start (int): the start of the range processed by a kernel (in the first dimension)
+            range_end (int): the end of the range processed by a kernel (in the first dimension)
+        """
+        raise NotImplementedError()
+
+    def enqueue_device_access(self, queue, buffers, range_start, range_end):
+        """Enqueue either an unmap or read operation for this kernel input data object.
+
+        This should add non-blocking unmaps or read operations to the given queue.
+
+        Args:
+            queue (opencl queue): the queue on which to add the unmap buffer command
+            buffers (List[pyopencl._cl.Buffer.Buffer]): the list of buffers corresponding to this kernel data.
+                These buffers are obtained earlier from the method :meth:`get_kernel_inputs`.
+            range_start (int): the start of the range the kernel wants to process (in the first dimension)
+            range_end (int): the end of the range the kernel wants to process (in the first dimension)
         """
         raise NotImplementedError()
 
@@ -245,13 +259,22 @@ class Struct(KernelData):
             dtypes.extend(d.get_scalar_arg_dtypes())
         return dtypes
 
-    def enqueue_readouts(self, queue, buffers, range_start, range_end):
+    def enqueue_host_access(self, queue, buffers, range_start, range_end):
         buffer_ind = 0
 
         for d in self._elements.values():
             if d.get_nmr_kernel_inputs():
-                d.enqueue_readouts(queue, buffers[buffer_ind:buffer_ind + d.get_nmr_kernel_inputs()],
-                                   range_start, range_end)
+                d.enqueue_host_access(queue, buffers[buffer_ind:buffer_ind + d.get_nmr_kernel_inputs()],
+                                      range_start, range_end)
+                buffer_ind += d.get_nmr_kernel_inputs()
+
+    def enqueue_device_access(self, queue, buffers, range_start, range_end):
+        buffer_ind = 0
+
+        for d in self._elements.values():
+            if d.get_nmr_kernel_inputs():
+                d.enqueue_device_access(queue, buffers[buffer_ind:buffer_ind + d.get_nmr_kernel_inputs()],
+                                        range_start, range_end)
                 buffer_ind += d.get_nmr_kernel_inputs()
 
     def get_type_definitions(self):
@@ -375,7 +398,10 @@ class Scalar(KernelData):
     def get_scalar_arg_dtypes(self):
         return []
 
-    def enqueue_readouts(self, queue, buffers, range_start, range_end):
+    def enqueue_host_access(self, queue, buffers, range_start, range_end):
+        pass
+
+    def enqueue_device_access(self, queue, buffers, range_start, range_end):
         pass
 
     def get_type_definitions(self):
@@ -459,7 +485,10 @@ class LocalMemory(KernelData):
     def get_scalar_arg_dtypes(self):
         return [None]
 
-    def enqueue_readouts(self, queue, buffers, range_start, range_end):
+    def enqueue_host_access(self, queue, buffers, range_start, range_end):
+        pass
+
+    def enqueue_device_access(self, queue, buffers, range_start, range_end):
         pass
 
     def get_type_definitions(self):
@@ -518,7 +547,10 @@ class PrivateMemory(KernelData):
     def get_scalar_arg_dtypes(self):
         return []
 
-    def enqueue_readouts(self, queue, buffers, range_start, range_end):
+    def enqueue_host_access(self, queue, buffers, range_start, range_end):
+        pass
+
+    def enqueue_device_access(self, queue, buffers, range_start, range_end):
         pass
 
     def get_type_definitions(self):
@@ -604,6 +636,7 @@ class Array(KernelData):
         self._parallelize_over_first_dimension = parallelize_over_first_dimension
 
         self._buffer_cache = {}  # caching the buffers per context
+        self._memory_maps = []  # a cache of the memory maps, these
 
         self._data_length = 1
         if len(self._data.shape):
@@ -660,20 +693,25 @@ class Array(KernelData):
     def get_scalar_arg_dtypes(self):
         return [None]
 
-    def enqueue_readouts(self, queue, buffers, range_start, range_end):
+    def enqueue_host_access(self, queue, buffers, range_start, range_end):
         if self._is_writable:
             if self._parallelize_over_first_dimension:
                 nmr_problems = int(range_end - range_start)
-                cl.enqueue_map_buffer(
+                data, _ = cl.enqueue_map_buffer(
                     queue, buffers[0], cl.map_flags.READ,
                     int(range_start * self._data.strides[0]),
                     (nmr_problems,) + self._data.shape[1:], self._data.dtype,
                     order="C", wait_for=None, is_blocking=False)
+                self._memory_maps.append(data.base)
             else:
-                cl.enqueue_map_buffer(
+                data, _ = cl.enqueue_map_buffer(
                     queue, buffers[0], cl.map_flags.READ,
                     0, self._data.shape, self._data.dtype,
                     order="C", wait_for=None, is_blocking=False)
+                self._memory_maps.append(data.base)
+
+    def enqueue_device_access(self, queue, buffers, range_start, range_end):
+        self._memory_maps = []
 
     def get_type_definitions(self):
         return ''
@@ -839,7 +877,10 @@ class CompositeArray(KernelData):
             dtypes.extend(d.get_scalar_arg_dtypes())
         return dtypes
 
-    def enqueue_readouts(self, queue, buffers, range_start, range_end):
+    def enqueue_host_access(self, queue, buffers, range_start, range_end):
+        pass
+
+    def enqueue_device_access(self, queue, buffers, range_start, range_end):
         pass
 
     def get_type_definitions(self):
