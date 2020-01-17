@@ -225,7 +225,7 @@ def get_cl_utility_definitions(double_precision, include_complex=True):
         #define EULER 0.577215664901532860606512090082402431 /* Euler constant, from Scipy */
     '''
 
-    workitem_batch_func = '''
+    helper_funcs = '''
         /**
          * Utility function used in splitting work over workitems in a workgroup.
          *
@@ -269,7 +269,7 @@ def get_cl_utility_definitions(double_precision, include_complex=True):
             #define MOT_EPSILON DBL_EPSILON
             #define MOT_MIN DBL_MIN
             #define MOT_MAX DBL_MAX
-        ''' + scipy_constants + complex_number_support + workitem_batch_func
+        ''' + scipy_constants + complex_number_support + helper_funcs
     else:
         return '''
             #if __OPENCL_VERSION__ <= CL_VERSION_1_1
@@ -285,7 +285,7 @@ def get_cl_utility_definitions(double_precision, include_complex=True):
             #define MOT_EPSILON FLT_EPSILON
             #define MOT_MIN FLT_MIN
             #define MOT_MAX FLT_MAX
-        ''' + scipy_constants + complex_number_support + workitem_batch_func
+        ''' + scipy_constants + complex_number_support + helper_funcs
 
 
 def topological_sort(data):
