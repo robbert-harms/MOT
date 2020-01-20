@@ -3,6 +3,7 @@ import logging
 import multiprocessing
 import numbers
 import os
+from collections import Iterable, Mapping
 from contextlib import contextmanager
 from functools import reduce
 import numpy as np
@@ -16,6 +17,71 @@ __date__ = "2014-05-13"
 __license__ = "LGPL v3"
 __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
+
+
+def convert_inputs_to_kernel_data(inputs, cl_parameters, nmr_instances):
+    """Convert a list or dictionary of input values to an appropriate :class:`~mot.lib.kernel_data.KernelData` object.
+
+    Args:
+        inputs (Iterable[Union(ndarray, mot.lib.utils.KernelData)]
+                    or Mapping[str: Union(ndarray, mot.lib.utils.KernelData)]):
+            for each CL parameter matching input data. This function accepts either an iterable with one value
+            per parameter, or a mapping with for every parameter a corresponding value. The elements can either
+            be scalars, numpy ndarrays  or KernelData objects. If a scalar is given we load it as is. If an ndarray
+            is given we will load it read/write by default.
+        cl_parameters (List[mot.lib.cl_function.CLFunctionParameter]): list of function parameters corresponding to the
+            function we plan on using the kernel data for.
+        nmr_instances (int): the number of parallel processes supported by the data
+
+    Returns:
+        Dict[str: mot.lib.kernel_data.KernelData]: mapping parameter names to kernel data objects.
+    """
+    from mot.lib.kernel_data import KernelData, Scalar, Array
+
+    if isinstance(inputs, Iterable) and not isinstance(inputs, Mapping):
+        inputs = list(inputs)
+        if len(inputs) != len(cl_parameters):
+            raise ValueError('The length of the input list ({}), does not equal '
+                             'the number of parameters ({})'.format(len(inputs), len(cl_parameters)))
+
+        param_names = [param.name for param in cl_parameters]
+        inputs = dict(zip(param_names, inputs))
+
+    for param in cl_parameters:
+        if param.name not in inputs:
+            names = [param.name for param in cl_parameters]
+            raise ValueError('Some parameters are missing an input value, '
+                             'required parameters are: {}, given inputs are: {}'.format(names, inputs.keys()))
+
+    def get_data_object(param):
+        input_data = inputs[param.name]
+
+        if input_data is None:
+            return Scalar(0)
+        elif isinstance(input_data, KernelData):
+            return input_data
+
+        input_data = np.array(input_data)
+
+        if param.is_vector_type and np.squeeze(input_data).shape[0] == 3:
+            return Scalar(inputs[param.name], ctype=param.ctype)
+        elif is_scalar(inputs[param.name]) and not (param.is_pointer_type or param.is_array_type):
+            return Scalar(inputs[param.name])
+        else:
+            if is_scalar(inputs[param.name]):
+                if param.is_pointer_type or param.is_array_type:
+                    data = np.ones(nmr_instances) * inputs[param.name]
+                    return Array(data, ctype=param.ctype, mode='rw')
+                else:
+                    return Scalar(inputs[param.name])
+            else:
+                data = inputs[param.name]
+                if param.is_pointer_type or param.is_array_type:
+                    return Array(data, ctype=param.ctype, mode='rw')
+                else:
+                    return Array(data, ctype=param.ctype, mode='r', as_scalar=True)
+
+    return {param.name.replace('.', '_'): get_data_object(param) for param in cl_parameters}
 
 
 def add_include_guards(cl_str, guard_name=None):
@@ -118,7 +184,11 @@ def convert_data_to_dtype(data, data_type, mot_float_type='float'):
     if is_vector_ctype(data_type):
         shape = data.shape
         dtype = ctype_to_dtype(data_type, mot_float_type)
-        ve = np.zeros(shape[:-1], dtype=dtype)
+
+        if len(shape) > 1:
+            ve = np.zeros(shape[:-1], dtype=dtype)
+        else:
+            ve = np.zeros(1, dtype=dtype)
 
         if data.dtype == dtype:
             return data

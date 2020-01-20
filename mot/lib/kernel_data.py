@@ -631,6 +631,9 @@ class Array(KernelData):
                 (m, k, ...) arrays for each problem instance. If False, the data will be loaded as is, and each problem
                 instance will have a reference to the complete array.
         """
+        if isinstance(data, (list, tuple)):
+            data = np.array(data)
+
         self._mode = mode
         self._is_readable = 'r' in mode
         self._is_writable = 'w' in mode
