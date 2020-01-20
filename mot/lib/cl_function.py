@@ -234,25 +234,7 @@ class SimpleCLFunction(CLFunction):
 
     def evaluate(self, inputs, nmr_instances, use_local_reduction=False, local_size=None,
                  context_variables=None, enable_rng=False, cl_runtime_info=None):
-        if isinstance(inputs, Iterable) and not isinstance(inputs, Mapping):
-            inputs = list(inputs)
-            if len(inputs) != len(self.get_parameters()):
-                raise ValueError('The length of the input list ({}), does not equal '
-                                 'the number of parameters ({})'.format(len(inputs), len(self.get_parameters())))
-
-            param_names = [param.name for param in self.get_parameters()]
-            inputs = dict(zip(param_names, inputs))
-
-        for param in self.get_parameters():
-            if param.name not in inputs:
-                names = [param.name for param in self.get_parameters()]
-                missing_names = set(names) - set(inputs.keys())
-                raise ValueError('Some parameters are missing an input value, '
-                                 'required parameters are: {}, given inputs are: {}, missing are: {}'.format(
-                    names, list(inputs.keys()), list(missing_names)))
-
         kernel_inputs = convert_inputs_to_kernel_data(inputs, self.get_parameters(), nmr_instances)
-
         return apply_cl_function(self, kernel_inputs, nmr_instances,
                                  use_local_reduction=use_local_reduction,
                                  local_size=local_size,
