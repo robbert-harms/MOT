@@ -218,9 +218,11 @@ class SimpleCLFunction(CLFunction):
 
         workers = []
         for ind, cl_environment in enumerate(cl_environments):
-            worker = _ProcedureWorker(cl_environment, cl_runtime_info.compile_flags,
-                                      self, kernel_data, cl_runtime_info.double_precision,
-                                      use_local_reduction, local_size=local_size)
+            worker = Processor(self, kernel_data, cl_environment,
+                               compile_flags=cl_runtime_info.compile_flags,
+                               double_precision=cl_runtime_info.double_precision,
+                               use_local_reduction=use_local_reduction,
+                               local_size=local_size)
             workers.append(worker)
 
         batches = cl_runtime_info.load_balancer.get_division(cl_environments, nmr_instances)
@@ -564,11 +566,15 @@ class SimpleCLFunctionParameter(CLFunctionParameter):
         return len(self.array_sizes) > 0
 
 
-class _ProcedureWorker:
+class Processor:
 
-    def __init__(self, cl_environment, compile_flags, cl_function,
-                 kernel_data, double_precision, use_local_reduction, local_size=None):
+    def __init__(self, cl_function, kernel_data, cl_environment, compile_flags=None,
+                 double_precision=False, use_local_reduction=False, local_size=None):
+        """Create a processor able to process the given function with the given data in the given environment.
 
+        Objects of this type can be used in pipelines since very fast execution can be achieved by creating it once
+        and then changing the underlying data of the kernel data objects.
+        """
         self._cl_environment = cl_environment
         self._cl_context = cl_environment.context
         self._cl_queue = cl_environment.queue
@@ -593,26 +599,23 @@ class _ProcedureWorker:
                                for name, data in self._kernel_data.items()}
 
     @property
-    def cl_environment(self):
-        """Get the used CL environment.
-
-        Returns:
-            cl_environment (CLEnvironment): The cl environment to use for calculations.
-        """
-        return self._cl_environment
-
-    @property
     def cl_queue(self):
         """Get the queue this worker is using for its GPU computations.
 
-        The load balancing routine will use this queue to flush and finish the computations.
+        This may be used to flush or finish the queue to provide synchronization.
 
         Returns:
-            pyopencl queues: the queue used by this worker
+            pyopencl queue: the queue used by this worker
         """
         return self._cl_queue
 
     def calculate(self, range_start, range_end):
+        """Start processing the current data on the given range.
+
+        Args:
+            range_start (int): the beginning of the range we will process (defines the start of the global offset)
+            range_end (int): the end of the range we will process
+        """
         nmr_problems = range_end - range_start
 
         func = self._kernel.run_procedure
