@@ -54,14 +54,28 @@ def set_cl_environments(cl_environments):
     a persistent state change, consider using :func:`~mot.configuration.config_context` instead.
 
     Args:
-        cl_environments (list of CLEnvironment): the new list of CL environments.
+        cl_environments (List[Union[CLEnvironment, int]]): the new list of CL environments. Can also be a list
+            of integers (or a single integer) indicing into :func:`CLEnvironmentFactory.smart_device_selection`.
 
     Raises:
         ValueError: if the list of environments is empty
     """
-    if not cl_environments:
+    if not isinstance(cl_environments, collections.Iterable):
+        cl_environments = [cl_environments]
+
+    final_environments = []
+    all_environments = CLEnvironmentFactory.smart_device_selection()
+
+    for environment in cl_environments:
+        if isinstance(environment, int):
+            final_environments.append(all_environments[environment])
+        else:
+            final_environments.append(environment)
+
+    if not final_environments:
         raise ValueError('The list of CL Environments is empty.')
-    _config['cl_environments'] = cl_environments
+
+    _config['cl_environments'] = final_environments
 
 
 def get_compile_flags():
