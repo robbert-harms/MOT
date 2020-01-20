@@ -728,14 +728,8 @@ class KernelWorker:
             self._kernel_inputs['_context_' + name] = data.get_kernel_inputs(self._cl_context, self._workgroup_size)
             self._kernel_inputs_order.append('_context_' + name)
 
-    @property
-    def cl_environment(self):
-        """Get the used CL environment.
-
-        Returns:
-            cl_environment (CLEnvironment): The cl environment to use for calculations.
-        """
-        return self._cl_environment
+        self._kernel_func = self._kernel.run_procedure
+        self._kernel_func.set_scalar_arg_dtypes(self._scalar_arg_dtypes)
 
     @property
     def cl_queue(self):
@@ -757,9 +751,6 @@ class KernelWorker:
         """
         nmr_problems = range_end - range_start
 
-        func = self._kernel.run_procedure
-        func.set_scalar_arg_dtypes(self._scalar_arg_dtypes)
-
         kernel_inputs_list = []
         for inputs in [self._kernel_inputs[name] for name in self._kernel_inputs_order]:
             kernel_inputs_list.extend(inputs)
@@ -767,11 +758,12 @@ class KernelWorker:
         for name, data in self._kernel_data.items():
             data.enqueue_device_access(self._cl_queue, self._kernel_inputs[name], range_start, range_end)
 
-        func(self._cl_queue,
-             (int(nmr_problems * self._workgroup_size),),
-             (int(self._workgroup_size),),
-             *kernel_inputs_list,
-             global_offset=(int(range_start * self._workgroup_size),))
+        self._kernel_func(
+            self._cl_queue,
+            (int(nmr_problems * self._workgroup_size),),
+            (int(self._workgroup_size),),
+            *kernel_inputs_list,
+            global_offset=(int(range_start * self._workgroup_size),))
 
         for name, data in self._kernel_data.items():
             data.enqueue_host_access(self._cl_queue, self._kernel_inputs[name], range_start, range_end)
