@@ -11,7 +11,8 @@ from textwrap import dedent, indent
 
 from mot.configuration import CLRuntimeInfo
 from mot.lib.kernel_data import KernelData, Scalar, Array, Zeros
-from mot.lib.utils import is_scalar, get_cl_utility_definitions, split_cl_function, split_in_batches
+from mot.lib.utils import is_scalar, get_cl_utility_definitions, split_cl_function, split_in_batches, \
+    convert_inputs_to_kernel_data
 
 __author__ = 'Robbert Harms'
 __date__ = '2017-08-31'
@@ -205,30 +206,6 @@ class SimpleCLFunction(CLFunction):
         return self._cl_body
 
     def evaluate(self, inputs, nmr_instances, use_local_reduction=False, local_size=None, cl_runtime_info=None):
-        def wrap_input_data(input_data):
-            def get_data_object(param):
-                if input_data[param.name] is None:
-                    return Scalar(0)
-                elif isinstance(input_data[param.name], KernelData):
-                    return input_data[param.name]
-                elif param.is_vector_type and np.squeeze(input_data[param.name]).shape[0] == 3:
-                    return Scalar(input_data[param.name], ctype=param.ctype)
-                elif is_scalar(input_data[param.name]) \
-                        and not (param.is_pointer_type or param.is_array_type):
-                    return Scalar(input_data[param.name])
-                else:
-                    if is_scalar(input_data[param.name]):
-                        data = np.ones(nmr_instances) * input_data[param.name]
-                    else:
-                        data = input_data[param.name]
-
-                    if param.is_pointer_type or param.is_array_type:
-                        return Array(data, ctype=param.ctype, mode='rw')
-                    else:
-                        return Array(data, ctype=param.ctype, mode='r', as_scalar=True)
-
-            return {param.name.replace('.', '_'): get_data_object(param) for param in self.get_parameters()}
-
         if isinstance(inputs, Iterable) and not isinstance(inputs, Mapping):
             inputs = list(inputs)
             if len(inputs) != len(self.get_parameters()):
@@ -241,13 +218,15 @@ class SimpleCLFunction(CLFunction):
         for param in self.get_parameters():
             if param.name not in inputs:
                 names = [param.name for param in self.get_parameters()]
+                missing_names = set(names) - set(inputs.keys())
                 raise ValueError('Some parameters are missing an input value, '
-                                 'required parameters are: {}, given inputs are: {}'.format(names, inputs.keys()))
+                                 'required parameters are: {}, given inputs are: {}, missing are: {}'.format(
+                    names, list(inputs.keys()), list(missing_names)))
 
-        return apply_cl_function(self, wrap_input_data(inputs), nmr_instances,
-                                 use_local_reduction=use_local_reduction,
-                                 local_size=local_size,
-                                 cl_runtime_info=cl_runtime_info)
+        kernel_inputs = convert_inputs_to_kernel_data(inputs, self.get_parameters(), nmr_instances)
+
+        return apply_cl_function(self, kernel_inputs, nmr_instances, use_local_reduction=use_local_reduction,
+                                 local_size=local_size, cl_runtime_info=cl_runtime_info)
 
     def get_dependencies(self):
         return self._dependencies
