@@ -1,18 +1,13 @@
-from collections import Iterable, Mapping
+from collections import Iterable
 from collections.__init__ import OrderedDict
-
 import numpy as np
 from copy import copy
-
 import pyopencl as cl
 import tatsu
-
 from textwrap import dedent, indent
-
 from mot.configuration import CLRuntimeInfo
-from mot.lib.kernel_data import KernelData, Scalar, Array, Zeros
-from mot.lib.utils import is_scalar, get_cl_utility_definitions, split_cl_function, split_in_batches, \
-    convert_inputs_to_kernel_data
+from mot.lib.kernel_data import Zeros
+from mot.lib.utils import get_cl_utility_definitions, split_cl_function, convert_inputs_to_kernel_data
 
 __author__ = 'Robbert Harms'
 __date__ = '2017-08-31'
@@ -206,9 +201,40 @@ class SimpleCLFunction(CLFunction):
         return self._cl_body
 
     def evaluate(self, inputs, nmr_instances, use_local_reduction=False, local_size=None, cl_runtime_info=None):
-        kernel_inputs = convert_inputs_to_kernel_data(inputs, self.get_parameters(), nmr_instances)
-        return apply_cl_function(self, kernel_inputs, nmr_instances, use_local_reduction=use_local_reduction,
-                                 local_size=local_size, cl_runtime_info=cl_runtime_info)
+        cl_runtime_info = cl_runtime_info or CLRuntimeInfo()
+        cl_environments = cl_runtime_info.cl_environments
+
+        kernel_data = convert_inputs_to_kernel_data(inputs, self.get_parameters(), nmr_instances)
+
+        if self.get_return_type() != 'void':
+            kernel_data['_results'] = Zeros((nmr_instances,), self.get_return_type())
+
+        mot_float_dtype = np.float32
+        if cl_runtime_info.double_precision:
+            mot_float_dtype = np.float64
+
+        for data in kernel_data.values():
+            data.set_mot_float_dtype(mot_float_dtype)
+
+        workers = []
+        for ind, cl_environment in enumerate(cl_environments):
+            worker = _ProcedureWorker(cl_environment, cl_runtime_info.compile_flags,
+                                      self, kernel_data, cl_runtime_info.double_precision,
+                                      use_local_reduction, local_size=local_size)
+            workers.append(worker)
+
+        batches = cl_runtime_info.load_balancer.get_division(cl_environments, nmr_instances)
+
+        for worker, (batch_start, batch_end) in zip(workers, batches):
+            if batch_end - batch_start > 0:
+                worker.calculate(batch_start, batch_end)
+                worker.cl_queue.flush()
+
+        for worker in workers:
+            worker.cl_queue.finish()
+
+        if self.get_return_type() != 'void':
+            return kernel_data['_results'].get_data()
 
     def get_dependencies(self):
         return self._dependencies
@@ -536,65 +562,6 @@ class SimpleCLFunctionParameter(CLFunctionParameter):
     @property
     def is_array_type(self):
         return len(self.array_sizes) > 0
-
-
-def apply_cl_function(cl_function, kernel_data, nmr_instances, use_local_reduction=False,
-                      local_size=None, cl_runtime_info=None):
-    """Run the given function/procedure on the given set of data.
-
-    This class will wrap the given CL function in a kernel call and execute that that for every data instance using
-    the provided kernel data. This class will respect the read write setting of the kernel data elements such that
-    output can be written back to the according kernel data elements.
-
-    Args:
-        cl_function (mot.lib.cl_function.CLFunction): the function to
-            run on the datasets. Either a name function tuple or an actual CLFunction object.
-        kernel_data (dict[str: mot.lib.kernel_data.KernelData]): the data to use as input to the function.
-        nmr_instances (int): the number of parallel threads to run (used as ``global_size``)
-        use_local_reduction (boolean): set this to True if you want to use local memory reduction in
-             your CL procedure. If this is set to True we will multiply the global size (given by the nmr_instances)
-             by the work group sizes.
-        local_size (int): can be used to specify the exact local size (workgroup size) the kernel must use.
-        cl_runtime_info (mot.configuration.CLRuntimeInfo): the runtime information
-    """
-    cl_runtime_info = cl_runtime_info or CLRuntimeInfo()
-    cl_environments = cl_runtime_info.cl_environments
-
-    for param in cl_function.get_parameters():
-        if param.name not in kernel_data:
-            names = [param.name for param in cl_function.get_parameters()]
-            raise ValueError('Some parameters are missing an input value, '
-                             'required parameters are: {}, given items are: {}'.format(names, kernel_data.keys()))
-
-    if cl_function.get_return_type() != 'void':
-        kernel_data['_results'] = Zeros((nmr_instances,), cl_function.get_return_type())
-
-    mot_float_dtype = np.float32
-    if cl_runtime_info.double_precision:
-        mot_float_dtype = np.float64
-
-    for data in kernel_data.values():
-        data.set_mot_float_dtype(mot_float_dtype)
-
-    workers = []
-    for ind, cl_environment in enumerate(cl_environments):
-        worker = _ProcedureWorker(cl_environment, cl_runtime_info.compile_flags,
-                                  cl_function, kernel_data, cl_runtime_info.double_precision,
-                                  use_local_reduction, local_size=local_size)
-        workers.append(worker)
-
-    batches = cl_runtime_info.load_balancer.get_division(cl_environments, nmr_instances)
-
-    for worker, (batch_start, batch_end) in zip(workers, batches):
-        if batch_end - batch_start > 0:
-            worker.calculate(batch_start, batch_end)
-            worker.cl_queue.flush()
-
-    for worker in workers:
-        worker.cl_queue.finish()
-
-    if cl_function.get_return_type() != 'void':
-        return kernel_data['_results'].get_data()
 
 
 class _ProcedureWorker:
