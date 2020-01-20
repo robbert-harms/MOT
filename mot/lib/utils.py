@@ -50,8 +50,10 @@ def convert_inputs_to_kernel_data(inputs, cl_parameters, nmr_instances):
     for param in cl_parameters:
         if param.name not in inputs:
             names = [param.name for param in cl_parameters]
+            missing_names = set(names) - set(inputs.keys())
             raise ValueError('Some parameters are missing an input value, '
-                             'required parameters are: {}, given inputs are: {}'.format(names, inputs.keys()))
+                             'required parameters are: {}, given inputs are: {}, missing are: {}'.format(
+                names, list(inputs.keys()), list(missing_names)))
 
     def get_data_object(param):
         input_data = inputs[param.name]
