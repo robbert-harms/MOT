@@ -639,7 +639,6 @@ class Array(KernelData):
         self._parallelize_over_first_dimension = parallelize_over_first_dimension
 
         self._buffer_cache = {}  # caching the buffers per context
-        self._memory_maps = []  # a cache of the memory maps, these
 
         self._data_length = 1
         if len(self._data.shape):
@@ -705,16 +704,14 @@ class Array(KernelData):
                     int(range_start * self._data.strides[0]),
                     (nmr_problems,) + self._data.shape[1:], self._data.dtype,
                     order="C", wait_for=None, is_blocking=False)
-                self._memory_maps.append(data.base)
             else:
                 data, _ = cl.enqueue_map_buffer(
                     queue, buffers[0], cl.map_flags.READ,
                     0, self._data.shape, self._data.dtype,
                     order="C", wait_for=None, is_blocking=False)
-                self._memory_maps.append(data.base)
 
     def enqueue_device_access(self, queue, buffers, range_start, range_end):
-        self._memory_maps = []
+        pass
 
     def get_type_definitions(self):
         return ''
