@@ -121,8 +121,10 @@ R123_CUDA_DEVICE R123_STATIC_INLINE Word mulhilo##W(Word a, Word b, Word* hip){ 
 // A template for mulhilo using only word-size operations and
 // C99 operators (no adc, no mulhi).  It
 // requires four multiplies and a dozen or so shifts, adds
-// and tests.  It's not clear what this is good for, other than
-// completeness.  On 32-bit platforms, it could be used to
+// and tests.  It's *SLOW*.  It can be used to
+// implement philoxNx32 on platforms that completely lack
+// 64-bit types, e.g., Metal.
+// On 32-bit platforms, it could be used to
 // implement philoxNx64, but on such platforms both the philoxNx32
 // and the threefryNx64 cbrngs are going to have much better
 // performance.  It is enabled below by R123_USE_MULHILO64_C99,

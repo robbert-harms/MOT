@@ -93,7 +93,7 @@ class LogCosh(SimpleCLLibrary):
 
 class Rand123(SimpleCLCodeObject):
     def __init__(self):
-        generator = 'threefry'
+        generator = 'philox'
 
         src = open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/openclfeatures.h'), ), 'r').read()
         src += open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/array.h'), ), 'r').read()
