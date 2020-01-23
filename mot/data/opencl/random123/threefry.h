@@ -153,14 +153,11 @@ enum r123_enum_threefry_wcnt {
     WCNT2=2,
     WCNT4=4
 };
-
-#if R123_USE_64BIT
 R123_CUDA_DEVICE R123_STATIC_INLINE R123_FORCE_INLINE(uint64_t RotL_64(uint64_t x, unsigned int N));
 R123_CUDA_DEVICE R123_STATIC_INLINE uint64_t RotL_64(uint64_t x, unsigned int N)
 {
     return (x << (N & 63)) | (x >> ((64-N) & 63));
 }
-#endif
 
 R123_CUDA_DEVICE R123_STATIC_INLINE R123_FORCE_INLINE(uint32_t RotL_32(uint32_t x, unsigned int N));
 R123_CUDA_DEVICE R123_STATIC_INLINE uint32_t RotL_32(uint32_t x, unsigned int N)
@@ -171,8 +168,6 @@ R123_CUDA_DEVICE R123_STATIC_INLINE uint32_t RotL_32(uint32_t x, unsigned int N)
 #define SKEIN_MK_64(hi32,lo32)  ((lo32) + (((uint64_t) (hi32)) << 32))
 #define SKEIN_KS_PARITY64         SKEIN_MK_64(0x1BD11BDA,0xA9FC1A22)
 #define SKEIN_KS_PARITY32         0x1BD11BDA
-
-/** \endcond */
 
 #ifndef THREEFRY2x32_DEFAULT_ROUNDS
 #define THREEFRY2x32_DEFAULT_ROUNDS 20
@@ -717,7 +712,6 @@ threefry4x##W##_ctr_t threefry4x##W##_R(unsigned int Nrounds, threefry4x##W##_ct
                                                                         \
     return X;                                                           \
 }                                                                       \
-                                                                        \
  /** @ingroup ThreefryNxW */                                            \
 enum r123_enum_threefry4x##W { threefry4x##W##_rounds = THREEFRY4x##W##_DEFAULT_ROUNDS };       \
 R123_CUDA_DEVICE R123_STATIC_INLINE R123_FORCE_INLINE(threefry4x##W##_ctr_t threefry4x##W(threefry4x##W##_ctr_t in, threefry4x##W##_key_t k)); \
@@ -725,12 +719,11 @@ R123_CUDA_DEVICE R123_STATIC_INLINE                                     \
 threefry4x##W##_ctr_t threefry4x##W(threefry4x##W##_ctr_t in, threefry4x##W##_key_t k){ \
     return threefry4x##W##_R(threefry4x##W##_rounds, in, k);            \
 }
+/** \endcond */
 
-#if R123_USE_64BIT
 _threefry2x_tpl(64)
-_threefry4x_tpl(64)
-#endif
 _threefry2x_tpl(32)
+_threefry4x_tpl(64)
 _threefry4x_tpl(32)
 
 /* gcc4.5 and 4.6 seem to optimize a macro-ized threefryNxW better
@@ -740,29 +733,30 @@ _threefry4x_tpl(32)
 #define threefry2x64(c,k) threefry2x64_R(threefry2x64_rounds, c, k)
 #define threefry4x64(c,k) threefry4x64_R(threefry4x64_rounds, c, k)
 
-#if defined(__cplusplus)
+#ifdef __cplusplus
+/** \cond HIDDEN_FROM_DOXYGEN */
 #define _threefryNxWclass_tpl(NxW)                                      \
 namespace r123{                                                     \
-template<unsigned int ROUNDS>                                                  \
+template<unsigned int R>                                                  \
  struct Threefry##NxW##_R{                                              \
     typedef threefry##NxW##_ctr_t ctr_type;                             \
     typedef threefry##NxW##_key_t key_type;                             \
     typedef threefry##NxW##_key_t ukey_type;                            \
-    static const R123_METAL_CONSTANT_ADDRESS_SPACE unsigned int rounds=ROUNDS;                            \
+    static const unsigned int rounds=R;                                 \
    inline R123_CUDA_DEVICE R123_FORCE_INLINE(ctr_type operator()(ctr_type ctr, key_type key)){ \
-        R123_STATIC_ASSERT(ROUNDS<=72, "threefry is only unrolled up to 72 rounds\n"); \
-        return threefry##NxW##_R(ROUNDS, ctr, key);                              \
+        R123_STATIC_ASSERT(R<=72, "threefry is only unrolled up to 72 rounds\n"); \
+        return threefry##NxW##_R(R, ctr, key);                              \
     }                                                                   \
 };                                                                      \
  typedef Threefry##NxW##_R<threefry##NxW##_rounds> Threefry##NxW;       \
 } // namespace r123
 
+/** \endcond */
+
 _threefryNxWclass_tpl(2x32)
 _threefryNxWclass_tpl(4x32)
-#if R123_USE_64BIT
 _threefryNxWclass_tpl(2x64)
 _threefryNxWclass_tpl(4x64)
-#endif
 
 /* The _tpl macros don't quite work to do string-pasting inside comments.
    so we just write out the boilerplate documentation four times... */
