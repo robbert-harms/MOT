@@ -821,7 +821,7 @@ class KernelWorker:
         return kernel_source
 
     def _get_rng_cl_code(self):
-        generator = 'threefry'
+        generator = 'philox'
 
         src = open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/openclfeatures.h'), ), 'r').read()
         src += open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/array.h'), ), 'r').read()
