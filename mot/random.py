@@ -56,11 +56,9 @@ def uniform(nmr_distributions, nmr_samples, low=0, high=1, ctype='float', seed=N
                    'high': Array(high, as_scalar=True)}
 
     kernel = SimpleCLFunction.from_string('''
-        void compute(double low, double high, global uint* rng_state, global ''' + ctype + '''* samples){
-        
-            rand123_data rand123_rng_data = rand123_initialize_data((uint[]){
-                rng_state[0], rng_state[1], rng_state[2], rng_state[3], 
-                rng_state[4], rng_state[5], 0});
+        void compute(double low, double high, uint rng_seed, global ''' + ctype + '''* samples){
+
+            rand123_data rand123_rng_data = rand123_initialize_from_seed(rng_seed);
             void* rng_data = (void*)&rand123_rng_data;
 
             for(uint i = 0; i < ''' + str(nmr_samples) + '''; i++){
@@ -96,10 +94,8 @@ def normal(nmr_distributions, nmr_samples, mean=0, std=1, ctype='float', seed=No
                    'std': Array(std, as_scalar=True)}
 
     kernel = SimpleCLFunction.from_string('''
-        void compute(double mean, double std, global uint* rng_state, global ''' + ctype + '''* samples){
-            rand123_data rand123_rng_data = rand123_initialize_data((uint[]){
-                rng_state[0], rng_state[1], rng_state[2], rng_state[3], 
-                rng_state[4], rng_state[5], 0});
+        void compute(double mean, double std, uint rng_seed, global ''' + ctype + '''* samples){
+            rand123_data rand123_rng_data = rand123_initialize_from_seed(rng_seed);
             void* rng_data = (void*)&rand123_rng_data;
 
             for(uint i = 0; i < ''' + str(nmr_samples) + '''; i++){
@@ -114,11 +110,11 @@ def normal(nmr_distributions, nmr_samples, mean=0, std=1, ctype='float', seed=No
 
 def _generate_samples(cl_function, nmr_distributions, nmr_samples, ctype, kernel_data, seed=None):
     np.random.seed(seed)
-    rng_state = np.random.uniform(low=np.iinfo(np.uint32).min, high=np.iinfo(np.uint32).max + 1,
-                                  size=(nmr_distributions, 6)).astype(np.uint32)
+    rng_seed = np.random.uniform(low=np.iinfo(np.uint32).min, high=np.iinfo(np.uint32).max + 1,
+                                 size=(nmr_distributions, 1)).astype(np.uint32)
 
     kernel_data.update({'samples': Zeros((nmr_distributions, nmr_samples), ctype),
-                        'rng_state': Array(rng_state, 'uint')})
+                        'rng_seed': Array(rng_seed, 'uint', mode='r', as_scalar=True)})
 
     cl_function.evaluate(kernel_data, nmr_distributions)
     return kernel_data['samples'].get_data()

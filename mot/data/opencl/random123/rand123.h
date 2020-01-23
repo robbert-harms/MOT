@@ -50,6 +50,17 @@ rand123_data rand123_initialize_data(uint state[8]){
 }
 
 /**
+ * Initializes the rand123_data structure from a single seed.
+ *
+ */
+rand123_data rand123_initialize_from_seed(uint seed){
+    %(GENERATOR_NAME)s4x32_key_t k = {{seed, 0}};
+    %(GENERATOR_NAME)s4x32_ctr_t c = {{}};
+    rand123_data rng_data = {c, k};
+    return rng_data;
+}
+
+/**
  * Convert the rand123 state back into a state array.
  */
 void rand123_data_to_array(rand123_data data, uint rng_state[8]){
