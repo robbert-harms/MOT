@@ -739,12 +739,13 @@ class KernelWorker:
             self._cl_function_kernel = cl_function.created_wrapped_kernel_func(self._kernel_data)
 
         self._kernel = cl.Program(self._cl_context, self._get_kernel_source()).build(' '.join(compile_flags))
+        self._kernel_func = getattr(self._kernel, self._cl_function_kernel.get_cl_function_name())
 
         if self._use_local_reduction:
             if local_size:
                 self._workgroup_size = local_size
             else:
-                self._workgroup_size = self._kernel.run_procedure.get_work_group_info(
+                self._workgroup_size = self._kernel_func.get_work_group_info(
                     cl.kernel_work_group_info.PREFERRED_WORK_GROUP_SIZE_MULTIPLE,
                     self._cl_environment.device)
         else:
@@ -752,7 +753,6 @@ class KernelWorker:
 
         self._kernel_inputs = {name: data.get_kernel_inputs(self._cl_context, self._workgroup_size)
                                for name, data in self._kernel_data.items()}
-        self._kernel_func = getattr(self._kernel, self._cl_function_kernel.get_cl_function_name())
         self._kernel_func.set_scalar_arg_dtypes(self.get_scalar_arg_dtypes())
 
     @property
