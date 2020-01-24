@@ -44,7 +44,7 @@ class CLFunction(CLCodeObject):
         """
         raise NotImplementedError()
 
-    def created_wrapped_kernel_func(self, input_data, kernel_name=None, context_variables=None):
+    def created_wrapped_kernel_func(self, input_data, kernel_name=None):
         """Wrap the current CLFunction with a kernel CLFunction.
 
         The idea is that we can have a function like:
@@ -75,7 +75,6 @@ class CLFunction(CLCodeObject):
             input_data (Dict[str: mot.lib.kernel_data.KernelData]): mapping parameter names to kernel data objects.
             kernel_name (str): the name of the generated kernel function. If not given it will be called
                 ``kernel_<CLFunction.get_cl_function_name()>``.
-            context_variables (Dict[str: mot.lib.kernel_data.KernelData]): context variables we also need to load
 
         Returns:
             CLFunction: A CL function with :meth:`is_kernel_func` set to True.
@@ -234,17 +233,12 @@ class SimpleCLFunction(CLFunction):
     def get_parameters(self):
         return self._parameter_list
 
-    def created_wrapped_kernel_func(self, input_data, kernel_name=None, context_variables=None):
+    def created_wrapped_kernel_func(self, input_data, kernel_name=None):
         kernel_name = kernel_name or 'kernel_' + self.get_cl_function_name()
 
         assignment = ''
         if self.get_return_type() != 'void':
             assignment = '__results[gid] = '
-
-        context_variables = context_variables or {}
-        context_inits = []
-        for name, data in context_variables.items():
-            context_inits.append(data.get_context_variable_initialization(name, '_context_' + name))
 
         variable_inits = []
         function_call_inputs = []
@@ -259,14 +253,10 @@ class SimpleCLFunction(CLFunction):
         for name, data in input_data.items():
             parameter_list.extend(data.get_kernel_parameters('_' + name))
 
-        for name, data in context_variables.items():
-            parameter_list.extend(data.get_kernel_parameters('_context_' + name))
-
         cl_body = '''
             ulong gid = (ulong)(get_global_id(0) / get_local_size(0));
 
             ''' + '\n'.join(variable_inits) + '''
-            ''' + '\n'.join(context_inits) + '''
 
             ''' + assignment + ' ' + self.get_cl_function_name() + '(' + ', '.join(function_call_inputs) + ''');
         '''
@@ -770,25 +760,13 @@ class KernelWorker:
         self._use_local_reduction = use_local_reduction
         self._enable_rng = enable_rng
 
-        self._scalar_arg_dtypes = []
-        self._kernel_arguments = []
-
-        for name, data in self._kernel_data.items():
-            self._scalar_arg_dtypes.extend(data.get_scalar_arg_dtypes())
-            self._kernel_arguments.extend(data.get_kernel_parameters('_' + name))
-
-        for name, data in self._context_variables.items():
-            self._scalar_arg_dtypes.extend(data.get_scalar_arg_dtypes())
-            self._kernel_arguments.extend(data.get_kernel_parameters('_context_' + name))
-
         if cl_function.is_kernel_func():
             self._cl_function_kernel = cl_function
         else:
-            self._cl_function_kernel = cl_function.created_wrapped_kernel_func(
-                self._kernel_data, context_variables=context_variables)
+            self._cl_function_kernel = cl_function.created_wrapped_kernel_func(self._kernel_data)
 
-        self._kernel = cl.Program(self._cl_context, self._get_kernel_source()).build(' '.join(compile_flags))
-        self._kernel_func = getattr(self._kernel, self._cl_function_kernel.get_cl_function_name())
+        self._program = cl.Program(self._cl_context, self._get_kernel_source()).build(' '.join(compile_flags))
+        self._kernel_func = getattr(self._program, self._cl_function_kernel.get_cl_function_name())
 
         if self._use_local_reduction:
             if local_size:
@@ -799,19 +777,6 @@ class KernelWorker:
                     self._cl_environment.device)
         else:
             self._workgroup_size = 1
-
-        self._kernel_inputs = {}
-        self._kernel_inputs_order = []
-
-        for name, data in self._kernel_data.items():
-            self._kernel_inputs[name] = data.get_kernel_inputs(self._cl_context, self._workgroup_size)
-            self._kernel_inputs_order.append(name)
-
-        for name, data in self._context_variables.items():
-            self._kernel_inputs['_context_' + name] = data.get_kernel_inputs(self._cl_context, self._workgroup_size)
-            self._kernel_inputs_order.append('_context_' + name)
-
-        self._kernel_func.set_scalar_arg_dtypes(self._scalar_arg_dtypes)
 
     @property
     def cl_queue(self):
@@ -833,22 +798,58 @@ class KernelWorker:
         """
         nmr_problems = range_end - range_start
 
-        kernel_inputs_list = []
-        for inputs in [self._kernel_inputs[name] for name in self._kernel_inputs_order]:
-            kernel_inputs_list.extend(inputs)
+        def run_context_var_kernel():
+            kernel_inputs = {}
+            kernel_inputs_order = []
+            for name, data in self._context_variables.items():
+                kernel_inputs[name] = data.get_kernel_inputs(self._cl_context, self._workgroup_size)
+                kernel_inputs_order.append(name)
 
-        for name, data in self._kernel_data.items():
-            data.enqueue_device_access(self._cl_queue, self._kernel_inputs[name], range_start, range_end)
+            kernel_inputs_list = []
+            for inputs in [kernel_inputs[name] for name in kernel_inputs_order]:
+                kernel_inputs_list.extend(inputs)
 
-        self._kernel_func(
-            self._cl_queue,
-            (int(nmr_problems * self._workgroup_size),),
-            (int(self._workgroup_size),),
-            *kernel_inputs_list,
-            global_offset=(int(range_start * self._workgroup_size),))
+            for name, data in self._context_variables.items():
+                data.enqueue_device_access(self._cl_queue, kernel_inputs[name], range_start, range_end)
 
-        for name, data in self._kernel_data.items():
-            data.enqueue_host_access(self._cl_queue, self._kernel_inputs[name], range_start, range_end)
+            func = self._program._initialize_context_variables
+            func(
+                self._cl_queue,
+                (int(nmr_problems * self._workgroup_size),),
+                (int(self._workgroup_size),),
+                *kernel_inputs_list,
+                global_offset=(int(range_start * self._workgroup_size),))
+
+            for name, data in self._context_variables.items():
+                data.enqueue_host_access(self._cl_queue, kernel_inputs[name], range_start, range_end)
+
+        def run_compute_kernel():
+            kernel_inputs = {}
+            kernel_inputs_order = []
+            for name, data in self._kernel_data.items():
+                kernel_inputs[name] = data.get_kernel_inputs(self._cl_context, self._workgroup_size)
+                kernel_inputs_order.append(name)
+
+            kernel_inputs_list = []
+            for inputs in [kernel_inputs[name] for name in kernel_inputs_order]:
+                kernel_inputs_list.extend(inputs)
+
+            for name, data in self._kernel_data.items():
+                data.enqueue_device_access(self._cl_queue, kernel_inputs[name], range_start, range_end)
+
+            self._kernel_func(
+                self._cl_queue,
+                (int(nmr_problems * self._workgroup_size),),
+                (int(self._workgroup_size),),
+                *kernel_inputs_list,
+                global_offset=(int(range_start * self._workgroup_size),))
+
+            for name, data in self._kernel_data.items():
+                data.enqueue_host_access(self._cl_queue, kernel_inputs[name], range_start, range_end)
+
+        if self._context_variables:
+            run_context_var_kernel()
+        run_compute_kernel()
 
     def _get_kernel_source(self):
         kernel_source = ''
@@ -859,8 +860,27 @@ class KernelWorker:
                                    for name, data in self._context_variables.items())
         if self._enable_rng:
             kernel_source += self._get_rng_cl_code()
+
+        if self._context_variables:
+            kernel_source += self._get_context_variable_init_function().get_cl_code()
+
         kernel_source += self._cl_function_kernel.get_cl_code()
         return kernel_source
+
+    def _get_context_variable_init_function(self):
+        kernel_name = '_initialize_context_variables'
+
+        parameter_list = []
+        context_inits = []
+        for name, data in self._context_variables.items():
+            parameter_list.extend(data.get_kernel_parameters('_context_' + name))
+            context_inits.append(data.get_context_variable_initialization(name, '_context_' + name))
+
+        cl_body = '''
+            ulong gid = (ulong)(get_global_id(0) / get_local_size(0));
+            ''' + '\n'.join(context_inits) + '''
+        '''
+        return SimpleCLFunction('void', kernel_name, parameter_list, cl_body, is_kernel_func=True)
 
     def _get_rng_cl_code(self):
         generator = 'philox'
