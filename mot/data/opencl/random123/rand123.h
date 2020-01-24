@@ -28,7 +28,7 @@ uint4 rand123_generate_bits(){
     } key;
 
     ctr.vec_el = __rng_state[gid];
-    key.vec_el = __rng_state[gid + 4];
+    key.vec_el = __rng_state[gid];
 
     u.rng_el = %(GENERATOR_NAME)s4x32(ctr.rng_el, key.rng_el);
 

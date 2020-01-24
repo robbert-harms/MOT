@@ -674,7 +674,7 @@ class Processor:
         context_variables = context_variables or {}
         if enable_rng:
             rng_state = np.random.uniform(low=np.iinfo(np.uint32).min, high=np.iinfo(np.uint32).max + 1,
-                                          size=(nmr_instances, 8)).astype(np.uint32)
+                                          size=(nmr_instances, 4)).astype(np.uint32)
             context_variables['__rng_state'] = Array(rng_state, 'uint', mode='rw', ensure_zero_copy=True)
 
         cl_runtime_info = cl_runtime_info or CLRuntimeInfo()
