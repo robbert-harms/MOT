@@ -808,7 +808,7 @@ class KernelWorker:
         kernel_source += self._cl_function.get_cl_code()
 
         kernel_source += '''
-            __kernel void run_procedure(''' + ",\n".join(self._kernel_arguments) + '''){
+            __kernel void run_procedure(''' + ",\n".join(self._get_kernel_arguments()) + '''){
                 ulong gid = (ulong)(get_global_id(0) / get_local_size(0));
 
                 ''' + '\n'.join(variable_inits) + '''
