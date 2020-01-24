@@ -41,6 +41,43 @@ class CLFunction(CLCodeObject):
         """
         raise NotImplementedError()
 
+    def created_wrapped_kernel_func(self, input_data, kernel_name=None):
+        """Wrap the current CLFunction with a kernel CLFunction.
+
+        The idea is that we can have a function like:
+
+        .. code-block:: c
+
+            int foo(void* data){...}
+
+        That is, without the ``kernel`` modifier. This function can not readily be executed on a CL device.
+        To make life easy, this method wraps the current CL code in a kernel like this:
+
+        .. code-block:: c
+
+            int foo(void* data){...}
+            kernel void kernel_foo(...){
+                ... data = ...;
+                foo(&data);
+            }
+
+        And then kernel_foo can be executed on the device.
+
+        In order to generate the correct kernel arguments, this method needs to know which data will be loaded and
+        which with signature. At the moment, this is done by providing it with all the kernel inputs you wish to load
+        into the kernel at execution time. The generated kernel function will then do do automatic data marshalling
+        from all the :class:`mot.lib.kernel_data.KernelData` inputs to the inputs for the wrapped function.
+
+        Args:
+            input_data (Dict[str: mot.lib.kernel_data.KernelData]): mapping parameter names to kernel data objects.
+            kernel_name (str): the name of the generated kernel function. If not given it will be called
+                ``kernel_<CLFunction.get_cl_function_name()>``.
+
+        Returns:
+            CLFunction: A CL function with :meth:`is_kernel_func` set to True.
+        """
+        raise NotImplementedError()
+
     def get_return_type(self):
         """Get the type (in CL naming) of the returned value from this function.
 
@@ -186,6 +223,40 @@ class SimpleCLFunction(CLFunction):
 
     def get_parameters(self):
         return self._parameter_list
+
+    def created_wrapped_kernel_func(self, input_data, kernel_name=None):
+        kernel_name = kernel_name or 'kernel_' + self.get_cl_function_name()
+
+        assignment = ''
+        if self.get_return_type() != 'void':
+            assignment = '__results[gid] = '
+
+        variable_inits = []
+        function_call_inputs = []
+        post_function_callbacks = []
+        for parameter in self.get_parameters():
+            data = input_data[parameter.name]
+            call_args = (parameter.name, '_' + parameter.name, 'gid', parameter.address_space)
+
+            variable_inits.append(data.initialize_variable(*call_args))
+            function_call_inputs.append(data.get_function_call_input(*call_args))
+            post_function_callbacks.append(data.post_function_callback(*call_args))
+
+        parameter_list = []
+        for name, data in input_data.items():
+            parameter_list.extend(data.get_kernel_parameters('_' + name))
+
+        cl_body = '''
+            ulong gid = (ulong)(get_global_id(0) / get_local_size(0));
+
+            ''' + '\n'.join(variable_inits) + '''
+
+            ''' + assignment + ' ' + self.get_cl_function_name() + '(' + ', '.join(function_call_inputs) + ''');
+
+            ''' + '\n'.join(post_function_callbacks) + '''
+        '''
+        return SimpleCLFunction('void', kernel_name, parameter_list, cl_body,
+                                dependencies=[self], is_kernel_func=True)
 
     def get_signature(self):
         return dedent('{kernel} {return_type} {cl_function_name}({parameters});'.format(
@@ -646,12 +717,6 @@ class Processor:
             return self._kernel_data['_results'].get_data()
 
 
-# class Kernel:
-
-
-
-
-
 class KernelWorker:
 
     def __init__(self, cl_function, kernel_data, cl_environment, compile_flags=None,
@@ -664,12 +729,16 @@ class KernelWorker:
         self._cl_environment = cl_environment
         self._cl_context = cl_environment.context
         self._cl_queue = cl_environment.queue
-        self._cl_function = cl_function
         self._kernel_data = OrderedDict(sorted(kernel_data.items()))
         self._double_precision = double_precision
         self._use_local_reduction = use_local_reduction
 
-        self._kernel = self._build_kernel(self._get_kernel_source(), compile_flags)
+        if cl_function.is_kernel_func():
+            self._cl_function_kernel = cl_function
+        else:
+            self._cl_function_kernel = cl_function.created_wrapped_kernel_func(self._kernel_data)
+
+        self._kernel = cl.Program(self._cl_context, self._get_kernel_source()).build(' '.join(compile_flags))
 
         if self._use_local_reduction:
             if local_size:
@@ -683,7 +752,7 @@ class KernelWorker:
 
         self._kernel_inputs = {name: data.get_kernel_inputs(self._cl_context, self._workgroup_size)
                                for name, data in self._kernel_data.items()}
-        self._kernel_func = self._kernel.run_procedure
+        self._kernel_func = getattr(self._kernel, self._cl_function_kernel.get_cl_function_name())
         self._kernel_func.set_scalar_arg_dtypes(self.get_scalar_arg_dtypes())
 
     @property
@@ -723,64 +792,12 @@ class KernelWorker:
         for name, data in self._kernel_data.items():
             data.enqueue_host_access(self._cl_queue, self._kernel_inputs[name], range_start, range_end)
 
-    def _build_kernel(self, kernel_source, compile_flags=()):
-        """Convenience function for building the kernel for this worker.
-
-        Args:
-            kernel_source (str): the kernel source to use for building the kernel
-
-        Returns:
-            cl.Program: a compiled CL kernel
-        """
-        return cl.Program(self._cl_context, kernel_source).build(' '.join(compile_flags))
-
     def _get_kernel_source(self):
-        assignment = ''
-        if self._cl_function.get_return_type() != 'void':
-            assignment = '__results[gid] = '
-
-        variable_inits = []
-        function_call_inputs = []
-        post_function_callbacks = []
-        for parameter in self._cl_function.get_parameters():
-            data = self._kernel_data[parameter.name]
-            call_args = (parameter.name, '_' + parameter.name, 'gid', parameter.address_space)
-
-            variable_inits.append(data.initialize_variable(*call_args))
-            function_call_inputs.append(data.get_function_call_input(*call_args))
-            post_function_callbacks.append(data.post_function_callback(*call_args))
-
         kernel_source = ''
         kernel_source += get_cl_utility_definitions(self._double_precision)
         kernel_source += '\n'.join(data.get_type_definitions() for data in self._kernel_data.values())
-        kernel_source += self._cl_function.get_cl_code()
-
-        kernel_source += '''
-            kernel void run_procedure(''' + ",\n".join(self._get_kernel_arguments()) + '''){
-                ulong gid = (ulong)(get_global_id(0) / get_local_size(0));
-
-                ''' + '\n'.join(variable_inits) + '''
-
-                ''' + assignment + ' ' + self._cl_function.get_cl_function_name() + '(' + \
-                         ', '.join(function_call_inputs) + ''');
-
-                ''' + '\n'.join(post_function_callbacks) + '''
-            }
-        '''
+        kernel_source += self._cl_function_kernel.get_cl_code()
         return kernel_source
-
-    def _get_kernel_arguments(self):
-        """Get the list of kernel arguments for loading the kernel data elements into the kernel.
-
-        This will use the sorted keys for looping through the kernel input items.
-
-        Returns:
-            list of str: the list of parameter definitions
-        """
-        declarations = []
-        for name, data in self._kernel_data.items():
-            declarations.extend(data.get_kernel_parameters('_' + name))
-        return declarations
 
     def get_scalar_arg_dtypes(self):
         """Get the location and types of the input scalars.

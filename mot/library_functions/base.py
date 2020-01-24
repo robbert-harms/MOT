@@ -16,13 +16,14 @@ class CLLibrary(CLFunction):
 class SimpleCLLibrary(CLLibrary, SimpleCLFunction):
 
     def __init__(self, cl_code, **kwargs):
-        return_type, function_name, parameter_list, body = split_cl_function(cl_code)
+        is_kernel_func, return_type, function_name, parameter_list, body = split_cl_function(cl_code)
         super().__init__(
             return_type,
             function_name,
             parameter_list,
             body,
-            dependencies=kwargs.get('dependencies', None)
+            dependencies=kwargs.get('dependencies', None),
+            is_kernel_func=is_kernel_func
         )
 
 

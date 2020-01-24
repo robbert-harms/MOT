@@ -97,9 +97,9 @@ class SimpleConstraintFunction(SimpleCLFunction, ConstraintFunction):
         Returns:
             SimpleCLFunction: the CL data type for this parameter declaration
         """
-        return_type, function_name, parameter_list, body = split_cl_function(cl_function)
+        is_kernel_func, return_type, function_name, parameter_list, body = split_cl_function(cl_function)
         return SimpleConstraintFunction(return_type, function_name, parameter_list, body, dependencies=dependencies,
-                                        nmr_constraints=nmr_constraints)
+                                        nmr_constraints=nmr_constraints, is_kernel_func=is_kernel_func)
 
     def get_nmr_constraints(self):
         return self._nmr_constraints
