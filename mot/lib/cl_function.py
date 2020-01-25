@@ -2,7 +2,7 @@ from collections import Iterable
 from copy import copy
 import tatsu
 from textwrap import dedent, indent
-from mot.lib.cl_processor import Processor
+from mot.lib.cl_processors import CLFunctionProcessor
 from mot.lib.utils import split_cl_function
 
 __author__ = 'Robbert Harms'
@@ -231,7 +231,7 @@ class SimpleCLFunction(CLFunction):
 
         assignment = ''
         if self.get_return_type() != 'void':
-            assignment = '__results[gid] = '
+            assignment = '__return_values[gid] = '
 
         variable_inits = []
         function_call_inputs = []
@@ -289,11 +289,10 @@ class SimpleCLFunction(CLFunction):
 
     def evaluate(self, inputs, nmr_instances, use_local_reduction=False, local_size=None,
                  context_variables=None, enable_rng=False, cl_runtime_info=None):
-        processor = Processor(self, inputs, nmr_instances, use_local_reduction=use_local_reduction,
-                              local_size=local_size, context_variables=context_variables, enable_rng=enable_rng,
-                              cl_runtime_info=cl_runtime_info)
-        processor.enqueue_run()
-        processor.enqueue_finish()
+        processor = CLFunctionProcessor(self, inputs, nmr_instances, use_local_reduction=use_local_reduction,
+                                        local_size=local_size, context_variables=context_variables, enable_rng=enable_rng,
+                                        cl_runtime_info=cl_runtime_info)
+        processor.enqueue_kernels(finish=True)
         return processor.get_function_results()
 
     def get_dependencies(self):
