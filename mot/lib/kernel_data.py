@@ -15,6 +15,15 @@ __licence__ = 'LGPL v3'
 
 class KernelData:
 
+    @property
+    def ctype(self):
+        """Get the ctype of this kernel data element
+
+        Returns:
+            str: the ctype of this kernel data element
+        """
+        raise NotImplementedError()
+
     def get_subset(self, problem_indices):
         """Get a subset of this kernel data over problem instances.
 
@@ -240,6 +249,10 @@ class Struct(KernelData):
         self._ctype = ctype
         self._anonymous = anonymous
 
+    @property
+    def ctype(self):
+        return self._ctype
+
     def get_subset(self, problem_indices):
         if problem_indices is None:
             return self
@@ -393,6 +406,10 @@ class Scalar(KernelData):
         self._ctype = ctype or dtype_to_ctype(self._value.dtype)
         self._mot_float_dtype = None
 
+    @property
+    def ctype(self):
+        return self._ctype
+
     def get_subset(self, problem_indices):
         return self
 
@@ -474,6 +491,10 @@ class PrivateMemory(KernelData):
         self._mot_float_dtype = None
         self._nmr_items = nmr_items
 
+    @property
+    def ctype(self):
+        return self._ctype
+
     def get_subset(self, problem_indices):
         return self
 
@@ -547,6 +568,10 @@ class LocalMemory(KernelData):
             self._size_func = lambda _: nmr_items
         else:
             self._size_func = nmr_items
+
+    @property
+    def ctype(self):
+        return self._ctype
 
     def get_subset(self, problem_indices):
         return self
@@ -667,6 +692,10 @@ class Array(KernelData):
         if self._is_writable and self._ensure_zero_copy and self._data is not data:
             raise ValueError('Zero copy was set but we had to make '
                              'a copy to guarantee the writing and ctype requirements.')
+
+    @property
+    def ctype(self):
+        return self._ctype
 
     def get_subset(self, problem_indices):
         if problem_indices is None:
@@ -831,6 +860,10 @@ class CompositeArray(KernelData):
         elif self._address_space == 'global':
             self._composite_array = Zeros(len(self._elements), self._ctype, mode='rw',
                                           parallelize_over_first_dimension=False)
+
+    @property
+    def ctype(self):
+        return self._ctype
 
     def get_subset(self, problem_indices):
         return self

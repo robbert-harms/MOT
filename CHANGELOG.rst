@@ -2,6 +2,40 @@
 Changelog
 *********
 
+v0.10.0 (2020-01-25)
+====================
+
+Added
+-----
+- Adds kernel keyword to the opencl preprocessor.
+- Adds the inverse-gamma distribution.
+- Adds load balancing of CL compute tasks.
+- Adds a buffer cache to the Array KernelData class
+
+Changed
+-------
+- Updates the random123 library to version 1.13.2.
+- Changed the execution to include an intermediate Processor object. This is meant for pipelining functions.
+- Changed the kernel data array readout to include mapping the entire array if the array object did not specify parallelize_over_first_dimension.
+- Changed the default random123 method to philox as it is slightly faster.
+
+Fixed
+-----
+- Fixed bug in which data was modified twice towards mot_float_type.
+- Small bugfix for when the last worker had no items left.
+- Fixed that minimizer crashed if None data was given.
+
+Other
+-----
+- Made the CLEnvironments share a context whenever possible.
+- Created a new module for processors. Fixed the random number generation in the sampling.
+- Moved the function processors out of the cl_function module.
+- Moved the automatic wrapped kernel generation to a method of CLFunction.
+- Moved the conversion of inputs to KernelData objects to a separate function.
+- Allowed the configuration function set_cl_environments accept integers as arguments.
+- CLRuntimeInfo now also supports initialization using integer indices and single value elements.
+
+
 v0.9.6 (2019-12-17)
 ===================
 
