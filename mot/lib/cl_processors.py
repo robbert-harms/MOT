@@ -52,7 +52,7 @@ class SimpleProcessor(Processor):
         self._kernel_data = kernel_data
         self._cl_environment = cl_environment
         self._nmr_instances = nmr_instances
-        self._global_offset = global_offset
+        self._global_offset = global_offset or 0
         self._kernel.set_scalar_arg_dtypes(self._flatten_list([d.get_scalar_arg_dtypes() for d in self._kernel_data]))
         self._workgroup_size = workgroup_size
 
