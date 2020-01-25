@@ -58,7 +58,7 @@ class AbstractSampler:
         self._current_log_likelihood = np.zeros(self._nmr_problems, dtype=float_type)
         self._current_log_prior = np.zeros(self._nmr_problems, dtype=float_type)
         self._rng_state = np.random.uniform(low=np.iinfo(np.uint32).min, high=np.iinfo(np.uint32).max + 1,
-                                            size=(self._nmr_problems, 6)).astype(np.uint32)
+                                            size=(self._nmr_problems, 1)).astype(np.uint32)
 
         self._initialize_likelihood_prior(self._current_chain_position, self._current_log_likelihood,
                                           self._current_log_prior)
