@@ -1,4 +1,9 @@
+import os
+
+from mot.lib.cl_function import SimpleCLCodeObject
 from mot.library_functions.base import SimpleCLLibrary, SimpleCLLibraryFromFile, CLLibrary
+from pkg_resources import resource_filename
+
 from mot.library_functions.eispack import eispack_tred2, eispack_tql2
 from mot.library_functions.unity import log1pmx
 from mot.library_functions.polynomials import p1evl, polevl, ratevl, real_zeros_cubic_pol
@@ -10,6 +15,7 @@ from mot.library_functions.continuous_distributions.invgamma import invgamma_pdf
 from mot.library_functions.error_functions import dawson, CerfImWOfX, erfi
 from mot.library_functions.legendre_polynomial import FirstLegendreTerm, LegendreTerms, \
     EvenLegendreTerms, OddLegendreTerms
+
 
 __author__ = 'Robbert Harms'
 __date__ = '2018-05-07'
@@ -83,6 +89,20 @@ class LogCosh(SimpleCLLibrary):
                 return fabs(x) + log(1 + exp(-2.0 * fabs(x))) - log(2.0);
             }
         ''')
+
+
+class Rand123(SimpleCLCodeObject):
+    def __init__(self):
+        generator = 'philox'
+
+        src = open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/openclfeatures.h'), ), 'r').read()
+        src += open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/array.h'), ), 'r').read()
+        src += open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/{}.h'.format(generator)), ),
+                    'r').read()
+        src += (open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/rand123.h'), ), 'r').read() % {
+            'GENERATOR_NAME': (generator)
+        })
+        super().__init__(src)
 
 
 class simpsons_rule(SimpleCLLibrary):
