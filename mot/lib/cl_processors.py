@@ -36,8 +36,7 @@ class Processor:
 
 class SimpleProcessor(Processor):
 
-    def __init__(self, kernel, kernel_data, cl_environment, nmr_instances, use_local_reduction=False,
-                 local_size=None, global_offset=None):
+    def __init__(self, kernel, kernel_data, cl_environment, nmr_instances, workgroup_size, global_offset=None):
         """Simple processor which can execute the provided (compiled) kernel with the provided data.
 
         Args:
@@ -46,10 +45,7 @@ class SimpleProcessor(Processor):
             cl_environment (mot.lib.cl_environments.CLEnvironment): the CL environment to use for executing the kernel
             nmr_instances (int): the number of instances to compute. Technically, the global work size,
                 not yet multiplied by the local workgroup size.
-            use_local_reduction (boolean): set this to True if you want to use local memory reduction in
-                 evaluating this function. If this is set to True we will multiply the global size
-                 (given by the nmr_instances) by the work group sizes.
-            local_size (int): can be used to specify the exact local size (workgroup size) the kernel must use.
+            workgroup_size (int): the local size (workgroup size) the kernel must use
             global_offset (int): the offset for the global id
         """
         self._kernel = kernel
@@ -57,17 +53,8 @@ class SimpleProcessor(Processor):
         self._cl_environment = cl_environment
         self._nmr_instances = nmr_instances
         self._global_offset = global_offset
-
         self._kernel.set_scalar_arg_dtypes(self._flatten_list([d.get_scalar_arg_dtypes() for d in self._kernel_data]))
-
-        if use_local_reduction:
-            if local_size:
-                self._workgroup_size = local_size
-            else:
-                self._workgroup_size = self._kernel.get_work_group_info(
-                    cl.kernel_work_group_info.PREFERRED_WORK_GROUP_SIZE_MULTIPLE, cl_environment.device)
-        else:
-            self._workgroup_size = 1
+        self._workgroup_size = workgroup_size
 
     def enqueue_kernels(self, flush=True, finish=False):
         range_start = self._global_offset
@@ -153,7 +140,7 @@ class CLFunctionProcessor(Processor):
         self._enable_rng = enable_rng
         self._context_variables = self._resolve_context_variables(context_variables, nmr_instances)
 
-        self._workers = []
+        self._subprocessors = []
         for ind, cl_environment in enumerate(self._cl_environments):
             batch_start, batch_end = self._batches[ind]
             nmr_instances = batch_end - batch_start
@@ -162,29 +149,36 @@ class CLFunctionProcessor(Processor):
                 ' '.join(self._cl_runtime_info.compile_flags))
             kernel = getattr(program, self._cl_function.get_cl_function_name())
 
+            if use_local_reduction:
+                if local_size:
+                    workgroup_size = local_size
+                else:
+                    workgroup_size = kernel.get_work_group_info(
+                        cl.kernel_work_group_info.PREFERRED_WORK_GROUP_SIZE_MULTIPLE, cl_environment.device)
+            else:
+                workgroup_size = 1
+
             if nmr_instances > 0:
                 if self._context_variables:
                     context_kernel = getattr(program, '_initialize_context_variables')
                     worker = SimpleProcessor(context_kernel, list(self._context_variables.values()), cl_environment,
-                                             nmr_instances, use_local_reduction=use_local_reduction,
-                                             local_size=local_size, global_offset=batch_start)
-                    self._workers.append(worker)
+                                             nmr_instances, 1, global_offset=batch_start)
+                    self._subprocessors.append(worker)
 
-                worker = SimpleProcessor(kernel, list(self._kernel_data.values()), cl_environment,
-                                         nmr_instances, use_local_reduction=use_local_reduction,
-                                         local_size=local_size, global_offset=batch_start)
-                self._workers.append(worker)
+                processor = SimpleProcessor(kernel, list(self._kernel_data.values()), cl_environment,
+                                         nmr_instances, workgroup_size, global_offset=batch_start)
+                self._subprocessors.append(processor)
 
     def enqueue_kernels(self, flush=True, finish=False):
-        for worker in self._workers:
+        for worker in self._subprocessors:
             worker.enqueue_kernels(flush=flush, finish=finish)
 
     def enqueue_flush(self):
-        for worker in self._workers:
+        for worker in self._subprocessors:
             worker.enqueue_flush()
 
     def enqueue_finish(self):
-        for worker in self._workers:
+        for worker in self._subprocessors:
             worker.enqueue_finish()
 
     def get_kernel_data(self):
