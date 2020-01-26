@@ -381,7 +381,7 @@ class Struct(KernelData):
 
 class Scalar(KernelData):
 
-    def __init__(self, value, ctype=None):
+    def __init__(self, value, ctype=None, inline=False):
         """A kernel input scalar.
 
         This will insert the given value directly into the kernel's source code, and will not load it as a buffer.
@@ -390,6 +390,8 @@ class Scalar(KernelData):
             value (number): the number to insert into the kernel as a scalar.
             ctype (str): the desired c-type for in use in the kernel, like ``int``, ``float`` or ``mot_float_type``.
                 If None it is implied from the value.
+            inline (bool): if set to True, we inline the value in the generated kernel code,
+                else we set it as an argument.
         """
         if isinstance(value, str) and value == 'INFINITY':
             self._value = np.inf
@@ -399,6 +401,7 @@ class Scalar(KernelData):
             self._value = np.array(value)
         self._ctype = ctype or dtype_to_ctype(self._value.dtype)
         self._mot_float_dtype = None
+        self._inline = inline
 
     @property
     def ctype(self):
@@ -413,6 +416,8 @@ class Scalar(KernelData):
         return np.asscalar(self._value)
 
     def get_scalar_arg_dtypes(self):
+        if self._inline:
+            return [ctype_to_dtype(self._ctype)]
         return []
 
     def enqueue_host_access(self, queue, buffers, range_start, range_end):
@@ -428,15 +433,23 @@ class Scalar(KernelData):
         return '{} {};'.format(self._ctype, name)
 
     def get_struct_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
+        if self._inline:
+            return kernel_param_name
         return self.get_function_call_input(variable_name, kernel_param_name, problem_id_substitute, 'private')
 
     def get_kernel_parameters(self, kernel_param_name):
+        if self._inline:
+            return ['{} {}'.format(self._ctype, kernel_param_name)]
         return []
 
     def get_kernel_inputs(self, cl_context, workgroup_size):
+        if self._inline:
+            return [self.get_data()]
         return []
 
     def get_nmr_kernel_inputs(self):
+        if self._inline:
+            return 1
         return 0
 
     def set_mot_float_dtype(self, mot_float_dtype):
@@ -446,6 +459,9 @@ class Scalar(KernelData):
         return ''
 
     def get_function_call_input(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        if self._inline:
+            return kernel_param_name
+
         if is_vector_ctype(self._ctype):
             vector_length = split_vector_ctype(self._ctype)[1]
 
