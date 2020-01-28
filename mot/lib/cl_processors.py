@@ -45,7 +45,8 @@ class SimpleProcessor(Processor):
             cl_environment (mot.lib.cl_environments.CLEnvironment): the CL environment to use for executing the kernel
             nmr_instances (int): the number of instances to compute. Technically, the global work size,
                 not yet multiplied by the local workgroup size.
-            workgroup_size (int): the local size (workgroup size) the kernel must use
+            workgroup_size (int): the local size (workgroup size) the kernel must use,
+                we multiply the nmr_instances with this.
             global_offset (int): the offset for the global id
         """
         self._kernel = kernel
