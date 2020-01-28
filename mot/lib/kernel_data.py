@@ -450,9 +450,6 @@ class Scalar(KernelData):
             return []
         return [ctype_to_dtype(self._ctype)]
 
-    def enqueue_host_access(self, queue, buffers, range_start, range_end):
-        pass
-
     def get_type_definitions(self):
         return ''
 
@@ -553,9 +550,6 @@ class PrivateMemory(KernelData):
     def get_scalar_arg_dtypes(self):
         return []
 
-    def enqueue_host_access(self, queue, buffers, range_start, range_end):
-        pass
-
     def get_type_definitions(self):
         return ''
 
@@ -636,9 +630,6 @@ class LocalMemory(KernelData):
 
     def get_scalar_arg_dtypes(self):
         return [None]
-
-    def enqueue_host_access(self, queue, buffers, range_start, range_end):
-        pass
 
     def get_type_definitions(self):
         return ''
@@ -797,22 +788,6 @@ class Array(KernelData):
     def get_scalar_arg_dtypes(self):
         return [None]
 
-    def enqueue_host_access(self, queue, buffers, range_start, range_end):
-        if self._is_writable:
-            if self.parallelize_over_first_dimension:
-                nmr_problems = int(range_end - range_start)
-                nmr_problems = min(nmr_problems, self._data.shape[0])
-                cl.enqueue_map_buffer(
-                    queue, buffers[0], cl.map_flags.READ,
-                    int(range_start * self._data.strides[0]),
-                    (nmr_problems,) + self._data.shape[1:], self._data.dtype,
-                    order="C", wait_for=None, is_blocking=False)
-            else:
-                cl.enqueue_map_buffer(
-                    queue, buffers[0], cl.map_flags.READ,
-                    0, self._data.shape, self._data.dtype,
-                    order="C", wait_for=None, is_blocking=False)
-
     def get_type_definitions(self):
         return ''
 
@@ -949,9 +924,6 @@ class CompositeArray(KernelData):
         for d in self._elements:
             dtypes.extend(d.get_scalar_arg_dtypes())
         return dtypes
-
-    def enqueue_host_access(self, queue, buffers, range_start, range_end):
-        pass
 
     def get_type_definitions(self):
         return '\n'.join(element.get_type_definitions() for element in self._elements)
