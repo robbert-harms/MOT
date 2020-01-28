@@ -760,13 +760,13 @@ class Array(KernelData):
             if self._parallelize_over_first_dimension:
                 nmr_problems = int(range_end - range_start)
                 nmr_problems = min(nmr_problems, self._data.shape[0])
-                data, _ = cl.enqueue_map_buffer(
+                cl.enqueue_map_buffer(
                     queue, buffers[0], cl.map_flags.READ,
                     int(range_start * self._data.strides[0]),
                     (nmr_problems,) + self._data.shape[1:], self._data.dtype,
                     order="C", wait_for=None, is_blocking=False)
             else:
-                data, _ = cl.enqueue_map_buffer(
+                cl.enqueue_map_buffer(
                     queue, buffers[0], cl.map_flags.READ,
                     0, self._data.shape, self._data.dtype,
                     order="C", wait_for=None, is_blocking=False)
