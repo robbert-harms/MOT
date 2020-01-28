@@ -98,20 +98,6 @@ class KernelData:
         """
         raise NotImplementedError()
 
-    def enqueue_host_access(self, queue, buffers, range_start, range_end):
-        """Enqueue either a map or write operation for this kernel input data object.
-
-        This should add non-blocking maps or write operations to the given queue.
-
-        Args:
-            queue (opencl queue): the queue on which to add the unmap buffer command
-            buffers (List[pyopencl._cl.Buffer.Buffer]): the list of buffers corresponding to this kernel data.
-                These buffers are obtained earlier from the method :meth:`get_kernel_inputs`.
-            range_start (int): the start of the range processed by a kernel (in the first dimension)
-            range_end (int): the end of the range processed by a kernel (in the first dimension)
-        """
-        raise NotImplementedError()
-
     def get_type_definitions(self):
         """Get possible type definitions needed to load this data into the kernel.
 
@@ -296,15 +282,6 @@ class Struct(KernelData):
             dtypes.extend(d.get_scalar_arg_dtypes())
         return dtypes
 
-    def enqueue_host_access(self, queue, buffers, range_start, range_end):
-        buffer_ind = 0
-
-        for d in self._elements.values():
-            if d.get_nmr_kernel_inputs():
-                d.enqueue_host_access(queue, buffers[buffer_ind:buffer_ind + d.get_nmr_kernel_inputs()],
-                                      range_start, range_end)
-                buffer_ind += d.get_nmr_kernel_inputs()
-
     def get_type_definitions(self):
         other_structs = '\n'.join(element.get_type_definitions() for element in self._elements.values())
 
@@ -444,9 +421,6 @@ class Scalar(KernelData):
             return []
         return [ctype_to_dtype(self._ctype)]
 
-    def enqueue_host_access(self, queue, buffers, range_start, range_end):
-        pass
-
     def get_type_definitions(self):
         return ''
 
@@ -553,9 +527,6 @@ class LocalMemory(KernelData):
     def get_scalar_arg_dtypes(self):
         return [None]
 
-    def enqueue_host_access(self, queue, buffers, range_start, range_end):
-        pass
-
     def get_type_definitions(self):
         return ''
 
@@ -624,9 +595,6 @@ class PrivateMemory(KernelData):
 
     def get_scalar_arg_dtypes(self):
         return []
-
-    def enqueue_host_access(self, queue, buffers, range_start, range_end):
-        pass
 
     def get_type_definitions(self):
         return ''
@@ -711,14 +679,14 @@ class Array(KernelData):
         self._backup_data_reference = None
         self._ensure_zero_copy = ensure_zero_copy
         self._as_scalar = as_scalar
-        self._parallelize_over_first_dimension = parallelize_over_first_dimension
+        self.parallelize_over_first_dimension = parallelize_over_first_dimension
 
         self._buffer_cache = {}  # caching the buffers per context
 
         self._data_length = 1
         if len(self._data.shape):
             self._data_length = self._data.strides[0] // self._data.itemsize
-        if not self._parallelize_over_first_dimension:
+        if not self.parallelize_over_first_dimension:
             self._data_length = self._data.size
 
         if self._as_scalar and len(np.squeeze(self._data).shape) > 1:
@@ -735,11 +703,11 @@ class Array(KernelData):
     def get_subset(self, problem_indices):
         if problem_indices is None:
             return self
-        if not self._parallelize_over_first_dimension:
+        if not self.parallelize_over_first_dimension:
             return self
         return Array(self._data[problem_indices], ctype=self._ctype,
                      mode=self._mode, ensure_zero_copy=False, as_scalar=self._as_scalar,
-                     parallelize_over_first_dimension=self._parallelize_over_first_dimension)
+                     parallelize_over_first_dimension=self.parallelize_over_first_dimension)
 
     def set_mot_float_dtype(self, mot_float_dtype):
         self._mot_float_dtype = mot_float_dtype
@@ -765,7 +733,7 @@ class Array(KernelData):
         self._data_length = 1
         if len(self._data.shape):
             self._data_length = self._data.strides[0] // self._data.itemsize
-        if not self._parallelize_over_first_dimension:
+        if not self.parallelize_over_first_dimension:
             self._data_length = self._data.size
 
     def get_data(self):
@@ -782,22 +750,6 @@ class Array(KernelData):
 
     def get_scalar_arg_dtypes(self):
         return [None]
-
-    def enqueue_host_access(self, queue, buffers, range_start, range_end):
-        if self._is_writable:
-            if self._parallelize_over_first_dimension:
-                nmr_problems = int(range_end - range_start)
-                nmr_problems = min(nmr_problems, self._data.shape[0])
-                cl.enqueue_map_buffer(
-                    queue, buffers[0], cl.map_flags.READ,
-                    int(range_start * self._data.strides[0]),
-                    (nmr_problems,) + self._data.shape[1:], self._data.dtype,
-                    order="C", wait_for=None, is_blocking=False)
-            else:
-                cl.enqueue_map_buffer(
-                    queue, buffers[0], cl.map_flags.READ,
-                    0, self._data.shape, self._data.dtype,
-                    order="C", wait_for=None, is_blocking=False)
 
     def get_type_definitions(self):
         return ''
@@ -891,7 +843,7 @@ class Array(KernelData):
         return 1
 
     def _get_offset_str(self, problem_id_substitute):
-        if self._parallelize_over_first_dimension:
+        if self.parallelize_over_first_dimension:
             offset_str = str(self._data_length) + ' * {problem_id}'
         else:
             offset_str = '0'
@@ -978,9 +930,6 @@ class CompositeArray(KernelData):
         for d in self._elements:
             dtypes.extend(d.get_scalar_arg_dtypes())
         return dtypes
-
-    def enqueue_host_access(self, queue, buffers, range_start, range_end):
-        pass
 
     def get_type_definitions(self):
         return '\n'.join(element.get_type_definitions() for element in self._elements)
