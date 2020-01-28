@@ -58,6 +58,32 @@ class KernelData:
         """
         raise NotImplementedError()
 
+    def get_buffer(self, cl_context):
+        """Get the underlying buffer of this kernel data object, for the given context.
+
+        Args:
+            cl_context (cl.Context): the pyopencl context for which we want to get the buffer object.
+        """
+        raise NotImplementedError()
+
+    def get_children(self):
+        """Get a list of children kernel data elements.
+
+        Returns:
+            List[KernelData]: list of children kernel data elements, can be an an empty list.
+        """
+        raise NotImplementedError()
+
+    def get_flattened(self):
+        """Get a list of this kernel data with the children and sub/sub/sub... children as a flattened list.
+
+        The first element of the list is always the current element itself.
+
+        Returns:
+            List[KernelData]: list of children kernel data elements, including itself
+        """
+        raise NotImplementedError()
+
     def get_scalar_arg_dtypes(self):
         """Get the numpy data types we should report in the kernel call for scalar elements.
 
@@ -83,20 +109,6 @@ class KernelData:
                 These buffers are obtained earlier from the method :meth:`get_kernel_inputs`.
             range_start (int): the start of the range processed by a kernel (in the first dimension)
             range_end (int): the end of the range processed by a kernel (in the first dimension)
-        """
-        raise NotImplementedError()
-
-    def enqueue_device_access(self, queue, buffers, range_start, range_end):
-        """Enqueue either an unmap or read operation for this kernel input data object.
-
-        This should add non-blocking unmaps or read operations to the given queue.
-
-        Args:
-            queue (opencl queue): the queue on which to add the unmap buffer command
-            buffers (List[pyopencl._cl.Buffer.Buffer]): the list of buffers corresponding to this kernel data.
-                These buffers are obtained earlier from the method :meth:`get_kernel_inputs`.
-            range_start (int): the start of the range the kernel wants to process (in the first dimension)
-            range_end (int): the end of the range the kernel wants to process (in the first dimension)
         """
         raise NotImplementedError()
 
@@ -269,6 +281,18 @@ class Struct(KernelData):
             data[name] = value.get_data()
         return data
 
+    def get_buffer(self, cl_context):
+        return None
+
+    def get_children(self):
+        return self._elements.values()
+
+    def get_flattened(self):
+        flattened = [self]
+        for d in self._elements.values():
+            flattened.extend(d.get_flattened())
+        return flattened
+
     def get_scalar_arg_dtypes(self):
         dtypes = []
         for d in self._elements.values():
@@ -282,15 +306,6 @@ class Struct(KernelData):
             if d.get_nmr_kernel_inputs():
                 d.enqueue_host_access(queue, buffers[buffer_ind:buffer_ind + d.get_nmr_kernel_inputs()],
                                       range_start, range_end)
-                buffer_ind += d.get_nmr_kernel_inputs()
-
-    def enqueue_device_access(self, queue, buffers, range_start, range_end):
-        buffer_ind = 0
-
-        for d in self._elements.values():
-            if d.get_nmr_kernel_inputs():
-                d.enqueue_device_access(queue, buffers[buffer_ind:buffer_ind + d.get_nmr_kernel_inputs()],
-                                        range_start, range_end)
                 buffer_ind += d.get_nmr_kernel_inputs()
 
     def get_type_definitions(self):
@@ -421,15 +436,21 @@ class Scalar(KernelData):
             return np.asscalar(self._value.astype(self._mot_float_dtype))
         return np.asscalar(self._value)
 
+    def get_buffer(self, cl_context):
+        return None
+
+    def get_children(self):
+        return []
+
+    def get_flattened(self):
+        return [self]
+
     def get_scalar_arg_dtypes(self):
         if self._inline:
             return []
         return [ctype_to_dtype(self._ctype)]
 
     def enqueue_host_access(self, queue, buffers, range_start, range_end):
-        pass
-
-    def enqueue_device_access(self, queue, buffers, range_start, range_end):
         pass
 
     def get_type_definitions(self):
@@ -520,13 +541,19 @@ class PrivateMemory(KernelData):
     def get_data(self):
         return None
 
+    def get_buffer(self, cl_context):
+        return None
+
+    def get_children(self):
+        return []
+
+    def get_flattened(self):
+        return [self]
+
     def get_scalar_arg_dtypes(self):
         return []
 
     def enqueue_host_access(self, queue, buffers, range_start, range_end):
-        pass
-
-    def enqueue_device_access(self, queue, buffers, range_start, range_end):
         pass
 
     def get_type_definitions(self):
@@ -598,13 +625,19 @@ class LocalMemory(KernelData):
     def get_data(self):
         return None
 
+    def get_buffer(self, cl_context):
+        return None
+
+    def get_children(self):
+        return []
+
+    def get_flattened(self):
+        return [self]
+
     def get_scalar_arg_dtypes(self):
         return [None]
 
     def enqueue_host_access(self, queue, buffers, range_start, range_end):
-        pass
-
-    def enqueue_device_access(self, queue, buffers, range_start, range_end):
         pass
 
     def get_type_definitions(self):
@@ -752,6 +785,15 @@ class Array(KernelData):
     def get_data(self):
         return self._data
 
+    def get_buffer(self, cl_context):
+        return self._buffer_cache.get(cl_context)
+
+    def get_children(self):
+        return []
+
+    def get_flattened(self):
+        return [self]
+
     def get_scalar_arg_dtypes(self):
         return [None]
 
@@ -770,9 +812,6 @@ class Array(KernelData):
                     queue, buffers[0], cl.map_flags.READ,
                     0, self._data.shape, self._data.dtype,
                     order="C", wait_for=None, is_blocking=False)
-
-    def enqueue_device_access(self, queue, buffers, range_start, range_end):
-        pass
 
     def get_type_definitions(self):
         return ''
@@ -893,6 +932,18 @@ class CompositeArray(KernelData):
     def get_data(self):
         return [item.get_data() for item in self._elements]
 
+    def get_buffer(self, cl_context):
+        return None
+
+    def get_children(self):
+        return self._elements
+
+    def get_flattened(self):
+        flattened = [self]
+        for d in self._elements:
+            flattened.extend(d.get_flattened())
+        return flattened
+
     def get_scalar_arg_dtypes(self):
         dtypes = list(self._composite_array.get_scalar_arg_dtypes())
         for d in self._elements:
@@ -900,9 +951,6 @@ class CompositeArray(KernelData):
         return dtypes
 
     def enqueue_host_access(self, queue, buffers, range_start, range_end):
-        pass
-
-    def enqueue_device_access(self, queue, buffers, range_start, range_end):
         pass
 
     def get_type_definitions(self):
