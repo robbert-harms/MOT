@@ -38,7 +38,8 @@ class Processor:
 
 class SimpleProcessor(Processor):
 
-    def __init__(self, kernel, cl_environment, global_nmr_instances, workgroup_size, kernel_data, instance_offset=None):
+    def __init__(self, kernel, cl_environment, global_nmr_instances, workgroup_size, kernel_data,
+                 instance_offset=None, do_data_transfers=True):
         """Simple processor which can execute the provided (compiled) kernel with the provided data.
 
         Args:
@@ -49,6 +50,9 @@ class SimpleProcessor(Processor):
                 local workgroup size.
             workgroup_size (int): the local size (workgroup size) the kernel must use
             instance_offset (int): the offset for the global id, this will be multiplied with the local workgroup size.
+            do_data_transfers (boolean): if this processor should do the data transfers for the kernel data elements.
+                If set to True, this will call ``enqueue_device_access`` and ``enqueue_host_access`` on each kernel
+                data element.
         """
         self._kernel = kernel
         self._kernel_data = kernel_data
@@ -57,6 +61,7 @@ class SimpleProcessor(Processor):
         self._instance_offset = instance_offset or 0
         self._kernel.set_scalar_arg_dtypes(self._flatten_list([d.get_scalar_arg_dtypes() for d in self._kernel_data]))
         self._workgroup_size = workgroup_size
+        self._do_data_transfers = do_data_transfers
 
     def enqueue_kernels(self, flush=True, finish=False):
         range_start = self._instance_offset
@@ -65,9 +70,10 @@ class SimpleProcessor(Processor):
         kernel_inputs = [data.get_kernel_inputs(self._cl_environment.context, self._workgroup_size)
                          for data in self._kernel_data]
 
-        for ind, kernel_data in enumerate(self._kernel_data):
-            kernel_data.enqueue_device_access(self._cl_environment.queue,
-                                              kernel_inputs[ind], range_start, range_end)
+        if self._do_data_transfers:
+            for ind, kernel_data in enumerate(self._kernel_data):
+                kernel_data.enqueue_device_access(self._cl_environment.queue,
+                                                  kernel_inputs[ind], range_start, range_end)
 
         self._kernel(
             self._cl_environment.queue,
@@ -76,9 +82,10 @@ class SimpleProcessor(Processor):
             *self._flatten_list(kernel_inputs),
             global_offset=(int(self._instance_offset * self._workgroup_size),))
 
-        for ind, kernel_data in enumerate(self._kernel_data):
-            kernel_data.enqueue_host_access(self._cl_environment.queue,
-                                            kernel_inputs[ind], range_start, range_end)
+        if self._do_data_transfers:
+            for ind, kernel_data in enumerate(self._kernel_data):
+                kernel_data.enqueue_host_access(self._cl_environment.queue,
+                                                kernel_inputs[ind], range_start, range_end)
 
         if flush:
             self.enqueue_flush()
