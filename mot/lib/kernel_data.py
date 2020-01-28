@@ -725,14 +725,14 @@ class Array(KernelData):
         self._backup_data_reference = None
         self._ensure_zero_copy = ensure_zero_copy
         self._as_scalar = as_scalar
-        self._parallelize_over_first_dimension = parallelize_over_first_dimension
+        self.parallelize_over_first_dimension = parallelize_over_first_dimension
 
         self._buffer_cache = {}  # caching the buffers per context
 
         self._data_length = 1
         if len(self._data.shape):
             self._data_length = self._data.strides[0] // self._data.itemsize
-        if not self._parallelize_over_first_dimension:
+        if not self.parallelize_over_first_dimension:
             self._data_length = self._data.size
 
         if self._as_scalar and len(np.squeeze(self._data).shape) > 1:
@@ -749,11 +749,11 @@ class Array(KernelData):
     def get_subset(self, problem_indices):
         if problem_indices is None:
             return self
-        if not self._parallelize_over_first_dimension:
+        if not self.parallelize_over_first_dimension:
             return self
         return Array(self._data[problem_indices], ctype=self._ctype,
                      mode=self._mode, ensure_zero_copy=False, as_scalar=self._as_scalar,
-                     parallelize_over_first_dimension=self._parallelize_over_first_dimension)
+                     parallelize_over_first_dimension=self.parallelize_over_first_dimension)
 
     def set_mot_float_dtype(self, mot_float_dtype):
         self._mot_float_dtype = mot_float_dtype
@@ -779,7 +779,7 @@ class Array(KernelData):
         self._data_length = 1
         if len(self._data.shape):
             self._data_length = self._data.strides[0] // self._data.itemsize
-        if not self._parallelize_over_first_dimension:
+        if not self.parallelize_over_first_dimension:
             self._data_length = self._data.size
 
     def get_data(self):
@@ -799,7 +799,7 @@ class Array(KernelData):
 
     def enqueue_host_access(self, queue, buffers, range_start, range_end):
         if self._is_writable:
-            if self._parallelize_over_first_dimension:
+            if self.parallelize_over_first_dimension:
                 nmr_problems = int(range_end - range_start)
                 nmr_problems = min(nmr_problems, self._data.shape[0])
                 cl.enqueue_map_buffer(
@@ -862,7 +862,7 @@ class Array(KernelData):
         return 1
 
     def _get_offset_str(self, problem_id_substitute):
-        if self._parallelize_over_first_dimension:
+        if self.parallelize_over_first_dimension:
             offset_str = str(self._data_length) + ' * {problem_id}'
         else:
             offset_str = '0'
