@@ -36,30 +36,29 @@ class Processor:
 
 class SimpleProcessor(Processor):
 
-    def __init__(self, kernel, kernel_data, cl_environment, nmr_instances, workgroup_size, global_offset=None):
+    def __init__(self, kernel, cl_environment, global_nmr_instances, workgroup_size, kernel_data, instance_offset=None):
         """Simple processor which can execute the provided (compiled) kernel with the provided data.
 
         Args:
             kernel: a pyopencl compiled kernel program
             kernel_data (List[mot.lib.utils.KernelData]): the kernel data to load as input to the kernel
             cl_environment (mot.lib.cl_environments.CLEnvironment): the CL environment to use for executing the kernel
-            nmr_instances (int): the number of instances to compute. Technically, the global work size,
-                not yet multiplied by the local workgroup size.
-            workgroup_size (int): the local size (workgroup size) the kernel must use,
-                we multiply the nmr_instances with this.
-            global_offset (int): the offset for the global id
+            global_nmr_instances (int): the global work size, this will internally be multiplied by the
+                local workgroup size.
+            workgroup_size (int): the local size (workgroup size) the kernel must use
+            instance_offset (int): the offset for the global id, this will be multiplied with the local workgroup size.
         """
         self._kernel = kernel
         self._kernel_data = kernel_data
         self._cl_environment = cl_environment
-        self._nmr_instances = nmr_instances
-        self._global_offset = global_offset or 0
+        self._global_nmr_instances = global_nmr_instances
+        self._instance_offset = instance_offset or 0
         self._kernel.set_scalar_arg_dtypes(self._flatten_list([d.get_scalar_arg_dtypes() for d in self._kernel_data]))
         self._workgroup_size = workgroup_size
 
     def enqueue_kernels(self, flush=True, finish=False):
-        range_start = self._global_offset
-        range_end = self._global_offset + self._nmr_instances
+        range_start = self._instance_offset
+        range_end = self._instance_offset + self._global_nmr_instances
 
         kernel_inputs = [data.get_kernel_inputs(self._cl_environment.context, self._workgroup_size)
                          for data in self._kernel_data]
@@ -70,10 +69,10 @@ class SimpleProcessor(Processor):
 
         self._kernel(
             self._cl_environment.queue,
-            (int(self._nmr_instances * self._workgroup_size),),
+            (int(self._global_nmr_instances * self._workgroup_size),),
             (int(self._workgroup_size),),
             *self._flatten_list(kernel_inputs),
-            global_offset=(int(self._global_offset * self._workgroup_size),))
+            global_offset=(int(self._instance_offset * self._workgroup_size),))
 
         for ind, kernel_data in enumerate(self._kernel_data):
             kernel_data.enqueue_host_access(self._cl_environment.queue,
@@ -166,8 +165,8 @@ class CLFunctionProcessor(Processor):
                                              nmr_instances, 1, global_offset=batch_start)
                     self._subprocessors.append(worker)
 
-                processor = SimpleProcessor(kernel, list(self._kernel_data.values()), cl_environment,
-                                         nmr_instances, workgroup_size, global_offset=batch_start)
+                processor = SimpleProcessor(kernel, cl_environment, nmr_instances, workgroup_size,
+                                            list(self._kernel_data.values()), instance_offset=batch_start)
                 self._subprocessors.append(processor)
 
     def enqueue_kernels(self, flush=True, finish=False):
