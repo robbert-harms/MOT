@@ -381,7 +381,7 @@ class Struct(KernelData):
 
 class Scalar(KernelData):
 
-    def __init__(self, value, ctype=None, inline=False):
+    def __init__(self, value, ctype=None, inline=True):
         """A kernel input scalar.
 
         This will insert the given value directly into the kernel's source code, and will not load it as a buffer.
@@ -417,8 +417,8 @@ class Scalar(KernelData):
 
     def get_scalar_arg_dtypes(self):
         if self._inline:
-            return [ctype_to_dtype(self._ctype)]
-        return []
+            return []
+        return [ctype_to_dtype(self._ctype)]
 
     def enqueue_host_access(self, queue, buffers, range_start, range_end):
         pass
@@ -434,23 +434,24 @@ class Scalar(KernelData):
 
     def get_struct_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
         if self._inline:
-            return kernel_param_name
-        return self.get_function_call_input(variable_name, kernel_param_name, problem_id_substitute, 'private')
+            return self.get_function_call_input(variable_name, kernel_param_name, problem_id_substitute, 'private')
+        return kernel_param_name
 
     def get_kernel_parameters(self, kernel_param_name):
         if self._inline:
-            return ['{} {}'.format(self._ctype, kernel_param_name)]
-        return []
+            return []
+        return ['{} {}'.format(self._ctype, kernel_param_name)]
+
 
     def get_kernel_inputs(self, cl_context, workgroup_size):
         if self._inline:
-            return [self.get_data()]
-        return []
+            return []
+        return [self.get_data()]
 
     def get_nmr_kernel_inputs(self):
         if self._inline:
-            return 1
-        return 0
+            return 0
+        return 1
 
     def set_mot_float_dtype(self, mot_float_dtype):
         self._mot_float_dtype = mot_float_dtype
@@ -459,7 +460,7 @@ class Scalar(KernelData):
         return ''
 
     def get_function_call_input(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
-        if self._inline:
+        if not self._inline:
             return kernel_param_name
 
         if is_vector_ctype(self._ctype):
