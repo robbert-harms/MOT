@@ -68,6 +68,11 @@ class SimpleProcessor(Processor):
         kernel_inputs = [data.get_kernel_inputs(self._cl_environment.context, self._workgroup_size)
                          for data in self._kernel_data]
 
+        if self._do_data_transfers:
+            for ind, kernel_data in enumerate(self._kernel_data):
+                kernel_data.enqueue_device_access(self._cl_environment.queue,
+                                                  kernel_inputs[ind], range_start, range_end)
+
         self._kernel(
             self._cl_environment.queue,
             (int(self._global_nmr_instances * self._workgroup_size),),
@@ -76,22 +81,9 @@ class SimpleProcessor(Processor):
             global_offset=(int(self._instance_offset * self._workgroup_size),))
 
         if self._do_data_transfers:
-            for kernel_data in self._kernel_data:
-                for item in kernel_data.get_flattened():
-                    buffer = item.get_buffer(self._cl_environment.context)
-                    if buffer:
-                        data = item.get_data()
-                        if item.parallelize_over_first_dimension:
-                            nmr_problems = int(range_end - range_start)
-                            MapBuffer(
-                                self._cl_environment,
-                                buffer,
-                                int(range_start * data.strides[0]),
-                                (nmr_problems,) + data.shape[1:],
-                                data.dtype).enqueue_process(flush=False)
-                        else:
-                            MapBuffer(self._cl_environment, buffer,
-                                      0, data.shape, data.dtype).enqueue_process(flush=False)
+            for ind, kernel_data in enumerate(self._kernel_data):
+                kernel_data.enqueue_host_access(self._cl_environment.queue,
+                                                kernel_inputs[ind], range_start, range_end)
 
         if flush:
             self.enqueue_flush()
