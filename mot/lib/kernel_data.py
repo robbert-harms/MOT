@@ -24,15 +24,21 @@ class KernelData:
         """
         raise NotImplementedError()
 
-    def get_subset(self, problem_indices):
+    def get_subset(self, problem_indices=None, range_start=None, range_end=None):
         """Get a subset of this kernel data over problem instances.
 
         This can be used to get a subset of a kernel data object such that only a subset of the problem instances
-        can be processed.
+        are processed.
+
+        One can either provide a list of indices or a range defined by a start and end position. Providing a list
+        of indices is more flexible, but will incur a memory copy. Providing a range only allows contiguous slices,
+        but it will use the original memory.
 
         Args:
             problem_indices (Iterable or None): list of problem instances we would like to have in the subset.
                 May return ``self``. If problem_indices evaluates to None, this should return ``self``.
+            range_start (int): the start of the range (inclusive), can not be provided together with problem_indices.
+            range_end (int): the end of the range (exclusive), can not be provided together with problem_indices.
 
         Returns:
             KernelData: a kernel data object of the same type as the current kernel data object.
@@ -276,10 +282,11 @@ class Struct(KernelData):
     def ctype(self):
         return self._ctype
 
-    def get_subset(self, problem_indices):
+    def get_subset(self, problem_indices=None, range_start=None, range_end=None):
         if problem_indices is None:
             return self
-        sub_elements = OrderedDict([(k, v.get_subset(problem_indices)) for k, v in self._elements.items()])
+        sub_elements = OrderedDict([(k, v.get_subset(problem_indices, range_start, range_end))
+                                    for k, v in self._elements.items()])
         return Struct(sub_elements, self._ctype, anonymous=self._anonymous)
 
     def set_mot_float_dtype(self, mot_float_dtype):
@@ -445,7 +452,7 @@ class Scalar(KernelData):
     def ctype(self):
         return self._ctype
 
-    def get_subset(self, problem_indices):
+    def get_subset(self, problem_indices=None, range_start=None, range_end=None):
         return self
 
     def get_data(self):
@@ -558,7 +565,7 @@ class LocalMemory(KernelData):
     def ctype(self):
         return self._ctype
 
-    def get_subset(self, problem_indices):
+    def get_subset(self, problem_indices=None, range_start=None, range_end=None):
         return self
 
     def set_mot_float_dtype(self, mot_float_dtype):
@@ -633,7 +640,7 @@ class PrivateMemory(KernelData):
     def ctype(self):
         return self._ctype
 
-    def get_subset(self, problem_indices):
+    def get_subset(self, problem_indices=None, range_start=None, range_end=None):
         return self
 
     def set_mot_float_dtype(self, mot_float_dtype):
@@ -764,9 +771,11 @@ class Array(KernelData):
     def ctype(self):
         return self._ctype
 
-    def get_subset(self, problem_indices):
+    def get_subset(self, problem_indices=None, range_start=None, range_end=None):
         if problem_indices is None:
-            return self
+            if range_start is None and range_end is None:
+                return self
+            return ArrayView(self, range_start, range_end, self._mode)
         if not self._parallelize_over_first_dimension:
             return self
         return Array(self._data[problem_indices], ctype=self._ctype,
@@ -919,7 +928,6 @@ class Array(KernelData):
                 flags = cl.mem_flags.READ_ONLY
             flags = flags | cl.mem_flags.USE_HOST_PTR
             self._buffer_cache[cl_context] = cl.Buffer(cl_context, flags, hostbuf=self._data)
-
         return [self._buffer_cache[cl_context]]
 
     def get_nmr_kernel_inputs(self):
@@ -931,6 +939,109 @@ class Array(KernelData):
         else:
             offset_str = '0'
         return offset_str.replace('{problem_id}', problem_id_substitute)
+
+
+class ArrayView(KernelData):
+
+    def __init__(self, parent_array, range_start, range_end, mode):
+        """This represents a subbuffer of an :class:`Array`.
+
+        Args:
+            parent_array (Array): the array class we are subbuffering
+            range_start (int): the start of the subbuffer range
+            range_end (int): the end of the subbuffer range
+        """
+        self._parent_array = parent_array
+        self._range_start = range_start
+        self._range_end = range_end
+
+        self._mode = mode
+        self._is_readable = 'r' in mode
+        self._is_writable = 'w' in mode
+
+        self._buffer_cache = {}  # caching the buffers per context
+
+    @property
+    def ctype(self):
+        return self._parent_array.ctype
+
+    def get_subset(self, problem_indices=None, range_start=None, range_end=None):
+        return self._parent_array.get_subset(range_start=self._range_start + range_start,
+                                             range_end=self._range_start + range_end)
+
+    def set_mot_float_dtype(self, mot_float_dtype):
+        old_data = self._parent_array.get_data()
+        self._parent_array.set_mot_float_dtype(mot_float_dtype)
+
+        if self._parent_array.get_data() is not old_data:
+            self._buffer_cache = {}
+
+    def get_data(self):
+        return self._parent_array.get_data()[self._range_start:self._range_end]
+
+    def get_children(self):
+        return self._parent_array.get_children()
+
+    def get_flattened(self):
+        return self._parent_array.get_flattened()
+
+    def get_scalar_arg_dtypes(self):
+        return self._parent_array.get_scalar_arg_dtypes()
+
+    def enqueue_host_access(self, queue, buffers, range_start, range_end):
+        if self._is_writable:
+            data = self._parent_array.get_data()
+            shape = (self._range_end - self._range_start,) + data.shape[1:]
+            cl.enqueue_map_buffer(
+                queue, buffers[0], cl.map_flags.READ,
+                0, shape, data.dtype,
+                order="C", wait_for=None, is_blocking=False)
+
+    def enqueue_device_access(self, queue, buffers, range_start, range_end):
+        pass
+
+    def get_type_definitions(self):
+        return self._parent_array.get_type_definitions()
+
+    def initialize_variable(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        return self._parent_array.initialize_variable(variable_name, kernel_param_name,
+                                                      problem_id_substitute, address_space)
+
+    def get_function_call_input(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        return self._parent_array.get_function_call_input(variable_name, kernel_param_name,
+                                                          problem_id_substitute, address_space)
+
+    def post_function_callback(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        return self._parent_array.post_function_callback(variable_name, kernel_param_name,
+                                                         problem_id_substitute, address_space)
+
+    def get_struct_declaration(self, name):
+        return self._parent_array.get_struct_declaration(name)
+
+    def get_struct_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
+        return self._parent_array.get_struct_initialization(variable_name, kernel_param_name, problem_id_substitute)
+
+    def get_kernel_parameters(self, kernel_param_name):
+        return self._parent_array.get_kernel_parameters(kernel_param_name)
+
+    def get_kernel_inputs(self, cl_context, workgroup_size):
+        if cl_context not in self._buffer_cache:
+            if self._is_writable:
+                if self._is_readable:
+                    flags = cl.mem_flags.READ_WRITE
+                else:
+                    flags = cl.mem_flags.WRITE_ONLY
+            else:
+                flags = cl.mem_flags.READ_ONLY
+            flags = flags | cl.mem_flags.USE_HOST_PTR
+
+            v = memoryview(self._parent_array.get_data())[self._range_start:self._range_end]
+            self._buffer_cache[cl_context] = cl.Buffer(cl_context, flags, hostbuf=v)
+
+        return [self._buffer_cache[cl_context]]
+
+    def get_nmr_kernel_inputs(self):
+        return self._parent_array.get_nmr_kernel_inputs()
 
 
 class Zeros(Array):
@@ -985,7 +1096,7 @@ class CompositeArray(KernelData):
     def ctype(self):
         return self._ctype
 
-    def get_subset(self, problem_indices):
+    def get_subset(self, problem_indices=None, range_start=None, range_end=None):
         return self
 
     def set_mot_float_dtype(self, mot_float_dtype):
