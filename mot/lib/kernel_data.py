@@ -24,15 +24,21 @@ class KernelData:
         """
         raise NotImplementedError()
 
-    def get_subset(self, problem_indices):
+    def get_subset(self, problem_indices=None, range_start=None, range_end=None):
         """Get a subset of this kernel data over problem instances.
 
         This can be used to get a subset of a kernel data object such that only a subset of the problem instances
-        can be processed.
+        are processed.
+
+        One can either provide a list of indices or a range defined by a start and end position. Providing a list
+        of indices is more flexible, but will incur a memory copy. Providing a range only allows contiguous slices,
+        but it will use the original memory.
 
         Args:
             problem_indices (Iterable or None): list of problem instances we would like to have in the subset.
                 May return ``self``. If problem_indices evaluates to None, this should return ``self``.
+            range_start (int): the start of the range (inclusive), can not be provided together with problem_indices.
+            range_end (int): the end of the range (exclusive), can not be provided together with problem_indices.
 
         Returns:
             KernelData: a kernel data object of the same type as the current kernel data object.
@@ -55,14 +61,6 @@ class KernelData:
 
         Returns:
             dict, ndarray, scalar: the underlying data object, can return None if this input data has no actual data.
-        """
-        raise NotImplementedError()
-
-    def get_buffer(self, cl_context):
-        """Get the underlying buffer of this kernel data object, for the given context.
-
-        Args:
-            cl_context (cl.Context): the pyopencl context for which we want to get the buffer object.
         """
         raise NotImplementedError()
 
@@ -98,31 +96,23 @@ class KernelData:
         """
         raise NotImplementedError()
 
-    def enqueue_host_access(self, queue, buffers, range_start, range_end):
+    def enqueue_host_access(self, cl_environment):
         """Enqueue either a map or write operation for this kernel input data object.
 
         This should add non-blocking maps or write operations to the given queue.
 
         Args:
-            queue (opencl queue): the queue on which to add the unmap buffer command
-            buffers (List[pyopencl._cl.Buffer.Buffer]): the list of buffers corresponding to this kernel data.
-                These buffers are obtained earlier from the method :meth:`get_kernel_inputs`.
-            range_start (int): the start of the range processed by a kernel (in the first dimension)
-            range_end (int): the end of the range processed by a kernel (in the first dimension)
+            cl_environment (mot.lib.cl_environments.CLEnvironment): enqueue device access for this CL environment.
         """
         raise NotImplementedError()
 
-    def enqueue_device_access(self, queue, buffers, range_start, range_end):
+    def enqueue_device_access(self, cl_environment):
         """Enqueue either an unmap or read operation for this kernel input data object.
 
         This should add non-blocking unmaps or read operations to the given queue.
 
         Args:
-            queue (opencl queue): the queue on which to add the unmap buffer command
-            buffers (List[pyopencl._cl.Buffer.Buffer]): the list of buffers corresponding to this kernel data.
-                These buffers are obtained earlier from the method :meth:`get_kernel_inputs`.
-            range_start (int): the start of the range the kernel wants to process (in the first dimension)
-            range_end (int): the end of the range the kernel wants to process (in the first dimension)
+            cl_environment (mot.lib.cl_environments.CLEnvironment): enqueue device access for this CL environment.
         """
         raise NotImplementedError()
 
@@ -279,10 +269,11 @@ class Struct(KernelData):
     def ctype(self):
         return self._ctype
 
-    def get_subset(self, problem_indices):
+    def get_subset(self, problem_indices=None, range_start=None, range_end=None):
         if problem_indices is None:
             return self
-        sub_elements = OrderedDict([(k, v.get_subset(problem_indices)) for k, v in self._elements.items()])
+        sub_elements = OrderedDict([(k, v.get_subset(problem_indices, range_start, range_end))
+                                    for k, v in self._elements.items()])
         return Struct(sub_elements, self._ctype, anonymous=self._anonymous)
 
     def set_mot_float_dtype(self, mot_float_dtype):
@@ -294,9 +285,6 @@ class Struct(KernelData):
         for name, value in self._elements.items():
             data[name] = value.get_data()
         return data
-
-    def get_buffer(self, cl_context):
-        return None
 
     def get_children(self):
         return self._elements.values()
@@ -313,22 +301,16 @@ class Struct(KernelData):
             dtypes.extend(d.get_scalar_arg_dtypes())
         return dtypes
 
-    def enqueue_host_access(self, queue, buffers, range_start, range_end):
+    def enqueue_host_access(self, cl_environment):
+        for d in self._elements.values():
+            d.enqueue_host_access(cl_environment)
+
+    def enqueue_device_access(self, cl_environment):
         buffer_ind = 0
 
         for d in self._elements.values():
             if d.get_nmr_kernel_inputs():
-                d.enqueue_host_access(queue, buffers[buffer_ind:buffer_ind + d.get_nmr_kernel_inputs()],
-                                      range_start, range_end)
-                buffer_ind += d.get_nmr_kernel_inputs()
-
-    def enqueue_device_access(self, queue, buffers, range_start, range_end):
-        buffer_ind = 0
-
-        for d in self._elements.values():
-            if d.get_nmr_kernel_inputs():
-                d.enqueue_device_access(queue, buffers[buffer_ind:buffer_ind + d.get_nmr_kernel_inputs()],
-                                        range_start, range_end)
+                d.enqueue_device_access(cl_environment)
                 buffer_ind += d.get_nmr_kernel_inputs()
 
     def get_type_definitions(self):
@@ -451,16 +433,13 @@ class Scalar(KernelData):
     def ctype(self):
         return self._ctype
 
-    def get_subset(self, problem_indices):
+    def get_subset(self, problem_indices=None, range_start=None, range_end=None):
         return self
 
     def get_data(self):
         if self._ctype.startswith('mot_float_type'):
             return np.asscalar(self._value.astype(self._mot_float_dtype))
         return np.asscalar(self._value)
-
-    def get_buffer(self, cl_context):
-        return None
 
     def get_children(self):
         return []
@@ -473,10 +452,10 @@ class Scalar(KernelData):
             return []
         return [ctype_to_dtype(self._ctype)]
 
-    def enqueue_host_access(self, queue, buffers, range_start, range_end):
+    def enqueue_host_access(self, cl_environment):
         pass
 
-    def enqueue_device_access(self, queue, buffers, range_start, range_end):
+    def enqueue_device_access(self, cl_environment):
         pass
 
     def get_type_definitions(self):
@@ -558,16 +537,13 @@ class PrivateMemory(KernelData):
     def ctype(self):
         return self._ctype
 
-    def get_subset(self, problem_indices):
+    def get_subset(self, problem_indices=None, range_start=None, range_end=None):
         return self
 
     def set_mot_float_dtype(self, mot_float_dtype):
         self._mot_float_dtype = mot_float_dtype
 
     def get_data(self):
-        return None
-
-    def get_buffer(self, cl_context):
         return None
 
     def get_children(self):
@@ -579,10 +555,10 @@ class PrivateMemory(KernelData):
     def get_scalar_arg_dtypes(self):
         return []
 
-    def enqueue_host_access(self, queue, buffers, range_start, range_end):
+    def enqueue_host_access(self, cl_environment):
         pass
 
-    def enqueue_device_access(self, queue, buffers, range_start, range_end):
+    def enqueue_device_access(self, cl_environment):
         pass
 
     def get_type_definitions(self):
@@ -645,16 +621,13 @@ class LocalMemory(KernelData):
     def ctype(self):
         return self._ctype
 
-    def get_subset(self, problem_indices):
+    def get_subset(self, problem_indices=None, range_start=None, range_end=None):
         return self
 
     def set_mot_float_dtype(self, mot_float_dtype):
         self._mot_float_dtype = mot_float_dtype
 
     def get_data(self):
-        return None
-
-    def get_buffer(self, cl_context):
         return None
 
     def get_children(self):
@@ -666,10 +639,10 @@ class LocalMemory(KernelData):
     def get_scalar_arg_dtypes(self):
         return [None]
 
-    def enqueue_host_access(self, queue, buffers, range_start, range_end):
+    def enqueue_host_access(self, cl_environment):
         pass
 
-    def enqueue_device_access(self, queue, buffers, range_start, range_end):
+    def enqueue_device_access(self, cl_environment):
         pass
 
     def get_type_definitions(self):
@@ -778,11 +751,24 @@ class Array(KernelData):
     def ctype(self):
         return self._ctype
 
-    def get_subset(self, problem_indices):
-        if problem_indices is None:
+    @property
+    def mode(self):
+        """Get the read write mode defined for this array.
+
+        Returns:
+            str: the mode in which the buffer should be created, a string like 'r', 'w' or 'rw'
+        """
+        return self._mode
+
+    def get_subset(self, problem_indices=None, range_start=None, range_end=None):
+        if problem_indices is None and range_start is None and range_end is None:
             return self
         if not self._parallelize_over_first_dimension:
             return self
+
+        if problem_indices is None:
+            return SubArray(self, range_start, range_end)
+
         return Array(self._data[problem_indices], ctype=self._ctype,
                      mode=self._mode, ensure_zero_copy=False, as_scalar=self._as_scalar,
                      parallelize_over_first_dimension=self._parallelize_over_first_dimension)
@@ -817,9 +803,6 @@ class Array(KernelData):
     def get_data(self):
         return self._data
 
-    def get_buffer(self, cl_context):
-        return self._buffer_cache.get(cl_context)
-
     def get_children(self):
         return []
 
@@ -829,23 +812,14 @@ class Array(KernelData):
     def get_scalar_arg_dtypes(self):
         return [None]
 
-    def enqueue_host_access(self, queue, buffers, range_start, range_end):
+    def enqueue_host_access(self, cl_environment):
         if self._is_writable:
-            if self._parallelize_over_first_dimension:
-                nmr_problems = int(range_end - range_start)
-                nmr_problems = min(nmr_problems, self._data.shape[0])
-                cl.enqueue_map_buffer(
-                    queue, buffers[0], cl.map_flags.READ,
-                    int(range_start * self._data.strides[0]),
-                    (nmr_problems,) + self._data.shape[1:], self._data.dtype,
-                    order="C", wait_for=None, is_blocking=False)
-            else:
-                cl.enqueue_map_buffer(
-                    queue, buffers[0], cl.map_flags.READ,
-                    0, self._data.shape, self._data.dtype,
-                    order="C", wait_for=None, is_blocking=False)
+            cl.enqueue_map_buffer(
+                cl_environment.queue, self._buffer_cache[cl_environment.context],
+                cl.map_flags.READ, 0, self._data.shape, self._data.dtype,
+                order="C", wait_for=None, is_blocking=False)
 
-    def enqueue_device_access(self, queue, buffers, range_start, range_end):
+    def enqueue_device_access(self, cl_environment):
         pass
 
     def get_type_definitions(self):
@@ -890,7 +864,6 @@ class Array(KernelData):
                 flags = cl.mem_flags.READ_ONLY
             flags = flags | cl.mem_flags.USE_HOST_PTR
             self._buffer_cache[cl_context] = cl.Buffer(cl_context, flags, hostbuf=self._data)
-
         return [self._buffer_cache[cl_context]]
 
     def get_nmr_kernel_inputs(self):
@@ -902,6 +875,116 @@ class Array(KernelData):
         else:
             offset_str = '0'
         return offset_str.replace('{problem_id}', problem_id_substitute)
+
+
+class SubArray(KernelData):
+
+    def __init__(self, parent_array, range_start, range_end):
+        """This creates buffers for only a part of a data array.
+
+        This is useful if you need to split an array into multiple chunks, but you want to use the original memory
+        location for the outputs.
+
+        Args:
+            parent_array (Array): the array class we want to sub buffer
+            range_start (int): the start of the subbuffer range
+            range_end (int): the end of the subbuffer range
+        """
+        self._parent_array = parent_array
+        self._range_start = range_start
+        self._range_end = range_end
+
+        self._mode = self._parent_array.mode
+        self._is_readable = 'r' in self._mode
+        self._is_writable = 'w' in self._mode
+
+        self._buffer_cache = {}  # caching the buffers per context
+
+    @property
+    def ctype(self):
+        return self._parent_array.ctype
+
+    @property
+    def mode(self):
+        return self._mode
+
+    def get_subset(self, problem_indices=None, range_start=None, range_end=None):
+        return self._parent_array.get_subset(range_start=self._range_start + range_start,
+                                             range_end=self._range_start + range_end)
+
+    def set_mot_float_dtype(self, mot_float_dtype):
+        old_data = self._parent_array.get_data()
+        self._parent_array.set_mot_float_dtype(mot_float_dtype)
+
+        if self._parent_array.get_data() is not old_data:
+            self._buffer_cache = {}
+
+    def get_data(self):
+        return self._parent_array.get_data()[self._range_start:self._range_end]
+
+    def get_children(self):
+        return self._parent_array.get_children()
+
+    def get_flattened(self):
+        return self._parent_array.get_flattened()
+
+    def get_scalar_arg_dtypes(self):
+        return self._parent_array.get_scalar_arg_dtypes()
+
+    def enqueue_host_access(self, cl_environment):
+        if self._is_writable:
+            data = self._parent_array.get_data()
+            shape = (self._range_end - self._range_start,) + data.shape[1:]
+            cl.enqueue_map_buffer(
+                cl_environment.queue, self._buffer_cache[cl_environment.context],
+                cl.map_flags.READ, 0, shape, data.dtype,
+                order="C", wait_for=None, is_blocking=False)
+
+    def enqueue_device_access(self, cl_environment):
+        pass
+
+    def get_type_definitions(self):
+        return self._parent_array.get_type_definitions()
+
+    def initialize_variable(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        return self._parent_array.initialize_variable(variable_name, kernel_param_name,
+                                                      problem_id_substitute, address_space)
+
+    def get_function_call_input(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        return self._parent_array.get_function_call_input(variable_name, kernel_param_name,
+                                                          problem_id_substitute, address_space)
+
+    def post_function_callback(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        return self._parent_array.post_function_callback(variable_name, kernel_param_name,
+                                                         problem_id_substitute, address_space)
+
+    def get_struct_declaration(self, name):
+        return self._parent_array.get_struct_declaration(name)
+
+    def get_struct_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
+        return self._parent_array.get_struct_initialization(variable_name, kernel_param_name, problem_id_substitute)
+
+    def get_kernel_parameters(self, kernel_param_name):
+        return self._parent_array.get_kernel_parameters(kernel_param_name)
+
+    def get_kernel_inputs(self, cl_context, workgroup_size):
+        if cl_context not in self._buffer_cache:
+            if self._is_writable:
+                if self._is_readable:
+                    flags = cl.mem_flags.READ_WRITE
+                else:
+                    flags = cl.mem_flags.WRITE_ONLY
+            else:
+                flags = cl.mem_flags.READ_ONLY
+            flags = flags | cl.mem_flags.USE_HOST_PTR
+
+            v = memoryview(self._parent_array.get_data())[self._range_start:self._range_end]
+            self._buffer_cache[cl_context] = cl.Buffer(cl_context, flags, hostbuf=v)
+
+        return [self._buffer_cache[cl_context]]
+
+    def get_nmr_kernel_inputs(self):
+        return self._parent_array.get_nmr_kernel_inputs()
 
 
 class Zeros(Array):
@@ -956,7 +1039,7 @@ class CompositeArray(KernelData):
     def ctype(self):
         return self._ctype
 
-    def get_subset(self, problem_indices):
+    def get_subset(self, problem_indices=None, range_start=None, range_end=None):
         return self
 
     def set_mot_float_dtype(self, mot_float_dtype):
@@ -966,9 +1049,6 @@ class CompositeArray(KernelData):
 
     def get_data(self):
         return [item.get_data() for item in self._elements]
-
-    def get_buffer(self, cl_context):
-        return None
 
     def get_children(self):
         return self._elements
@@ -985,10 +1065,10 @@ class CompositeArray(KernelData):
             dtypes.extend(d.get_scalar_arg_dtypes())
         return dtypes
 
-    def enqueue_host_access(self, queue, buffers, range_start, range_end):
+    def enqueue_host_access(self, cl_environment):
         pass
 
-    def enqueue_device_access(self, queue, buffers, range_start, range_end):
+    def enqueue_device_access(self, cl_environment):
         pass
 
     def get_type_definitions(self):
