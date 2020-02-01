@@ -64,16 +64,12 @@ class SimpleProcessor(Processor):
         self._do_data_transfers = do_data_transfers
 
     def enqueue_process(self, flush=True, finish=False):
-        range_start = self._instance_offset
-        range_end = self._instance_offset + self._global_nmr_instances
-
         kernel_inputs = [data.get_kernel_inputs(self._cl_environment.context, self._workgroup_size)
                          for data in self._kernel_data]
 
         if self._do_data_transfers:
             for ind, kernel_data in enumerate(self._kernel_data):
-                kernel_data.enqueue_device_access(self._cl_environment.queue,
-                                                  kernel_inputs[ind], range_start, range_end)
+                kernel_data.enqueue_device_access(self._cl_environment)
 
         self._kernel(
             self._cl_environment.queue,
@@ -84,8 +80,7 @@ class SimpleProcessor(Processor):
 
         if self._do_data_transfers:
             for ind, kernel_data in enumerate(self._kernel_data):
-                kernel_data.enqueue_host_access(self._cl_environment.queue,
-                                                kernel_inputs[ind], range_start, range_end)
+                kernel_data.enqueue_host_access(self._cl_environment)
 
         if flush:
             self.enqueue_flush()
@@ -103,44 +98,6 @@ class SimpleProcessor(Processor):
         for e in l:
             return_l.extend(e)
         return return_l
-
-
-class MapBuffer(Processor):
-
-    def __init__(self, cl_environment, buffer, offset, shape, dtype, order='C'):
-        """Map a buffer back into host memory.
-
-        Args:
-            cl_environment (mot.lib.cl_environments.CLEnvironment): the CL environment to use for executing the kernel
-            buffer: the pyopencl buffer object
-            offset (int): the starting offset
-            shape (tuple): the shape of the host array
-            dtype (np.dtype): the dtype of the host array
-            order (str): the storage order, column or row order
-        """
-        self._cl_environment = cl_environment
-        self._buffer = buffer
-        self._offset = offset
-        self._shape = shape
-        self._dtype = dtype
-        self._order = order
-
-    def enqueue_process(self, flush=True, finish=False):
-        cl.enqueue_map_buffer(
-            self._cl_environment.queue, self._buffer, cl.map_flags.READ,
-            self._offset, self._shape, self._dtype,
-            order="C", wait_for=None, is_blocking=False)
-
-        if flush:
-            self.enqueue_flush()
-        if finish:
-            self.enqueue_finish()
-
-    def enqueue_flush(self):
-        self._cl_environment.queue.flush()
-
-    def enqueue_finish(self):
-        self._cl_environment.queue.finish()
 
 
 class CLFunctionProcessor(Processor):
