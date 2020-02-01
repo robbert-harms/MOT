@@ -946,17 +946,11 @@ class SubArray(KernelData):
     def get_type_definitions(self):
         return self._parent_array.get_type_definitions()
 
-    def initialize_variable(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
-        return self._parent_array.initialize_variable(variable_name, kernel_param_name,
-                                                      problem_id_substitute, address_space)
+    def initialize_variable(self, variable_name, kernel_param_name, problem_id_substitute):
+        return self._parent_array.initialize_variable(variable_name, kernel_param_name, problem_id_substitute)
 
-    def get_function_call_input(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
-        return self._parent_array.get_function_call_input(variable_name, kernel_param_name,
-                                                          problem_id_substitute, address_space)
-
-    def post_function_callback(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
-        return self._parent_array.post_function_callback(variable_name, kernel_param_name,
-                                                         problem_id_substitute, address_space)
+    def get_function_call_input(self, variable_name, kernel_param_name, problem_id_substitute):
+        return self._parent_array.get_function_call_input(variable_name, kernel_param_name, problem_id_substitute)
 
     def get_struct_declaration(self, name):
         return self._parent_array.get_struct_declaration(name)
@@ -966,6 +960,12 @@ class SubArray(KernelData):
 
     def get_kernel_parameters(self, kernel_param_name):
         return self._parent_array.get_kernel_parameters(kernel_param_name)
+
+    def get_context_variable_declaration(self, name):
+        return self._parent_array.get_context_variable_declaration(name)
+
+    def get_context_variable_initialization(self, variable_name, kernel_param_name):
+        return self._parent_array.get_context_variable_initialization(variable_name, kernel_param_name)
 
     def get_kernel_inputs(self, cl_context, workgroup_size):
         if cl_context not in self._buffer_cache:
