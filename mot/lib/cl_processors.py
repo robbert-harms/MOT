@@ -38,8 +38,8 @@ class Processor:
 
 class SimpleProcessor(Processor):
 
-    def __init__(self, kernel, cl_environment, global_nmr_instances, workgroup_size, kernel_data,
-                 instance_offset=None, do_data_transfers=True):
+    def __init__(self, kernel, kernel_data, cl_environment, global_nmr_instances, workgroup_size, instance_offset=None,
+                 do_data_transfers=True):
         """Simple processor which can execute the provided (compiled) kernel with the provided data.
 
         Args:
@@ -156,8 +156,10 @@ class CLFunctionProcessor(Processor):
             nmr_instances = batch_end - batch_start
 
             if nmr_instances > 0:
-                processor = SimpleProcessor(kernel, cl_environment, nmr_instances, workgroup_size,
-                                            list(self._kernel_data.values()), instance_offset=batch_start)
+                kernel_data = [v.get_subset(range_start=batch_start, range_end=batch_end)
+                               for v in self._kernel_data.values()]
+                processor = SimpleProcessor(kernel, kernel_data, cl_environment,
+                                            batch_end - batch_start, workgroup_size)
                 self._subprocessors.append(processor)
 
     def enqueue_process(self, flush=True, finish=False):

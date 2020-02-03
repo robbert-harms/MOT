@@ -54,7 +54,7 @@ class AbstractSampler:
         self._sampling_index = 0
 
         float_type = self._cl_runtime_info.mot_float_dtype
-        self._current_chain_position = np.require(np.copy(self._x0), requirements='CAOW', dtype=float_type)
+        self._current_chain_position = np.require(np.copy(self._x0), dtype=float_type)
         self._current_log_likelihood = np.zeros(self._nmr_problems, dtype=float_type)
         self._current_log_prior = np.zeros(self._nmr_problems, dtype=float_type)
         self._rng_state = np.random.uniform(low=np.iinfo(np.uint32).min, high=np.iinfo(np.uint32).max + 1,
@@ -411,8 +411,7 @@ class AbstractRWMSampler(AbstractSampler):
                     void <func_name>(void* data, local mot_float_type* x);
         """
         super().__init__(ll_func, log_prior_func, x0, **kwargs)
-        self._proposal_stds = np.require(np.copy(proposal_stds), requirements='CAOW',
-                                         dtype=self._cl_runtime_info.mot_float_dtype)
+        self._proposal_stds = np.require(np.copy(proposal_stds), dtype=self._cl_runtime_info.mot_float_dtype)
         self._use_random_scan = use_random_scan
         self._finalize_proposal_func = finalize_proposal_func or SimpleCLFunction.from_string(
             'void finalizeProposal(void* data, local mot_float_type* x){}')

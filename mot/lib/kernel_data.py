@@ -267,7 +267,7 @@ class Struct(KernelData):
         return self._ctype
 
     def get_subset(self, problem_indices=None, range_start=None, range_end=None):
-        if problem_indices is None:
+        if problem_indices is None and range_start is None and range_end is None:
             return self
         sub_elements = OrderedDict([(k, v.get_subset(problem_indices, range_start, range_end))
                                     for k, v in self._elements.items()])
@@ -707,7 +707,8 @@ class Array(KernelData):
         if self._is_writable:
             self._requirements.append('W')
 
-        self._data = np.require(data, requirements=self._requirements)
+        self._data = data
+        # self._data = np.require(data, requirements=self._requirements)
         if ctype and not ctype.startswith('mot_float_type'):
             self._data = convert_data_to_dtype(self._data, ctype)
 
