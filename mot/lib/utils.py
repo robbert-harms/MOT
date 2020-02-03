@@ -208,8 +208,8 @@ def convert_data_to_dtype(data, data_type, mot_float_type='float'):
                     for vector_ind in range(data.shape[2]):
                         ve[i, j][vector_ind] = data[i, j, vector_ind]
 
-        return np.require(ve, requirements=['C', 'A', 'O'])
-    return np.require(data, scalar_dtype, ['C', 'A', 'O'])
+        return ve
+    return np.require(data, scalar_dtype)
 
 
 def split_vector_ctype(ctype):

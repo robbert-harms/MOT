@@ -75,9 +75,9 @@ class ThoughtfulWalk(AbstractSampler):
 
         float_type = self._cl_runtime_info.mot_float_dtype
         if x1.shape != x0.shape:
-            self._x1 = np.require(np.tile(x1, (x0.shape[0], 1)), requirements='CAOW', dtype=float_type)
+            self._x1 = np.require(np.tile(x1, (x0.shape[0], 1)), dtype=float_type)
         else:
-            self._x1 = np.require(np.copy(x1), requirements='CAOW', dtype=float_type)
+            self._x1 = np.require(np.copy(x1), dtype=float_type)
 
         self._x1_log_likelihood = np.zeros(self._nmr_problems, dtype=float_type)
         self._x1_log_prior = np.zeros(self._nmr_problems, dtype=float_type)
@@ -106,7 +106,6 @@ class ThoughtfulWalk(AbstractSampler):
                     mot_float_type* current_position,
                     mot_float_type* current_log_likelihood,
                     mot_float_type* current_log_prior){
-
                 _twalk_data* twalk_data = (_twalk_data*)method_data;
                 bool is_first_work_item = get_local_id(0) == 0;
 
@@ -118,7 +117,6 @@ class ThoughtfulWalk(AbstractSampler):
                 mot_float_type* proposal_ll = twalk_data->scratch_mft;
                 mot_float_type* proposal_lprior = twalk_data->scratch_mft + 1;
                 mot_float_type* proposal = twalk_data->scratch_mft + 2;
-
                 *proposal_accepted = false;
                 *proposal_ll = 0;
                 *proposal_lprior = 0;
@@ -127,10 +125,8 @@ class ThoughtfulWalk(AbstractSampler):
                 mot_float_type* helper_chain;
                 mot_float_type* main_ll;
                 mot_float_type* main_lprior;
-
                 if(is_first_work_item){
                     float r = frand();
-
                     if(r < ''' + str(self._move_probabilities[0]) + '''){
                         *kernel_ind = 0;
                     }
@@ -212,7 +208,6 @@ class ThoughtfulWalk(AbstractSampler):
                     mot_float_type* current_position,
                     mot_float_type* current_log_likelihood,
                     mot_float_type* current_log_prior){
-
                 _twalk_data* twalk_data = (_twalk_data*)method_data;
 
                 int* chain_ind = twalk_data->scratch_int;
@@ -310,7 +305,6 @@ class ThoughtfulWalk(AbstractSampler):
                     mot_float_type* proposal,
                     int* params_selector,
                     mot_float_type beta){
-
                 for(uint i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                     if(params_selector[i]){
                         proposal[i] = helper_chain[i] + beta * (helper_chain[i] - main_chain[i]);
@@ -333,7 +327,6 @@ class ThoughtfulWalk(AbstractSampler):
                     int* params_selector,
                     int nmr_params_selected,
                     void* data){
-
                 float beta;
                 bool is_first_work_item = get_local_id(0) == 0;
 
@@ -372,7 +365,6 @@ class ThoughtfulWalk(AbstractSampler):
                     mot_float_type* helper_chain,
                     mot_float_type* proposal,
                     int* params_selector){
-
                 mot_float_type sigma = 0;
                 for(uint i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                     sigma = max(sigma, params_selector[i] * fabs(main_chain[i] - helper_chain[i]));
@@ -425,7 +417,6 @@ class ThoughtfulWalk(AbstractSampler):
                     int* params_selector,
                     int nmr_params_selected,
                     void* data){
-
                 bool is_first_work_item = get_local_id(0) == 0;
 
                 if(is_first_work_item){
