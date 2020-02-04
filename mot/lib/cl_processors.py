@@ -163,13 +163,12 @@ class CLFunctionProcessor(Processor):
             if nmr_instances > 0:
                 if self._context_variables:
                     context_kernel = getattr(program, '_initialize_context_variables')
-                    context_data = [v.get_subset(range_start=batch_start, range_end=batch_end)
+                    context_data = [v.get_subset(batch_range=self._batches[ind])
                                     for v in self._context_variables.values()]
                     worker = SimpleProcessor(context_kernel, context_data, cl_environment, nmr_instances, 1)
                     self._subprocessors.append(worker)
 
-                kernel_data = [v.get_subset(range_start=batch_start, range_end=batch_end)
-                               for v in self._kernel_data.values()]
+                kernel_data = [v.get_subset(batch_range=self._batches[ind]) for v in self._kernel_data.values()]
                 processor = SimpleProcessor(kernel, kernel_data, cl_environment,
                                             batch_end - batch_start, workgroup_size)
                 self._subprocessors.append(processor)
