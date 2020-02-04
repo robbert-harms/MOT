@@ -24,7 +24,7 @@ class KernelData:
         """
         raise NotImplementedError()
 
-    def get_subset(self, problem_indices=None, range_start=None, range_end=None):
+    def get_subset(self, problem_indices=None, batch_range=None):
         """Get a subset of this kernel data over problem instances.
 
         This can be used to get a subset of a kernel data object such that only a subset of the problem instances
@@ -37,8 +37,8 @@ class KernelData:
         Args:
             problem_indices (Iterable or None): list of problem instances we would like to have in the subset.
                 May return ``self``. If problem_indices evaluates to None, this should return ``self``.
-            range_start (int): the start of the range (inclusive), can not be provided together with problem_indices.
-            range_end (int): the end of the range (exclusive), can not be provided together with problem_indices.
+            batch_range (Tuple(int, int)): the range specified by a starting and ending position. The
+                Start position is taken inclusive, the end position is taken exclusive.
 
         Returns:
             KernelData: a kernel data object of the same type as the current kernel data object.
@@ -266,10 +266,10 @@ class Struct(KernelData):
     def ctype(self):
         return self._ctype
 
-    def get_subset(self, problem_indices=None, range_start=None, range_end=None):
-        if problem_indices is None and range_start is None and range_end is None:
+    def get_subset(self, problem_indices=None, batch_range=None):
+        if problem_indices is None and batch_range is None:
             return self
-        sub_elements = OrderedDict([(k, v.get_subset(problem_indices, range_start, range_end))
+        sub_elements = OrderedDict([(k, v.get_subset(problem_indices, batch_range))
                                     for k, v in self._elements.items()])
         return Struct(sub_elements, self._ctype, anonymous=self._anonymous)
 
@@ -427,7 +427,7 @@ class Scalar(KernelData):
     def ctype(self):
         return self._ctype
 
-    def get_subset(self, problem_indices=None, range_start=None, range_end=None):
+    def get_subset(self, problem_indices=None, batch_range=None):
         return self
 
     def get_data(self):
@@ -537,7 +537,7 @@ class LocalMemory(KernelData):
     def ctype(self):
         return self._ctype
 
-    def get_subset(self, problem_indices=None, range_start=None, range_end=None):
+    def get_subset(self, problem_indices=None, batch_range=None):
         return self
 
     def set_mot_float_dtype(self, mot_float_dtype):
@@ -609,7 +609,7 @@ class PrivateMemory(KernelData):
     def ctype(self):
         return self._ctype
 
-    def get_subset(self, problem_indices=None, range_start=None, range_end=None):
+    def get_subset(self, problem_indices=None, batch_range=None):
         return self
 
     def set_mot_float_dtype(self, mot_float_dtype):
@@ -747,14 +747,20 @@ class Array(KernelData):
         """
         return self._mode
 
-    def get_subset(self, problem_indices=None, range_start=None, range_end=None):
-        if problem_indices is None and range_start is None and range_end is None:
+    def get_subset(self, problem_indices=None, batch_range=None):
+        if problem_indices is None and batch_range is None:
             return self
         if not self._parallelize_over_first_dimension:
             return self
 
         if problem_indices is None:
-            return SubArray(self, range_start, range_end)
+            return SubArray(self, batch_range)
+
+        def is_consecutive(l):
+            return np.sum(np.diff(np.sort(l)) == 1) >= (len(l) - 1)
+
+        if is_consecutive(problem_indices):
+            return SubArray(self, (problem_indices[0], problem_indices[-1] + 1))
 
         return Array(self._data[problem_indices], ctype=self._ctype,
                      mode=self._mode, ensure_zero_copy=False, as_scalar=self._as_scalar,
@@ -909,7 +915,7 @@ class Array(KernelData):
 
 class SubArray(KernelData):
 
-    def __init__(self, parent_array, range_start, range_end):
+    def __init__(self, parent_array, batch_range):
         """This creates buffers for only a part of a data array.
 
         This is useful if you need to split an array into multiple chunks, but you want to use the original memory
@@ -921,8 +927,8 @@ class SubArray(KernelData):
             range_end (int): the end of the subbuffer range
         """
         self._parent_array = parent_array
-        self._range_start = range_start
-        self._range_end = range_end
+        self._range_start = batch_range[0]
+        self._range_end = batch_range[1]
 
         self._mode = self._parent_array.mode
         self._is_readable = 'r' in self._mode
@@ -938,9 +944,13 @@ class SubArray(KernelData):
     def mode(self):
         return self._mode
 
-    def get_subset(self, problem_indices=None, range_start=None, range_end=None):
-        return self._parent_array.get_subset(range_start=self._range_start + range_start,
-                                             range_end=self._range_start + range_end)
+    def get_subset(self, problem_indices=None, batch_range=None):
+        if problem_indices is None and batch_range is None:
+            return self
+        if problem_indices is not None:
+            raise ValueError('SubArray does not support subsetting by problem indices.')
+        return self._parent_array.get_subset(batch_range=(self._range_start + batch_range[0],
+                                                          self._range_start + batch_range[1]))
 
     def set_mot_float_dtype(self, mot_float_dtype):
         old_data = self._parent_array.get_data()
@@ -1069,7 +1079,7 @@ class CompositeArray(KernelData):
     def ctype(self):
         return self._ctype
 
-    def get_subset(self, problem_indices=None, range_start=None, range_end=None):
+    def get_subset(self, problem_indices=None, batch_range=None):
         return self
 
     def set_mot_float_dtype(self, mot_float_dtype):
