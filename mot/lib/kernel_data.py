@@ -858,6 +858,7 @@ class Array(KernelData):
         return ['global {}* restrict {}'.format(self._ctype, kernel_param_name)]
 
     def get_kernel_inputs(self, cl_environment, workgroup_size):
+        cl_context = cl_environment.context
         if cl_environment.context not in self._buffer_cache:
             if self._is_writable:
                 if self._is_readable:
@@ -977,7 +978,6 @@ class SubArray(KernelData):
 
     def get_kernel_inputs(self, cl_environment, workgroup_size):
         cl_context = cl_environment.context
-
         if cl_context not in self._buffer_cache:
             if self._is_writable:
                 if self._is_readable:
