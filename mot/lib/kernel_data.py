@@ -859,7 +859,7 @@ class Array(KernelData):
 
     def get_kernel_inputs(self, cl_environment, workgroup_size):
         cl_context = cl_environment.context
-        if cl_environment.context not in self._buffer_cache:
+        if cl_context not in self._buffer_cache:
             if self._is_writable:
                 if self._is_readable:
                     flags = cl.mem_flags.READ_WRITE
@@ -868,8 +868,8 @@ class Array(KernelData):
             else:
                 flags = cl.mem_flags.READ_ONLY
             flags = flags | cl.mem_flags.USE_HOST_PTR
-            self._buffer_cache[cl_environment.context] = cl.Buffer(cl_environment.context, flags, hostbuf=self._data)
-        return [self._buffer_cache[cl_environment.context]]
+            self._buffer_cache[cl_context] = cl.Buffer(cl_context, flags, hostbuf=self._data)
+        return [self._buffer_cache[cl_context]]
 
     def get_nmr_kernel_inputs(self):
         return 1
