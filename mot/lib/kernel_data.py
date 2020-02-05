@@ -1088,18 +1088,28 @@ class Zeros(KernelData):
         return ''
 
     def get_function_call_input(self, variable_name, kernel_param_name, problem_id_substitute):
+        if self._host_accessible:
+            return self._array.get_function_call_input(variable_name, kernel_param_name, problem_id_substitute)
         return '{} + {}'.format(kernel_param_name, self._get_offset_str(problem_id_substitute))
 
     def get_struct_declaration(self, name):
+        if self._host_accessible:
+            return self._array.get_struct_declaration(name)
         return 'global {}* restrict {};'.format(self._ctype, name)
 
     def get_struct_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
+        if self._host_accessible:
+            return self._array.get_struct_initialization(variable_name, kernel_param_name, problem_id_substitute)
         return self.get_function_call_input(variable_name, kernel_param_name, problem_id_substitute)
 
     def get_context_variable_declaration(self, name):
+        if self._host_accessible:
+            return self._array.get_context_variable_declaration(name)
         return 'global {}* {};'.format(self._ctype, name)
 
     def get_context_variable_initialization(self, variable_name, kernel_param_name):
+        if self._host_accessible:
+            return self._array.get_context_variable_initialization(variable_name, kernel_param_name)
         return '{} = {};'.format(variable_name, kernel_param_name)
 
     def get_kernel_parameters(self, kernel_param_name):
