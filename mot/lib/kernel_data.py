@@ -1052,6 +1052,8 @@ class Zeros(KernelData):
                 can not take a subset of the array anymore.
         """
         self._shape = shape
+        if isinstance(self._shape, numbers.Number):
+            self._shape = (self._shape,)
         self._host_accessible = host_accessible
         self._ctype = ctype
 
@@ -1086,7 +1088,13 @@ class Zeros(KernelData):
     def get_subset(self, problem_indices=None, batch_range=None):
         if self._host_accessible:
             return self._array.get_subset(problem_indices, batch_range)
-        raise ValueError('Can not take a subset of a non host accessible array.')
+        if problem_indices is not None:
+            shape = (len(problem_indices),) + self._shape[1:]
+        else:
+            shape = (batch_range[1] - batch_range[0],) + self._shape[1:]
+        return Zeros(shape, self._ctype, mode=self._mode,
+                     parallelize_over_first_dimension=self._parallelize_over_first_dimension,
+                     host_accessible=False)
 
     def set_mot_float_dtype(self, mot_float_dtype):
         if self._host_accessible:
