@@ -1024,9 +1024,9 @@ class SubArray(KernelData):
         return self._parent_array.get_nmr_kernel_inputs()
 
 
-class Zeros(Array):
+class Zeros(KernelData):
 
-    def __init__(self, shape, ctype, mode='w', parallelize_over_first_dimension=True):
+    def __init__(self, shape, ctype, mode='w', parallelize_over_first_dimension=True, host_accessible=True):
         """Allocate an output buffer of the given shape.
 
         This is meant to quickly allocate a buffer large enough to hold the data requested. After running an OpenCL
@@ -1041,10 +1041,195 @@ class Zeros(Array):
                 where ``n`` is expected to correspond to problem instances. If True, we will load the data as
                 (m, k, ...) arrays for each problem instance. If False, the data will be loaded as is, and each problem
                 instance will have a reference to the complete array.
+            host_accessible (boolean): if the array needs to be accessible from the host. If not, we can allocate
+                the buffer on the device, saving memory copy times. If host_accessible is set to False, one
+                can not take a subset of the array anymore.
         """
-        super().__init__(np.zeros(shape, dtype=ctype_to_dtype(ctype)), ctype,
-                         parallelize_over_first_dimension=parallelize_over_first_dimension,
-                         mode=mode, as_scalar=False)
+        self._shape = shape
+        self._host_accessible = host_accessible
+        self._ctype = ctype
+
+        self._mode = mode
+        self._is_readable = 'r' in mode
+        self._is_writable = 'w' in mode
+
+        self._mot_float_dtype = None
+        self._parallelize_over_first_dimension = parallelize_over_first_dimension
+
+        self._buffer_cache = {}  # caching the buffers per context
+
+        self._data_length = 1
+        if isinstance(shape, (list, tuple)) and len(shape) > 1:
+            self._data_length = np.prod(shape[1:])
+        if not self._parallelize_over_first_dimension:
+            self._data_length = np.prod(shape)
+
+        if host_accessible:
+            self._array = Array(np.zeros(shape, dtype=ctype_to_dtype(ctype)), ctype,
+                                parallelize_over_first_dimension=parallelize_over_first_dimension,
+                                mode=mode, as_scalar=False)
+
+    @property
+    def ctype(self):
+        return self._ctype
+
+    @property
+    def mode(self):
+        return self._mode
+
+    def get_subset(self, problem_indices=None, batch_range=None):
+        if self._host_accessible:
+            return self._array.get_subset(problem_indices, batch_range)
+        raise ValueError('Can not take a subset of a non host accessible array.')
+
+    def set_mot_float_dtype(self, mot_float_dtype):
+        if self._host_accessible:
+            return self._array.set_mot_float_dtype(mot_float_dtype)
+        self._mot_float_dtype = mot_float_dtype
+
+    def get_data(self):
+        if self._host_accessible:
+            return self._array.get_data()
+        raise ValueError('Can not get the data from a non host accessible array.')
+
+    def get_children(self):
+        return []
+
+    def get_flattened(self):
+        return [self]
+
+    def get_scalar_arg_dtypes(self):
+        return [None]
+
+    def enqueue_host_access(self, cl_environment):
+        if self._host_accessible:
+            return self._array.enqueue_host_access(cl_environment)
+
+    def enqueue_device_access(self, cl_environment):
+        pass
+
+    def get_type_definitions(self):
+        return ''
+
+    def initialize_variable(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        if self._host_accessible:
+            return self._array.initialize_variable(variable_name, kernel_param_name,
+                                                   problem_id_substitute, address_space)
+
+        if address_space == 'private':
+            return '''
+                private {ctype} {v_name}[{nmr_elements}];
+
+                for(uint i = 0; i < {nmr_elements}; i++){{
+                    {v_name}[i] = {k_name}[{offset} + i];
+                }}
+            '''.format(ctype=self._ctype, v_name=variable_name, k_name=kernel_param_name,
+                       nmr_elements=self._data_length,
+                       offset=self._get_offset_str(problem_id_substitute))
+        elif address_space == 'local':
+            return '''
+                local {ctype} {v_name}[{nmr_elements}];
+
+                if(get_local_id(0) == 0){{
+                    for(uint i = 0; i < {nmr_elements}; i++){{
+                        {v_name}[i] = {k_name}[{offset} + i];
+                    }}
+                }}
+                barrier(CLK_LOCAL_MEM_FENCE);
+            '''.format(ctype=self._ctype, v_name=variable_name, k_name=kernel_param_name,
+                       nmr_elements=self._data_length,
+                       offset=self._get_offset_str(problem_id_substitute))
+
+    def get_function_call_input(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        if self._host_accessible:
+            return self._array.get_function_call_input(variable_name, kernel_param_name,
+                                                       problem_id_substitute, address_space)
+
+        if address_space == 'global':
+            return '{} + {}'.format(kernel_param_name, self._get_offset_str(problem_id_substitute))
+        elif address_space == 'private':
+            return variable_name
+        elif address_space == 'local':
+            return variable_name
+
+    def post_function_callback(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        if self._host_accessible:
+            return self._array.post_function_callback(variable_name, kernel_param_name,
+                                                      problem_id_substitute, address_space)
+
+        if self._is_writable:
+            if address_space == 'private':
+                return '''
+                    for(uint i = 0; i < {nmr_elements}; i++){{
+                        {k_name}[{offset} + i] = {v_name}[i];
+                    }}
+                '''.format(v_name=variable_name, k_name=kernel_param_name,
+                           nmr_elements=self._data_length, offset=self._get_offset_str(problem_id_substitute))
+            elif address_space == 'local':
+                return '''
+                    if(get_local_id(0) == 0){{
+                        for(uint i = 0; i < {nmr_elements}; i++){{
+                            {k_name}[{offset} + i] = {v_name}[i];
+                        }}
+                    }}
+                '''.format(v_name=variable_name, k_name=kernel_param_name,
+                           nmr_elements=self._data_length,
+                           offset=self._get_offset_str(problem_id_substitute))
+        return ''
+
+    def get_struct_declaration(self, name):
+        if self._host_accessible:
+            return self._array.get_struct_declaration(name)
+
+        return 'global {}* restrict {};'.format(self._ctype, name)
+
+    def get_struct_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
+        if self._host_accessible:
+            return self._array.get_struct_initialization(variable_name, kernel_param_name, problem_id_substitute)
+        return self.get_function_call_input(variable_name, kernel_param_name, problem_id_substitute, 'global')
+
+    def get_kernel_parameters(self, kernel_param_name):
+        return ['global {}* restrict {}'.format(self._ctype, kernel_param_name)]
+
+    def get_kernel_inputs(self, cl_environment, workgroup_size):
+        cl_context = cl_environment.context
+
+        if self._host_accessible:
+            return self._array.get_kernel_inputs(cl_environment, workgroup_size)
+
+        mot_float_type_dtype = None
+        if self._mot_float_dtype:
+            mot_float_type_dtype = dtype_to_ctype(self._mot_float_dtype)
+        dtype = np.dtype(ctype_to_dtype(self._ctype, mot_float_type_dtype))
+        itemsize = dtype.itemsize
+
+        if cl_context not in self._buffer_cache:
+            if self._is_writable:
+                if self._is_readable:
+                    flags = cl.mem_flags.READ_WRITE
+                else:
+                    flags = cl.mem_flags.WRITE_ONLY
+            else:
+                flags = cl.mem_flags.READ_ONLY
+
+            buffer = cl.Buffer(cl_context, flags, size=np.prod(self._shape) * itemsize)
+
+            cl.enqueue_fill_buffer(cl_environment.queue, buffer,
+                                   np.zeros(1, dtype=dtype), 0, np.prod(self._shape) * itemsize)
+
+            self._buffer_cache[cl_context] = buffer
+
+        return [self._buffer_cache[cl_context]]
+
+    def get_nmr_kernel_inputs(self):
+        return 1
+
+    def _get_offset_str(self, problem_id_substitute):
+        if self._parallelize_over_first_dimension:
+            offset_str = str(self._data_length) + ' * {problem_id}'
+        else:
+            offset_str = '0'
+        return offset_str.replace('{problem_id}', problem_id_substitute)
 
 
 class CompositeArray(KernelData):
