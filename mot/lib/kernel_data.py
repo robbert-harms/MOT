@@ -867,8 +867,14 @@ class Array(KernelData):
                     flags = cl.mem_flags.WRITE_ONLY
             else:
                 flags = cl.mem_flags.READ_ONLY
-            flags = flags | cl.mem_flags.USE_HOST_PTR
-            self._buffer_cache[cl_context] = cl.Buffer(cl_context, flags, hostbuf=self._data)
+
+            if not self._is_writable:
+                buffer = cl.Buffer(cl_context, flags, size=self._data.nbytes)
+                self._buffer_cache[cl_context] = buffer
+                cl.enqueue_copy(cl_environment.queue, buffer, self._data, is_blocking=False)
+            else:
+                flags = flags | cl.mem_flags.USE_HOST_PTR
+                self._buffer_cache[cl_context] = cl.Buffer(cl_context, flags, hostbuf=self._data)
         return [self._buffer_cache[cl_context]]
 
     def get_nmr_kernel_inputs(self):
