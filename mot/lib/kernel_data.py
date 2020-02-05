@@ -707,12 +707,7 @@ class Array(KernelData):
         self._is_readable = 'r' in mode
         self._is_writable = 'w' in mode
 
-        self._requirements = ['C', 'A', 'O']
-        if self._is_writable:
-            self._requirements.append('W')
-
         self._data = data
-        # self._data = np.require(data, requirements=self._requirements)
         if ctype and not ctype.startswith('mot_float_type'):
             self._data = convert_data_to_dtype(self._data, ctype)
 
@@ -780,7 +775,6 @@ class Array(KernelData):
 
             new_data = convert_data_to_dtype(self._data, self._ctype,
                                              mot_float_type=dtype_to_ctype(mot_float_dtype))
-            new_data = np.require(new_data, requirements=self._requirements)
 
             if new_data is not self._data:
                 self._backup_data_reference = self._data
