@@ -194,8 +194,6 @@ class KernelData:
              variable_name (str): the name for this variable
              kernel_param_name (str): the kernel parameter name (given in :meth:`get_kernel_parameters`).
              problem_id_substitute (str): the substitute for the ``{problem_id}`` in the kernel data info elements.
-             address_space (str): the desired address space for this variable, defined by the parameter of the called
-                function.
 
         Returns:
             str: the necessary CL code to initialize this variable
@@ -213,14 +211,14 @@ class KernelData:
         """
         raise NotImplementedError()
 
-    def get_kernel_inputs(self, cl_context, workgroup_size):
+    def get_kernel_inputs(self, cl_environment, workgroup_size):
         """Get the kernel input data matching the list of parameters of :meth:`get_kernel_parameters`.
 
         Since the kernels follow the map/unmap paradigm make sure to use the ``USE_HOST_PTR`` when making
         writable data objects.
 
         Args:
-            cl_context (pyopencl.Context): the CL context in which we are working.
+            cl_environment (mot.lib.cl_environments.CLEnvironment): the environment for which to prepare the input
             workgroup_size (int): the workgroup size the kernel will use.
 
         Returns:
@@ -380,10 +378,10 @@ class Struct(KernelData):
             parameters.extend(d.get_kernel_parameters('{}_{}'.format(kernel_param_name, name)))
         return parameters
 
-    def get_kernel_inputs(self, cl_context, workgroup_size):
+    def get_kernel_inputs(self, cl_environment, workgroup_size):
         data = []
         for d in self._elements.values():
-            data.extend(d.get_kernel_inputs(cl_context, workgroup_size))
+            data.extend(d.get_kernel_inputs(cl_environment, workgroup_size))
         return data
 
     def get_nmr_kernel_inputs(self):
@@ -468,8 +466,7 @@ class Scalar(KernelData):
             return []
         return ['{} {}'.format(self._ctype, kernel_param_name)]
 
-
-    def get_kernel_inputs(self, cl_context, workgroup_size):
+    def get_kernel_inputs(self, cl_environment, workgroup_size):
         if self._inline:
             return []
         return [self.get_data()]
@@ -582,7 +579,7 @@ class LocalMemory(KernelData):
     def get_kernel_parameters(self, kernel_param_name):
         return ['local {}* restrict {}'.format(self._ctype, kernel_param_name)]
 
-    def get_kernel_inputs(self, cl_context, workgroup_size):
+    def get_kernel_inputs(self, cl_environment, workgroup_size):
         mot_float_type_dtype = None
         if self._mot_float_dtype:
             mot_float_type_dtype = dtype_to_ctype(self._mot_float_dtype)
@@ -660,7 +657,7 @@ class PrivateMemory(KernelData):
     def get_kernel_parameters(self, kernel_param_name):
         return []
 
-    def get_kernel_inputs(self, cl_context, workgroup_size):
+    def get_kernel_inputs(self, cl_environment, workgroup_size):
         return []
 
     def get_nmr_kernel_inputs(self):
@@ -887,7 +884,8 @@ class Array(KernelData):
     def get_kernel_parameters(self, kernel_param_name):
         return ['global {}* restrict {}'.format(self._ctype, kernel_param_name)]
 
-    def get_kernel_inputs(self, cl_context, workgroup_size):
+    def get_kernel_inputs(self, cl_environment, workgroup_size):
+        cl_context = cl_environment.context
         if cl_context not in self._buffer_cache:
             if self._is_writable:
                 if self._is_readable:
@@ -1005,7 +1003,8 @@ class SubArray(KernelData):
     def get_kernel_parameters(self, kernel_param_name):
         return self._parent_array.get_kernel_parameters(kernel_param_name)
 
-    def get_kernel_inputs(self, cl_context, workgroup_size):
+    def get_kernel_inputs(self, cl_environment, workgroup_size):
+        cl_context = cl_environment.context
         if cl_context not in self._buffer_cache:
             if self._is_writable:
                 if self._is_readable:
@@ -1150,10 +1149,10 @@ class CompositeArray(KernelData):
             parameters.extend(d.get_kernel_parameters('{}_{}'.format(kernel_param_name, str(ind))))
         return parameters
 
-    def get_kernel_inputs(self, cl_context, workgroup_size):
-        data = list(self._composite_array.get_kernel_inputs(cl_context, workgroup_size))
+    def get_kernel_inputs(self, cl_environment, workgroup_size):
+        data = list(self._composite_array.get_kernel_inputs(cl_environment, workgroup_size))
         for d in self._elements:
-            data.extend(d.get_kernel_inputs(cl_context, workgroup_size))
+            data.extend(d.get_kernel_inputs(cl_environment, workgroup_size))
         return data
 
     def get_nmr_kernel_inputs(self):

@@ -64,7 +64,7 @@ class SimpleProcessor(Processor):
         self._do_data_transfers = do_data_transfers
 
     def enqueue_process(self, flush=True, finish=False):
-        kernel_inputs = [data.get_kernel_inputs(self._cl_environment.context, self._workgroup_size)
+        kernel_inputs = [data.get_kernel_inputs(self._cl_environment, self._workgroup_size)
                          for data in self._kernel_data]
 
         if self._do_data_transfers:
