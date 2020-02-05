@@ -992,10 +992,16 @@ class SubArray(KernelData):
                     flags = cl.mem_flags.WRITE_ONLY
             else:
                 flags = cl.mem_flags.READ_ONLY
-            flags = flags | cl.mem_flags.USE_HOST_PTR
 
             v = memoryview(self._parent_array.get_data())[self._range_start:self._range_end]
-            self._buffer_cache[cl_context] = cl.Buffer(cl_context, flags, hostbuf=v)
+
+            if not self._is_writable:
+                buffer = cl.Buffer(cl_context, flags, size=v.nbytes)
+                self._buffer_cache[cl_context] = buffer
+                cl.enqueue_copy(cl_environment.queue, buffer, v, is_blocking=False)
+            else:
+                flags = flags | cl.mem_flags.USE_HOST_PTR
+                self._buffer_cache[cl_context] = cl.Buffer(cl_context, flags, hostbuf=v)
 
         return [self._buffer_cache[cl_context]]
 
@@ -1059,7 +1065,7 @@ class Zeros(KernelData):
     def get_subset(self, problem_indices=None, batch_range=None):
         if self._host_accessible:
             return self._array.get_subset(problem_indices, batch_range)
-        raise ValueError('Can not take a subset of a non host accessible array.')
+        raise ValueError('Subset of a non host accessible array is not implemented.')
 
     def set_mot_float_dtype(self, mot_float_dtype):
         if self._host_accessible:
