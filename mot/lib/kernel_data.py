@@ -583,7 +583,11 @@ class LocalMemory(KernelData):
         return ['local {}* restrict {}'.format(self._ctype, kernel_param_name)]
 
     def get_kernel_inputs(self, cl_context, workgroup_size):
-        itemsize = np.dtype(ctype_to_dtype(self._ctype, dtype_to_ctype(self._mot_float_dtype))).itemsize
+        mot_float_type_dtype = None
+        if self._mot_float_dtype:
+            mot_float_type_dtype = dtype_to_ctype(self._mot_float_dtype)
+
+        itemsize = np.dtype(ctype_to_dtype(self._ctype, mot_float_type_dtype)).itemsize
         return [cl.LocalMemory(itemsize * self._size_func(workgroup_size))]
 
     def get_nmr_kernel_inputs(self):
