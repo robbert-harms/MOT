@@ -507,6 +507,79 @@ class Scalar(KernelData):
         return ''
 
 
+class PrivateMemory(KernelData):
+
+    def __init__(self, nmr_items, ctype):
+        """Adds a private memory array of the indicated size to the kernel data elements.
+
+        This is useful if you want to have private memory arrays in kernel data structs.
+
+        Args:
+            nmr_items (int): the size of the private memory array
+            ctype (str): the desired c-type for this local memory object, like ``int``, ``float`` or ``mot_float_type``.
+        """
+        self._ctype = ctype
+        self._mot_float_dtype = None
+        self._nmr_items = nmr_items
+
+    @property
+    def ctype(self):
+        return self._ctype
+
+    def get_subset(self, problem_indices=None, batch_range=None):
+        return self
+
+    def set_mot_float_dtype(self, mot_float_dtype):
+        self._mot_float_dtype = mot_float_dtype
+
+    def get_data(self):
+        return None
+
+    def get_children(self):
+        return []
+
+    def get_flattened(self):
+        return [self]
+
+    def get_scalar_arg_dtypes(self):
+        return []
+
+    def enqueue_host_access(self, cl_environment):
+        pass
+
+    def enqueue_device_access(self, cl_environment):
+        pass
+
+    def get_type_definitions(self):
+        return ''
+
+    def initialize_variable(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        return '''
+            {ctype} {v_name}[{nmr_elements}];
+        '''.format(ctype=self._ctype, v_name=kernel_param_name, nmr_elements=self._nmr_items)
+
+    def get_function_call_input(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        return kernel_param_name
+
+    def post_function_callback(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        return ''
+
+    def get_struct_declaration(self, name):
+        return '{}* {};'.format(self._ctype, name)
+
+    def get_struct_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
+        return kernel_param_name
+
+    def get_kernel_parameters(self, kernel_param_name):
+        return []
+
+    def get_kernel_inputs(self, cl_environment, workgroup_size):
+        return []
+
+    def get_nmr_kernel_inputs(self):
+        return 0
+
+
 class LocalMemory(KernelData):
 
     def __init__(self, ctype, nmr_items=None):
@@ -589,79 +662,6 @@ class LocalMemory(KernelData):
 
     def get_nmr_kernel_inputs(self):
         return 1
-
-
-class PrivateMemory(KernelData):
-
-    def __init__(self, nmr_items, ctype):
-        """Adds a private memory array of the indicated size to the kernel data elements.
-
-        This is useful if you want to have private memory arrays in kernel data structs.
-
-        Args:
-            nmr_items (int): the size of the private memory array
-            ctype (str): the desired c-type for this local memory object, like ``int``, ``float`` or ``mot_float_type``.
-        """
-        self._ctype = ctype
-        self._mot_float_dtype = None
-        self._nmr_items = nmr_items
-
-    @property
-    def ctype(self):
-        return self._ctype
-
-    def get_subset(self, problem_indices=None, batch_range=None):
-        return self
-
-    def set_mot_float_dtype(self, mot_float_dtype):
-        self._mot_float_dtype = mot_float_dtype
-
-    def get_data(self):
-        return None
-
-    def get_children(self):
-        return []
-
-    def get_flattened(self):
-        return [self]
-
-    def get_scalar_arg_dtypes(self):
-        return []
-
-    def enqueue_host_access(self, cl_environment):
-        pass
-
-    def enqueue_device_access(self, cl_environment):
-        pass
-
-    def get_type_definitions(self):
-        return ''
-
-    def initialize_variable(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
-        return '''
-            {ctype} {v_name}[{nmr_elements}];
-        '''.format(ctype=self._ctype, v_name=kernel_param_name, nmr_elements=self._nmr_items)
-
-    def get_function_call_input(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
-        return kernel_param_name
-
-    def post_function_callback(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
-        return ''
-
-    def get_struct_declaration(self, name):
-        return '{}* {};'.format(self._ctype, name)
-
-    def get_struct_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
-        return kernel_param_name
-
-    def get_kernel_parameters(self, kernel_param_name):
-        return []
-
-    def get_kernel_inputs(self, cl_environment, workgroup_size):
-        return []
-
-    def get_nmr_kernel_inputs(self):
-        return 0
 
 
 class Array(KernelData):
