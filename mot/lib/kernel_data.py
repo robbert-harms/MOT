@@ -1,5 +1,5 @@
 import numbers
-from collections import OrderedDict, Mapping
+from collections import OrderedDict, Mapping, Iterable
 
 import numpy as np
 import pyopencl as cl
@@ -216,14 +216,14 @@ class KernelData:
         """
         raise NotImplementedError()
 
-    def get_kernel_inputs(self, cl_context, workgroup_size):
+    def get_kernel_inputs(self, cl_environment, workgroup_size):
         """Get the kernel input data matching the list of parameters of :meth:`get_kernel_parameters`.
 
         Since the kernels follow the map/unmap paradigm make sure to use the ``USE_HOST_PTR`` when making
         writable data objects.
 
         Args:
-            cl_context (pyopencl.Context): the CL context in which we are working.
+            cl_environment (mot.lib.cl_environments.CLEnvironment): the environment for which to prepare the input
             workgroup_size (int): the workgroup size the kernel will use.
 
         Returns:
@@ -386,10 +386,10 @@ class Struct(KernelData):
             parameters.extend(d.get_kernel_parameters('{}_{}'.format(kernel_param_name, name)))
         return parameters
 
-    def get_kernel_inputs(self, cl_context, workgroup_size):
+    def get_kernel_inputs(self, cl_environment, workgroup_size):
         data = []
         for d in self._elements.values():
-            data.extend(d.get_kernel_inputs(cl_context, workgroup_size))
+            data.extend(d.get_kernel_inputs(cl_environment, workgroup_size))
         return data
 
     def get_nmr_kernel_inputs(self):
@@ -480,8 +480,7 @@ class Scalar(KernelData):
             return []
         return ['{} {}'.format(self._ctype, kernel_param_name)]
 
-
-    def get_kernel_inputs(self, cl_context, workgroup_size):
+    def get_kernel_inputs(self, cl_environment, workgroup_size):
         if self._inline:
             return []
         return [self.get_data()]
@@ -587,7 +586,7 @@ class PrivateMemory(KernelData):
     def get_kernel_parameters(self, kernel_param_name):
         return []
 
-    def get_kernel_inputs(self, cl_context, workgroup_size):
+    def get_kernel_inputs(self, cl_environment, workgroup_size):
         return []
 
     def get_nmr_kernel_inputs(self):
@@ -669,7 +668,7 @@ class LocalMemory(KernelData):
     def get_kernel_parameters(self, kernel_param_name):
         return ['local {}* restrict {}'.format(self._ctype, kernel_param_name)]
 
-    def get_kernel_inputs(self, cl_context, workgroup_size):
+    def get_kernel_inputs(self, cl_environment, workgroup_size):
         mot_float_type_dtype = None
         if self._mot_float_dtype:
             mot_float_type_dtype = dtype_to_ctype(self._mot_float_dtype)
@@ -721,12 +720,7 @@ class Array(KernelData):
         self._is_readable = 'r' in mode
         self._is_writable = 'w' in mode
 
-        self._requirements = ['C', 'A', 'O']
-        if self._is_writable:
-            self._requirements.append('W')
-
         self._data = data
-        # self._data = np.require(data, requirements=self._requirements)
         if ctype and not ctype.startswith('mot_float_type'):
             self._data = convert_data_to_dtype(self._data, ctype)
 
@@ -794,7 +788,6 @@ class Array(KernelData):
 
             new_data = convert_data_to_dtype(self._data, self._ctype,
                                              mot_float_type=dtype_to_ctype(mot_float_dtype))
-            new_data = np.require(new_data, requirements=self._requirements)
 
             if new_data is not self._data:
                 self._backup_data_reference = self._data
@@ -864,8 +857,8 @@ class Array(KernelData):
     def get_kernel_parameters(self, kernel_param_name):
         return ['global {}* restrict {}'.format(self._ctype, kernel_param_name)]
 
-    def get_kernel_inputs(self, cl_context, workgroup_size):
-        if cl_context not in self._buffer_cache:
+    def get_kernel_inputs(self, cl_environment, workgroup_size):
+        if cl_environment.context not in self._buffer_cache:
             if self._is_writable:
                 if self._is_readable:
                     flags = cl.mem_flags.READ_WRITE
@@ -874,8 +867,8 @@ class Array(KernelData):
             else:
                 flags = cl.mem_flags.READ_ONLY
             flags = flags | cl.mem_flags.USE_HOST_PTR
-            self._buffer_cache[cl_context] = cl.Buffer(cl_context, flags, hostbuf=self._data)
-        return [self._buffer_cache[cl_context]]
+            self._buffer_cache[cl_environment.context] = cl.Buffer(cl_environment.context, flags, hostbuf=self._data)
+        return [self._buffer_cache[cl_environment.context]]
 
     def get_nmr_kernel_inputs(self):
         return 1
@@ -982,7 +975,9 @@ class SubArray(KernelData):
     def get_context_variable_initialization(self, variable_name, kernel_param_name):
         return self._parent_array.get_context_variable_initialization(variable_name, kernel_param_name)
 
-    def get_kernel_inputs(self, cl_context, workgroup_size):
+    def get_kernel_inputs(self, cl_environment, workgroup_size):
+        cl_context = cl_environment.context
+
         if cl_context not in self._buffer_cache:
             if self._is_writable:
                 if self._is_readable:
@@ -1002,9 +997,9 @@ class SubArray(KernelData):
         return self._parent_array.get_nmr_kernel_inputs()
 
 
-class Zeros(Array):
+class Zeros(KernelData):
 
-    def __init__(self, shape, ctype, mode='w', parallelize_over_first_dimension=True):
+    def __init__(self, shape, ctype, mode='w', parallelize_over_first_dimension=True, host_accessible=True):
         """Allocate an output buffer of the given shape.
 
         This is meant to quickly allocate a buffer large enough to hold the data requested. After running an OpenCL
@@ -1019,10 +1014,136 @@ class Zeros(Array):
                 where ``n`` is expected to correspond to problem instances. If True, we will load the data as
                 (m, k, ...) arrays for each problem instance. If False, the data will be loaded as is, and each problem
                 instance will have a reference to the complete array.
+            host_accessible (boolean): if the array needs to be accessible from the host. If not, we can allocate
+                the buffer on the device, saving memory copy times. If host_accessible is set to False, one
+                can not take a subset of the array anymore.
         """
-        super().__init__(np.zeros(shape, dtype=ctype_to_dtype(ctype)), ctype,
-                         parallelize_over_first_dimension=parallelize_over_first_dimension,
-                         mode=mode, as_scalar=False)
+        self._shape = shape
+        self._host_accessible = host_accessible
+        self._ctype = ctype
+
+        self._mode = mode
+        self._is_readable = 'r' in mode
+        self._is_writable = 'w' in mode
+
+        self._mot_float_dtype = None
+        self._parallelize_over_first_dimension = parallelize_over_first_dimension
+
+        self._buffer_cache = {}  # caching the buffers per context
+
+        self._data_length = 1
+        if isinstance(shape, (list, tuple)) and len(shape) > 1:
+            self._data_length = np.prod(shape[1:])
+        if not self._parallelize_over_first_dimension:
+            self._data_length = np.prod(shape)
+
+        if host_accessible:
+            self._array = Array(np.zeros(shape, dtype=ctype_to_dtype(ctype)), ctype,
+                                parallelize_over_first_dimension=parallelize_over_first_dimension,
+                                mode=mode, as_scalar=False)
+
+    @property
+    def ctype(self):
+        return self._ctype
+
+    @property
+    def mode(self):
+        return self._mode
+
+    def get_subset(self, problem_indices=None, batch_range=None):
+        if self._host_accessible:
+            return self._array.get_subset(problem_indices, batch_range)
+        raise ValueError('Can not take a subset of a non host accessible array.')
+
+    def set_mot_float_dtype(self, mot_float_dtype):
+        if self._host_accessible:
+            return self._array.set_mot_float_dtype(mot_float_dtype)
+        self._mot_float_dtype = mot_float_dtype
+
+    def get_data(self):
+        if self._host_accessible:
+            return self._array.get_data()
+        raise ValueError('Can not get the data from a non host accessible array.')
+
+    def get_children(self):
+        return []
+
+    def get_flattened(self):
+        return [self]
+
+    def get_scalar_arg_dtypes(self):
+        return [None]
+
+    def enqueue_host_access(self, cl_environment):
+        if self._host_accessible:
+            return self._array.enqueue_host_access(cl_environment)
+
+    def enqueue_device_access(self, cl_environment):
+        pass
+
+    def get_type_definitions(self):
+        return ''
+
+    def initialize_variable(self, variable_name, kernel_param_name, problem_id_substitute):
+        return ''
+
+    def get_function_call_input(self, variable_name, kernel_param_name, problem_id_substitute):
+        return '{} + {}'.format(kernel_param_name, self._get_offset_str(problem_id_substitute))
+
+    def get_struct_declaration(self, name):
+        return 'global {}* restrict {};'.format(self._ctype, name)
+
+    def get_struct_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
+        return self.get_function_call_input(variable_name, kernel_param_name, problem_id_substitute)
+
+    def get_context_variable_declaration(self, name):
+        return 'global {}* {};'.format(self._ctype, name)
+
+    def get_context_variable_initialization(self, variable_name, kernel_param_name):
+        return '{} = {};'.format(variable_name, kernel_param_name)
+
+    def get_kernel_parameters(self, kernel_param_name):
+        return ['global {}* restrict {}'.format(self._ctype, kernel_param_name)]
+
+    def get_kernel_inputs(self, cl_environment, workgroup_size):
+        cl_context = cl_environment.context
+
+        if self._host_accessible:
+            return self._array.get_kernel_inputs(cl_environment, workgroup_size)
+
+        mot_float_type_dtype = None
+        if self._mot_float_dtype:
+            mot_float_type_dtype = dtype_to_ctype(self._mot_float_dtype)
+        dtype = np.dtype(ctype_to_dtype(self._ctype, mot_float_type_dtype))
+        itemsize = dtype.itemsize
+
+        if cl_context not in self._buffer_cache:
+            if self._is_writable:
+                if self._is_readable:
+                    flags = cl.mem_flags.READ_WRITE
+                else:
+                    flags = cl.mem_flags.WRITE_ONLY
+            else:
+                flags = cl.mem_flags.READ_ONLY
+
+            buffer = cl.Buffer(cl_context, flags, size=np.prod(self._shape) * itemsize)
+
+            cl.enqueue_fill_buffer(cl_environment.queue, buffer,
+                                   np.zeros(1, dtype=dtype), 0, np.prod(self._shape) * itemsize)
+
+            self._buffer_cache[cl_context] = buffer
+
+        return [self._buffer_cache[cl_context]]
+
+    def get_nmr_kernel_inputs(self):
+        return 1
+
+    def _get_offset_str(self, problem_id_substitute):
+        if self._parallelize_over_first_dimension:
+            offset_str = str(self._data_length) + ' * {problem_id}'
+        else:
+            offset_str = '0'
+        return offset_str.replace('{problem_id}', problem_id_substitute)
 
 
 class CompositeArray(KernelData):
@@ -1129,10 +1250,10 @@ class CompositeArray(KernelData):
             parameters.extend(d.get_kernel_parameters('{}_{}'.format(kernel_param_name, str(ind))))
         return parameters
 
-    def get_kernel_inputs(self, cl_context, workgroup_size):
-        data = list(self._composite_array.get_kernel_inputs(cl_context, workgroup_size))
+    def get_kernel_inputs(self, cl_environment, workgroup_size):
+        data = list(self._composite_array.get_kernel_inputs(cl_environment, workgroup_size))
         for d in self._elements:
-            data.extend(d.get_kernel_inputs(cl_context, workgroup_size))
+            data.extend(d.get_kernel_inputs(cl_environment, workgroup_size))
         return data
 
     def get_nmr_kernel_inputs(self):
