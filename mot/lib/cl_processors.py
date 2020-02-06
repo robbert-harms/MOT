@@ -144,9 +144,6 @@ class CLFunctionProcessor(Processor):
 
         self._subprocessors = []
         for ind, cl_environment in enumerate(self._cl_environments):
-            batch_start, batch_end = self._batches[ind]
-            nmr_instances = batch_end - batch_start
-
             program = cl.Program(cl_environment.context, self._get_kernel_source()).build(
                 ' '.join(self._cl_runtime_info.compile_flags))
             kernel = getattr(program, self._cl_function.get_cl_function_name())
@@ -160,15 +157,24 @@ class CLFunctionProcessor(Processor):
             else:
                 workgroup_size = 1
 
-            if nmr_instances > 0:
+            batch_start, batch_end = self._batches[ind]
+
+            if batch_end - batch_start > 0:
                 if self._context_variables:
                     context_kernel = getattr(program, '_initialize_context_variables')
-                    context_data = [v.get_subset(batch_range=self._batches[ind])
-                                    for v in self._context_variables.values()]
-                    worker = SimpleProcessor(context_kernel, context_data, cl_environment, nmr_instances, 1)
+
+                    if batch_end - batch_start == nmr_instances:
+                        context_data = self._context_variables.values()
+                    else:
+                        context_data = [v.get_subset(batch_range=self._batches[ind])
+                                        for v in self._context_variables.values()]
+                    worker = SimpleProcessor(context_kernel, context_data, cl_environment, batch_end - batch_start, 1)
                     self._subprocessors.append(worker)
 
-                kernel_data = [v.get_subset(batch_range=self._batches[ind]) for v in self._kernel_data.values()]
+                if batch_end - batch_start == nmr_instances:
+                    kernel_data = self._kernel_data.values()
+                else:
+                    kernel_data = [v.get_subset(batch_range=self._batches[ind]) for v in self._kernel_data.values()]
                 processor = SimpleProcessor(kernel, kernel_data, cl_environment,
                                             batch_end - batch_start, workgroup_size)
                 self._subprocessors.append(processor)

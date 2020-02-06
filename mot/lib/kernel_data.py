@@ -693,12 +693,10 @@ class Array(KernelData):
         the generated OpenCL buffers. In general, the only case when mutations of the underlying data are reflected
         in the OpenCL buffers is when:
 
-            - mode != 'r'
             - ctype != 'mot_float_type'
 
-        In those cases, i.e. when mode is not 'r' and ctype is not 'mot_float_type' the data is stored such that
-        host-side mutations are forwarded. In all other cases, mutations are not forwarded. Still, to update the values
-        in the array, one can use the method :meth:`set_data` of this class to set new values.
+        In that cases, i.e. when ctype is not 'mot_float_type' the data is stored such that host-side mutations
+        are forwarded. In all other cases, mutations are not forwarded.
 
         Args:
             data (ndarray): the data to load in the kernel
@@ -754,34 +752,6 @@ class Array(KernelData):
             str: the mode in which the buffer should be created, a string like 'r', 'w' or 'rw'
         """
         return self._mode
-
-    def set_data(self, data):
-        """Set the underlying data of this Array class to new data.
-
-        The dimensions and dtype of the old data must match exactly with the old dimensions.
-
-        Args:
-            data (ndarray): the new data
-        """
-        if self._data is data and self._is_writable:
-            return
-
-        if self._data.shape != data.shape:
-            raise ValueError('The new data must have the same shape as the old data.')
-        if self._data.dtype != data.dtype:
-            raise ValueError('The new data must have the same dtype as the old data.')
-
-        self._data = data
-
-        if self._ctype.startswith('mot_float_type'):
-            mot_float_type_dtype = None
-            if self._mot_float_dtype:
-                mot_float_type_dtype = dtype_to_ctype(self._mot_float_dtype)
-
-            self._backup_data_reference = self._data
-            self._data = convert_data_to_dtype(self._data, self._ctype, mot_float_type=mot_float_type_dtype)
-
-        self._buffer_dirty = True
 
     def get_subset(self, problem_indices=None, batch_range=None):
         if problem_indices is None and batch_range is None:
@@ -896,14 +866,8 @@ class Array(KernelData):
                     flags = cl.mem_flags.WRITE_ONLY
             else:
                 flags = cl.mem_flags.READ_ONLY
-
-            if not self._is_writable:
-                buffer = cl.Buffer(cl_context, flags, size=self._data.nbytes)
-                self._buffer_cache[cl_context] = buffer
-                cl.enqueue_copy(cl_environment.queue, buffer, self._data, is_blocking=False)
-            else:
-                flags = flags | cl.mem_flags.USE_HOST_PTR
-                self._buffer_cache[cl_context] = cl.Buffer(cl_context, flags, hostbuf=self._data)
+            flags = flags | cl.mem_flags.USE_HOST_PTR
+            self._buffer_cache[cl_context] = cl.Buffer(cl_context, flags, hostbuf=self._data)
 
         return [self._buffer_cache[cl_context]]
 
@@ -1023,14 +987,8 @@ class SubArray(KernelData):
                 flags = cl.mem_flags.READ_ONLY
 
             v = memoryview(self._parent_array.get_data())[self._range_start:self._range_end]
-
-            if not self._is_writable:
-                buffer = cl.Buffer(cl_context, flags, size=v.nbytes)
-                self._buffer_cache[cl_context] = buffer
-                cl.enqueue_copy(cl_environment.queue, buffer, v, is_blocking=False)
-            else:
-                flags = flags | cl.mem_flags.USE_HOST_PTR
-                self._buffer_cache[cl_context] = cl.Buffer(cl_context, flags, hostbuf=v)
+            flags = flags | cl.mem_flags.USE_HOST_PTR
+            self._buffer_cache[cl_context] = cl.Buffer(cl_context, flags, hostbuf=v)
 
         return [self._buffer_cache[cl_context]]
 
