@@ -8,24 +8,6 @@ __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
 
-def _initialize_context_devices_cache():
-    """Initialize the CL Contexts and devices cache.
-
-    This cache holds, per platform a cache with a context and list of devices in that context.
-
-    Returns:
-        dict: a dictionary mapping platforms to a tuple of a context and list of devices.
-    """
-    device_contexts_cache = {}
-    for platform in cl.get_platforms():
-        devices = platform.get_devices()
-        device_contexts_cache[platform] = (cl.Context(devices), devices)
-    return device_contexts_cache
-
-
-_context_devices_cache = _initialize_context_devices_cache()
-
-
 class CLEnvironment:
 
     def __init__(self, platform, context, device):
@@ -169,6 +151,30 @@ class CLEnvironment:
         return False
 
 
+def _initialize_cl_environment_cache():
+    """Initialize a cache of CL environments.
+
+    This cache holds, per platform a cache with all applicable CL environments.
+
+    Returns:
+        dict: a dictionary mapping platforms to CLEnvironment
+    """
+    cache = {}
+    for platform in cl.get_platforms():
+        devices = platform.get_devices()
+        context = cl.Context(devices)
+        items = []
+        for device in devices:
+            if device_supports_double(device):
+                env = CLEnvironment(platform, context, device)
+                items.append(env)
+        cache[platform] = items
+    return cache
+
+
+_cl_environment_cache = _initialize_cl_environment_cache()
+
+
 class CLEnvironmentFactory:
 
     @staticmethod
@@ -187,42 +193,16 @@ class CLEnvironmentFactory:
         Returns:
             list of CLEnvironment: List with one element, the CL runtime environment requested.
         """
-        if isinstance(cl_device_type, str):
-            cl_device_type = device_type_from_string(cl_device_type)
+        cl_environments = CLEnvironmentFactory.all_devices(cl_device_type=cl_device_type, platform=platform)
 
-        device = None
-
-        if platform is None:
-            platforms = _context_devices_cache.keys()
+        if len(cl_environments):
+            return cl_environments[0]
         else:
-            platforms = [platform]
-
-        for platform in platforms:
-            context, devices = _context_devices_cache[platform]
-
-            if cl_device_type:
-                devices_of_type = []
-                for device in devices:
-                    if device.get_info(cl.device_info.TYPE) == cl_device_type:
-                        devices_of_type.append(device)
-                devices = devices_of_type
-
-            for device in devices:
-                if device_supports_double(device):
-                    try:
-                        env = CLEnvironment(platform, context, device)
-                        return [env]
-                    except cl.RuntimeError:
-                        pass
-
-        if not device:
             if fallback_to_any_device_type:
                 return CLEnvironmentFactory.single_device(cl_device_type=None)
             else:
-                raise ValueError('No devices of the specified type ({}) found.'.format(
+                raise ValueError('No suitable devices of the specified type ({}) found.'.format(
                     cl.device_type.to_string(cl_device_type)))
-
-        raise ValueError('No suitable OpenCL device found.')
 
     @staticmethod
     def all_devices(cl_device_type=None, platform=None):
@@ -241,29 +221,24 @@ class CLEnvironmentFactory:
         if isinstance(cl_device_type, str):
             cl_device_type = device_type_from_string(cl_device_type)
 
-        runtime_list = []
+        cl_environments = []
 
         if platform is None:
-            platforms = _context_devices_cache.keys()
+            platforms = _cl_environment_cache.keys()
         else:
             platforms = [platform]
 
         for platform in platforms:
-            context, devices = _context_devices_cache[platform]
+            cached_envs = _cl_environment_cache[platform]
 
             if cl_device_type:
-                devices_of_type = []
-                for device in devices:
-                    if device.get_info(cl.device_info.TYPE) == cl_device_type:
-                        devices_of_type.append(device)
-                devices = devices_of_type
+                for env in cached_envs:
+                    if env.device.get_info(cl.device_info.TYPE) == cl_device_type:
+                        cl_environments.append(env)
+            else:
+                cl_environments.extend(cached_envs)
 
-            for device in devices:
-                if device_supports_double(device):
-                    env = CLEnvironment(platform, context, device)
-                    runtime_list.append(env)
-
-        return runtime_list
+        return cl_environments
 
     @staticmethod
     def smart_device_selection(preferred_device_type=None):
