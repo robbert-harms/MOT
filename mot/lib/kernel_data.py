@@ -666,20 +666,23 @@ class LocalMemory(KernelData):
 
 class Array(KernelData):
 
-    def __init__(self, data, ctype=None, mode='r', ensure_zero_copy=False, as_scalar=False,
-                 parallelize_over_first_dimension=True):
+    def __init__(self, data, ctype=None, mode='r', as_scalar=False, parallelize_over_first_dimension=True):
         """Loads the given array as a buffer into the kernel.
 
         By default, this expects multi-dimensional arrays (n, m, k, ...) which holds a (m, k, ...) for every data
         point ``n``. As such, every global work item will only receive a subset of the matrix. If every work item
         needs access to all items, set parallelize_over_first_dimension to False.
 
-        This class will adapt the data to match the ctype (if necessary) and it might copy the data as a consecutive
-        array for direct memory access by the CL environment. Depending on those transformations, a copy of the original
-        array may be made. As such, if mode "r" would have been set, the return values might be written to
-        a different array. To retrieve the output data after kernel execution, use the method :meth:`get_data`.
-        Alternatively, set ``ensure_zero_copy`` to True, this ensures that the return values are written to the
-        same reference by raising a ValueError if the data has to be copied to be used in the kernel.
+        In general, this array class can not guarantee that changes to the underlying data object are forwarded to
+        the generated OpenCL buffers. In general, the only case when mutations of the underlying data are reflected
+        in the OpenCL buffers is when:
+
+            - mode != 'r'
+            - ctype != 'mot_float_type'
+
+        In those cases, i.e. when mode is not 'r' and ctype is not 'mot_float_type' the data is stored such that
+        host-side mutations are forwarded. In all other cases, mutations are not forwarded. Still, to update the values
+        in the array, one can use the method :meth:`get_data` of this class to set new values.
 
         Args:
             data (ndarray): the data to load in the kernel
@@ -687,9 +690,6 @@ class Array(KernelData):
                 If None it is implied from the provided data.
             mode (str): one of 'r', 'w' or 'rw', for respectively read, write or read and write. This sets the
                 mode of how the data is loaded into the compute device's memory.
-            ensure_zero_copy (boolean): only used if ``is_writable`` is set to True. If set, we guarantee that the
-                return values are written to the same input array. This allows the user of this class to user their
-                reference to the underlying data, relieving the user of having to use :meth:`get_data`.
             as_scalar (boolean): if given and if the data is only a 1d, we will load the value as a scalar in the
                 data struct. As such, one does not need to evaluate as a pointer.
             parallelize_over_first_dimension (boolean): only applicable for multi-dimensional arrays (n, m, k, ...)
@@ -711,7 +711,6 @@ class Array(KernelData):
         self._ctype = ctype or dtype_to_ctype(self._data.dtype)
         self._mot_float_dtype = None
         self._backup_data_reference = None
-        self._ensure_zero_copy = ensure_zero_copy
         self._as_scalar = as_scalar
         self._parallelize_over_first_dimension = parallelize_over_first_dimension
 
@@ -725,10 +724,6 @@ class Array(KernelData):
 
         if self._as_scalar and len(np.squeeze(self._data).shape) > 1:
             raise ValueError('The option "as_scalar" was set, but the data has more than one dimensions.')
-
-        if self._is_writable and self._ensure_zero_copy and self._data is not data:
-            raise ValueError('Zero copy was set but we had to make '
-                             'a copy to guarantee the writing and ctype requirements.')
 
     @property
     def ctype(self):
@@ -759,7 +754,7 @@ class Array(KernelData):
             return SubArray(self, (problem_indices[0], problem_indices[-1] + 1))
 
         return Array(self._data[problem_indices], ctype=self._ctype,
-                     mode=self._mode, ensure_zero_copy=False, as_scalar=self._as_scalar,
+                     mode=self._mode, as_scalar=self._as_scalar,
                      parallelize_over_first_dimension=self._parallelize_over_first_dimension)
 
     def set_mot_float_dtype(self, mot_float_dtype):
@@ -777,9 +772,6 @@ class Array(KernelData):
                 self._backup_data_reference = self._data
                 self._data = new_data
                 self._buffer_cache = {}  # cache is invalidated
-
-                if self._is_writable and self._ensure_zero_copy:
-                    raise ValueError('We had to make a copy of the data while zero copy was set to True.')
 
         # data length may change when an CL vector type is converted from (n, 3) shape to (n,)
         self._data_length = 1

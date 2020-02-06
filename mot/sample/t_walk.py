@@ -89,9 +89,9 @@ class ThoughtfulWalk(AbstractSampler):
 
     def _get_mcmc_method_kernel_data(self):
         return Struct({
-            'x1_position': Array(self._x1, 'mot_float_type', mode='rw', ensure_zero_copy=True),
-            'x1_log_likelihood': Array(self._x1_log_likelihood, 'mot_float_type', mode='rw', ensure_zero_copy=True),
-            'x1_log_prior': Array(self._x1_log_prior, 'mot_float_type', mode='rw', ensure_zero_copy=True),
+            'x1_position': Array(self._x1, 'mot_float_type', mode='rw'),
+            'x1_log_likelihood': Array(self._x1_log_likelihood, 'mot_float_type', mode='rw'),
+            'x1_log_prior': Array(self._x1_log_prior, 'mot_float_type', mode='rw'),
             'scratch_mft': LocalMemory('mot_float_type', self._nmr_params + 2),
             'scratch_int': LocalMemory('int', self._nmr_params + 4),
         }, '_twalk_data')

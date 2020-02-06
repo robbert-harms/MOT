@@ -191,9 +191,9 @@ class AbstractSampler:
         ''', dependencies=[self._get_log_prior_cl_func(), self._get_log_likelihood_cl_func()])
 
         kernel_data = {
-            'chain_position': Array(positions, 'mot_float_type', mode='rw', ensure_zero_copy=True),
-            'log_likelihood': Array(log_likelihoods, 'mot_float_type', mode='rw', ensure_zero_copy=True),
-            'log_prior': Array(log_priors, 'mot_float_type', mode='rw', ensure_zero_copy=True),
+            'chain_position': Array(positions, 'mot_float_type', mode='rw'),
+            'log_likelihood': Array(log_likelihoods, 'mot_float_type', mode='rw'),
+            'log_prior': Array(log_priors, 'mot_float_type', mode='rw'),
             'x_tmp': LocalMemory('mot_float_type', self._nmr_params),
             'data': self._data
         }
@@ -235,13 +235,10 @@ class AbstractSampler:
             'method_data': self._get_mcmc_method_kernel_data(),
             'nmr_iterations': Scalar(nmr_samples * thinning, ctype='ulong'),
             'iteration_offset': Scalar(self._sampling_index, ctype='ulong'),
-            'rng_state': Array(self._rng_state, 'uint', mode='rw', ensure_zero_copy=True),
-            'current_chain_position': Array(self._current_chain_position, 'mot_float_type',
-                                            mode='rw', ensure_zero_copy=True),
-            'current_log_likelihood': Array(self._current_log_likelihood, 'mot_float_type',
-                                            mode='rw', ensure_zero_copy=True),
-            'current_log_prior': Array(self._current_log_prior, 'mot_float_type',
-                                       mode='rw', ensure_zero_copy=True),
+            'rng_state': Array(self._rng_state, 'uint', mode='rw'),
+            'current_chain_position': Array(self._current_chain_position, 'mot_float_type', mode='rw'),
+            'current_log_likelihood': Array(self._current_log_likelihood, 'mot_float_type', mode='rw'),
+            'current_log_prior': Array(self._current_log_prior, 'mot_float_type', mode='rw'),
         }
 
         if return_output:
@@ -421,7 +418,7 @@ class AbstractRWMSampler(AbstractSampler):
 
     def _get_mcmc_method_kernel_data_elements(self):
         """Get the mcmc method kernel data elements. Used by :meth:`_get_mcmc_method_kernel_data`."""
-        return {'proposal_stds': Array(self._proposal_stds, 'mot_float_type', mode='rw', ensure_zero_copy=True),
+        return {'proposal_stds': Array(self._proposal_stds, 'mot_float_type', mode='rw'),
                 'x_tmp': LocalMemory('mot_float_type', nmr_items=1 + self._nmr_params)}
 
     def _get_proposal_update_function(self, nmr_samples, thinning, return_output):
