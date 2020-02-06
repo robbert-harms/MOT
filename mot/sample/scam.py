@@ -67,11 +67,9 @@ class SingleComponentAdaptiveMetropolis(AbstractRWMSampler):
     def _get_mcmc_method_kernel_data_elements(self):
         kernel_data = super()._get_mcmc_method_kernel_data_elements()
         kernel_data.update({
-            'parameter_means': Array(self._parameter_means, 'mot_float_type', mode='rw', ensure_zero_copy=True),
-            'parameter_variances': Array(self._parameter_variances, 'mot_float_type', mode='rw',
-                                         ensure_zero_copy=True),
-            'parameter_variance_update_m2s': Array(self._parameter_variance_update_m2s, 'mot_float_type',
-                                                   mode='rw', ensure_zero_copy=True),
+            'parameter_means': Array(self._parameter_means, 'mot_float_type', mode='rw'),
+            'parameter_variances': Array(self._parameter_variances, 'mot_float_type', mode='rw'),
+            'parameter_variance_update_m2s': Array(self._parameter_variance_update_m2s, 'mot_float_type', mode='rw'),
             'epsilons': Array(self._epsilon, 'float', mode='r', parallelize_over_first_dimension=False)
         })
         return kernel_data

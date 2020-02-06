@@ -223,7 +223,7 @@ class CLFunctionProcessor(Processor):
         if self._enable_rng:
             rng_state = np.random.uniform(low=np.iinfo(np.uint32).min, high=np.iinfo(np.uint32).max + 1,
                                           size=(nmr_instances, 4)).astype(np.uint32)
-            context_variables['__rng_state'] = Array(rng_state, 'uint', mode='rw', ensure_zero_copy=True)
+            context_variables['__rng_state'] = Array(rng_state, 'uint', mode='rw')
 
         mot_float_dtype = np.float32
         if self._cl_runtime_info.double_precision:
