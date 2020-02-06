@@ -1046,6 +1046,10 @@ class Zeros(KernelData):
         This is meant to quickly allocate a buffer large enough to hold the data requested. After running an OpenCL
         kernel you can get the written data using the method :meth:`get_data`.
 
+        If host accessible is False and you call the method :meth:`get_subset`, the resulting computations will
+        be split over multiple buffers and there is no single continuous buffer with all the values. Therefore,
+        this flag is not usable if you intend to share a :class:`Zeros` with multiple CLEnvironments.
+
         Args:
             shape (int or tuple): the shape of the output array
             ctype (str): the desired C-type for this zero's array
@@ -1056,8 +1060,7 @@ class Zeros(KernelData):
                 (m, k, ...) arrays for each problem instance. If False, the data will be loaded as is, and each problem
                 instance will have a reference to the complete array.
             host_accessible (boolean): if the array needs to be accessible from the host. If not, we can allocate
-                the buffer on the device, saving memory copy times. If host_accessible is set to False, one
-                can not take a subset of the array anymore.
+                the buffer on the device, saving time on memory copies.
         """
         self._shape = shape
         if isinstance(self._shape, numbers.Number):
