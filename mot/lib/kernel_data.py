@@ -955,8 +955,7 @@ class SubArray(KernelData):
 
         Args:
             parent_array (Array): the array class we want to sub buffer
-            range_start (int): the start of the subbuffer range
-            range_end (int): the end of the subbuffer range
+            batch_range (tuple): the range start and end position
         """
         self._parent_array = parent_array
         self._range_start = batch_range[0]
