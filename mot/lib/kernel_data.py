@@ -731,6 +731,7 @@ class Array(KernelData):
         self._parallelize_over_first_dimension = parallelize_over_first_dimension
 
         self._buffer_cache = {}  # caching the buffers per context
+        self._buffer_dirty = False
 
         self._data_length = 1
         if len(self._data.shape):
@@ -762,6 +763,9 @@ class Array(KernelData):
         Args:
             data (ndarray): the new data
         """
+        if self._data is data and self._is_writable:
+            return
+
         if self._data.shape != data.shape:
             raise ValueError('The new data must have the same shape as the old data.')
         if self._data.dtype != data.dtype:
@@ -777,7 +781,7 @@ class Array(KernelData):
             self._backup_data_reference = self._data
             self._data = convert_data_to_dtype(self._data, self._ctype, mot_float_type=mot_float_type_dtype)
 
-        self._buffer_cache = {}
+        self._buffer_dirty = True
 
     def get_subset(self, problem_indices=None, batch_range=None):
         if problem_indices is None and batch_range is None:
@@ -876,6 +880,14 @@ class Array(KernelData):
 
     def get_kernel_inputs(self, cl_environment, workgroup_size):
         cl_context = cl_environment.context
+
+        if self._buffer_dirty and cl_context in self._buffer_cache:
+            if self._is_writable:
+                del self._buffer_cache[cl_context]
+            else:
+                cl.enqueue_copy(cl_environment.queue, self._buffer_cache[cl_context], self._data, is_blocking=False)
+            self._buffer_dirty = False
+
         if cl_context not in self._buffer_cache:
             if self._is_writable:
                 if self._is_readable:
@@ -892,6 +904,7 @@ class Array(KernelData):
             else:
                 flags = flags | cl.mem_flags.USE_HOST_PTR
                 self._buffer_cache[cl_context] = cl.Buffer(cl_context, flags, hostbuf=self._data)
+
         return [self._buffer_cache[cl_context]]
 
     def get_nmr_kernel_inputs(self):
