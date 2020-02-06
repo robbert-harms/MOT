@@ -698,7 +698,7 @@ class Array(KernelData):
 
         In those cases, i.e. when mode is not 'r' and ctype is not 'mot_float_type' the data is stored such that
         host-side mutations are forwarded. In all other cases, mutations are not forwarded. Still, to update the values
-        in the array, one can use the method :meth:`get_data` of this class to set new values.
+        in the array, one can use the method :meth:`set_data` of this class to set new values.
 
         Args:
             data (ndarray): the data to load in the kernel
@@ -753,6 +753,31 @@ class Array(KernelData):
             str: the mode in which the buffer should be created, a string like 'r', 'w' or 'rw'
         """
         return self._mode
+
+    def set_data(self, data):
+        """Set the underlying data of this Array class to new data.
+
+        The dimensions and dtype of the old data must match exactly with the old dimensions.
+
+        Args:
+            data (ndarray): the new data
+        """
+        if self._data.shape != data.shape:
+            raise ValueError('The new data must have the same shape as the old data.')
+        if self._data.dtype != data.dtype:
+            raise ValueError('The new data must have the same dtype as the old data.')
+
+        self._data = data
+
+        if self._ctype.startswith('mot_float_type'):
+            mot_float_type_dtype = None
+            if self._mot_float_dtype:
+                mot_float_type_dtype = dtype_to_ctype(self._mot_float_dtype)
+
+            self._backup_data_reference = self._data
+            self._data = convert_data_to_dtype(self._data, self._ctype, mot_float_type=mot_float_type_dtype)
+
+        self._buffer_cache = {}
 
     def get_subset(self, problem_indices=None, batch_range=None):
         if problem_indices is None and batch_range is None:
