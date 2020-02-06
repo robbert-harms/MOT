@@ -153,10 +153,12 @@ class CLFunctionProcessor(Processor):
                 workgroup_size = 1
 
             batch_start, batch_end = self._batches[ind]
-            nmr_instances = batch_end - batch_start
 
-            if nmr_instances > 0:
-                kernel_data = [v.get_subset(batch_range=self._batches[ind]) for v in self._kernel_data.values()]
+            if batch_end - batch_start > 0:
+                if batch_end - batch_start == nmr_instances:
+                    kernel_data = self._kernel_data.values()
+                else:
+                    kernel_data = [v.get_subset(batch_range=self._batches[ind]) for v in self._kernel_data.values()]
                 processor = SimpleProcessor(kernel, kernel_data, cl_environment,
                                             batch_end - batch_start, workgroup_size)
                 self._subprocessors.append(processor)
