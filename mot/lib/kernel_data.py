@@ -72,16 +72,6 @@ class KernelData:
         """
         raise NotImplementedError()
 
-    def get_flattened(self):
-        """Get a list of this kernel data with the children and sub/sub/sub... children as a flattened list.
-
-        The first element of the list is always the current element itself.
-
-        Returns:
-            List[KernelData]: list of children kernel data elements, including itself
-        """
-        raise NotImplementedError()
-
     def get_scalar_arg_dtypes(self):
         """Get the numpy data types we should report in the kernel call for scalar elements.
 
@@ -289,12 +279,6 @@ class Struct(KernelData):
     def get_children(self):
         return self._elements.values()
 
-    def get_flattened(self):
-        flattened = [self]
-        for d in self._elements.values():
-            flattened.extend(d.get_flattened())
-        return flattened
-
     def get_scalar_arg_dtypes(self):
         dtypes = []
         for d in self._elements.values():
@@ -444,9 +428,6 @@ class Scalar(KernelData):
     def get_children(self):
         return []
 
-    def get_flattened(self):
-        return [self]
-
     def get_scalar_arg_dtypes(self):
         if self._inline:
             return []
@@ -548,9 +529,6 @@ class PrivateMemory(KernelData):
     def get_children(self):
         return []
 
-    def get_flattened(self):
-        return [self]
-
     def get_scalar_arg_dtypes(self):
         return []
 
@@ -631,9 +609,6 @@ class LocalMemory(KernelData):
 
     def get_children(self):
         return []
-
-    def get_flattened(self):
-        return [self]
 
     def get_scalar_arg_dtypes(self):
         return [None]
@@ -801,9 +776,6 @@ class Array(KernelData):
     def get_children(self):
         return []
 
-    def get_flattened(self):
-        return [self]
-
     def get_scalar_arg_dtypes(self):
         return [None]
 
@@ -932,9 +904,6 @@ class SubArray(KernelData):
 
     def get_children(self):
         return self._parent_array.get_children()
-
-    def get_flattened(self):
-        return self._parent_array.get_flattened()
 
     def get_scalar_arg_dtypes(self):
         return self._parent_array.get_scalar_arg_dtypes()
@@ -1080,9 +1049,6 @@ class Zeros(KernelData):
     def get_children(self):
         return []
 
-    def get_flattened(self):
-        return [self]
-
     def get_scalar_arg_dtypes(self):
         return [None]
 
@@ -1210,12 +1176,6 @@ class CompositeArray(KernelData):
 
     def get_children(self):
         return self._elements
-
-    def get_flattened(self):
-        flattened = [self]
-        for d in self._elements:
-            flattened.extend(d.get_flattened())
-        return flattened
 
     def get_scalar_arg_dtypes(self):
         dtypes = list(self._composite_array.get_scalar_arg_dtypes())
