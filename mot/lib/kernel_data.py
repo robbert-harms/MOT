@@ -740,17 +740,24 @@ class Array(KernelData):
             return self
 
         if problem_indices is None:
-            return SubArray(self, batch_range, buffer_mode=self._buffer_mode)
+            return Array(self._data[batch_range[0]:batch_range[1]], ctype=self._ctype,
+                         mode=self._mode, as_scalar=self._as_scalar,
+                         parallelize_over_first_dimension=self._parallelize_over_first_dimension,
+                         buffer_mode=self._buffer_mode)
 
         def is_consecutive(l):
             return np.sum(np.diff(np.sort(l)) == 1) >= (len(l) - 1)
 
         if is_consecutive(problem_indices):
-            return SubArray(self, (problem_indices[0], problem_indices[-1] + 1))
+            return Array(self._data[problem_indices[0]:(problem_indices[-1] + 1)], ctype=self._ctype,
+                         mode=self._mode, as_scalar=self._as_scalar,
+                         parallelize_over_first_dimension=self._parallelize_over_first_dimension,
+                         buffer_mode=self._buffer_mode)
 
         return Array(self._data[problem_indices], ctype=self._ctype,
                      mode=self._mode, as_scalar=self._as_scalar,
-                     parallelize_over_first_dimension=self._parallelize_over_first_dimension)
+                     parallelize_over_first_dimension=self._parallelize_over_first_dimension,
+                     buffer_mode=self._buffer_mode)
 
     def set_mot_float_dtype(self, mot_float_dtype):
         self._mot_float_dtype = mot_float_dtype
@@ -868,144 +875,6 @@ class Array(KernelData):
         else:
             offset_str = '0'
         return offset_str.replace('{problem_id}', problem_id_substitute)
-
-
-class SubArray(KernelData):
-
-    def __init__(self, parent_array, batch_range, buffer_mode='mapped'):
-        """This creates buffers for only a part of a data array.
-
-        This is useful if you need to split an array into multiple chunks, but you want to use the original memory
-        location for the outputs.
-
-        Args:
-            parent_array (Array): the array class we want to sub buffer
-            batch_range (tuple): the range start and end position
-            buffer_mode (str): the way in which we will do the buffering. Available options are :
-                - mapped: (default), in this way we will use the USE_HOST_PTR flag and use map/unmap for data transfers
-                - readwrite: with this method we only create a device side buffer and use explicit read and write
-                    commands to transfer the data.
-        """
-        self._parent_array = parent_array
-        self._range_start = batch_range[0]
-        self._range_end = batch_range[1]
-
-        self._mode = self._parent_array.mode
-        self._is_readable = 'r' in self._mode
-        self._is_writable = 'w' in self._mode
-
-        self._buffer_mode = buffer_mode
-        self._buffer_cache = {}  # caching the buffers per context
-
-    @property
-    def ctype(self):
-        return self._parent_array.ctype
-
-    @property
-    def mode(self):
-        return self._mode
-
-    def get_subset(self, problem_indices=None, batch_range=None):
-        if problem_indices is None and batch_range is None:
-            return self
-        if problem_indices is not None:
-            raise ValueError('SubArray does not support subsetting by problem indices.')
-        return self._parent_array.get_subset(batch_range=(self._range_start + batch_range[0],
-                                                          self._range_start + batch_range[1]))
-
-    def set_mot_float_dtype(self, mot_float_dtype):
-        old_data = self._parent_array.get_data()
-        self._parent_array.set_mot_float_dtype(mot_float_dtype)
-
-        if self._parent_array.get_data() is not old_data:
-            self._buffer_cache = {}
-
-    def get_data(self):
-        return self._parent_array.get_data()[self._range_start:self._range_end]
-
-    def get_children(self):
-        return self._parent_array.get_children()
-
-    def get_scalar_arg_dtypes(self):
-        return self._parent_array.get_scalar_arg_dtypes()
-
-    def enqueue_host_access(self, cl_environment):
-        if self._buffer_mode == 'mapped':
-            if self._is_writable:
-                data = self._parent_array.get_data()
-                shape = (self._range_end - self._range_start,) + data.shape[1:]
-                cl.enqueue_map_buffer(
-                    cl_environment.queue, self._buffer_cache[cl_environment.context],
-                    cl.map_flags.READ, 0, shape, data.dtype,
-                    order="C", wait_for=None, is_blocking=False)
-        elif self._buffer_mode == 'readwrite':
-            if self._is_writable:
-                data = self._parent_array.get_data()[self._range_start:self._range_end]
-                cl.enqueue_copy(cl_environment.queue,
-                                data,
-                                self._buffer_cache[cl_environment.context], is_blocking=False)
-
-    def enqueue_device_access(self, cl_environment):
-        if self._buffer_mode == 'readwrite':
-            data = self._parent_array.get_data()[self._range_start:self._range_end]
-            cl.enqueue_copy(cl_environment.queue,
-                            self._buffer_cache[cl_environment.context],
-                            data, is_blocking=False)
-
-
-    def get_type_definitions(self):
-        return self._parent_array.get_type_definitions()
-
-    def initialize_variable(self, variable_name, kernel_param_name, problem_id_substitute):
-        return self._parent_array.initialize_variable(variable_name, kernel_param_name, problem_id_substitute)
-
-    def get_function_call_input(self, variable_name, kernel_param_name, problem_id_substitute):
-        return self._parent_array.get_function_call_input(variable_name, kernel_param_name, problem_id_substitute)
-
-    def get_struct_declaration(self, name):
-        return self._parent_array.get_struct_declaration(name)
-
-    def get_struct_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
-        return self._parent_array.get_struct_initialization(variable_name, kernel_param_name, problem_id_substitute)
-
-    def get_kernel_parameters(self, kernel_param_name):
-        return self._parent_array.get_kernel_parameters(kernel_param_name)
-
-    def get_context_variable_declaration(self, name):
-        return self._parent_array.get_context_variable_declaration(name)
-
-    def get_context_variable_initialization(self, variable_name, kernel_param_name):
-        return self._parent_array.get_context_variable_initialization(variable_name, kernel_param_name)
-
-    def get_kernel_inputs(self, cl_environment, workgroup_size):
-        def get_mem_flags():
-            if self._is_writable:
-                if self._is_readable:
-                    return cl.mem_flags.READ_WRITE
-                else:
-                    return cl.mem_flags.WRITE_ONLY
-            else:
-                return cl.mem_flags.READ_ONLY
-
-        cl_context = cl_environment.context
-        if cl_context not in self._buffer_cache:
-            if self._buffer_mode == 'mapped':
-                v = memoryview(self._parent_array.get_data())[self._range_start:self._range_end]
-                self._buffer_cache[cl_context] = cl.Buffer(cl_context,
-                                                           get_mem_flags() | cl.mem_flags.USE_HOST_PTR,
-                                                           hostbuf=v)
-            elif self._buffer_mode == 'readwrite':
-                self._buffer_cache[cl_context] = cl.Buffer(
-                    cl_context, get_mem_flags(),
-                    size=self._parent_array.get_data()[self._range_start:self._range_end].nbytes)
-            else:
-                raise ValueError('The provided buffer mode "{}" '
-                                 'is not one of ["mapped", "readwrite"]'.format(self._buffer_mode))
-
-        return [self._buffer_cache[cl_context]]
-
-    def get_nmr_kernel_inputs(self):
-        return self._parent_array.get_nmr_kernel_inputs()
 
 
 class Zeros(KernelData):
