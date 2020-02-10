@@ -16,22 +16,18 @@ from mot.lib.utils import convert_inputs_to_kernel_data, get_cl_utility_definiti
 
 class Processor:
 
-    def enqueue_process(self, flush=True, finish=False):
+    def process(self):
         """Enqueue all compute kernels for this processor.
 
-        This may enqueue multiple kernels to multiple devices. It may call flush and finish afterwards if set.
-
-        Args:
-            flush (boolean): if we flush the queues after enqueuing the kernels
-            finish (boolean): if we enqueue a finish operation after enqueueing the kernels
+        This may enqueue multiple kernels to multiple devices.
         """
         raise NotImplementedError()
 
-    def enqueue_flush(self):
+    def flush(self):
         """Enqueues a flush operation to all the queues."""
         raise NotImplementedError()
 
-    def enqueue_finish(self):
+    def finish(self):
         """Enqueues a finish operation to all the queues."""
         raise NotImplementedError()
 
@@ -63,7 +59,7 @@ class SimpleProcessor(Processor):
         self._workgroup_size = workgroup_size
         self._do_data_transfers = do_data_transfers
 
-    def enqueue_process(self, flush=True, finish=False):
+    def process(self):
         kernel_inputs = [data.get_kernel_inputs(self._cl_environment, self._workgroup_size)
                          for data in self._kernel_data]
 
@@ -82,15 +78,10 @@ class SimpleProcessor(Processor):
             for ind, kernel_data in enumerate(self._kernel_data):
                 kernel_data.enqueue_host_access(self._cl_environment)
 
-        if flush:
-            self.enqueue_flush()
-        if finish:
-            self.enqueue_finish()
-
-    def enqueue_flush(self):
+    def flush(self):
         self._cl_environment.queue.flush()
 
-    def enqueue_finish(self):
+    def finish(self):
         self._cl_environment.queue.finish()
 
     def _flatten_list(self, l):
@@ -110,8 +101,8 @@ class CLFunctionProcessor(Processor):
         1) create it
         2) use :meth:`get_kernel_data` to get the kernel data elements and use get_data() for each of them to get the
             underlying data. You can then modify that.
-        3) call :meth:`enqueue_run` to run this function on all devices with the current data
-        4) call :meth:`enqueue_finish` to finish the execution (or do not call it and chain another operation)
+        3) call :meth:`process` to run this function on all devices with the current data
+        4) call :meth:`finish` to finish the execution (or do not call it and chain another operation)
         5) optionally use :meth:`get_function_results` to get the function results (if the function had a non-void
             return signature).
 
@@ -163,17 +154,18 @@ class CLFunctionProcessor(Processor):
                                             batch_end - batch_start, workgroup_size)
                 self._subprocessors.append(processor)
 
-    def enqueue_process(self, flush=True, finish=False):
+    def process(self):
         for worker in self._subprocessors:
-            worker.enqueue_process(flush=flush, finish=finish)
+            worker.process()
+            worker.flush()
 
-    def enqueue_flush(self):
+    def flush(self):
         for worker in self._subprocessors:
-            worker.enqueue_flush()
+            worker.flush()
 
-    def enqueue_finish(self):
+    def finish(self):
         for worker in self._subprocessors:
-            worker.enqueue_finish()
+            worker.finish()
 
     def get_kernel_data(self):
         return self._kernel_data
