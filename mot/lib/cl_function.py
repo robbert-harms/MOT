@@ -292,7 +292,8 @@ class SimpleCLFunction(CLFunction):
         processor = CLFunctionProcessor(self, inputs, nmr_instances, use_local_reduction=use_local_reduction,
                                         local_size=local_size, context_variables=context_variables, enable_rng=enable_rng,
                                         cl_runtime_info=cl_runtime_info)
-        processor.enqueue_process(finish=True)
+        processor.process()
+        processor.finish()
         return processor.get_function_results()
 
     def get_dependencies(self):
