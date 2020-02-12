@@ -3,7 +3,8 @@ from copy import copy
 import tatsu
 from textwrap import dedent, indent
 from mot.lib.cl_processors import CLFunctionProcessor
-from mot.lib.utils import split_cl_function
+from mot.lib.kernel_data import Zeros
+from mot.lib.utils import split_cl_function, convert_inputs_to_kernel_data
 
 __author__ = 'Robbert Harms'
 __date__ = '2017-08-31'
@@ -37,8 +38,10 @@ class CLFunction(CLCodeObject):
         """
         raise NotImplementedError()
 
-    def created_wrapped_kernel_func(self, input_data, kernel_name=None):
+    def get_kernel_wrapped(self, input_data, nmr_instances, kernel_name=None):
         """Wrap the current CLFunction with a kernel CLFunction.
+
+        This may return self if the current function is already a kernel function.
 
         The idea is that we can have a function like:
 
@@ -52,25 +55,33 @@ class CLFunction(CLCodeObject):
         .. code-block:: c
 
             int foo(void* data){...}
+
             kernel void kernel_foo(...){
                 ... data = ...;
-                foo(&data);
+                int result = foo(&data);
+                __return_values[gid] = result
             }
 
-        And then kernel_foo can be executed on the device.
+        And then kernel_foo can be executed on the device. Note that if the function we are wrapping has a non-void
+        return type, we return an Zeros kernel data element to be added to the kernel data when calling
+        the wrapped function.
 
         In order to generate the correct kernel arguments, this method needs to know which data will be loaded and
-        which with signature. At the moment, this is done by providing it with all the kernel inputs you wish to load
-        into the kernel at execution time. The generated kernel function will then do do automatic data marshalling
+        with which signature. This is done by providing it with all the kernel inputs you wish to load into the
+        kernel when evaluating the function. The generated kernel function will do automatic data marshalling
         from all the :class:`mot.lib.kernel_data.KernelData` inputs to the inputs for the wrapped function.
 
         Args:
             input_data (Dict[str: mot.lib.kernel_data.KernelData]): mapping parameter names to kernel data objects.
+            nmr_instances (int): the number of instances we run the data with, needed to generate the possible
+                additional kernel data.
             kernel_name (str): the name of the generated kernel function. If not given it will be called
                 ``kernel_<CLFunction.get_cl_function_name()>``.
 
         Returns:
-            CLFunction: A CL function with :meth:`is_kernel_func` set to True.
+            Tuple[CLFunction, Optional[Dict[str, KernelData]]]: A tuple with a CL function with :meth:`is_kernel_func`
+                set to True (might return 'self'), and an optional dictionary with a KernelData element
+                for storing the possible CL function return values.
         """
         raise NotImplementedError()
 
@@ -220,12 +231,13 @@ class SimpleCLFunction(CLFunction):
     def get_parameters(self):
         return self._parameter_list
 
-    def created_wrapped_kernel_func(self, input_data, kernel_name=None):
-        kernel_name = kernel_name or 'kernel_' + self.get_cl_function_name()
+    def get_kernel_wrapped(self, input_data, nmr_instances, kernel_name=None):
+        if self.is_kernel_func():
+            return self
 
-        assignment = ''
-        if self.get_return_type() != 'void':
-            assignment = '__return_values[gid] = '
+        input_data = convert_inputs_to_kernel_data(input_data, self.get_parameters(), nmr_instances)
+
+        kernel_name = kernel_name or 'kernel_' + self.get_cl_function_name()
 
         variable_inits = []
         function_call_inputs = []
@@ -242,6 +254,13 @@ class SimpleCLFunction(CLFunction):
         for name, data in input_data.items():
             parameter_list.extend(data.get_kernel_parameters('_' + name))
 
+        assignment = ''
+        extra_data = {}
+        if self.get_return_type() != 'void':
+            assignment = '__return_values[gid] = '
+            extra_data = {'__return_values': Zeros((nmr_instances,), self.get_return_type())}
+            parameter_list.extend(extra_data['__return_values'].get_kernel_parameters('__return_values'))
+
         cl_body = '''
             ulong gid = (ulong)(get_global_id(0) / get_local_size(0));
 
@@ -251,8 +270,9 @@ class SimpleCLFunction(CLFunction):
 
             ''' + '\n'.join(post_function_callbacks) + '''
         '''
-        return SimpleCLFunction('void', kernel_name, parameter_list, cl_body,
+        func = SimpleCLFunction('void', kernel_name, parameter_list, cl_body,
                                 dependencies=[self], is_kernel_func=True)
+        return func, extra_data
 
     def get_signature(self):
         return dedent('{kernel} {return_type} {cl_function_name}({parameters});'.format(

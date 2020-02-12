@@ -3,7 +3,7 @@ import logging
 import multiprocessing
 import numbers
 import os
-from collections import Iterable, Mapping
+from collections import Iterable, Mapping, OrderedDict
 from contextlib import contextmanager
 from functools import reduce
 import numpy as np
@@ -34,7 +34,7 @@ def convert_inputs_to_kernel_data(inputs, cl_parameters, nmr_instances):
         nmr_instances (int): the number of parallel processes supported by the data
 
     Returns:
-        Dict[str: mot.lib.kernel_data.KernelData]: mapping parameter names to kernel data objects.
+        OrderedDict[str: mot.lib.kernel_data.KernelData]: mapping parameter names to kernel data objects.
     """
     from mot.lib.kernel_data import KernelData, Scalar, Array
 
@@ -83,7 +83,7 @@ def convert_inputs_to_kernel_data(inputs, cl_parameters, nmr_instances):
                 else:
                     return Array(data, ctype=param.ctype, mode='r', as_scalar=True)
 
-    return {param.name.replace('.', '_'): get_data_object(param) for param in cl_parameters}
+    return OrderedDict([(param.name.replace('.', '_'), get_data_object(param)) for param in cl_parameters])
 
 
 def add_include_guards(cl_str, guard_name=None):
