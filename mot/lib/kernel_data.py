@@ -290,12 +290,8 @@ class Struct(KernelData):
             d.enqueue_host_access(cl_environment)
 
     def enqueue_device_access(self, cl_environment):
-        buffer_ind = 0
-
         for d in self._elements.values():
-            if d.get_nmr_kernel_inputs():
-                d.enqueue_device_access(cl_environment)
-                buffer_ind += d.get_nmr_kernel_inputs()
+            d.enqueue_device_access(cl_environment)
 
     def get_type_definitions(self):
         other_structs = '\n'.join(element.get_type_definitions() for element in self._elements.values())
