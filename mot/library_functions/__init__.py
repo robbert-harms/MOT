@@ -92,9 +92,13 @@ class LogCosh(SimpleCLLibrary):
 
 
 class Rand123(SimpleCLCodeObject):
-    def __init__(self):
-        generator = 'philox'
 
+    def __init__(self, generator='philox'):
+        """A CL library for adding random number support to a compute kernel.
+
+        In MOT with OpenCL 2.0 support, this requires the presence of an "__rng_state"
+        context variable, which must be set when evaluating the kernel.
+        """
         src = open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/openclfeatures.h'), ), 'r').read()
         src += open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/array.h'), ), 'r').read()
         src += open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/{}.h'.format(generator)), ),

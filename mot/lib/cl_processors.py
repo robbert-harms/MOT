@@ -154,7 +154,7 @@ class CLFunctionProcessor(Processor):
                 if self._context_variables:
                     context_kernel = getattr(program, '_initialize_context_variables')
                     worker = SimpleProcessor(context_kernel, self._context_variables.values(),
-                                             cl_environment, batch_end - batch_start, 1)
+                                             cl_environment, batch_end - batch_start, 1, instance_offset=batch_start)
                     self._subprocessors.append(worker)
 
                 processor = SimpleProcessor(kernel, self._kernel_data.values(), cl_environment,
@@ -209,7 +209,7 @@ class CLFunctionProcessor(Processor):
 
     def _resolve_context_variables(self, context_variables, nmr_instances):
         context_variables = context_variables or {}
-        if self._enable_rng:
+        if self._enable_rng and '__rng_state' not in context_variables:
             rng_state = np.random.uniform(low=np.iinfo(np.uint32).min, high=np.iinfo(np.uint32).max + 1,
                                           size=(nmr_instances, 4)).astype(np.uint32)
             context_variables['__rng_state'] = Array(rng_state, 'uint', mode='rw')
@@ -229,14 +229,16 @@ class CLFunctionProcessor(Processor):
         kernel_source += '\n'.join(data.get_type_definitions() for data in self._context_variables.values())
         kernel_source += '\n'.join(data.get_context_variable_declaration(name)
                                    for name, data in self._context_variables.items())
-        if self._enable_rng:
-            from mot.library_functions import Rand123
-            kernel_source += Rand123().get_cl_code()
 
         if self._context_variables:
             kernel_source += self._get_context_variable_init_function(self._context_variables).get_cl_code()
 
+        if self._enable_rng:
+            from mot.library_functions import Rand123
+            kernel_source += Rand123().get_cl_code()
+
         kernel_source += self._cl_function.get_cl_code()
+
         return kernel_source
 
     def _get_context_variable_init_function(self, context_variables):
