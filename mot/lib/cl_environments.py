@@ -144,11 +144,8 @@ class CLEnvironment:
         s += "\n"
         return s
 
-    def __eq__(self, other):
-        """A device is equal to another if the platform and the device are equal."""
-        if isinstance(other, CLEnvironment):
-            return other.platform == self.platform and other.device == self.device
-        return False
+    def __hash__(self):
+        return hash(self._platform) + hash(self._context) + hash(self._device) + hash(self._queue)
 
 
 def _initialize_cl_environment_cache():
