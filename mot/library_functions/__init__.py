@@ -1,5 +1,5 @@
 import os
-
+import numpy as np
 from mot.lib.cl_function import SimpleCLCodeObject
 from mot.library_functions.base import SimpleCLLibrary, SimpleCLLibraryFromFile, CLLibrary
 from pkg_resources import resource_filename
@@ -95,9 +95,6 @@ class Rand123(SimpleCLCodeObject):
 
     def __init__(self, generator='philox'):
         """A CL library for adding random number support to a compute kernel.
-
-        In MOT with OpenCL 2.0 support, this requires the presence of an "__rng_state"
-        context variable, which must be set when evaluating the kernel.
         """
         src = open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/openclfeatures.h'), ), 'r').read()
         src += open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/array.h'), ), 'r').read()
@@ -107,6 +104,12 @@ class Rand123(SimpleCLCodeObject):
             'GENERATOR_NAME': (generator)
         })
         super().__init__(src)
+
+    def get_context_variables(self, nmr_instances):
+        from mot.lib.kernel_data import Array
+        rng_state = np.random.uniform(low=np.iinfo(np.uint32).min, high=np.iinfo(np.uint32).max + 1,
+                                      size=(nmr_instances, 4)).astype(np.uint32)
+        return {'__rng_state': Array(rng_state, 'uint', mode='rw', buffer_mode='readwrite')}
 
 
 class simpsons_rule(SimpleCLLibrary):

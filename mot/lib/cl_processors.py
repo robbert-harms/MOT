@@ -8,7 +8,7 @@ from collections import OrderedDict
 import numpy as np
 import pyopencl as cl
 from mot.configuration import CLRuntimeInfo
-from mot.lib.kernel_data import Array, Zeros
+from mot.lib.kernel_data import Zeros
 from mot.lib.utils import convert_inputs_to_kernel_data, get_cl_utility_definitions
 
 
@@ -92,7 +92,7 @@ class SimpleProcessor(Processor):
 class CLFunctionProcessor(Processor):
 
     def __init__(self, cl_function, inputs, nmr_instances, use_local_reduction=False, local_size=None,
-                 context_variables=None, enable_rng=False, cl_runtime_info=None):
+                 context_variables=None, cl_runtime_info=None):
         """Create a processor for the given function and inputs.
 
         The typical way of using this processor is by:
@@ -119,8 +119,6 @@ class CLFunctionProcessor(Processor):
             context_variables (dict[str: mot.lib.kernel_data.KernelData]): data structures that will be loaded
                 as program scope global variables. Note that not all KernelData types are allowed, only the
                 global variables are allowed.
-            enable_rng (boolean): if this function wants to use random numbers. If set to true we prepare the random
-                number generator for use in this function.
             cl_runtime_info (mot.configuration.CLRuntimeInfo): the runtime information for execution
         """
         self._original_cl_function = cl_function
@@ -130,7 +128,6 @@ class CLFunctionProcessor(Processor):
         self._cl_function, self._kernel_data = self._resolve_cl_function_and_kernel_data(
             cl_function, inputs, nmr_instances)
         self._batches = self._cl_runtime_info.load_balancer.get_division(self._cl_environments, nmr_instances)
-        self._enable_rng = enable_rng
         self._context_variables = self._resolve_context_variables(context_variables, nmr_instances)
 
         self._subprocessors = []
@@ -209,10 +206,6 @@ class CLFunctionProcessor(Processor):
 
     def _resolve_context_variables(self, context_variables, nmr_instances):
         context_variables = context_variables or {}
-        if self._enable_rng and '__rng_state' not in context_variables:
-            rng_state = np.random.uniform(low=np.iinfo(np.uint32).min, high=np.iinfo(np.uint32).max + 1,
-                                          size=(nmr_instances, 4)).astype(np.uint32)
-            context_variables['__rng_state'] = Array(rng_state, 'uint', mode='rw')
 
         mot_float_dtype = np.float32
         if self._cl_runtime_info.double_precision:
@@ -233,18 +226,12 @@ class CLFunctionProcessor(Processor):
         if self._context_variables:
             kernel_source += self._get_context_variable_init_function(self._context_variables).get_cl_code()
 
-        if self._enable_rng:
-            from mot.library_functions import Rand123
-            kernel_source += Rand123().get_cl_code()
-
         kernel_source += self._cl_function.get_cl_code()
 
         return kernel_source
 
     def _get_context_variable_init_function(self, context_variables):
         from mot.lib.cl_function import SimpleCLFunction
-
-        kernel_name = '_initialize_context_variables'
 
         parameter_list = []
         context_inits = []
@@ -253,7 +240,8 @@ class CLFunctionProcessor(Processor):
             context_inits.append(data.get_context_variable_initialization(name, '_context_' + name))
 
         cl_body = '''
-                    ulong gid = (ulong)(get_global_id(0) / get_local_size(0));
-                    ''' + '\n'.join(context_inits) + '''
-                '''
-        return SimpleCLFunction('void', kernel_name, parameter_list, cl_body, is_kernel_func=True)
+            ulong gid = (ulong)(get_global_id(0) / get_local_size(0));
+            ''' + '\n'.join(context_inits) + '''
+        '''
+        return SimpleCLFunction('void', '_initialize_context_variables',
+                                parameter_list, cl_body, is_kernel_func=True)

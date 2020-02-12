@@ -14,6 +14,8 @@ __license__ = "LGPL v3"
 __maintainer__ = "Robbert Harms"
 __email__ = "robbert.harms@maastrichtuniversity.nl"
 
+from mot.library_functions import Rand123
+
 
 class AbstractSampler:
 
@@ -151,8 +153,7 @@ class AbstractSampler:
         sample_func = self._get_compute_func(nmr_samples, thinning, return_output)
         sample_func.evaluate(kernel_data, self._nmr_problems,
                              use_local_reduction=all(env.is_gpu for env in self._cl_runtime_info.cl_environments),
-                             cl_runtime_info=self._cl_runtime_info,
-                             enable_rng=True)
+                             cl_runtime_info=self._cl_runtime_info)
         self._sampling_index += nmr_samples * thinning
         if return_output:
             return (kernel_data['samples'].get_data(),
@@ -283,7 +284,8 @@ class AbstractSampler:
         '''
         return SimpleCLFunction.from_string(
             cl_func,
-            dependencies=[self._get_log_prior_cl_func(),
+            dependencies=[Rand123(),
+                          self._get_log_prior_cl_func(),
                           self._get_log_likelihood_cl_func(),
                           SimpleCLCodeObject(self._get_state_update_cl_func(nmr_samples, thinning, return_output))])
 

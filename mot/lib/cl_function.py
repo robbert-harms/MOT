@@ -23,6 +23,17 @@ class CLCodeObject:
         """
         raise NotImplementedError()
 
+    def get_context_variables(self, nmr_instances):
+        """Get the context variables required by this code object.
+
+        Args:
+            nmr_instances (int): the number of instances for which to prepare the instance variables.
+
+        Returns:
+            Dict[str, mot.lib.kernel_data.KernelData]: kernel data elements to load as global variables.
+        """
+        raise NotImplementedError()
+
 
 class CLFunction(CLCodeObject):
     """Interface for a basic CL function."""
@@ -122,8 +133,8 @@ class CLFunction(CLCodeObject):
         """
         raise NotImplementedError()
 
-    def evaluate(self, inputs, nmr_instances, context_variables=None, enable_rng=False,
-                 use_local_reduction=False, local_size=None, cl_runtime_info=None):
+    def evaluate(self, inputs, nmr_instances, context_variables=None, use_local_reduction=False,
+                 local_size=None, cl_runtime_info=None):
         """Evaluate this function for each set of given parameters.
 
         Given a set of input parameters, this model will be evaluated for every parameter set.
@@ -140,8 +151,6 @@ class CLFunction(CLCodeObject):
             context_variables (dict[str: mot.lib.kernel_data.KernelData]): data structures that will be loaded
                 as program scope global variables. Note that not all KernelData types are allowed, only the
                 global variables are allowed.
-            enable_rng (boolean): if this function wants to use random numbers. If set to true we prepare the random
-                number generator for use in this function.
             use_local_reduction (boolean): set this to True if you want to use local memory reduction in
                  evaluating this function. If this is set to True we will multiply the global size
                  (given by the nmr_instances) by the work group sizes.
@@ -174,6 +183,9 @@ class SimpleCLCodeObject(CLCodeObject):
 
     def get_cl_code(self):
         return self._cl_code
+
+    def get_context_variables(self, nmr_instances):
+        return {}
 
 
 class SimpleCLFunction(CLFunction):
@@ -287,9 +299,13 @@ class SimpleCLFunction(CLFunction):
         return self._cl_body
 
     def evaluate(self, inputs, nmr_instances, use_local_reduction=False, local_size=None,
-                 context_variables=None, enable_rng=False, cl_runtime_info=None):
+                 context_variables=None, cl_runtime_info=None):
+
+        context_variables = context_variables or {}
+        context_variables.update(self.get_context_variables(nmr_instances))
+
         processor = CLFunctionProcessor(self, inputs, nmr_instances, use_local_reduction=use_local_reduction,
-                                        local_size=local_size, context_variables=context_variables, enable_rng=enable_rng,
+                                        local_size=local_size, context_variables=context_variables,
                                         cl_runtime_info=cl_runtime_info)
         processor.process()
         processor.finish()
@@ -297,6 +313,12 @@ class SimpleCLFunction(CLFunction):
 
     def get_dependencies(self):
         return self._dependencies
+
+    def get_context_variables(self, nmr_instances):
+        context_variables = {}
+        for dependency in self._dependencies:
+            context_variables.update(dependency.get_context_variables(nmr_instances))
+        return context_variables
 
     def _get_parameter_signatures(self):
         """Get the signature of the parameters for the CL function declaration.

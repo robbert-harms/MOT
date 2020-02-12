@@ -31,8 +31,10 @@ __maintainer__ = 'Robbert Harms'
 __email__ = 'robbert.harms@maastrichtuniversity.nl'
 __licence__ = 'LGPL v3'
 
+from mot.library_functions import Rand123
 
-def uniform(nmr_distributions, nmr_samples, low=0, high=1, ctype='float', seed=None):
+
+def uniform(nmr_distributions, nmr_samples, low=0, high=1, ctype='float'):
     """Draw random samples from the Uniform distribution.
 
     Args:
@@ -41,7 +43,6 @@ def uniform(nmr_distributions, nmr_samples, low=0, high=1, ctype='float', seed=N
         low (double): The minimum value of the random numbers
         high (double): The minimum value of the random numbers
         ctype (str): the C type of the output samples
-        seed (float): the seed for the RNG
 
     Returns:
         ndarray: A two dimensional numpy array as (nmr_distributions, nmr_samples).
@@ -61,13 +62,13 @@ def uniform(nmr_distributions, nmr_samples, low=0, high=1, ctype='float', seed=N
                 samples[i] = (''' + ctype + ''')(low + rand() * (high - low));
             }
         }
-    ''')
+    ''', dependencies=[Rand123()])
 
-    kernel.evaluate(kernel_data, nmr_distributions, enable_rng=True)
+    kernel.evaluate(kernel_data, nmr_distributions)
     return kernel_data['samples'].get_data()
 
 
-def normal(nmr_distributions, nmr_samples, mean=0, std=1, ctype='float', seed=None):
+def normal(nmr_distributions, nmr_samples, mean=0, std=1, ctype='float'):
     """Draw random samples from the Gaussian distribution.
 
     Args:
@@ -76,7 +77,6 @@ def normal(nmr_distributions, nmr_samples, mean=0, std=1, ctype='float', seed=No
         mean (float or ndarray): The mean of the distribution
         std (float or ndarray): The standard deviation or the distribution
         ctype (str): the C type of the output samples
-        seed (float): the seed for the RNG
 
     Returns:
         ndarray: A two dimensional numpy array as (nmr_distributions, nmr_samples).
@@ -96,7 +96,7 @@ def normal(nmr_distributions, nmr_samples, mean=0, std=1, ctype='float', seed=No
                 samples[i] = (''' + ctype + ''')(mean + randn() * std);
             }
         }
-    ''')
+    ''', dependencies=[Rand123()])
 
-    kernel.evaluate(kernel_data, nmr_distributions, enable_rng=True)
+    kernel.evaluate(kernel_data, nmr_distributions)
     return kernel_data['samples'].get_data()
