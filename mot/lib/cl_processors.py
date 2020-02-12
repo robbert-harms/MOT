@@ -181,14 +181,11 @@ class CLFunctionProcessor(Processor):
             ndarray: the return values of the function, which can be None if this function has a void return type.
         """
         if self._original_cl_function.get_return_type() != 'void':
-            return self._kernel_data['_return_values'].get_data()
+            return self._kernel_data['__return_values'].get_data()
 
     def _resolve_cl_function_and_kernel_data(self, cl_function, inputs, nmr_instances):
         """Ensures that the CLFunction is a kernel function and the inputs are kernel data elements."""
         kernel_data = convert_inputs_to_kernel_data(inputs, cl_function.get_parameters(), nmr_instances)
-
-        if cl_function.get_return_type() != 'void':
-            kernel_data['_return_values'] = Zeros((nmr_instances,), cl_function.get_return_type())
 
         mot_float_dtype = np.float32
         if self._cl_runtime_info.double_precision:
@@ -197,10 +194,9 @@ class CLFunctionProcessor(Processor):
         for data in kernel_data.values():
             data.set_mot_float_dtype(mot_float_dtype)
 
-        kernel_data = OrderedDict(sorted(kernel_data.items()))
-
         if not cl_function.is_kernel_func():
-            cl_function = cl_function.created_wrapped_kernel_func(kernel_data)
+            cl_function, extra_data = cl_function.get_kernel_wrapped(kernel_data, nmr_instances)
+            kernel_data.update(extra_data)
 
         return cl_function, kernel_data
 
