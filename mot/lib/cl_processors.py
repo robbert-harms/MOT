@@ -198,13 +198,8 @@ class CLFunctionProcessor(Processor):
 
     def _resolve_context_variables(self, context_variables, nmr_instances):
         context_variables = context_variables or {}
-
-        mot_float_dtype = np.float32
-        if self._cl_runtime_info.double_precision:
-            mot_float_dtype = np.float64
-
         for data in context_variables.values():
-            data.set_mot_float_dtype(mot_float_dtype)
+            data.set_mot_float_dtype(self._cl_runtime_info.mot_float_dtype)
         return context_variables
 
     def _get_kernel_source(self):
