@@ -274,14 +274,13 @@ class SimpleCLFunction(CLFunction):
                    parameters=', '.join(self._get_parameter_signatures()),
                    body=indent(dedent(self._cl_body), ' '*4*4)))
 
-        return dedent('''
-            {dependencies}
+        dependencies = self._get_cl_dependency_code()
+        return dependencies + dedent('''
             #ifndef {inclusion_guard_name}
             #define {inclusion_guard_name}
             {code}
             #endif // {inclusion_guard_name}
-        '''.format(dependencies=indent(self._get_cl_dependency_code(), ' ' * 4 * 3),
-                   inclusion_guard_name='INCLUDE_GUARD_{}'.format(self.get_cl_function_name()),
+        '''.format(inclusion_guard_name='INCLUDE_GUARD_{}'.format(self.get_cl_function_name()),
                    code=indent('\n' + cl_code + '\n', ' ' * 4 * 3)))
 
     def get_cl_body(self):
