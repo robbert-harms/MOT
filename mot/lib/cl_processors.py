@@ -187,12 +187,8 @@ class CLFunctionProcessor(Processor):
         """Ensures that the CLFunction is a kernel function and the inputs are kernel data elements."""
         kernel_data = convert_inputs_to_kernel_data(inputs, cl_function.get_parameters(), nmr_instances)
 
-        mot_float_dtype = np.float32
-        if self._cl_runtime_info.double_precision:
-            mot_float_dtype = np.float64
-
         for data in kernel_data.values():
-            data.set_mot_float_dtype(mot_float_dtype)
+            data.set_mot_float_dtype(self._cl_runtime_info.mot_float_dtype)
 
         if not cl_function.is_kernel_func():
             cl_function, extra_data = cl_function.get_kernel_wrapped(kernel_data, nmr_instances)
