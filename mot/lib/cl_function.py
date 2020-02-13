@@ -2,9 +2,11 @@ from collections import Iterable
 from copy import copy
 import tatsu
 from textwrap import dedent, indent
+
+from mot.configuration import CLRuntimeInfo
 from mot.lib.cl_processors import CLFunctionProcessor
 from mot.lib.kernel_data import Zeros
-from mot.lib.utils import split_cl_function, convert_inputs_to_kernel_data
+from mot.lib.utils import split_cl_function, convert_inputs_to_kernel_data, get_cl_utility_definitions
 
 __author__ = 'Robbert Harms'
 __date__ = '2017-08-31'
@@ -311,14 +313,41 @@ class SimpleCLFunction(CLFunction):
 
     def evaluate(self, inputs, nmr_instances, use_local_reduction=False, local_size=None, cl_runtime_info=None,
                  do_data_transfers=True, is_blocking=True):
-        processor = CLFunctionProcessor(self, inputs, nmr_instances, use_local_reduction=use_local_reduction,
+
+        cl_runtime_info = cl_runtime_info or CLRuntimeInfo()
+
+        def resolve_cl_function_and_kernel_data():
+            kernel_data = convert_inputs_to_kernel_data(inputs, self.get_parameters(), nmr_instances)
+            for data in kernel_data.values():
+                data.set_mot_float_dtype(cl_runtime_info.mot_float_dtype)
+
+            cl_function = self
+            if not self.is_kernel_func():
+                cl_function, extra_data = self.get_kernel_wrapped(kernel_data, nmr_instances)
+                kernel_data.update(extra_data)
+
+            return cl_function, kernel_data
+
+        def get_kernel_source(cl_function, kernel_data):
+            kernel_source = ''
+            kernel_source += get_cl_utility_definitions(cl_runtime_info.double_precision)
+            kernel_source += '\n'.join(data.get_type_definitions() for data in kernel_data.values())
+            kernel_source += cl_function.get_cl_code()
+            return kernel_source
+
+        cl_function, kernel_data = resolve_cl_function_and_kernel_data()
+        kernel_source = get_kernel_source(cl_function, kernel_data)
+
+        processor = CLFunctionProcessor(kernel_source, self, kernel_data, nmr_instances,
+                                        use_local_reduction=use_local_reduction,
                                         local_size=local_size, cl_runtime_info=cl_runtime_info,
                                         do_data_transfers=do_data_transfers)
         processor.process()
 
         if is_blocking:
             processor.finish()
-            return processor.get_function_results()
+            if self.get_return_type() != 'void':
+                return kernel_data['__return_values'].get_data()
         else:
             return None
 
