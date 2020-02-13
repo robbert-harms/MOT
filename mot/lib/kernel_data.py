@@ -890,8 +890,8 @@ class Array(KernelData):
                     events[env] = event
 
         if is_blocking:
-            for event in events.values():
-                event.wait()
+            for env in cl_environments:
+                env.queue.finish()
 
         return events
 
@@ -920,8 +920,8 @@ class Array(KernelData):
                     events[env] = event
 
         if is_blocking:
-            for event in events.values():
-                event.wait()
+            for env in cl_environments:
+                env.queue.finish()
 
         return events
 
