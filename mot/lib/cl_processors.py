@@ -4,14 +4,7 @@ __maintainer__ = 'Robbert Harms'
 __email__ = 'robbert.harms@maastrichtuniversity.nl'
 __licence__ = 'LGPL v3'
 
-from collections import OrderedDict
-
-import numpy as np
 import pyopencl as cl
-
-from mot.configuration import CLRuntimeInfo
-from mot.lib.kernel_data import Zeros
-from mot.lib.utils import convert_inputs_to_kernel_data, get_cl_utility_definitions
 
 
 class Processor:
