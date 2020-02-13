@@ -4,6 +4,7 @@ from collections import OrderedDict, Mapping
 import numpy as np
 import pyopencl as cl
 
+from mot.lib.cl_environments import CLEnvironment
 from mot.lib.utils import dtype_to_ctype, ctype_to_dtype, convert_data_to_dtype, is_vector_ctype, split_vector_ctype
 
 __author__ = 'Robbert Harms'
@@ -181,23 +182,25 @@ class KernelData:
         """
         raise NotImplementedError()
 
-    def enqueue_host_access(self, cl_environment):
+    def enqueue_host_access(self, cl_environments):
         """Enqueue either a map or write operation for this kernel input data object.
 
         This should add non-blocking maps or write operations to the given queue.
 
         Args:
-            cl_environment (mot.lib.cl_environments.CLEnvironment): enqueue device access for this CL environment.
+            cl_environments (mot.lib.cl_environments.CLEnvironment or list):
+                enqueue host access for one or multiple CL environments
         """
         raise NotImplementedError()
 
-    def enqueue_device_access(self, cl_environment):
+    def enqueue_device_access(self, cl_environments):
         """Enqueue either an unmap or read operation for this kernel input data object.
 
         This should add non-blocking unmaps or read operations to the given queue.
 
         Args:
-            cl_environment (mot.lib.cl_environments.CLEnvironment): enqueue device access for this CL environment.
+            cl_environments (mot.lib.cl_environments.CLEnvironment or list):
+                enqueue device access for one or multiple CL environments
         """
         raise NotImplementedError()
 
@@ -350,13 +353,13 @@ class Struct(KernelData):
             parameters.extend(d.get_kernel_parameters('{}_{}'.format(kernel_param_name, name)))
         return parameters
 
-    def enqueue_host_access(self, cl_environment):
+    def enqueue_host_access(self, cl_environments):
         for d in self._elements.values():
-            d.enqueue_host_access(cl_environment)
+            d.enqueue_host_access(cl_environments)
 
-    def enqueue_device_access(self, cl_environment):
+    def enqueue_device_access(self, cl_environments):
         for d in self._elements.values():
-            d.enqueue_device_access(cl_environment)
+            d.enqueue_device_access(cl_environments)
 
     def get_kernel_inputs(self, cl_environment, workgroup_size):
         data = []
@@ -453,10 +456,10 @@ class Scalar(KernelData):
     def initialize_variable(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
         return ''
 
-    def enqueue_host_access(self, cl_environment):
+    def enqueue_host_access(self, cl_environments):
         pass
 
-    def enqueue_device_access(self, cl_environment):
+    def enqueue_device_access(self, cl_environments):
         pass
 
     def get_function_call_input(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
@@ -541,10 +544,10 @@ class PrivateMemory(KernelData):
     def get_kernel_parameters(self, kernel_param_name):
         return []
 
-    def enqueue_host_access(self, cl_environment):
+    def enqueue_host_access(self, cl_environments):
         pass
 
-    def enqueue_device_access(self, cl_environment):
+    def enqueue_device_access(self, cl_environments):
         pass
 
     def get_kernel_inputs(self, cl_environment, workgroup_size):
@@ -617,10 +620,10 @@ class LocalMemory(KernelData):
     def get_kernel_parameters(self, kernel_param_name):
         return ['local {}* restrict {}'.format(self._ctype, kernel_param_name)]
 
-    def enqueue_host_access(self, cl_environment):
+    def enqueue_host_access(self, cl_environments):
         pass
 
-    def enqueue_device_access(self, cl_environment):
+    def enqueue_device_access(self, cl_environments):
         pass
 
     def get_kernel_inputs(self, cl_environment, workgroup_size):
@@ -839,24 +842,34 @@ class Array(KernelData):
     def get_kernel_parameters(self, kernel_param_name):
         return ['global {}* restrict {}'.format(self._ctype, kernel_param_name)]
 
-    def enqueue_host_access(self, cl_environment):
-        if self._use_host_ptr:
-            if self._is_writable:
-                cl.enqueue_map_buffer(
-                    cl_environment.queue, self._buffer_cache[cl_environment.context],
-                    cl.map_flags.READ, 0, self._data.shape, self._data.dtype,
-                    order="C", wait_for=None, is_blocking=False)
-        else:
-            if self._is_writable:
-                cl.enqueue_copy(cl_environment.queue,
-                                self._data,
-                                self._buffer_cache[cl_environment.context], is_blocking=False)
+    def enqueue_host_access(self, cl_environments):
+        if isinstance(cl_environments, CLEnvironment):
+            cl_environments = [cl_environments]
 
-    def enqueue_device_access(self, cl_environment):
+        read_out_info = {}
+        for cl_environment in cl_environments:
+            read_out_info[cl_environment.context] = (self.get_kernel_inputs(cl_environment, 0)[0], cl_environment.queue)
+
+        if self._is_writable:
+            if self._use_host_ptr:
+                for buffer, queue in read_out_info.values():
+                    cl.enqueue_map_buffer(queue, buffer, cl.map_flags.READ, 0, self._data.shape, self._data.dtype,
+                                          order="C", wait_for=None, is_blocking=False)
+            else:
+                for buffer, queue in read_out_info.values():
+                    cl.enqueue_copy(queue, self._data, buffer, is_blocking=False)
+
+    def enqueue_device_access(self, cl_environments):
+        if isinstance(cl_environments, CLEnvironment):
+            cl_environments = [cl_environments]
+
+        read_out_info = {}
+        for cl_environment in cl_environments:
+            read_out_info[cl_environment.context] = (self.get_kernel_inputs(cl_environment, 0)[0], cl_environment.queue)
+
         if not self._use_host_ptr:
-            cl.enqueue_copy(cl_environment.queue,
-                            self._buffer_cache[cl_environment.context],
-                            self._data, is_blocking=False)
+            for buffer, queue in read_out_info.values():
+                cl.enqueue_copy(queue, buffer, self._data, is_blocking=False)
 
     def get_kernel_inputs(self, cl_environment, workgroup_size):
         def get_mem_flags():
@@ -1059,11 +1072,11 @@ class Zeros(KernelData):
     def get_kernel_parameters(self, kernel_param_name):
         return ['global {}* restrict {}'.format(self._ctype, kernel_param_name)]
 
-    def enqueue_host_access(self, cl_environment):
+    def enqueue_host_access(self, cl_environments):
         if self._host_accessible:
-            return self._array.enqueue_host_access(cl_environment)
+            return self._array.enqueue_host_access(cl_environments)
 
-    def enqueue_device_access(self, cl_environment):
+    def enqueue_device_access(self, cl_environments):
         pass
 
     def get_kernel_inputs(self, cl_environment, workgroup_size):
@@ -1197,10 +1210,10 @@ class CompositeArray(KernelData):
             parameters.extend(d.get_kernel_parameters('{}_{}'.format(kernel_param_name, str(ind))))
         return parameters
 
-    def enqueue_host_access(self, cl_environment):
+    def enqueue_host_access(self, cl_environments):
         pass
 
-    def enqueue_device_access(self, cl_environment):
+    def enqueue_device_access(self, cl_environments):
         pass
 
     def get_kernel_inputs(self, cl_environment, workgroup_size):

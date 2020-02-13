@@ -133,7 +133,8 @@ class CLFunction(CLCodeObject):
         """
         raise NotImplementedError()
 
-    def evaluate(self, inputs, nmr_instances, use_local_reduction=False, local_size=None, cl_runtime_info=None):
+    def evaluate(self, inputs, nmr_instances, use_local_reduction=False, local_size=None, cl_runtime_info=None,
+                 do_data_transfers=True, is_blocking=True):
         """Evaluate this function for each set of given parameters.
 
         Given a set of input parameters, this model will be evaluated for every parameter set.
@@ -152,7 +153,11 @@ class CLFunction(CLCodeObject):
                  (given by the nmr_instances) by the work group sizes.
             local_size (int): can be used to specify the exact local size (workgroup size) the kernel must use.
             cl_runtime_info (mot.configuration.CLRuntimeInfo): the runtime information for execution
-
+            do_data_transfers (boolean): if we should do data transfers from host to device and back for evaluating
+                this function. For better control set this to False and use the method
+                ``enqueue_device_access()`` and ``enqueue_host_access`` of the KernelData to set the data.
+            is_blocking (boolean): if this is a blocking call, i.e. if we should call finish on all the queues
+                after enqueueing the function
         Returns:
             ndarray: the return values of the function, which can be None if this function has a void return type.
         """
@@ -304,12 +309,18 @@ class SimpleCLFunction(CLFunction):
     def get_cl_body(self):
         return self._cl_body
 
-    def evaluate(self, inputs, nmr_instances, use_local_reduction=False, local_size=None, cl_runtime_info=None):
+    def evaluate(self, inputs, nmr_instances, use_local_reduction=False, local_size=None, cl_runtime_info=None,
+                 do_data_transfers=True, is_blocking=True):
         processor = CLFunctionProcessor(self, inputs, nmr_instances, use_local_reduction=use_local_reduction,
-                                        local_size=local_size, cl_runtime_info=cl_runtime_info)
+                                        local_size=local_size, cl_runtime_info=cl_runtime_info,
+                                        do_data_transfers=do_data_transfers)
         processor.process()
-        processor.finish()
-        return processor.get_function_results()
+
+        if is_blocking:
+            processor.finish()
+            return processor.get_function_results()
+        else:
+            return None
 
     def get_dependencies(self):
         return self._dependencies

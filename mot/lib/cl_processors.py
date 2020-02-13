@@ -94,7 +94,7 @@ class SimpleProcessor(Processor):
 class CLFunctionProcessor(Processor):
 
     def __init__(self, cl_function, inputs, nmr_instances, use_local_reduction=False,
-                 local_size=None, cl_runtime_info=None):
+                 local_size=None, cl_runtime_info=None, do_data_transfers=True):
         """Create a processor for the given function and inputs.
 
         The typical way of using this processor is by:
@@ -119,6 +119,9 @@ class CLFunctionProcessor(Processor):
                  (given by the nmr_instances) by the work group sizes.
             local_size (int): can be used to specify the exact local size (workgroup size) the kernel must use.
             cl_runtime_info (mot.configuration.CLRuntimeInfo): the runtime information for execution
+            do_data_transfers (boolean): if we should do data transfers from host to device and back for evaluating
+                this function. For better control set this to False and use the method
+                ``enqueue_device_access()`` and ``enqueue_host_access`` of the KernelData to set the data.
         """
         self._original_cl_function = cl_function
 
@@ -148,7 +151,7 @@ class CLFunctionProcessor(Processor):
             if batch_end - batch_start > 0:
                 processor = SimpleProcessor(kernel, self._kernel_data.values(), cl_environment,
                                             batch_end - batch_start, workgroup_size,
-                                            instance_offset=batch_start)
+                                            instance_offset=batch_start, do_data_transfers=do_data_transfers)
                 self._subprocessors.append(processor)
 
     def process(self):
