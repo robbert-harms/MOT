@@ -91,7 +91,7 @@ class SimpleProcessor(Processor):
 
 class CLFunctionProcessor(Processor):
 
-    def __init__(self, cl_function, inputs, nmr_instances, use_local_reduction=False, local_size=None,
+    def __init__(self, kernel_source, cl_function, inputs, nmr_instances, use_local_reduction=False, local_size=None,
                  context_variables=None, cl_runtime_info=None, do_data_transfers=True):
         """Create a processor for the given function and inputs.
 
@@ -128,14 +128,14 @@ class CLFunctionProcessor(Processor):
 
         self._cl_runtime_info = cl_runtime_info or CLRuntimeInfo()
         self._cl_environments = self._cl_runtime_info.cl_environments
-        self._cl_function, self._kernel_data = self._resolve_cl_function_and_kernel_data(
-            cl_function, inputs, nmr_instances)
+        self._cl_function = cl_function
+        self._kernel_data = inputs
         self._batches = self._cl_runtime_info.load_balancer.get_division(self._cl_environments, nmr_instances)
-        self._context_variables = self._resolve_context_variables(context_variables, nmr_instances)
+        self._context_variables = context_variables
 
         self._subprocessors = []
         for ind, cl_environment in enumerate(self._cl_environments):
-            program = cl.Program(cl_environment.context, self._get_kernel_source()).build(
+            program = cl.Program(cl_environment.context, kernel_source).build(
                 ' '.join(self._cl_runtime_info.compile_flags))
             kernel = getattr(program, self._cl_function.get_cl_function_name())
 
@@ -174,65 +174,3 @@ class CLFunctionProcessor(Processor):
     def finish(self):
         for worker in self._subprocessors:
             worker.finish()
-
-    def get_kernel_data(self):
-        return self._kernel_data
-
-    def get_function_results(self):
-        """Get the current function results. Only useful if the function has a non-void return type.
-
-        Returns:
-            ndarray: the return values of the function, which can be None if this function has a void return type.
-        """
-        if self._original_cl_function.get_return_type() != 'void':
-            return self._kernel_data['__return_values'].get_data()
-
-    def _resolve_cl_function_and_kernel_data(self, cl_function, inputs, nmr_instances):
-        """Ensures that the CLFunction is a kernel function and the inputs are kernel data elements."""
-        kernel_data = convert_inputs_to_kernel_data(inputs, cl_function.get_parameters(), nmr_instances)
-
-        for data in kernel_data.values():
-            data.set_mot_float_dtype(self._cl_runtime_info.mot_float_dtype)
-
-        if not cl_function.is_kernel_func():
-            cl_function, extra_data = cl_function.get_kernel_wrapped(kernel_data, nmr_instances)
-            kernel_data.update(extra_data)
-
-        return cl_function, kernel_data
-
-    def _resolve_context_variables(self, context_variables, nmr_instances):
-        context_variables = context_variables or {}
-        for data in context_variables.values():
-            data.set_mot_float_dtype(self._cl_runtime_info.mot_float_dtype)
-        return context_variables
-
-    def _get_kernel_source(self):
-        kernel_source = ''
-        kernel_source += get_cl_utility_definitions(self._cl_runtime_info.double_precision)
-        kernel_source += '\n'.join(data.get_type_definitions() for data in self._kernel_data.values())
-        kernel_source += '\n'.join(data.get_type_definitions() for data in self._context_variables.values())
-        kernel_source += '\n'.join(data.get_context_variable_declaration(name)
-                                   for name, data in self._context_variables.items())
-
-        if self._context_variables:
-            kernel_source += self._get_context_variable_init_function(self._context_variables).get_cl_code()
-
-        kernel_source += self._cl_function.get_cl_code()
-
-        return kernel_source
-
-    def _get_context_variable_init_function(self, context_variables):
-        from mot.lib.cl_function import SimpleCLFunction
-
-        parameter_list = []
-        context_inits = []
-        for name, data in context_variables.items():
-            parameter_list.extend(data.get_kernel_parameters('_context_' + name))
-            context_inits.append(data.get_context_variable_initialization(name, '_context_' + name))
-
-        cl_body = '''
-            ulong gid = (ulong)(get_global_id(0) / get_local_size(0));
-            ''' + '\n'.join(context_inits) + '''
-        '''
-        return SimpleCLFunction('void', '_initialize_context_variables',
-                                parameter_list, cl_body, is_kernel_func=True)

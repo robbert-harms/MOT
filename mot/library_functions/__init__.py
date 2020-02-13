@@ -109,7 +109,7 @@ class Rand123(SimpleCLCodeObject):
         from mot.lib.kernel_data import Array
         rng_state = np.random.uniform(low=np.iinfo(np.uint32).min, high=np.iinfo(np.uint32).max + 1,
                                       size=(nmr_instances, 4)).astype(np.uint32)
-        return {'__rng_state': Array(rng_state, 'uint', mode='rw', buffer_mode='readwrite')}
+        return {'__rng_state': Array(rng_state, 'uint', mode='rw', use_host_ptr=False)}
 
 
 class simpsons_rule(SimpleCLLibrary):
