@@ -93,7 +93,7 @@ class SimpleProcessor(Processor):
 
 class CLFunctionProcessor(Processor):
 
-    def __init__(self, kernel_source, cl_function, inputs, nmr_instances, use_local_reduction=False,
+    def __init__(self, kernels, kernel_data, nmr_instances, use_local_reduction=False,
                  local_size=None, cl_runtime_info=None, do_data_transfers=True):
         """Create a processor for the given function and inputs.
 
@@ -107,7 +107,7 @@ class CLFunctionProcessor(Processor):
             return signature).
 
         Args:
-            inputs (Iterable[Union(ndarray, mot.lib.utils.KernelData)]
+            kernel_data (Iterable[Union(ndarray, mot.lib.utils.KernelData)]
                     or Mapping[str: Union(ndarray, mot.lib.utils.KernelData)]): for each CL function parameter
                 the input data. Each of these input datasets must either be a scalar or be of equal length in the
                 first dimension. The elements can either be raw ndarrays or KernelData objects.
@@ -123,19 +123,13 @@ class CLFunctionProcessor(Processor):
                 this function. For better control set this to False and use the method
                 ``enqueue_device_access()`` and ``enqueue_host_access`` of the KernelData to set the data.
         """
-        self._original_cl_function = cl_function
-
         self._cl_runtime_info = cl_runtime_info or CLRuntimeInfo()
         self._cl_environments = self._cl_runtime_info.cl_environments
-        self._cl_function = cl_function
-        self._kernel_data = inputs
         self._batches = self._cl_runtime_info.load_balancer.get_division(self._cl_environments, nmr_instances)
 
         self._subprocessors = []
         for ind, cl_environment in enumerate(self._cl_environments):
-            program = cl.Program(cl_environment.context, kernel_source).build(
-                ' '.join(self._cl_runtime_info.compile_flags))
-            kernel = getattr(program, self._cl_function.get_cl_function_name())
+            kernel = kernels[cl_environment]
 
             if use_local_reduction:
                 if local_size:
@@ -149,7 +143,7 @@ class CLFunctionProcessor(Processor):
             batch_start, batch_end = self._batches[ind]
 
             if batch_end - batch_start > 0:
-                processor = SimpleProcessor(kernel, self._kernel_data.values(), cl_environment,
+                processor = SimpleProcessor(kernel, kernel_data.values(), cl_environment,
                                             batch_end - batch_start, workgroup_size,
                                             instance_offset=batch_start, do_data_transfers=do_data_transfers)
                 self._subprocessors.append(processor)

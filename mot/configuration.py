@@ -279,7 +279,7 @@ class CLRuntimeInfo:
                 for the computations. Can either be a load balancer or a tuple with fractional loads per device.
         """
         self._cl_environments = self._load_environments(cl_environments)
-        self._compile_flags = compile_flags or get_compile_flags()
+        self._compile_flags = tuple(compile_flags or get_compile_flags())
         self._double_precision = double_precision
         self._load_balancer = self._prepare_load_balancer(load_balancer)
 

@@ -2,7 +2,7 @@ from collections import Iterable
 from copy import copy
 import tatsu
 from textwrap import dedent, indent
-
+import pyopencl as cl
 from mot.configuration import CLRuntimeInfo
 from mot.lib.cl_processors import CLFunctionProcessor
 from mot.lib.kernel_data import Zeros
@@ -210,6 +210,7 @@ class SimpleCLFunction(CLFunction):
         self._cl_body = cl_body
         self._dependencies = dependencies or []
         self._is_kernel_func = is_kernel_func
+        self._compilation_cache = {}
 
     @classmethod
     def from_string(cls, cl_function, dependencies=()):
@@ -310,7 +311,7 @@ class SimpleCLFunction(CLFunction):
 
     def get_cl_body(self):
         return self._cl_body
-
+    tt = 0
     def evaluate(self, inputs, nmr_instances, use_local_reduction=False, local_size=None, cl_runtime_info=None,
                  do_data_transfers=True, is_blocking=True):
 
@@ -338,7 +339,16 @@ class SimpleCLFunction(CLFunction):
         cl_function, kernel_data = resolve_cl_function_and_kernel_data()
         kernel_source = get_kernel_source(cl_function, kernel_data)
 
-        processor = CLFunctionProcessor(kernel_source, self, kernel_data, nmr_instances,
+        hashed_source = hash(kernel_source)
+        kernels = {}
+        for env in cl_runtime_info.cl_environments:
+            key = (hashed_source, env.context, cl_runtime_info.compile_flags)
+            if key not in self._compilation_cache:
+                self._compilation_cache[key] = cl.Program(
+                    env.context, kernel_source).build(' '.join(cl_runtime_info.compile_flags))
+            kernels[env] = getattr(self._compilation_cache[key], cl_function.get_cl_function_name())
+
+        processor = CLFunctionProcessor(kernels, kernel_data, nmr_instances,
                                         use_local_reduction=use_local_reduction,
                                         local_size=local_size, cl_runtime_info=cl_runtime_info,
                                         do_data_transfers=do_data_transfers)
