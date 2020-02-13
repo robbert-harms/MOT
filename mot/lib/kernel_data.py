@@ -187,7 +187,7 @@ class KernelData:
         """
         raise NotImplementedError()
 
-    def enqueue_host_access(self, cl_environments):
+    def enqueue_host_access(self, cl_environments, is_blocking=True, wait_for=None):
         """Enqueue either a map or write operation for this kernel input data object.
 
         This should add non-blocking maps or write operations to the given queue.
@@ -195,13 +195,16 @@ class KernelData:
         Args:
             cl_environments (mot.lib.cl_environments.CLEnvironment or list):
                 enqueue host access for one or multiple CL environments
+            is_blocking (boolean): if the enqueuing should be blocking calls or not
+                This first enqueues all the work to all the contexts and then waits for completion on them.
+            wait_for (Dict[CLEnvironment: cl.Event]): per CL environment an event to wait on
 
         Returns:
-            Dict[CLEnvironment: List[cl.Event]]: per CL environment a list of events to wait on
+            Dict[CLEnvironment: cl.Event]: per CLEnvironment an event for waiting on
         """
         raise NotImplementedError()
 
-    def enqueue_device_access(self, cl_environments):
+    def enqueue_device_access(self, cl_environments, is_blocking=True, wait_for=None):
         """Enqueue either an unmap or read operation for this kernel input data object.
 
         This should add non-blocking unmaps or read operations to the given queue.
@@ -209,9 +212,12 @@ class KernelData:
         Args:
             cl_environments (mot.lib.cl_environments.CLEnvironment or list):
                 enqueue device access for one or multiple CL environments
+            is_blocking (boolean): if the enqueuing should be blocking calls or not
+                This first enqueues all the work to all the contexts and then waits for completion on them.
+            wait_for (Dict[CLEnvironment: cl.Event]): per CL environment an event to wait on
 
         Returns:
-            Dict[CLEnvironment: List[cl.Event]]: per CL environment a list of events to wait on
+            Dict[CLEnvironment: cl.Event]: per CLEnvironment an event for waiting on
         """
         raise NotImplementedError()
 
@@ -367,22 +373,16 @@ class Struct(KernelData):
             parameters.extend(d.get_kernel_parameters('{}_{}'.format(kernel_param_name, name)))
         return parameters
 
-    def enqueue_host_access(self, cl_environments):
-        events = {env: [] for env in cl_environments}
+    def enqueue_host_access(self, cl_environments, is_blocking=True, wait_for=None):
+        events = {}
         for d in self._elements.values():
-            sub_events = d.enqueue_host_access(cl_environments)
-
-            for env, sub_event_list in sub_events:
-                events[env].extend(sub_event_list)
+            events.update(d.enqueue_host_access(cl_environments, is_blocking=is_blocking, wait_for=wait_for))
         return events
 
-    def enqueue_device_access(self, cl_environments):
-        events = {env: [] for env in cl_environments}
+    def enqueue_device_access(self, cl_environments, is_blocking=True, wait_for=None):
+        events = {}
         for d in self._elements.values():
-            sub_events = d.enqueue_device_access(cl_environments)
-
-            for env, sub_event_list in sub_events:
-                events[env].extend(sub_event_list)
+            events.update(d.enqueue_device_access(cl_environments, is_blocking=is_blocking, wait_for=wait_for))
         return events
 
     def get_kernel_inputs(self, cl_environment, workgroup_size):
@@ -486,10 +486,10 @@ class Scalar(KernelData):
     def initialize_variable(self, variable_name, kernel_param_name, problem_id_substitute):
         return ''
 
-    def enqueue_host_access(self, cl_environments):
+    def enqueue_host_access(self, cl_environments, is_blocking=True, wait_for=None):
         return {}
 
-    def enqueue_device_access(self, cl_environments):
+    def enqueue_device_access(self, cl_environments, is_blocking=True, wait_for=None):
         return {}
 
     def get_function_call_input(self, variable_name, kernel_param_name, problem_id_substitute):
@@ -573,10 +573,10 @@ class PrivateMemory(KernelData):
     def get_kernel_parameters(self, kernel_param_name):
         return []
 
-    def enqueue_host_access(self, cl_environments):
+    def enqueue_host_access(self, cl_environments, is_blocking=True, wait_for=None):
         return {}
 
-    def enqueue_device_access(self, cl_environments):
+    def enqueue_device_access(self, cl_environments, is_blocking=True, wait_for=None):
         return {}
 
     def get_kernel_inputs(self, cl_environment, workgroup_size):
@@ -652,10 +652,10 @@ class LocalMemory(KernelData):
     def get_kernel_parameters(self, kernel_param_name):
         return ['local {}* restrict {}'.format(self._ctype, kernel_param_name)]
 
-    def enqueue_host_access(self, cl_environments):
+    def enqueue_host_access(self, cl_environments, is_blocking=True, wait_for=None):
         return {}
 
-    def enqueue_device_access(self, cl_environments):
+    def enqueue_device_access(self, cl_environments, is_blocking=True, wait_for=None):
         return {}
 
     def get_kernel_inputs(self, cl_environment, workgroup_size):
@@ -831,55 +831,70 @@ class Array(KernelData):
     def get_kernel_parameters(self, kernel_param_name):
         return ['global {}* restrict {}'.format(self._ctype, kernel_param_name)]
 
-    def enqueue_host_access(self, cl_environments):
+    def enqueue_host_access(self, cl_environments, is_blocking=True, wait_for=None):
         if isinstance(cl_environments, CLEnvironment):
             cl_environments = [cl_environments]
 
         for env in cl_environments:
             self.get_kernel_inputs(env, 1)
 
-        events_per_context = {env.context: None for env in cl_environments}
-        events = {env: [] for env in cl_environments}
+        wait_for = wait_for or {}
+        events = {}
 
         if self._is_writable:
             for env in cl_environments:
                 context = env.context
 
-                if events_per_context[context]:
-                    events[env].append(events_per_context[context])
-                else:
+                wait_list = []
+                for wait_env, wait_event in wait_for.items():
+                    if wait_env.context is context:
+                        wait_list.append(wait_event)
+
+                if not any(e.context is env.context for e in events.keys()):
                     if self._use_host_ptr:
                         _, event = cl.enqueue_map_buffer(
                             env.queue, self._buffer_cache[context],
                             cl.map_flags.READ, 0, self._data.shape, self._data.dtype,
-                            order="C", wait_for=None, is_blocking=False)
+                            order="C", wait_for=wait_list, is_blocking=False)
                     else:
-                        event = cl.enqueue_copy(env.queue, self._data, self._buffer_cache[context], is_blocking=False)
+                        event = cl.enqueue_copy(env.queue, self._data, self._buffer_cache[context],
+                                                is_blocking=False, wait_for=wait_list)
 
-                    events[env].append(event)
-                    events_per_context[context] = event
+                    events[env] = event
+
+        if is_blocking:
+            for event in events.values():
+                event.wait()
+
         return events
 
-    def enqueue_device_access(self, cl_environments):
+    def enqueue_device_access(self, cl_environments, is_blocking=True, wait_for=None):
         if isinstance(cl_environments, CLEnvironment):
             cl_environments = [cl_environments]
 
         for env in cl_environments:
             self.get_kernel_inputs(env, 1)
 
-        events_per_context = {env.context: None for env in cl_environments}
-        events = {env: [] for env in cl_environments}
+        wait_for = wait_for or {}
+        events = {}
 
         if not self._use_host_ptr:
             for env in cl_environments:
                 context = env.context
 
-                if events_per_context[context]:
-                    events[env].append(events_per_context[context])
-                else:
-                    event = cl.enqueue_copy(env.queue, self._buffer_cache[context], self._data, is_blocking=False)
-                    events[env].append(event)
-                    events_per_context[context] = event
+                wait_list = []
+                for wait_env, wait_event in wait_for.items():
+                    if wait_env.context is context:
+                        wait_list.append(wait_event)
+
+                if not any(e.context is env.context for e in events.keys()):
+                    event = cl.enqueue_copy(env.queue, self._buffer_cache[context], self._data,
+                                            is_blocking=False, wait_for=wait_list)
+                    events[env] = event
+
+        if is_blocking:
+            for event in events.values():
+                event.wait()
 
         return events
 
@@ -1037,11 +1052,12 @@ class Zeros(KernelData):
     def get_kernel_parameters(self, kernel_param_name):
         return ['global {}* restrict {}'.format(self._ctype, kernel_param_name)]
 
-    def enqueue_host_access(self, cl_environments):
+    def enqueue_host_access(self, cl_environments, is_blocking=True, wait_for=None):
         if self._host_accessible:
-            return self._array.enqueue_host_access(cl_environments)
+            return self._array.enqueue_host_access(cl_environments, is_blocking=is_blocking, wait_for=wait_for)
+        return {}
 
-    def enqueue_device_access(self, cl_environments):
+    def enqueue_device_access(self, cl_environments, is_blocking=True, wait_for=None):
         return {}
 
     def get_kernel_inputs(self, cl_environment, workgroup_size):
@@ -1177,22 +1193,16 @@ class CompositeArray(KernelData):
             parameters.extend(d.get_kernel_parameters('{}_{}'.format(kernel_param_name, str(ind))))
         return parameters
 
-    def enqueue_host_access(self, cl_environments):
-        events = {env: [] for env in cl_environments}
-        for d in self._elements.values():
-            sub_events = d.enqueue_host_access(cl_environments)
-
-            for env, sub_event_list in sub_events:
-                events[env].extend(sub_event_list)
+    def enqueue_host_access(self, cl_environments, is_blocking=True, wait_for=None):
+        events = {}
+        for d in self._elements:
+            events.update(d.enqueue_host_access(cl_environments, is_blocking=is_blocking, wait_for=wait_for))
         return events
 
-    def enqueue_device_access(self, cl_environments):
-        events = {env: [] for env in cl_environments}
-        for d in self._elements.values():
-            sub_events = d.enqueue_device_access(cl_environments)
-
-            for env, sub_event_list in sub_events:
-                events[env].extend(sub_event_list)
+    def enqueue_device_access(self, cl_environments, is_blocking=True, wait_for=None):
+        events = {}
+        for d in self._elements:
+            events.update(d.enqueue_device_access(cl_environments, is_blocking=is_blocking, wait_for=wait_for))
         return events
 
     def get_kernel_inputs(self, cl_environment, workgroup_size):

@@ -147,7 +147,8 @@ class CLFunction(CLCodeObject):
         raise NotImplementedError()
 
     def evaluate(self, inputs, nmr_instances, context_variables=None, use_local_reduction=False,
-                 local_size=None, cl_runtime_info=None, do_data_transfers=True, is_blocking=True):
+                 local_size=None, cl_runtime_info=None, do_data_transfers=True, is_blocking=True,
+                 return_events=False, wait_for=None):
         """Evaluate this function for each set of given parameters.
 
         Given a set of input parameters, this model will be evaluated for every parameter set.
@@ -174,8 +175,12 @@ class CLFunction(CLCodeObject):
                 ``enqueue_device_access()`` and ``enqueue_host_access`` of the KernelData to set the data.
             is_blocking (boolean): if this is a blocking call, i.e. if we should call finish on all the queues
                 after enqueueing the function
+            return_events (boolean): if set we also return the last queued events
+            wait_for (Dict[CLEnvironment: cl.Event]): per CL environment an event to wait on
+
         Returns:
             ndarray: the return values of the function, which can be None if this function has a void return type.
+                If return_events is set, we return a tuple instead with the results and the last event.
         """
         raise NotImplementedError()
 
@@ -326,7 +331,8 @@ class SimpleCLFunction(CLFunction):
         return self._cl_body
 
     def evaluate(self, inputs, nmr_instances, use_local_reduction=False, local_size=None,
-                 context_variables=None, cl_runtime_info=None, do_data_transfers=True, is_blocking=True):
+                 context_variables=None, cl_runtime_info=None, do_data_transfers=True, is_blocking=True,
+                 return_events=False, wait_for=None):
 
         cl_runtime_info = cl_runtime_info or CLRuntimeInfo()
 
@@ -398,14 +404,17 @@ class SimpleCLFunction(CLFunction):
                                          nmr_instances, use_local_reduction=use_local_reduction,
                                          local_size=local_size, context_variables=context_variables,
                                          do_data_transfers=do_data_transfers)
-        processor.process()
+        events = processor.process(wait_for=wait_for)
 
+        return_data = None
         if is_blocking:
             processor.finish()
             if self.get_return_type() != 'void':
-                return kernel_data['__return_values'].get_data()
-        else:
-            return None
+                return_data = kernel_data['__return_values'].get_data()
+
+        if return_events:
+            return return_data, events
+        return return_data
 
     def get_dependencies(self):
         return self._dependencies
