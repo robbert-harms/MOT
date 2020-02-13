@@ -637,39 +637,33 @@ class LocalMemory(KernelData):
 
 class Array(KernelData):
 
-    def __init__(self, data, ctype=None, mode='r', as_scalar=False, parallelize_over_first_dimension=True,
-                 buffer_mode='mapped'):
-        """Loads the given array as a buffer into the kernel.
+    def __init__(self, data, ctype=None, as_scalar=False, parallelize_over_first_dimension=True,
+                 mode='rw', use_host_ptr=True):
+        """Loads the given array as a buffer into one or more OpenCL contexts.
 
         By default, this expects multi-dimensional arrays (n, m, k, ...) which holds a (m, k, ...) for every data
         point ``n``. As such, every global work item will only receive a subset of the matrix. If every work item
         needs access to all items, set parallelize_over_first_dimension to False.
 
-        In general, this array class can not guarantee that changes to the underlying data object are forwarded to
-        the generated OpenCL buffers. In general, the only case when mutations of the underlying data are reflected
-        in the OpenCL buffers is when:
-
-            - ctype != 'mot_float_type'
-
-        In that cases, i.e. when ctype is not 'mot_float_type' the data is stored such that host-side mutations
-        are forwarded. In all other cases, mutations are not forwarded.
+        In general, this class uses the provided data's dtype for the buffering. If the ctype is provided and the
+        data's dtype does not match the ctype, we will convert the data to the righ dtype. If the ctype is set
+        to mot_float_type and the mot_float_type changes, then a new Array data class is returned.
 
         Args:
             data (ndarray): the data to load in the kernel
             ctype (str): the desired c-type for in use in the kernel, like ``int``, ``float`` or ``mot_float_type``.
-                If None it is implied from the provided data.
-            mode (str): one of 'r', 'w' or 'rw', for respectively read, write or read and write. This sets the
-                mode of how the data is loaded into the compute device's memory.
+                If None it is implied from the provided data. If not matching the data, we convert the data.
             as_scalar (boolean): if given and if the data is only a 1d, we will load the value as a scalar in the
                 data struct. As such, one does not need to evaluate as a pointer.
             parallelize_over_first_dimension (boolean): only applicable for multi-dimensional arrays (n, m, k, ...)
                 where ``n`` is expected to correspond to problem instances. If True, we will load the data as
                 (m, k, ...) arrays for each problem instance. If False, the data will be loaded as is, and each problem
                 instance will have a reference to the complete array.
-            buffer_mode (str): the way in which we will do the buffering. Available options are :
-                - mapped: (default), in this way we will use the USE_HOST_PTR flag and use map/unmap for data transfers
-                - readwrite: with this method we only create a device side buffer and use explicit read and write
-                    commands to transfer the data.
+            mode (str): one of 'r', 'w' or 'rw', for respectively read, write or read and write.
+                This defines how the device is planned on accessing this array, and, defines if we will read the
+                data back after applying a kernel (if 'w' is included we will write data back, else, not).
+            use_host_ptr (boolean): if set, we will use the USE_HOST_PTR flag and use map/unmap for data transfers
+                if not set, we create a device side buffer and use explicit read and write commands to transfer the data
         """
         if isinstance(data, (list, tuple)):
             data = np.array(data)
@@ -688,7 +682,7 @@ class Array(KernelData):
         self._as_scalar = as_scalar
         self._parallelize_over_first_dimension = parallelize_over_first_dimension
 
-        self._buffer_mode = buffer_mode
+        self._use_host_ptr = use_host_ptr
         self._buffer_cache = {}  # caching the buffers per context
 
         self._data_length = 1
@@ -723,7 +717,7 @@ class Array(KernelData):
             return Array(self._data[batch_range[0]:batch_range[1]], ctype=self._ctype,
                          mode=self._mode, as_scalar=self._as_scalar,
                          parallelize_over_first_dimension=self._parallelize_over_first_dimension,
-                         buffer_mode=self._buffer_mode)
+                         use_host_ptr=self._use_host_ptr)
 
         def is_consecutive(l):
             return np.sum(np.diff(np.sort(l)) == 1) >= (len(l) - 1)
@@ -732,12 +726,12 @@ class Array(KernelData):
             return Array(self._data[problem_indices[0]:(problem_indices[-1] + 1)], ctype=self._ctype,
                          mode=self._mode, as_scalar=self._as_scalar,
                          parallelize_over_first_dimension=self._parallelize_over_first_dimension,
-                         buffer_mode=self._buffer_mode)
+                         use_host_ptr=self._use_host_ptr)
 
         return Array(self._data[problem_indices], ctype=self._ctype,
                      mode=self._mode, as_scalar=self._as_scalar,
                      parallelize_over_first_dimension=self._parallelize_over_first_dimension,
-                     buffer_mode=self._buffer_mode)
+                     use_host_ptr=self._use_host_ptr)
 
     def set_mot_float_dtype(self, mot_float_dtype):
         self._mot_float_dtype = mot_float_dtype
@@ -772,20 +766,20 @@ class Array(KernelData):
         return [None]
 
     def enqueue_host_access(self, cl_environment):
-        if self._buffer_mode == 'mapped':
+        if self._use_host_ptr:
             if self._is_writable:
                 cl.enqueue_map_buffer(
                     cl_environment.queue, self._buffer_cache[cl_environment.context],
                     cl.map_flags.READ, 0, self._data.shape, self._data.dtype,
                     order="C", wait_for=None, is_blocking=False)
-        elif self._buffer_mode == 'readwrite':
+        else:
             if self._is_writable:
                 cl.enqueue_copy(cl_environment.queue,
                                 self._data,
                                 self._buffer_cache[cl_environment.context], is_blocking=False)
 
     def enqueue_device_access(self, cl_environment):
-        if self._buffer_mode == 'readwrite':
+        if not self._use_host_ptr:
             cl.enqueue_copy(cl_environment.queue,
                             self._buffer_cache[cl_environment.context],
                             self._data, is_blocking=False)
@@ -877,15 +871,12 @@ class Array(KernelData):
         cl_context = cl_environment.context
 
         if cl_context not in self._buffer_cache:
-            if self._buffer_mode == 'mapped':
+            if self._use_host_ptr:
                 self._buffer_cache[cl_context] = cl.Buffer(cl_context,
                                                            get_mem_flags() | cl.mem_flags.USE_HOST_PTR,
                                                            hostbuf=self._data)
-            elif self._buffer_mode == 'readwrite':
-                self._buffer_cache[cl_context] = cl.Buffer(cl_context, get_mem_flags(), size=self._data.nbytes)
             else:
-                raise ValueError('The provided buffer mode "{}" '
-                                 'is not one of ["mapped", "readwrite"]'.format(self._buffer_mode))
+                self._buffer_cache[cl_context] = cl.Buffer(cl_context, get_mem_flags(), size=self._data.nbytes)
 
         return [self._buffer_cache[cl_context]]
 
@@ -902,7 +893,7 @@ class Array(KernelData):
 
 class Zeros(KernelData):
 
-    def __init__(self, shape, ctype, mode='w', parallelize_over_first_dimension=True, host_accessible=True):
+    def __init__(self, shape, ctype, parallelize_over_first_dimension=True, host_accessible=True, mode='rw'):
         """Allocate an output buffer of the given shape.
 
         This is meant to quickly allocate a buffer large enough to hold the data requested. After running an OpenCL
@@ -915,14 +906,14 @@ class Zeros(KernelData):
         Args:
             shape (int or tuple): the shape of the output array
             ctype (str): the desired C-type for this zero's array
-            mode (str): one of 'r', 'w' or 'rw', for respectively read, write or read and write. This sets the
-                mode of how the data is loaded into the compute device's memory.
             parallelize_over_first_dimension (boolean): only applicable for multi-dimensional arrays (n, m, k, ...)
                 where ``n`` is expected to correspond to problem instances. If True, we will load the data as
                 (m, k, ...) arrays for each problem instance. If False, the data will be loaded as is, and each problem
                 instance will have a reference to the complete array.
             host_accessible (boolean): if the array needs to be accessible from the host. If not, we can allocate
                 the buffer on the device, saving time on memory copies.
+            mode (str): one of 'r', 'w' or 'rw', for respectively read, write or read and write. This sets the
+                mode of how the data is loaded into the compute device's memory.
         """
         self._shape = shape
         if isinstance(self._shape, numbers.Number):

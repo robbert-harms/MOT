@@ -87,8 +87,8 @@ def estimate_hessian(objective_func, parameters,
     initial_step = _get_initial_step(parameters, lower_bounds, upper_bounds, max_step_sizes)
 
     kernel_data = {
-        'parameters': Array(parameters, ctype='mot_float_type'),
-        'initial_step': Array(initial_step, ctype='float'),
+        'parameters': Array(parameters, ctype='mot_float_type', mode='r', use_host_ptr=False),
+        'initial_step': Array(initial_step, ctype='float', mode='r'),
         'derivatives': Zeros((nmr_voxels, nmr_derivatives), 'double'),
         'errors': Zeros((nmr_voxels, nmr_derivatives), 'double'),
         'x_tmp': LocalMemory('mot_float_type', nmr_params),
