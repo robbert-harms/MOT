@@ -97,22 +97,9 @@ class CLFunctionProcessor(Processor):
                  local_size=None, cl_runtime_info=None, do_data_transfers=True):
         """Create a processor for the given function and inputs.
 
-        The typical way of using this processor is by:
-        1) create it
-        2) use :meth:`get_kernel_data` to get the kernel data elements and use get_data() for each of them to get the
-            underlying data. You can then modify that.
-        3) call :meth:`process` to run this function on all devices with the current data
-        4) call :meth:`finish` to finish the execution (or do not call it and chain another operation)
-        5) optionally use :meth:`get_function_results` to get the function results (if the function had a non-void
-            return signature).
-
         Args:
-            kernel_data (Iterable[Union(ndarray, mot.lib.utils.KernelData)]
-                    or Mapping[str: Union(ndarray, mot.lib.utils.KernelData)]): for each CL function parameter
-                the input data. Each of these input datasets must either be a scalar or be of equal length in the
-                first dimension. The elements can either be raw ndarrays or KernelData objects.
-                If an ndarray is given we will load it read/write by default. You can provide either an iterable
-                with one value per parameter, or a mapping with for every parameter a corresponding value.
+            kernels (dict): for each CL environment the kernel to use
+            kernel_data (dict): the input data for the kernels
             nmr_instances (int): the number of parallel processes to run.
             use_local_reduction (boolean): set this to True if you want to use local memory reduction in
                  evaluating this function. If this is set to True we will multiply the global size

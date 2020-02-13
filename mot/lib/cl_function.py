@@ -336,17 +336,20 @@ class SimpleCLFunction(CLFunction):
             kernel_source += cl_function.get_cl_code()
             return kernel_source
 
+        def get_kernels(kernel_source, function_name):
+            hashed_source = hash(kernel_source)
+            kernels = {}
+            for env in cl_runtime_info.cl_environments:
+                key = (hashed_source, env.context, cl_runtime_info.compile_flags)
+                if key not in self._compilation_cache:
+                    self._compilation_cache[key] = cl.Program(
+                        env.context, kernel_source).build(' '.join(cl_runtime_info.compile_flags))
+                kernels[env] = getattr(self._compilation_cache[key], function_name)
+            return kernels
+
         cl_function, kernel_data = resolve_cl_function_and_kernel_data()
         kernel_source = get_kernel_source(cl_function, kernel_data)
-
-        hashed_source = hash(kernel_source)
-        kernels = {}
-        for env in cl_runtime_info.cl_environments:
-            key = (hashed_source, env.context, cl_runtime_info.compile_flags)
-            if key not in self._compilation_cache:
-                self._compilation_cache[key] = cl.Program(
-                    env.context, kernel_source).build(' '.join(cl_runtime_info.compile_flags))
-            kernels[env] = getattr(self._compilation_cache[key], cl_function.get_cl_function_name())
+        kernels = get_kernels(kernel_source, cl_function.get_cl_function_name())
 
         processor = CLFunctionProcessor(kernels, kernel_data, nmr_instances,
                                         use_local_reduction=use_local_reduction,
