@@ -4,7 +4,7 @@ import tatsu
 from textwrap import dedent, indent
 import pyopencl as cl
 from mot.configuration import CLRuntimeInfo
-from mot.lib.cl_processors import CLFunctionProcessor
+from mot.lib.cl_processors import MultiDeviceProcessor
 from mot.lib.kernel_data import Zeros
 from mot.lib.utils import split_cl_function, convert_inputs_to_kernel_data, get_cl_utility_definitions
 
@@ -393,10 +393,11 @@ class SimpleCLFunction(CLFunction):
         kernel_source = get_kernel_source(cl_function, kernel_data, context_variables)
         kernels, context_kernels = get_kernels(kernel_source, cl_function.get_cl_function_name())
 
-        processor = CLFunctionProcessor(kernels, context_kernels, kernel_data, nmr_instances,
-                                        use_local_reduction=use_local_reduction,
-                                        local_size=local_size, context_variables=context_variables,
-                                        cl_runtime_info=cl_runtime_info, do_data_transfers=do_data_transfers)
+        processor = MultiDeviceProcessor(kernels, context_kernels, kernel_data,
+                                         cl_runtime_info.cl_environments, cl_runtime_info.load_balancer,
+                                         nmr_instances, use_local_reduction=use_local_reduction,
+                                         local_size=local_size, context_variables=context_variables,
+                                         do_data_transfers=do_data_transfers)
         processor.process()
 
         if is_blocking:

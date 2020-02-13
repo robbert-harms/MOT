@@ -89,36 +89,32 @@ class SimpleProcessor(Processor):
         return return_l
 
 
-class CLFunctionProcessor(Processor):
+class MultiDeviceProcessor(Processor):
 
-    def __init__(self, kernels, context_init_kernels,
-                 kernel_data, nmr_instances, use_local_reduction=False, local_size=None,
-                 context_variables=None, cl_runtime_info=None, do_data_transfers=True):
+    def __init__(self, kernels, context_init_kernels,  kernel_data,
+                 cl_environments, load_balancer, nmr_instances, use_local_reduction=False, local_size=None,
+                 context_variables=None, do_data_transfers=True):
         """Create a processor for the given function and inputs.
 
         Args:
             kernels (dict): for each CL environment the kernel to use
             kernel_data (dict): the input data for the kernels
+            cl_environments (List[mot.lib.cl_environments.CLEnvironment]): the list of CL environment to use
+                for executing the kernel
+            load_balancer (mot.lib.load_balancers.LoadBalancer): the load balancer to use
             nmr_instances (int): the number of parallel processes to run.
             use_local_reduction (boolean): set this to True if you want to use local memory reduction in
                  evaluating this function. If this is set to True we will multiply the global size
                  (given by the nmr_instances) by the work group sizes.
             local_size (int): can be used to specify the exact local size (workgroup size) the kernel must use.
-            context_variables (dict[str: mot.lib.kernel_data.KernelData]): data structures that will be loaded
-                as program scope global variables. Note that not all KernelData types are allowed, only the
-                global variables are allowed.
-            cl_runtime_info (mot.configuration.CLRuntimeInfo): the runtime information for execution
             do_data_transfers (boolean): if we should do data transfers from host to device and back for evaluating
                 this function. For better control set this to False and use the method
                 ``enqueue_device_access()`` and ``enqueue_host_access`` of the KernelData to set the data.
         """
-        self._cl_runtime_info = cl_runtime_info or CLRuntimeInfo()
-        self._cl_environments = self._cl_runtime_info.cl_environments
-        self._batches = self._cl_runtime_info.load_balancer.get_division(self._cl_environments, nmr_instances)
-        self._context_variables = context_variables
-
         self._subprocessors = []
-        for ind, cl_environment in enumerate(self._cl_environments):
+
+        batches = load_balancer.get_division(cl_environments, nmr_instances)
+        for ind, cl_environment in enumerate(cl_environments):
             kernel = kernels[cl_environment]
 
             if use_local_reduction:
@@ -130,12 +126,11 @@ class CLFunctionProcessor(Processor):
             else:
                 workgroup_size = 1
 
-            batch_start, batch_end = self._batches[ind]
-
+            batch_start, batch_end = batches[ind]
             if batch_end - batch_start > 0:
-                if self._context_variables:
+                if context_variables:
                     context_kernel = context_init_kernels[cl_environment]
-                    worker = SimpleProcessor(context_kernel, self._context_variables.values(),
+                    worker = SimpleProcessor(context_kernel, context_variables.values(),
                                              cl_environment, batch_end - batch_start, 1, instance_offset=batch_start)
                     self._subprocessors.append(worker)
 
