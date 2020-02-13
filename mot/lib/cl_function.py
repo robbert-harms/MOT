@@ -311,7 +311,7 @@ class SimpleCLFunction(CLFunction):
 
     def get_cl_body(self):
         return self._cl_body
-    tt = 0
+
     def evaluate(self, inputs, nmr_instances, use_local_reduction=False, local_size=None, cl_runtime_info=None,
                  do_data_transfers=True, is_blocking=True):
 
