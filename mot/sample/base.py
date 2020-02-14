@@ -125,7 +125,7 @@ class AbstractSampler:
         if not burnin or burnin < 0:
             burnin = 0
 
-        max_samples_per_batch = max(5000 // thinning, 100)
+        max_samples_per_batch = max(1000 // thinning, 100)
 
         with self._logging(nmr_samples, burnin, thinning):
             if burnin > 0:
