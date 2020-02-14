@@ -215,7 +215,7 @@ class MultiDeviceProcessor(Processor):
 
     def process(self, wait_for=None):
         if self._do_data_transfers:
-            for ind, kernel_data in enumerate(self._kernel_data):
+            for ind, kernel_data in enumerate(self._kernel_data.values()):
                 wait_for = kernel_data.enqueue_device_access(self._cl_environments, is_blocking=False,
                                                              wait_for=wait_for)
 
@@ -225,7 +225,7 @@ class MultiDeviceProcessor(Processor):
             worker.flush()
 
         if self._do_data_transfers:
-            for ind, kernel_data in enumerate(self._kernel_data):
+            for ind, kernel_data in enumerate(self._kernel_data.values()):
                 wait_for = kernel_data.enqueue_host_access(self._cl_environments, is_blocking=False, wait_for=wait_for)
 
         return events
