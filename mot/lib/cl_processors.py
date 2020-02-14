@@ -182,9 +182,9 @@ class MultiDeviceProcessor(Processor):
                 ``enqueue_device_access()`` and ``enqueue_host_access`` of the KernelData to set the data.
         """
         self._subprocessors = []
-
-        if do_data_transfers:
-            self._subprocessors.append(DeviceAccess(kernel_data.values(), cl_environments))
+        self._do_data_transfers = do_data_transfers
+        self._kernel_data = kernel_data
+        self._cl_environments = cl_environments
 
         batches = load_balancer.get_division(cl_environments, nmr_instances)
         for ind, cl_environment in enumerate(cl_environments):
@@ -206,14 +206,21 @@ class MultiDeviceProcessor(Processor):
                                             instance_offset=batch_start, do_data_transfers=False)
                 self._subprocessors.append(processor)
 
-        if do_data_transfers:
-            self._subprocessors.append(HostAccess(kernel_data.values(), cl_environments))
-
     def process(self, wait_for=None):
-        events = wait_for or {}
+        if self._do_data_transfers:
+            for ind, kernel_data in enumerate(self._kernel_data.values()):
+                wait_for = kernel_data.enqueue_device_access(self._cl_environments, is_blocking=False,
+                                                             wait_for=wait_for)
+
+        events = {}
         for worker in self._subprocessors:
-            events.update(worker.process(wait_for=events))
+            events.update(worker.process(wait_for=wait_for))
             worker.flush()
+
+        if self._do_data_transfers:
+            for ind, kernel_data in enumerate(self._kernel_data.values()):
+                wait_for = kernel_data.enqueue_host_access(self._cl_environments, is_blocking=False, wait_for=wait_for)
+
         return events
 
     def flush(self):
