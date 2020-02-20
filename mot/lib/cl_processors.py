@@ -36,7 +36,7 @@ class Processor:
 class MultiDeviceProcessor(Processor):
 
     def __init__(self, kernels, kernel_data, cl_environments, load_balancer,
-                 nmr_instances, use_local_reduction=False, local_size=None, do_data_transfers=True):
+                 nmr_instances, use_local_reduction=False, local_size=None):
         """Create a processor for the given function and inputs.
 
         Args:
@@ -50,12 +50,8 @@ class MultiDeviceProcessor(Processor):
                  evaluating this function. If this is set to True we will multiply the global size
                  (given by the nmr_instances) by the work group sizes.
             local_size (int): can be used to specify the exact local size (workgroup size) the kernel must use.
-            do_data_transfers (boolean): if we should do data transfers from host to device and back for evaluating
-                this function. For better control set this to False and use the method
-                ``enqueue_device_access()`` and ``enqueue_host_access`` of the KernelData to set the data.
         """
         self._subprocessors = []
-        self._do_data_transfers = do_data_transfers
         self._kernel_data = kernel_data
         self._cl_environments = cl_environments
 
@@ -74,26 +70,14 @@ class MultiDeviceProcessor(Processor):
 
             batch_start, batch_end = batches[ind]
             if batch_end - batch_start > 0:
-                processor = ProcessKernel(kernel, kernel_data.values(), cl_environment,
-                                          batch_end - batch_start, workgroup_size,
-                                          instance_offset=batch_start)
+                processor = ProcessBatch(kernel, kernel_data.values(), cl_environment, batches[ind], workgroup_size)
                 self._subprocessors.append(processor)
 
     def process(self, is_blocking=False, wait_for=None):
-        if self._do_data_transfers:
-            for ind, kernel_data in enumerate(self._kernel_data.values()):
-                wait_for = kernel_data.enqueue_device_access(self._cl_environments, is_blocking=False,
-                                                             wait_for=wait_for)
-
         events = {}
         for worker in self._subprocessors:
             events.update(worker.process(wait_for=wait_for))
             worker.flush()
-
-        if self._do_data_transfers:
-            for ind, kernel_data in enumerate(self._kernel_data.values()):
-                events = kernel_data.enqueue_host_access(self._cl_environments, is_blocking=False, wait_for=events)
-
         return events
 
     def flush(self):
@@ -105,43 +89,44 @@ class MultiDeviceProcessor(Processor):
             worker.finish()
 
 
-class ProcessKernel(Processor):
+class ProcessBatch(Processor):
 
-    def __init__(self, kernel, kernel_data, cl_environment, global_nmr_instances, workgroup_size, instance_offset=None):
+    def __init__(self, kernel, kernel_data, cl_environment, batch_range, workgroup_size):
         """Simple processor which can execute the provided (compiled) kernel with the provided data.
 
         Args:
             kernel: a pyopencl compiled kernel program
             kernel_data (List[mot.lib.utils.KernelData]): the kernel data to load as input to the kernel
             cl_environment (mot.lib.cl_environments.CLEnvironment): the CL environment to use for executing the kernel
-            global_nmr_instances (int): the global work size, this will internally be multiplied by the
-                local workgroup size.
+            batch_range (Tuple[int, int]): the batch start and batch end of the instances to process by this device.
             workgroup_size (int): the local size (workgroup size) the kernel must use
-            instance_offset (int): the offset for the global id, this will be multiplied with the local workgroup size.
         """
         self._kernel = kernel
         self._kernel_data = kernel_data
         self._cl_environment = cl_environment
-        self._global_nmr_instances = global_nmr_instances
-        self._instance_offset = instance_offset or 0
+        self._batch_range = batch_range
         self._kernel.set_scalar_arg_dtypes(self._flatten_list([d.get_scalar_arg_dtypes() for d in self._kernel_data]))
         self._workgroup_size = workgroup_size
 
     def process(self, is_blocking=False, wait_for=None):
-        wait_for = wait_for or {}
-        if self._cl_environment in wait_for:
-            wait_for = [wait_for[self._cl_environment]]
-        else:
-            wait_for = None
+        kernel_inputs = []
+        loading_events = []
+        for data in self._kernel_data:
+            inputs = data.get_kernel_inputs(self._cl_environment, self._workgroup_size,
+                                            batch_range=self._batch_range, is_blocking=False, wait_for=wait_for)
+            for kernel_input, event in inputs:
+                kernel_inputs.append(kernel_input)
+                if event is not None:
+                    loading_events.append(event)
+
+        nmr_instances = self._batch_range[1] - self._batch_range[0]
 
         event = self._kernel(
             self._cl_environment.queue,
-            (int(self._global_nmr_instances * self._workgroup_size),),
+            (int(nmr_instances * self._workgroup_size),),
             (int(self._workgroup_size),),
-            *self._flatten_list([data.get_kernel_inputs(self._cl_environment, self._workgroup_size)
-                                 for data in self._kernel_data]),
-            global_offset=(int(self._instance_offset * self._workgroup_size),),
-            wait_for=wait_for)
+            *kernel_inputs,
+            wait_for=loading_events)
 
         if is_blocking:
             event.wait()
@@ -159,59 +144,3 @@ class ProcessKernel(Processor):
         for e in l:
             return_l.extend(e)
         return return_l
-
-
-class DeviceAccess(Processor):
-
-    def __init__(self, kernel_data, cl_environments):
-        """A processor to enqueue device access for all the provided kernel data.
-
-        Args:
-            kernel_data (List[mot.lib.utils.KernelData]): the input data for the kernels
-            cl_environments (List[mot.lib.cl_environments.CLEnvironment]): the list of CL environment to use
-                for executing the kernel
-        """
-        self._kernel_data = kernel_data
-        self._cl_environments = cl_environments
-
-    def process(self, is_blocking=False, wait_for=None):
-        events = None
-        for ind, kernel_data in enumerate(self._kernel_data):
-            events = kernel_data.enqueue_device_access(self._cl_environments, is_blocking=False, wait_for=wait_for)
-        return events
-
-    def flush(self):
-        for env in self._cl_environments:
-            env.queue.flush()
-
-    def finish(self):
-        for env in self._cl_environments:
-            env.queue.finish()
-
-
-class HostAccess(Processor):
-
-    def __init__(self, kernel_data, cl_environments):
-        """A processor to enqueue device access for all the provided kernel data.
-
-        Args:
-            kernel_data (List[mot.lib.utils.KernelData]): the input data for the kernels
-            cl_environments (List[mot.lib.cl_environments.CLEnvironment]): the list of CL environment to use
-                for executing the kernel
-        """
-        self._kernel_data = kernel_data
-        self._cl_environments = cl_environments
-
-    def process(self, is_blocking=False, wait_for=None):
-        events = None
-        for ind, kernel_data in enumerate(self._kernel_data):
-            events = kernel_data.enqueue_host_access(self._cl_environments, is_blocking=False, wait_for=wait_for)
-        return events
-
-    def flush(self):
-        for env in self._cl_environments:
-            env.queue.flush()
-
-    def finish(self):
-        for env in self._cl_environments:
-            env.queue.finish()

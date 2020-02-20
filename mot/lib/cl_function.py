@@ -136,7 +136,7 @@ class CLFunction(CLCodeObject):
         raise NotImplementedError()
 
     def evaluate(self, inputs, nmr_instances, use_local_reduction=False, local_size=None, cl_runtime_info=None,
-                 do_data_transfers=True, is_blocking=True, return_events=False, wait_for=None):
+                 is_blocking=True, return_events=False, wait_for=None):
         """Evaluate this function for each set of given parameters.
 
         Given a set of input parameters, this model will be evaluated for every parameter set.
@@ -155,9 +155,6 @@ class CLFunction(CLCodeObject):
                  (given by the nmr_instances) by the work group sizes.
             local_size (int): can be used to specify the exact local size (workgroup size) the kernel must use.
             cl_runtime_info (mot.configuration.CLRuntimeInfo): the runtime information for execution
-            do_data_transfers (boolean): if we should do data transfers from host to device and back for evaluating
-                this function. For better control set this to False and use the method
-                ``enqueue_device_access()`` and ``enqueue_host_access`` of the KernelData to set the data.
             is_blocking (boolean): if this is a blocking call, i.e. if we should call finish on all the queues
                 after enqueueing the function
             return_events (boolean): if set we also return the last queued events
@@ -317,14 +314,13 @@ class SimpleCLFunction(CLFunction):
         return self._cl_body
 
     def evaluate(self, inputs, nmr_instances, use_local_reduction=False, local_size=None, cl_runtime_info=None,
-                 do_data_transfers=True, is_blocking=True, return_events=False, wait_for=None):
+                 is_blocking=True, return_events=False, wait_for=None):
 
         cl_runtime_info = cl_runtime_info or CLRuntimeInfo()
 
         def resolve_cl_function_and_kernel_data():
             kernel_data = convert_inputs_to_kernel_data(inputs, self.get_parameters(), nmr_instances)
-            for data in kernel_data.values():
-                data.set_mot_float_dtype(cl_runtime_info.mot_float_dtype)
+            kernel_data = {k: v.with_mot_float_type(cl_runtime_info.mot_float_dtype) for k, v in kernel_data.items()}
 
             cl_function = self
             if not self.is_kernel_func():
@@ -358,7 +354,7 @@ class SimpleCLFunction(CLFunction):
         processor = MultiDeviceProcessor(kernels, kernel_data, cl_runtime_info.cl_environments,
                                          cl_runtime_info.load_balancer, nmr_instances,
                                          use_local_reduction=use_local_reduction,
-                                         local_size=local_size, do_data_transfers=do_data_transfers)
+                                         local_size=local_size)
         events = processor.process(wait_for=wait_for)
 
         return_data = None
