@@ -8,25 +8,25 @@ from mot.lib.cl_function import SimpleCLFunction
 __author__ = 'Robbert Harms'
 __date__ = '2018-04-04'
 __maintainer__ = 'Robbert Harms'
-__email__ = 'robbert.harms@maastrichtuniversity.nl'
+__email__ = 'robbert@xkls.nl'
 __licence__ = 'LGPL v3'
 
 
 def get_objective_function(nmr_datapoints):
     return SimpleCLFunction.from_string('''
         double fit_gamma_distribution(local const mot_float_type* const x,
-                                      void* data, 
+                                      void* data,
                                       local mot_float_type* objective_list){
-            
+
             if(x[0] < 0 || x[1] < 0){
                 return INFINITY;
             }
-            
+
             double sum = 0;
             for(uint i = 0; i < ''' + str(nmr_datapoints) + '''; i++){
                 sum += gamma_logpdf(((optimization_data*)data)->gamma_random[i], x[0], x[1]);
             }
-            
+
             return -sum; // the optimization routines are minimizers
         }
     ''', dependencies=[gamma_logpdf()])
@@ -37,8 +37,8 @@ if __name__ == '__main__':
 
     This first simulates some test data, with ``nmr_simulations`` as the number of unique simulations and
     ``nmr_datapoints`` as the number of data points per simulation.
-    
-    Since we generate only 25 random datapoints on the simulated Gamma distribution, the fitting results may not 
+
+    Since we generate only 25 random datapoints on the simulated Gamma distribution, the fitting results may not
     be perfect for every simulated distribution. In general though, fit results should match the ground truth.
     """
     # The number of unique distributions, this is typically very large

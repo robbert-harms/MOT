@@ -11,7 +11,7 @@ from mot.lib.utils import is_scalar, multiprocess_mapping
 __author__ = 'Robbert Harms'
 __date__ = '2017-11-01'
 __maintainer__ = 'Robbert Harms'
-__email__ = 'robbert.harms@maastrichtuniversity.nl'
+__email__ = 'robbert@xkls.nl'
 __licence__ = 'LGPL v3'
 
 
@@ -43,8 +43,8 @@ def fit_circular_gaussian(samples, high=np.pi, low=0):
                      global mot_float_type* stds,
                      int nmr_samples,
                      int low,
-                     int high){ 
-        
+                     int high){
+
             double cos_mean = 0;
             double sin_mean = 0;
             double ang;

@@ -7,22 +7,22 @@ from mot.sample import AdaptiveMetropolisWithinGibbs
 __author__ = 'Robbert Harms'
 __date__ = '2018-04-04'
 __maintainer__ = 'Robbert Harms'
-__email__ = 'robbert.harms@maastrichtuniversity.nl'
+__email__ = 'robbert@xkls.nl'
 __licence__ = 'LGPL v3'
 
 
 def get_objective_function(nmr_parameters):
     return SimpleCLFunction.from_string('''
         double rosenbrock_MLE_func(local const mot_float_type* const x,
-                                   void* data, 
+                                   void* data,
                                    local mot_float_type* objective_list){
-            
+
             double sum = 0;
             double eval;
             for(uint i = 0; i < ''' + str(nmr_parameters) + ''' - 1; i++){
                 eval = 100 * pown(x[i + 1] - pown(x[i], 2), 2) + pown(1 - x[i], 2);
                 sum += eval;
-                
+
                 if(objective_list){
                     objective_list[i] = eval;
                 }

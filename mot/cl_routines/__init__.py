@@ -6,7 +6,7 @@ __author__ = 'Robbert Harms'
 __date__ = "2014-05-21"
 __license__ = "LGPL v3"
 __maintainer__ = "Robbert Harms"
-__email__ = "robbert.harms@maastrichtuniversity.nl"
+__email__ = "robbert@xkls.nl"
 
 
 def compute_log_likelihood(ll_func, parameters, data=None, cl_runtime_info=None):
@@ -39,17 +39,17 @@ def compute_log_likelihood(ll_func, parameters, data=None, cl_runtime_info=None)
 
         if len(parameters.shape) > 2:
             return SimpleCLFunction.from_string('''
-                void compute(global mot_float_type* parameters, 
+                void compute(global mot_float_type* parameters,
                              global mot_float_type* log_likelihoods,
                              void* data){
-                             
+
                     local mot_float_type x[''' + str(nmr_params) + '''];
 
                     for(uint sample_ind = 0; sample_ind < ''' + str(parameters.shape[2]) + '''; sample_ind++){
                         for(uint i = 0; i < ''' + str(nmr_params) + '''; i++){
                             x[i] = parameters[i *''' + str(parameters.shape[2]) + ''' + sample_ind];
                         }
-                        
+
                         double ll = ''' + ll_func.get_cl_function_name() + '''(x, data);
                         if(get_local_id(0) == 0){
                             log_likelihoods[sample_ind] = ll;
@@ -59,10 +59,10 @@ def compute_log_likelihood(ll_func, parameters, data=None, cl_runtime_info=None)
             ''', dependencies=[ll_func])
 
         return SimpleCLFunction.from_string('''
-            void compute(local mot_float_type* parameters, 
+            void compute(local mot_float_type* parameters,
                          global mot_float_type* log_likelihoods,
                          void* data){
-                         
+
                 double ll = ''' + ll_func.get_cl_function_name() + '''(parameters, data);
                 if(get_local_id(0) == 0){
                     *(log_likelihoods) = ll;

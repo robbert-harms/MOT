@@ -11,7 +11,7 @@ from mot.lib.utils import split_cl_function, convert_inputs_to_kernel_data, get_
 __author__ = 'Robbert Harms'
 __date__ = '2017-08-31'
 __maintainer__ = 'Robbert Harms'
-__email__ = 'robbert.harms@maastrichtuniversity.nl'
+__email__ = 'robbert@xkls.nl'
 __licence__ = 'LGPL v3'
 
 

@@ -27,8 +27,8 @@ requirements_tests = load_requirements('requirements_tests.txt')
 long_description = readme
 if sys.argv and len(sys.argv) > 3 and sys.argv[2] == 'debianize':
     long_description = dedent("""
-        The Multi-threaded Optimization Toolbox contains various optimization and sample algorithms 
-        implemented in OpenCL. Being GPU/multi-threaded CPU enabled, it allows for high-performance computing in 
+        The Multi-threaded Optimization Toolbox contains various optimization and sample algorithms
+        implemented in OpenCL. Being GPU/multi-threaded CPU enabled, it allows for high-performance computing in
         the case of large scale parallelizable problems.
     """).lstrip()
 
@@ -39,9 +39,9 @@ info_dict = dict(
     description='Multi-threaded Optimization Toolbox',
     long_description=long_description,
     author='Robbert Harms',
-    author_email='robbert.harms@maastrichtuniversity.nl',
+    author_email='robbert@xkls.nl',
     maintainer='Robbert Harms',
-    maintainer_email='robbert.harms@maastrichtuniversity.nl',
+    maintainer_email='robbert@xkls.nl',
     url='https://github.com/robbert-harms/MOT',
     packages=find_packages(),
     include_package_data=True,

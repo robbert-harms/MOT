@@ -31,7 +31,7 @@ EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * Date = 2014-02-05
  * License = LGPL v3
  * Maintainer = Robbert Harms
- * Email = robbert.harms@maastrichtuniversity.nl
+ * Email = robbert@xkls.nl
  */
 
 /** The evaluation function we are expecting. */

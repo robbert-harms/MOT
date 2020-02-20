@@ -3,7 +3,7 @@ from mot.library_functions.base import SimpleCLLibrary
 __author__ = 'Robbert Harms'
 __date__ = '2018-05-07'
 __maintainer__ = 'Robbert Harms'
-__email__ = 'robbert.harms@maastrichtuniversity.nl'
+__email__ = 'robbert@xkls.nl'
 __licence__ = 'LGPL v3'
 
 
@@ -34,12 +34,12 @@ class real_zeros_cubic_pol(SimpleCLLibrary):
                 const double b = coefficients[1];
                 const double c = coefficients[2];
                 const double d = coefficients[3];
-                
+
                 if(a == 0 && b == 0){
                     roots[0] = -d / c;
                     return 1;
                 }
-                
+
                 if(a == 0){
                     double D = c * c - 4.0 * b * d;
                     if(D >= 0){
@@ -48,18 +48,18 @@ class real_zeros_cubic_pol(SimpleCLLibrary):
                         roots[1] = (-c - D) / (2.0 * b);
                         return 2;
                     }
-                    /* // Imaginary roots, not returned 
+                    /* // Imaginary roots, not returned
                         D = sqrt(-D);
                         roots[0] = (-c + D * 1j) / (2.0 * b);
                         roots[1] = (-c - D * 1j) / (2.0 * b);
                     */
                     return 0;
                 }
-                
+
                 double f = ((3.0 * c / a) - ((b *b) / (a * a))) / 3.0;
                 double g = (((2.0 * (b * b * b)) / (a * a * a)) - ((9.0 * b * c) / (a * a)) + (27.0 * d / a)) /27.0;
                 double h = ((g * g) / 4.0 + (f * f * f) / 27.0);
-                
+
                 if(f == 0 && g == 0 && h == 0){
                     if((d / a) >= 0){
                         roots[0] = roots[1] = roots[2] = -pow(d/a, (double)(1/3.0));
@@ -69,7 +69,7 @@ class real_zeros_cubic_pol(SimpleCLLibrary):
                     }
                     return 3;
                 }
-                
+
                 if(h <= 0){
                     const double i = sqrt(((g * g) / 4.0) - h);
                     const double j = pow(i, (double)(1/3.0));
@@ -78,14 +78,14 @@ class real_zeros_cubic_pol(SimpleCLLibrary):
                     const double M = cos(k / 3.0);
                     const double N = sqrt(3.0) * sin(k / 3.0);
                     const double P = -(b / (3.0 * a));
-            
+
                     roots[0] = 2 * j * cos(k / 3.0) - (b / (3.0 * a));
                     roots[1] = L * (M + N) + P;
                     roots[2] = L * (M - N) + P;
-                    
+
                     return 3;
                 }
-                
+
                 double R = -(g / 2.0) + sqrt(h);
                 double S;
                 if(R >= 0){
@@ -94,7 +94,7 @@ class real_zeros_cubic_pol(SimpleCLLibrary):
                 else{
                     S = -pow((-R), (double)(1 / 3.0));
                 }
-                
+
                 double T = -(g / 2.0) - sqrt(h);
                 double U;
                 if(T >= 0){
@@ -103,7 +103,7 @@ class real_zeros_cubic_pol(SimpleCLLibrary):
                 else{
                     U = -pow((-T), (double)(1 / 3.0));
                 }
-                
+
                 roots[0] = (S + U) - (b / (3.0 * a));
                 /* //Imaginary roots, not returned
                 roots[1] = -(S + U) / 2 - (b / (3.0 * a)) + (S - U) * sqrt(3) * 0.5j;

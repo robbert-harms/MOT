@@ -6,7 +6,7 @@
  * Date = 2017-05-23
  * License = L-GPLv3
  * Maintainer = Robbert Harms
- * Email = robbert.harms@maastrichtuniversity.nl
+ * Email = robbert@xkls.nl
  */
 
 /** This requires the following call arguments in addition to the NMR_PARAMS attribute */

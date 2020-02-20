@@ -6,7 +6,7 @@
  * Date = 2014-05-17
  * License = LGPL v3
  * Maintainer = Robbert Harms
- * Email = robbert.harms@maastrichtuniversity.nl
+ * Email = robbert@xkls.nl
  */
 
 // sqrt(pi)/2
