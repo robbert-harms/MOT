@@ -6,7 +6,7 @@ __author__ = 'Robbert Harms'
 __date__ = "2014-05-21"
 __license__ = "LGPL v3"
 __maintainer__ = "Robbert Harms"
-__email__ = "robbert.harms@maastrichtuniversity.nl"
+__email__ = "robbert@xkls.nl"
 
 
 def compute_log_likelihood(ll_func, parameters, data=None, cl_runtime_info=None):

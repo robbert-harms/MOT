@@ -3,7 +3,7 @@
  * Date = 2014-09-29
  * License = see hereunder
  * Maintainer = Robbert Harms
- * Email = robbert.harms@maastrichtuniversity.nl
+ * Email = robbert@xkls.nl
  */
 
 /*

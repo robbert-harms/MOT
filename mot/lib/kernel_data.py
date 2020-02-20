@@ -10,7 +10,7 @@ from mot.lib.utils import dtype_to_ctype, ctype_to_dtype, convert_data_to_dtype,
 __author__ = 'Robbert Harms'
 __date__ = '2018-04-09'
 __maintainer__ = 'Robbert Harms'
-__email__ = 'robbert.harms@maastrichtuniversity.nl'
+__email__ = 'robbert@xkls.nl'
 __licence__ = 'LGPL v3'
 
 

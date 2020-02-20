@@ -3,7 +3,7 @@
  * Date = 2010-12-17
  * License = LGPL
  * Maintainer = Robbert Harms
- * Email = robbert.harms@maastrichtuniversity.nl
+ * Email = robbert@xkls.nl
  */
 
 #define BRACKET_GOLD 1.618034 /* the default ratio by which successive intervals are magnified in Bracketing */

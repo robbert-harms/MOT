@@ -4,7 +4,7 @@ from mot.library_functions.base import SimpleCLLibrary
 __author__ = 'Robbert Harms'
 __date__ = '2018-05-07'
 __maintainer__ = 'Robbert Harms'
-__email__ = 'robbert.harms@maastrichtuniversity.nl'
+__email__ = 'robbert@xkls.nl'
 __licence__ = 'LGPL v3'
 
 
@@ -177,7 +177,7 @@ class _ndtri(SimpleCLLibrary):
                 z = 1.0 / x;
                 if (x < 8.0) { /* y1 > exp(-32) = 1.2664165549e-14 */
                     x1 = z * polevl(z, P1, 8) / p1evl(z, Q1, 8);
-                } 
+                }
                 else{
                     x1 = z * polevl(z, P2, 8) / p1evl(z, Q2, 8);
                 }

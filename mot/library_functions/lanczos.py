@@ -3,7 +3,7 @@ from mot.library_functions import SimpleCLLibrary, ratevl
 __author__ = 'Robbert Harms'
 __date__ = '2018-05-14'
 __maintainer__ = 'Robbert Harms'
-__email__ = 'robbert.harms@maastrichtuniversity.nl'
+__email__ = 'robbert@xkls.nl'
 __licence__ = 'LGPL v3'
 
 
@@ -31,7 +31,7 @@ class lanczos_sum_expg_scaled(SimpleCLLibrary):
                     103794043.1163445451906271053616070238554,
                     56906521.91347156388090791033559122686859
                 };
-                
+
                 double lanczos_sum_expg_scaled_denom[13] = {
                     1,
                     66,
@@ -47,7 +47,7 @@ class lanczos_sum_expg_scaled(SimpleCLLibrary):
                     39916800,
                     0
                 };
-                    
+
                 return ratevl(x, lanczos_sum_expg_scaled_num, 13 - 1, lanczos_sum_expg_scaled_denom, 13 - 1);
             }
         ''', dependencies=(ratevl(),))

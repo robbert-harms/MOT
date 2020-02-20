@@ -22,7 +22,7 @@ from .lib.cl_environments import CLEnvironmentFactory
 __author__ = 'Robbert Harms'
 __date__ = "2015-07-22"
 __maintainer__ = "Robbert Harms"
-__email__ = "robbert.harms@maastrichtuniversity.nl"
+__email__ = "robbert@xkls.nl"
 
 
 """The runtime configuration, this can be overwritten at run time.

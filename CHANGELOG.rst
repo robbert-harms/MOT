@@ -2,6 +2,33 @@
 Changelog
 *********
 
+v0.11.0 (2020-02-14)
+====================
+
+Added
+-----
+- Adds an event system for better control of the processing.
+- Adds a hashing method to the CLEnvironment.
+- Adds use_host_ptr flag to the Array class to enable/disable that flag in the buffer allocation.
+- Adds a flag to the Zeros kerneldata to enable non host accessible buffers (does not use_host_ptr)
+- Adds inline keyword to the Scalar kernel data.
+- Adds ctype property to the kernel data classes.
+- Adds a do_data_transfer, is_blocking and wait_for flag to the evaluate method of a CLFunction.
+
+Changed
+-------
+- Changed the get_subset signature to also accept a batch_range instead of batch_start and batch_end.
+- Changed the get_subset method to check for consecutive problem indices and if so, use the batch range method instead.
+- Cached the CLEnvironment creation to ensure same CLEnvironments have the same OpenCL queue.
+- Removed the 'COAW' requirements from the array conversions, it was not needed.
+- The CL function now caches the compiled kernels for faster consecutive execution.
+
+Other
+-----
+- Set the ``enqueue_{host,device}_access`` methods of the KernelData to accept a list of CLEnvironments.
+- Buffer allocation is now done per context instead of per CLEnvironment.
+
+
 v0.10.0 (2020-01-25)
 ====================
 
