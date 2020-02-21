@@ -1,7 +1,10 @@
 import numbers
 from collections import OrderedDict, Mapping
+
 import numpy as np
 import pyopencl as cl
+
+from mot.lib.cl_environments import CLEnvironment
 from mot.lib.utils import dtype_to_ctype, ctype_to_dtype, convert_data_to_dtype, is_vector_ctype, split_vector_ctype
 
 __author__ = 'Robbert Harms'
@@ -43,17 +46,22 @@ class KernelData:
         """
         raise NotImplementedError()
 
-    def with_mot_float_type(self, mot_float_dtype):
-        """Get a version of this KernelData with the mot_float_type set to the given dtype.
+    def set_mot_float_dtype(self, mot_float_dtype):
+        """Set the numpy data type corresponding to the ``mot_float_type`` ctype.
 
-        This may return either a new KernelData object, or a copy of itself.
+        This is set just prior to using this kernel data in the kernel.
 
         Args:
             mot_float_dtype (dtype): the numpy data type that is to correspond with the ``mot_float_type`` used in the
                 kernels.
+        """
+        raise NotImplementedError()
+
+    def get_data(self):
+        """Get the underlying data of this kernel data object.
 
         Returns:
-            KernelData: a kernel data object of the same type as the current kernel data object.
+            dict, ndarray, scalar: the underlying data object, can return None if this input data has no actual data.
         """
         raise NotImplementedError()
 
@@ -174,32 +182,52 @@ class KernelData:
         """
         raise NotImplementedError()
 
-    def get_data(self):
-        """Get the underlying data of this kernel data object.
+    def enqueue_host_access(self, cl_environments, is_blocking=True, wait_for=None):
+        """Enqueue either a map or write operation for this kernel input data object.
 
-        This might read data from device buffers to return, which is a blocking call.
+        This should add non-blocking maps or write operations to the given queue.
+
+        Args:
+            cl_environments (mot.lib.cl_environments.CLEnvironment or list):
+                enqueue host access for one or multiple CL environments
+            is_blocking (boolean): if the enqueuing should be blocking calls or not
+                This first enqueues all the work to all the contexts and then waits for completion on them.
+            wait_for (Dict[CLEnvironment: cl.Event]): per CL environment an event to wait on
 
         Returns:
-            dict, ndarray, scalar: the underlying data object, can return None if this input data has no actual data.
+            Dict[CLEnvironment: cl.Event]: per CLEnvironment an event for waiting on
         """
         raise NotImplementedError()
 
-    def get_kernel_inputs(self, cl_environment, workgroup_size, batch_range=None, is_blocking=True, wait_for=None):
+    def enqueue_device_access(self, cl_environments, is_blocking=True, wait_for=None):
+        """Enqueue either an unmap or read operation for this kernel input data object.
+
+        This should add non-blocking unmaps or read operations to the given queue.
+
+        Args:
+            cl_environments (mot.lib.cl_environments.CLEnvironment or list):
+                enqueue device access for one or multiple CL environments
+            is_blocking (boolean): if the enqueuing should be blocking calls or not
+                This first enqueues all the work to all the contexts and then waits for completion on them.
+            wait_for (Dict[CLEnvironment: cl.Event]): per CL environment an event to wait on
+
+        Returns:
+            Dict[CLEnvironment: cl.Event]: per CLEnvironment an event for waiting on
+        """
+        raise NotImplementedError()
+
+    def get_kernel_inputs(self, cl_environment, workgroup_size):
         """Get the kernel input data matching the list of parameters of :meth:`get_kernel_parameters`.
 
-        This typically returns either a buffer or a scalar.
+        Since the kernels follow the map/unmap paradigm make sure to use the ``USE_HOST_PTR`` when making
+        writable data objects.
 
         Args:
             cl_environment (mot.lib.cl_environments.CLEnvironment): the environment for which to prepare the input
             workgroup_size (int): the workgroup size the kernel will use.
-            batch_range (Tuple[int, int]): the batch range we should load for the given CLEnvironment.
-            is_blocking (boolean): if loading the data should be a blocking operation or not
-            wait_for (cl.Event or List or None): one or more CL events to wait for when (optionally)
-                loading the data onto the device.
 
         Returns:
-            List[Tuple]: a list of buffers, local memory objects, scalars, etc., combined with an event.
-                For example, it may return something as: [(Buffer, event), (Scalar, None), ...].
+            List: a list of buffers, local memory objects, scalars, etc., anything that can be loaded into the kernel.
                 If no data should be entered, return an empty list.
         """
         raise NotImplementedError()
@@ -248,9 +276,15 @@ class Struct(KernelData):
                                     for k, v in self._elements.items()])
         return Struct(sub_elements, self._ctype, anonymous=self._anonymous)
 
-    def with_mot_float_type(self, mot_float_dtype):
-        sub_elements = OrderedDict([(k, v.with_mot_float_type(mot_float_dtype)) for k, v in self._elements.items()])
-        return Struct(sub_elements, self._ctype, anonymous=self._anonymous)
+    def set_mot_float_dtype(self, mot_float_dtype):
+        for element in self._elements.values():
+            element.set_mot_float_dtype(mot_float_dtype)
+
+    def get_data(self):
+        data = {}
+        for name, value in self._elements.items():
+            data[name] = value.get_data()
+        return data
 
     def get_children(self):
         return self._elements.values()
@@ -331,17 +365,22 @@ class Struct(KernelData):
             parameters.extend(d.get_kernel_parameters('{}_{}'.format(kernel_param_name, name)))
         return parameters
 
-    def get_data(self):
-        data = {}
-        for name, value in self._elements.items():
-            data[name] = value.get_data()
-        return data
+    def enqueue_host_access(self, cl_environments, is_blocking=True, wait_for=None):
+        events = {}
+        for d in self._elements.values():
+            events.update(d.enqueue_host_access(cl_environments, is_blocking=is_blocking, wait_for=wait_for))
+        return events
 
-    def get_kernel_inputs(self, cl_environment, workgroup_size, batch_range=None, is_blocking=True, wait_for=None):
+    def enqueue_device_access(self, cl_environments, is_blocking=True, wait_for=None):
+        events = {}
+        for d in self._elements.values():
+            events.update(d.enqueue_device_access(cl_environments, is_blocking=is_blocking, wait_for=wait_for))
+        return events
+
+    def get_kernel_inputs(self, cl_environment, workgroup_size):
         data = []
         for d in self._elements.values():
-            data.extend(d.get_kernel_inputs(cl_environment, workgroup_size, batch_range=batch_range,
-                                            is_blocking=is_blocking, wait_for=wait_for))
+            data.extend(d.get_kernel_inputs(cl_environment, workgroup_size))
         return data
 
     def get_nmr_kernel_inputs(self):
@@ -378,6 +417,7 @@ class Scalar(KernelData):
         else:
             self._value = np.array(value)
         self._ctype = ctype or dtype_to_ctype(self._value.dtype)
+        self._mot_float_dtype = None
         self._inline = inline
 
     @property
@@ -386,6 +426,11 @@ class Scalar(KernelData):
 
     def get_subset(self, problem_indices=None, batch_range=None):
         return self
+
+    def get_data(self):
+        if self._ctype.startswith('mot_float_type'):
+            return np.asscalar(self._value.astype(self._mot_float_dtype))
+        return np.asscalar(self._value)
 
     def get_children(self):
         return []
@@ -411,26 +456,27 @@ class Scalar(KernelData):
             return []
         return ['{} {}'.format(self._ctype, kernel_param_name)]
 
-    def get_data(self):
-        return np.asscalar(self._value)
-
-    def get_kernel_inputs(self, cl_environment, workgroup_size, batch_range=None, is_blocking=True, wait_for=None):
+    def get_kernel_inputs(self, cl_environment, workgroup_size):
         if self._inline:
             return []
-        return [(self.get_data(), None)]
+        return [self.get_data()]
 
     def get_nmr_kernel_inputs(self):
         if self._inline:
             return 0
         return 1
 
-    def with_mot_float_type(self, mot_float_dtype):
-        if self._ctype.startswith('mot_float_type'):
-            return Scalar(np.asscalar(self._value.astype(mot_float_dtype)), self._ctype, inline=self._inline)
-        return self
+    def set_mot_float_dtype(self, mot_float_dtype):
+        self._mot_float_dtype = mot_float_dtype
 
     def initialize_variable(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
         return ''
+
+    def enqueue_host_access(self, cl_environments, is_blocking=True, wait_for=None):
+        return {}
+
+    def enqueue_device_access(self, cl_environments, is_blocking=True, wait_for=None):
+        return {}
 
     def get_function_call_input(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
         if not self._inline:
@@ -469,6 +515,7 @@ class PrivateMemory(KernelData):
             ctype (str): the desired c-type for this local memory object, like ``int``, ``float`` or ``mot_float_type``.
         """
         self._ctype = ctype
+        self._mot_float_dtype = None
         self._nmr_items = nmr_items
 
     @property
@@ -478,8 +525,11 @@ class PrivateMemory(KernelData):
     def get_subset(self, problem_indices=None, batch_range=None):
         return self
 
-    def with_mot_float_type(self, mot_float_dtype):
-        return self
+    def set_mot_float_dtype(self, mot_float_dtype):
+        self._mot_float_dtype = mot_float_dtype
+
+    def get_data(self):
+        return None
 
     def get_children(self):
         return []
@@ -510,10 +560,13 @@ class PrivateMemory(KernelData):
     def get_kernel_parameters(self, kernel_param_name):
         return []
 
-    def get_data(self):
-        return None
+    def enqueue_host_access(self, cl_environments, is_blocking=True, wait_for=None):
+        return {}
 
-    def get_kernel_inputs(self, cl_environment, workgroup_size, batch_range=None, is_blocking=True, wait_for=None):
+    def enqueue_device_access(self, cl_environments, is_blocking=True, wait_for=None):
+        return {}
+
+    def get_kernel_inputs(self, cl_environment, workgroup_size):
         return []
 
     def get_nmr_kernel_inputs(self):
@@ -534,7 +587,7 @@ class LocalMemory(KernelData):
                 item size of the ctype for the final size in bytes.
         """
         self._ctype = ctype
-        self._nmr_items = nmr_items
+        self._mot_float_dtype = None
 
         if nmr_items is None:
             self._size_func = lambda workgroup_size: workgroup_size
@@ -550,11 +603,11 @@ class LocalMemory(KernelData):
     def get_subset(self, problem_indices=None, batch_range=None):
         return self
 
-    def with_mot_float_type(self, mot_float_dtype):
-        if self._ctype.startswith('mot_float_type'):
-            new_ctype = dtype_to_ctype(ctype_to_dtype(self._ctype, dtype_to_ctype(mot_float_dtype)))
-            return LocalMemory(new_ctype, nmr_items=self._nmr_items)
-        return self
+    def set_mot_float_dtype(self, mot_float_dtype):
+        self._mot_float_dtype = mot_float_dtype
+
+    def get_data(self):
+        return None
 
     def get_children(self):
         return []
@@ -583,12 +636,19 @@ class LocalMemory(KernelData):
     def get_kernel_parameters(self, kernel_param_name):
         return ['local {}* restrict {}'.format(self._ctype, kernel_param_name)]
 
-    def get_data(self):
-        return None
+    def enqueue_host_access(self, cl_environments, is_blocking=True, wait_for=None):
+        return {}
 
-    def get_kernel_inputs(self, cl_environment, workgroup_size, batch_range=None, is_blocking=True, wait_for=None):
-        itemsize = np.dtype(ctype_to_dtype(self._ctype)).itemsize
-        return [(cl.LocalMemory(itemsize * self._size_func(workgroup_size)), None)]
+    def enqueue_device_access(self, cl_environments, is_blocking=True, wait_for=None):
+        return {}
+
+    def get_kernel_inputs(self, cl_environment, workgroup_size):
+        mot_float_type_dtype = None
+        if self._mot_float_dtype:
+            mot_float_type_dtype = dtype_to_ctype(self._mot_float_dtype)
+
+        itemsize = np.dtype(ctype_to_dtype(self._ctype, mot_float_type_dtype)).itemsize
+        return [cl.LocalMemory(itemsize * self._size_func(workgroup_size))]
 
     def get_nmr_kernel_inputs(self):
         return 1
@@ -636,13 +696,13 @@ class Array(KernelData):
             self._data = convert_data_to_dtype(self._data, ctype)
 
         self._ctype = ctype or dtype_to_ctype(self._data.dtype)
+        self._mot_float_dtype = None
+        self._backup_data_reference = None
         self._as_scalar = as_scalar
         self._parallelize_over_first_dimension = parallelize_over_first_dimension
 
         self._use_host_ptr = use_host_ptr
-        self._buffer_cache = {}  # caching the buffers per CLEnvironment
-
-        self._dtype_change_array = None
+        self._buffer_cache = {}  # caching the buffers per context
 
         self._data_length = 1
         if len(self._data.shape):
@@ -667,10 +727,6 @@ class Array(KernelData):
         return self._mode
 
     def get_subset(self, problem_indices=None, batch_range=None):
-        self._dtype_change_array = None  # sets flag in the get_data() method
-        self.get_data()  # load the data into the host before creating a subset.
-        self._buffer_cache = {}  # reset the buffer cache
-
         if problem_indices is None and batch_range is None:
             return self
         if not self._parallelize_over_first_dimension:
@@ -696,21 +752,31 @@ class Array(KernelData):
                      parallelize_over_first_dimension=self._parallelize_over_first_dimension,
                      use_host_ptr=self._use_host_ptr)
 
-    def with_mot_float_type(self, mot_float_dtype):
+    def set_mot_float_dtype(self, mot_float_dtype):
+        self._mot_float_dtype = mot_float_dtype
+
         if self._ctype.startswith('mot_float_type'):
-            if self._data.dtype != mot_float_dtype:
-                self._dtype_change_array = None  # sets flag in the get_data() method
-                old_data = self.get_data()  # load the data into the host before creating a subset.
-                self._buffer_cache = {}  # reset the buffer cache
-                new_data = convert_data_to_dtype(old_data, self._ctype, mot_float_type=dtype_to_ctype(mot_float_dtype))
-                if new_data is not old_data:
-                    return_array = Array(new_data, ctype=dtype_to_ctype(mot_float_dtype),
-                                         mode=self._mode, as_scalar=self._as_scalar,
-                                         parallelize_over_first_dimension=self._parallelize_over_first_dimension,
-                                         use_host_ptr=self._use_host_ptr)
-                    self._dtype_change_array = return_array
-                    return return_array
-        return self
+            if self._backup_data_reference is not None:
+                self._data = self._backup_data_reference
+                self._backup_data_reference = None
+
+            new_data = convert_data_to_dtype(self._data, self._ctype,
+                                             mot_float_type=dtype_to_ctype(mot_float_dtype))
+
+            if new_data is not self._data:
+                self._backup_data_reference = self._data
+                self._data = new_data
+                self._buffer_cache = {}  # cache is invalidated
+
+        # data length may change when an CL vector type is converted from (n, 3) shape to (n,)
+        self._data_length = 1
+        if len(self._data.shape):
+            self._data_length = self._data.strides[0] // self._data.itemsize
+        if not self._parallelize_over_first_dimension:
+            self._data_length = self._data.size
+
+    def get_data(self):
+        return self._data
 
     def get_children(self):
         return []
@@ -792,32 +858,75 @@ class Array(KernelData):
     def get_kernel_parameters(self, kernel_param_name):
         return ['global {}* restrict {}'.format(self._ctype, kernel_param_name)]
 
-    def get_data(self):
-        if self._dtype_change_array:
-            return_value = self._dtype_change_array.get_data()
-            self._dtype_change_array = None
-            return return_value
+    def enqueue_host_access(self, cl_environments, is_blocking=True, wait_for=None):
+        if isinstance(cl_environments, CLEnvironment):
+            cl_environments = [cl_environments]
 
-        for cl_environment, info in self._buffer_cache.items():
-            (batch_range, is_on_device, host_buffer, device_buffer) = info
+        for env in cl_environments:
+            self.get_kernel_inputs(env, 1)
 
-            if is_on_device:
-                if self._use_host_ptr:
-                    cl.enqueue_map_buffer(
-                        cl_environment.queue, device_buffer,
-                        cl.map_flags.READ, 0, host_buffer.shape, host_buffer.dtype,
-                        order="C", is_blocking=True)
-                else:
-                    cl.enqueue_copy(cl_environment.queue, host_buffer, device_buffer, is_blocking=True)
-                info[1] = False
+        wait_for = wait_for or {}
+        events = {}
 
-        return self._data
+        if self._is_writable:
+            for env in cl_environments:
+                context = env.context
 
-    def get_kernel_inputs(self, cl_environment, workgroup_size, batch_range=None, is_blocking=True, wait_for=None):
-        if isinstance(wait_for, cl.Event):
-            wait_for = [wait_for]
+                wait_list = []
+                for wait_env, wait_event in wait_for.items():
+                    if wait_env.context is context:
+                        wait_list.append(wait_event)
 
-        def _get_mem_flags():
+                if not any(e.context is env.context for e in events.keys()):
+                    if self._use_host_ptr:
+                        _, event = cl.enqueue_map_buffer(
+                            env.queue, self._buffer_cache[context],
+                            cl.map_flags.READ, 0, self._data.shape, self._data.dtype,
+                            order="C", wait_for=wait_list, is_blocking=False)
+                    else:
+                        event = cl.enqueue_copy(env.queue, self._data, self._buffer_cache[context],
+                                                is_blocking=False, wait_for=wait_list)
+
+                    events[env] = event
+
+        if is_blocking:
+            for env in cl_environments:
+                env.queue.finish()
+
+        return events
+
+    def enqueue_device_access(self, cl_environments, is_blocking=True, wait_for=None):
+        if isinstance(cl_environments, CLEnvironment):
+            cl_environments = [cl_environments]
+
+        for env in cl_environments:
+            self.get_kernel_inputs(env, 1)
+
+        wait_for = wait_for or {}
+        events = {}
+
+        if not self._use_host_ptr:
+            for env in cl_environments:
+                context = env.context
+
+                wait_list = []
+                for wait_env, wait_event in wait_for.items():
+                    if wait_env.context is context:
+                        wait_list.append(wait_event)
+
+                if not any(e.context is env.context for e in events.keys()):
+                    event = cl.enqueue_copy(env.queue, self._buffer_cache[context], self._data,
+                                            is_blocking=False, wait_for=wait_list)
+                    events[env] = event
+
+        if is_blocking:
+            for env in cl_environments:
+                env.queue.finish()
+
+        return events
+
+    def get_kernel_inputs(self, cl_environment, workgroup_size):
+        def get_mem_flags():
             if self._is_writable:
                 if self._is_readable:
                     return cl.mem_flags.READ_WRITE
@@ -826,30 +935,17 @@ class Array(KernelData):
             else:
                 return cl.mem_flags.READ_ONLY
 
-        if cl_environment not in self._buffer_cache:
-            host_buffer = self._data
-            if batch_range and self._parallelize_over_first_dimension:
-                host_buffer = self._data[batch_range[0]:batch_range[1]]
+        cl_context = cl_environment.context
 
+        if cl_context not in self._buffer_cache:
             if self._use_host_ptr:
-                device_buffer = cl.Buffer(cl_environment.context, _get_mem_flags() | cl.mem_flags.USE_HOST_PTR,
-                                          hostbuf=host_buffer)
-                is_on_device = True
+                self._buffer_cache[cl_context] = cl.Buffer(cl_context,
+                                                           get_mem_flags() | cl.mem_flags.USE_HOST_PTR,
+                                                           hostbuf=self._data)
             else:
-                device_buffer = cl.Buffer(cl_environment.context, _get_mem_flags(), size=host_buffer.nbytes)
-                is_on_device = False
+                self._buffer_cache[cl_context] = cl.Buffer(cl_context, get_mem_flags(), size=self._data.nbytes)
 
-            self._buffer_cache[cl_environment] = [batch_range, is_on_device, host_buffer, device_buffer]
-
-        batch_range, is_on_device, host_buffer, device_buffer = self._buffer_cache[cl_environment]
-        return_event = None
-        if not is_on_device:
-            if not self._use_host_ptr:
-                return_event = cl.enqueue_copy(cl_environment.queue, device_buffer, host_buffer,
-                                               is_blocking=is_blocking, wait_for=wait_for)
-            self._buffer_cache[cl_environment][1] = True
-
-        return [(device_buffer, return_event)]
+        return [self._buffer_cache[cl_context]]
 
     def get_nmr_kernel_inputs(self):
         return 1
@@ -862,13 +958,17 @@ class Array(KernelData):
         return offset_str.replace('{problem_id}', problem_id_substitute)
 
 
-class Zeros(Array):
+class Zeros(KernelData):
 
-    def __init__(self, shape, ctype, parallelize_over_first_dimension=True, mode='rw', use_host_ptr=True):
+    def __init__(self, shape, ctype, parallelize_over_first_dimension=True, host_accessible=True, mode='rw'):
         """Allocate an output buffer of the given shape.
 
         This is meant to quickly allocate a buffer large enough to hold the data requested. After running an OpenCL
         kernel you can get the written data using the method :meth:`get_data`.
+
+        If host accessible is False and you call the method :meth:`get_subset`, the resulting computations will
+        be split over multiple buffers and there is no single continuous buffer with all the values. Therefore,
+        this flag is not usable if you intend to share a :class:`Zeros` with multiple CLEnvironments.
 
         Args:
             shape (int or tuple): the shape of the output array
@@ -877,14 +977,202 @@ class Zeros(Array):
                 where ``n`` is expected to correspond to problem instances. If True, we will load the data as
                 (m, k, ...) arrays for each problem instance. If False, the data will be loaded as is, and each problem
                 instance will have a reference to the complete array.
+            host_accessible (boolean): if the array needs to be accessible from the host. If not, we can allocate
+                the buffer on the device, saving time on memory copies.
             mode (str): one of 'r', 'w' or 'rw', for respectively read, write or read and write. This sets the
                 mode of how the data is loaded into the compute device's memory.
-            use_host_ptr (boolean): if set, we will use the USE_HOST_PTR flag and use map/unmap for data transfers
-                if not set, we create a device side buffer and use explicit read and write commands to transfer the data
         """
-        super().__init__(np.zeros(shape, dtype=ctype_to_dtype(ctype)), ctype,
-                         parallelize_over_first_dimension=parallelize_over_first_dimension,
-                         mode=mode, as_scalar=False, use_host_ptr=use_host_ptr)
+        self._shape = shape
+        if isinstance(self._shape, numbers.Number):
+            self._shape = (self._shape,)
+        self._host_accessible = host_accessible
+        self._ctype = ctype
+
+        self._mode = mode
+        self._is_readable = 'r' in mode
+        self._is_writable = 'w' in mode
+
+        self._mot_float_dtype = None
+        self._parallelize_over_first_dimension = parallelize_over_first_dimension
+
+        self._buffer_cache = {}  # caching the buffers per context
+
+        self._data_length = 1
+        if isinstance(shape, (list, tuple)) and len(shape) > 1:
+            self._data_length = np.prod(shape[1:])
+        if not self._parallelize_over_first_dimension:
+            self._data_length = np.prod(shape)
+
+        if host_accessible:
+            self._array = Array(np.zeros(shape, dtype=ctype_to_dtype(ctype)), ctype,
+                                parallelize_over_first_dimension=parallelize_over_first_dimension,
+                                mode=mode, as_scalar=False)
+
+    @property
+    def ctype(self):
+        return self._ctype
+
+    @property
+    def mode(self):
+        return self._mode
+
+    def get_subset(self, problem_indices=None, batch_range=None):
+        if self._host_accessible:
+            return self._array.get_subset(problem_indices, batch_range)
+        if problem_indices is not None:
+            shape = (len(problem_indices),) + self._shape[1:]
+        else:
+            shape = (batch_range[1] - batch_range[0],) + self._shape[1:]
+        return Zeros(shape, self._ctype, mode=self._mode,
+                     parallelize_over_first_dimension=self._parallelize_over_first_dimension,
+                     host_accessible=False)
+
+    def set_mot_float_dtype(self, mot_float_dtype):
+        if self._host_accessible:
+            return self._array.set_mot_float_dtype(mot_float_dtype)
+        self._mot_float_dtype = mot_float_dtype
+
+    def get_data(self):
+        if self._host_accessible:
+            return self._array.get_data()
+        raise ValueError('Can not get the data from a non host accessible array.')
+
+    def get_children(self):
+        return []
+
+    def get_scalar_arg_dtypes(self):
+        return [None]
+
+    def get_type_definitions(self):
+        return ''
+
+    def initialize_variable(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        if self._host_accessible:
+            return self._array.initialize_variable(variable_name, kernel_param_name,
+                                                   problem_id_substitute, address_space)
+
+        if address_space == 'private':
+            return '''
+                private {ctype} {v_name}[{nmr_elements}];
+
+                for(uint i = 0; i < {nmr_elements}; i++){{
+                    {v_name}[i] = {k_name}[{offset} + i];
+                }}
+            '''.format(ctype=self._ctype, v_name=variable_name, k_name=kernel_param_name,
+                       nmr_elements=self._data_length,
+                       offset=self._get_offset_str(problem_id_substitute))
+        elif address_space == 'local':
+            return '''
+                local {ctype} {v_name}[{nmr_elements}];
+
+                if(get_local_id(0) == 0){{
+                    for(uint i = 0; i < {nmr_elements}; i++){{
+                        {v_name}[i] = {k_name}[{offset} + i];
+                    }}
+                }}
+                barrier(CLK_LOCAL_MEM_FENCE);
+            '''.format(ctype=self._ctype, v_name=variable_name, k_name=kernel_param_name,
+                       nmr_elements=self._data_length,
+                       offset=self._get_offset_str(problem_id_substitute))
+
+    def get_function_call_input(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        if self._host_accessible:
+            return self._array.get_function_call_input(variable_name, kernel_param_name,
+                                                       problem_id_substitute, address_space)
+
+        if address_space == 'global':
+            return '{} + {}'.format(kernel_param_name, self._get_offset_str(problem_id_substitute))
+        elif address_space == 'private':
+            return variable_name
+        elif address_space == 'local':
+            return variable_name
+
+    def post_function_callback(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
+        if self._host_accessible:
+            return self._array.post_function_callback(variable_name, kernel_param_name,
+                                                      problem_id_substitute, address_space)
+
+        if self._is_writable:
+            if address_space == 'private':
+                return '''
+                    for(uint i = 0; i < {nmr_elements}; i++){{
+                        {k_name}[{offset} + i] = {v_name}[i];
+                    }}
+                '''.format(v_name=variable_name, k_name=kernel_param_name,
+                           nmr_elements=self._data_length, offset=self._get_offset_str(problem_id_substitute))
+            elif address_space == 'local':
+                return '''
+                    if(get_local_id(0) == 0){{
+                        for(uint i = 0; i < {nmr_elements}; i++){{
+                            {k_name}[{offset} + i] = {v_name}[i];
+                        }}
+                    }}
+                '''.format(v_name=variable_name, k_name=kernel_param_name,
+                           nmr_elements=self._data_length,
+                           offset=self._get_offset_str(problem_id_substitute))
+        return ''
+
+    def get_struct_declaration(self, name):
+        if self._host_accessible:
+            return self._array.get_struct_declaration(name)
+
+        return 'global {}* restrict {};'.format(self._ctype, name)
+
+    def get_struct_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
+        if self._host_accessible:
+            return self._array.get_struct_initialization(variable_name, kernel_param_name, problem_id_substitute)
+        return self.get_function_call_input(variable_name, kernel_param_name, problem_id_substitute, 'global')
+
+    def get_kernel_parameters(self, kernel_param_name):
+        return ['global {}* restrict {}'.format(self._ctype, kernel_param_name)]
+
+    def enqueue_host_access(self, cl_environments, is_blocking=True, wait_for=None):
+        if self._host_accessible:
+            return self._array.enqueue_host_access(cl_environments, is_blocking=is_blocking, wait_for=wait_for)
+        return {}
+
+    def enqueue_device_access(self, cl_environments, is_blocking=True, wait_for=None):
+        return {}
+
+    def get_kernel_inputs(self, cl_environment, workgroup_size):
+        cl_context = cl_environment.context
+
+        if self._host_accessible:
+            return self._array.get_kernel_inputs(cl_environment, workgroup_size)
+
+        mot_float_type_dtype = None
+        if self._mot_float_dtype:
+            mot_float_type_dtype = dtype_to_ctype(self._mot_float_dtype)
+        dtype = np.dtype(ctype_to_dtype(self._ctype, mot_float_type_dtype))
+        itemsize = dtype.itemsize
+
+        if cl_context not in self._buffer_cache:
+            if self._is_writable:
+                if self._is_readable:
+                    flags = cl.mem_flags.READ_WRITE
+                else:
+                    flags = cl.mem_flags.WRITE_ONLY
+            else:
+                flags = cl.mem_flags.READ_ONLY
+
+            buffer = cl.Buffer(cl_context, flags, size=np.prod(self._shape) * itemsize)
+
+            cl.enqueue_fill_buffer(cl_environment.queue, buffer,
+                                   np.zeros(1, dtype=dtype), 0, np.prod(self._shape) * itemsize)
+
+            self._buffer_cache[cl_context] = buffer
+
+        return [self._buffer_cache[cl_context]]
+
+    def get_nmr_kernel_inputs(self):
+        return 1
+
+    def _get_offset_str(self, problem_id_substitute):
+        if self._parallelize_over_first_dimension:
+            offset_str = str(self._data_length) + ' * {problem_id}'
+        else:
+            offset_str = '0'
+        return offset_str.replace('{problem_id}', problem_id_substitute)
 
 
 class CompositeArray(KernelData):
@@ -919,9 +1207,13 @@ class CompositeArray(KernelData):
     def get_subset(self, problem_indices=None, batch_range=None):
         return self
 
-    def with_mot_float_type(self, mot_float_dtype):
-        sub_elements = [el.with_mot_float_type(mot_float_dtype) for el in self._elements]
-        return CompositeArray(sub_elements, ctype=self._ctype, address_space=self._address_space)
+    def set_mot_float_dtype(self, mot_float_dtype):
+        for element in self._elements:
+            element.set_mot_float_dtype(mot_float_dtype)
+        self._composite_array.set_mot_float_dtype(mot_float_dtype)
+
+    def get_data(self):
+        return [item.get_data() for item in self._elements]
 
     def get_children(self):
         return self._elements
@@ -973,15 +1265,22 @@ class CompositeArray(KernelData):
             parameters.extend(d.get_kernel_parameters('{}_{}'.format(kernel_param_name, str(ind))))
         return parameters
 
-    def get_data(self):
-        return [item.get_data() for item in self._elements]
-
-    def get_kernel_inputs(self, cl_environment, workgroup_size, batch_range=None, is_blocking=True, wait_for=None):
-        data = list(self._composite_array.get_kernel_inputs(cl_environment, workgroup_size, batch_range=batch_range,
-                                                            is_blocking=is_blocking, wait_for=wait_for))
+    def enqueue_host_access(self, cl_environments, is_blocking=True, wait_for=None):
+        events = {}
         for d in self._elements:
-            data.extend(d.get_kernel_inputs(cl_environment, workgroup_size, batch_range=batch_range,
-                                            is_blocking=is_blocking, wait_for=wait_for))
+            events.update(d.enqueue_host_access(cl_environments, is_blocking=is_blocking, wait_for=wait_for))
+        return events
+
+    def enqueue_device_access(self, cl_environments, is_blocking=True, wait_for=None):
+        events = {}
+        for d in self._elements:
+            events.update(d.enqueue_device_access(cl_environments, is_blocking=is_blocking, wait_for=wait_for))
+        return events
+
+    def get_kernel_inputs(self, cl_environment, workgroup_size):
+        data = list(self._composite_array.get_kernel_inputs(cl_environment, workgroup_size))
+        for d in self._elements:
+            data.extend(d.get_kernel_inputs(cl_environment, workgroup_size))
         return data
 
     def get_nmr_kernel_inputs(self):
