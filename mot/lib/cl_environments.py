@@ -159,6 +159,10 @@ def _initialize_cl_environment_cache():
     cache = {}
     for platform in cl.get_platforms():
         devices = platform.get_devices()
+
+        if len(devices) == 0:
+            continue
+
         context = cl.Context(devices)
         items = []
         for device in devices:
@@ -166,6 +170,7 @@ def _initialize_cl_environment_cache():
                 env = CLEnvironment(platform, context, device)
                 items.append(env)
         cache[platform] = items
+
     return cache
 
 
