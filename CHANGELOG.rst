@@ -2,6 +2,18 @@
 Changelog
 *********
 
+v0.11.1 (2020-03-05)
+====================
+
+Fixed
+-----
+- Fixed pyopencl.LogicError: Context failed: invalid value happening when trying to create a context with a platform with no devices.
+
+Other
+-----
+- Replaced maintainer e-mail address with personal e-mail address.
+
+
 v0.11.0 (2020-02-14)
 ====================
 
