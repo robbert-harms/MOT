@@ -2,6 +2,14 @@
 Changelog
 *********
 
+v0.11.2 (2020-03-26)
+====================
+
+Fixed
+-----
+- Fixed problems with device initialization in case the the context creation throws a runtime error.
+
+
 v0.11.1 (2020-03-05)
 ====================
 
