@@ -163,7 +163,10 @@ def _initialize_cl_environment_cache():
         if len(devices) == 0:
             continue
 
-        context = cl.Context(devices)
+        try:
+            context = cl.Context(devices)
+        except cl.RuntimeError:
+            continue
         items = []
         for device in devices:
             if device_supports_double(device):
