@@ -15,6 +15,8 @@ from mot.library_functions.continuous_distributions.invgamma import invgamma_pdf
 from mot.library_functions.error_functions import dawson, CerfImWOfX, erfi
 from mot.library_functions.legendre_polynomial import FirstLegendreTerm, LegendreTerms, \
     EvenLegendreTerms, OddLegendreTerms
+from mot.library_functions.special_functions import bessi0, bessi1, log_bessi0, bessi, bessiaplusn, \
+    nonexp_bessi, nonexp_bessiaplusn, nonexp_spher_bessi, bessel_starting_point
 
 
 __author__ = 'Robbert Harms'
@@ -22,137 +24,6 @@ __date__ = '2018-05-07'
 __maintainer__ = 'Robbert Harms'
 __email__ = 'robbert@xkls.nl'
 __licence__ = 'LGPL v3'
-
-
-class Besseli0(SimpleCLLibrary):
-    def __init__(self):
-        """Return the zeroth-order modified Bessel function of the first kind
-
-        Evaluate modified Bessel function In(x) and n=0.
-
-        Original author of C code: M.G.R. Vogelaar
-        """
-        super().__init__('''
-            double bessel_i0(double x){
-                double y;
-
-                if(fabs(x) < 3.75){
-                    y = (x / 3.75) * (x / 3.75);
-
-                    return 1.0 + y * (3.5156229
-                                      + y * (3.0899424
-                                             + y * (1.2067492
-                                                    + y * (0.2659732
-                                                           + y * (0.360768e-1
-                                                                  + y * 0.45813e-2)))));
-                }
-
-                y = 3.75 / fabs(x);
-                return (exp(fabs(x)) / sqrt(fabs(x)))
-                        * (0.39894228
-                           + y * (0.1328592e-1
-                                  + y * (0.225319e-2
-                                         + y * (-0.157565e-2
-                                                + y * (0.916281e-2
-                                                       + y * (-0.2057706e-1
-                                                              + y * (0.2635537e-1
-                                                                     + y * (-0.1647633e-1
-                                                                            + y * 0.392377e-2))))))));
-            }
-        ''')
-
-
-class LogBesseli0(SimpleCLLibrary):
-    def __init__(self):
-        """Return the log of the zeroth-order modified Bessel function of the first kind."""
-        super().__init__('''
-            double log_bessel_i0(double x){
-                if(x < 700){
-                  return log(bessel_i0(x));
-                }
-                return x - log(2.0 * M_PI * x)/2.0;
-            }
-        ''', dependencies=(Besseli0(),))
-
-
-class Besseli1(SimpleCLLibrary):
-    def __init__(self):
-        """Return the first-order modified Bessel function of the first kind
-
-        Evaluate modified Bessel function In(x) and n=1.
-
-        Original author of C code: M.G.R. Vogelaar
-        """
-        super().__init__('''
-            double bessel_i1(double x){
-                double ax,ans;
-                double y;
-
-                if ((ax=fabs(x)) < 3.75) {
-                    y=x/3.75,y=y*y;
-                    ans=ax*(0.5+y*(0.87890594+y*(0.51498869+y*(0.15084934
-                                +y*(0.2658733e-1+y*(0.301532e-2+y*0.32411e-3))))));
-                } else {
-                    y=3.75/ax;
-                    ans=0.2282967e-1+y*(-0.2895312e-1+y*(0.1787654e-1-y*0.420059e-2));
-                    ans=0.39894228+y*(-0.3988024e-1+y*(-0.362018e-2+y*(0.163801e-2+y*(-0.1031555e-1+y*ans))));
-                    ans *= (exp(ax)/sqrt(ax));
-                }
-                return x < 0.0 ? -ans : ans;
-            }
-        ''')
-
-
-class Besselin(SimpleCLLibrary):
-    def __init__(self):
-        """Return the nth-order modified Bessel function of the first kind
-
-        Evaluate modified Bessel function In(x) for n >= 0
-
-        Original author of C code: M.G.R. Vogelaar
-        """
-        super().__init__('''
-            double bessel_in(int n, double x){
-                double ACC = 40.0;
-                double BIGNO = 1.0e10;
-                double BIGNI = 1.0e-10;
-
-                int j;
-                double bi,bim,bip,tox,ans;
-
-                if (n < 0){
-                    return NAN;
-                }
-                if (n == 0){
-                    return( bessel_i0(x) );
-                }
-                if (n == 1){
-                    return( bessel_i1(x) );
-                }
-
-                if (x == 0.0){
-                    return 0.0;
-                }
-                else {
-                    tox=2.0/fabs(x);
-                    bip=ans=0.0;
-                    bi=1.0;
-                    for (j=2*(n+(int) sqrt(ACC*n));j>0;j--) {
-                        bim=bip+j*tox*bi;
-                        bip=bi;
-                        bi=bim;
-                        if (fabs(bi) > BIGNO) {
-                            ans *= BIGNI;
-                            bi *= BIGNI;
-                            bip *= BIGNI;
-                        }
-                        if (j == n) ans=bip;
-                    }
-                    ans *= bessel_i0(x)/bi;
-                    return  x < 0.0 && n%2 == 1 ? -ans : ans;
-                }
-            }
-        ''', dependencies=[Besseli0(), Besseli1()])
 
 
 class LogCosh(SimpleCLLibrary):
