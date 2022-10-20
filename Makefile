@@ -3,7 +3,7 @@ PIP=$$(which pip3)
 PROJECT_NAME=mot
 PROJECT_VERSION=$$($(PYTHON) setup.py --version)
 GPG_SIGN_KEY=6F4438DB0E1AA560
-UBUNTU_DISTRIBUTIONS=xenial bionic
+UBUNTU_DISTRIBUTIONS=jammy
 
 .PHONY: help
 help:
