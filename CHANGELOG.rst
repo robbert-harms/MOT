@@ -11,6 +11,7 @@ Added
 
 Other
 -----
+- Removed the Ubuntu build for now.
 - Upgraded the ubuntu distributions.
 - Made MOT compatible with Python3.10 and the latest version of the TatSu library.
 
