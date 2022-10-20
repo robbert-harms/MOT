@@ -55,7 +55,7 @@ rand123_data rand123_initialize_data(uint state[1]){
  */
 rand123_data rand123_initialize_from_seed(uint seed){
     %(GENERATOR_NAME)s4x32_key_t k = {{seed, 0}};
-    %(GENERATOR_NAME)s4x32_ctr_t c = {{}};
+    %(GENERATOR_NAME)s4x32_ctr_t c = {{seed, 0}};
     rand123_data rng_data = {c, k};
     return rng_data;
 }
@@ -65,6 +65,13 @@ rand123_data rand123_initialize_from_seed(uint seed){
  */
 void rand123_data_to_array(rand123_data data, uint rng_state[1]){
     rng_state[0] = data.counter.v[0];
+}
+
+/**
+ * Get the current counter value.
+ */
+uint rand123_get_current_counter(rand123_data data){
+    return data.counter.v[0];
 }
 
 

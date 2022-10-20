@@ -3,7 +3,7 @@
 The two most important functions are :func:`multivariate_ess` and :func:`univariate_ess` to calculate the effective
 sample size of your samples.
 """
-from collections import Mapping
+from collections.abc import Mapping
 import itertools
 import numpy as np
 from numpy.linalg import det

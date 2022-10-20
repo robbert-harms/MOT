@@ -60,7 +60,7 @@ def set_cl_environments(cl_environments):
     Raises:
         ValueError: if the list of environments is empty
     """
-    if not isinstance(cl_environments, collections.Iterable):
+    if not isinstance(cl_environments, collections.abc.Iterable):
         cl_environments = [cl_environments]
 
     final_environments = []
@@ -292,7 +292,7 @@ class CLRuntimeInfo:
         if environments is None:
             environments = get_cl_environments()
 
-        if not isinstance(environments, collections.Iterable):
+        if not isinstance(environments, collections.abc.Iterable):
             environments = [environments]
 
         final_environments = []

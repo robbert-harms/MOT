@@ -275,9 +275,7 @@ class AbstractSampler:
 
                 bool is_first_work_item = get_local_id(0) == 0;
 
-                rand123_data rand123_rng_data = rand123_initialize_data((uint[]){
-                    rng_state[0], rng_state[1], rng_state[2], rng_state[3],
-                    rng_state[4], rng_state[5], 0, 0});
+                rand123_data rand123_rng_data = rand123_initialize_from_seed(rng_state[0]);
                 void* rng_data = (void*)&rand123_rng_data;
 
                 for(ulong i = 0; i < nmr_iterations; i++){
@@ -303,11 +301,7 @@ class AbstractSampler:
                 }
 
                 if(is_first_work_item){
-                    uint state[8];
-                    rand123_data_to_array(rand123_rng_data, state);
-                    for(uint i = 0; i < 6; i++){
-                        rng_state[i] = state[i];
-                    }
+                    rng_state[0] = rand123_get_current_counter(rand123_rng_data);
                 }
             }
         '''

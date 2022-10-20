@@ -237,8 +237,10 @@ class eigen_decompose_real_symmetric_matrix(SimpleCLLibrary):
     def __init__(self):
         """Computes eigenvalues and eigenvectors of real symmetric matrix.
 
-        This uses the RS routine from the EISPACK code, to be found at:
+        This uses the RS routine from the EISPACK code, previously found at:
         https://people.sc.fsu.edu/~jburkardt/c_src/eispack/eispack.html
+        mirrored at:
+        https://github.com/johannesgerer/jburkardt-c/blob/master/eispack/eispack.c
 
         It first tri-diagonalizes the matrix using Householder transformations and then computes the diagonal
         using QR transformations.

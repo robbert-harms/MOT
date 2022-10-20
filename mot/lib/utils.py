@@ -3,7 +3,8 @@ import logging
 import multiprocessing
 import numbers
 import os
-from collections import Iterable, Mapping, OrderedDict
+from collections.abc import Iterable, Mapping
+from collections import OrderedDict
 from contextlib import contextmanager
 from functools import reduce
 import numpy as np
@@ -650,10 +651,10 @@ _tatsu_cl_function = '''
     documentation = '/*' ->'*/';
     kernel = ['__'] 'kernel';
     address_space = ['__'] ('local' | 'global' | 'constant' | 'private');
-    data_type = /\w+(\s*(\*)?)+/;
+    data_type = /(\w+(\s*(\*)?)+)/;
     function_name = /\w+/;
     arglist = '(' @+:arg {',' @+:arg}* ')' | '()';
-    arg = /[\w \*\[\]]+/;
+    arg = /([\w \*\[\]]+)/;
     body = compound_statement;
     compound_statement = '{' {[/[^\{\}]*/] [compound_statement]}* '}';
 '''

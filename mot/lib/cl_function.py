@@ -1,4 +1,4 @@
-from collections import Iterable
+from collections.abc import Iterable
 from copy import copy
 import tatsu
 from textwrap import dedent, indent
@@ -558,7 +558,7 @@ _cl_data_type_parser = tatsu.compile('''
     address_space = ['__'] ('local' | 'global' | 'constant' | 'private');
     type_qualifiers = 'const' | 'volatile';
 
-    basic_ctype = ?'(unsigned )?\w[\w]*[a-zA-Z]';
+    basic_ctype = ['unsigned '] /(\w[\w]*[a-zA-Z])/;
     vector_type_length = '2' | '3' | '4' | '8' | '16';
     ctype = basic_ctype [vector_type_length];
     pointer_star = '*';
@@ -602,7 +602,10 @@ class SimpleCLFunctionParameter(CLFunctionParameter):
                 return ''.join(ast)
 
             def basic_ctype(self, ast):
-                param._basic_ctype = ast
+                if isinstance(ast, tuple):
+                    param._basic_ctype = ' '.join(ast)
+                else:
+                    param._basic_ctype = ast
                 return ast
 
             def vector_type_length(self, ast):

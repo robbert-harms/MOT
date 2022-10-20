@@ -1,5 +1,6 @@
 import numbers
-from collections import OrderedDict, Mapping
+from collections import OrderedDict
+from collections.abc import Mapping
 
 import numpy as np
 import pyopencl as cl
