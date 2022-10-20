@@ -2,6 +2,19 @@
 Changelog
 *********
 
+v0.11.4 (2022-10-20)
+====================
+
+Added
+-----
+- Adds a few more Bessel functions.
+
+Other
+-----
+- Upgraded the ubuntu distributions.
+- Made MOT compatible with Python3.10 and the latest version of the TatSu library.
+
+
 v0.11.3 (2020-05-10)
 ====================
 
